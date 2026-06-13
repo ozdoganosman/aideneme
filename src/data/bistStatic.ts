@@ -59,3 +59,30 @@ export async function fetchBistQuotes(signal?: AbortSignal): Promise<Quotes> {
     return {};
   }
 }
+
+// Market-wide strategy backtest aggregate (built in CI by scripts/strategies.py).
+export interface StrategyAgg {
+  name: string;
+  avgRet: number;
+  medRet: number;
+  beatPct: number;
+  avgWin: number;
+  avgDD: number;
+  n: number;
+}
+export interface StrategiesFile {
+  generated: number;
+  nSymbols: number;
+  holdAvg: number;
+  results: StrategyAgg[];
+}
+
+export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesFile | null> {
+  try {
+    const res = await fetch(`${base}data/bist/strategies.json`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as StrategiesFile;
+  } catch {
+    return null;
+  }
+}

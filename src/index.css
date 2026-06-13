@@ -337,6 +337,12 @@ button.ctl:disabled {
   font-size: 12px;
 }
 
+.bt-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .bt-table {
   width: 100%;
   border-collapse: collapse;

@@ -45,8 +45,13 @@ jobs:
           # full re-fetch on the scheduled run for fresh prices.
           FORCE_ALL: ${{ github.event_name == 'schedule' && '1' || '' }}
         run: |
-          python -m pip install --quiet borsapy numpy
+          python -m pip install --quiet borsapy numpy pandas
           python scripts/build_bist.py
+
+      - name: Market-wide strategy scan (schedule / first time)
+        if: ${{ github.event_name == 'schedule' || hashFiles('public/data/bist/strategies.json') == '' }}
+        continue-on-error: true
+        run: python scripts/strategies.py
 
       - run: npm ci
       - run: npm run build
