@@ -8,12 +8,20 @@ import {
   CrosshairMode,
   LineStyle,
   IChartApi,
+  ISeriesApi,
   CandlestickData,
   HistogramData,
 } from 'lightweight-charts';
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
 import { computeIndicators } from '../indicators/calc';
+
+export interface IndicatorSettings {
+  ema: boolean;
+  volume: boolean;
+  williams: boolean;
+  macd: boolean;
+}
 
 export interface HoverInfo {
   time: number;
@@ -32,7 +40,21 @@ interface Props {
   candles: Candles | null;
   onHover?: (info: HoverInfo | null) => void;
   fitOnLoad?: boolean; // false → preserve zoom + visible range (symbol switch)
+  settings?: IndicatorSettings; // which indicator panes/overlays are shown
 }
+
+type SeriesBag = {
+  ema377: ISeriesApi<'Line'>;
+  ema610: ISeriesApi<'Line'>;
+  volume: ISeriesApi<'Histogram'>;
+  wilR: ISeriesApi<'Line'>;
+  wilEma: ISeriesApi<'Line'>;
+  mHist: ISeriesApi<'Histogram'>;
+  mMacd: ISeriesApi<'Line'>;
+  mSignal: ISeriesApi<'Line'>;
+  mEma: ISeriesApi<'Line'>;
+  mDelta: ISeriesApi<'Area'>;
+};
 
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
   color,
@@ -42,9 +64,14 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
   title,
 });
 
-export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, onHover, fitOnLoad }, ref) {
+export const Chart = forwardRef<ChartHandle, Props>(function Chart(
+  { candles, onHover, fitOnLoad, settings },
+  ref,
+) {
   const elRef = useRef<HTMLDivElement>(null);
   const lodRef = useRef<LodController | null>(null);
+  const chartApiRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<SeriesBag | null>(null);
   const onHoverRef = useRef(onHover);
   onHoverRef.current = onHover;
   const hoveringRef = useRef(false);
@@ -121,6 +148,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, on
     ];
     const lod = new LodController(chart, candle, volume, extras);
     lodRef.current = lod;
+    chartApiRef.current = chart;
+    seriesRef.current = { ema377, ema610, volume, wilR, wilEma, mHist, mMacd, mSignal, mEma, mDelta };
 
     chart.subscribeCrosshairMove((param) => {
       if (param.time && param.seriesData.size) {
@@ -139,9 +168,31 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, on
     return () => {
       lod.destroy();
       lodRef.current = null;
+      chartApiRef.current = null;
+      seriesRef.current = null;
       chart.remove();
     };
   }, []);
+
+  // Toggle indicator overlays/panes without rebuilding the chart (keeps zoom).
+  useEffect(() => {
+    const s = seriesRef.current;
+    const chart = chartApiRef.current;
+    if (!s || !chart) return;
+    const st = settings ?? { ema: true, volume: true, williams: true, macd: true };
+
+    s.ema377.applyOptions({ visible: st.ema });
+    s.ema610.applyOptions({ visible: st.ema });
+    s.volume.applyOptions({ visible: st.volume });
+    [s.wilR, s.wilEma].forEach((x) => x.applyOptions({ visible: st.williams }));
+    [s.mHist, s.mMacd, s.mSignal, s.mEma, s.mDelta].forEach((x) => x.applyOptions({ visible: st.macd }));
+
+    // Collapse hidden panes to ~0 height (pane order: 0 price,1 vol,2 %R,3 MACD).
+    const panes = chart.panes();
+    panes[1]?.setStretchFactor(st.volume ? 1.1 : 0.0001);
+    panes[2]?.setStretchFactor(st.williams ? 2 : 0.0001);
+    panes[3]?.setStretchFactor(st.macd ? 2.2 : 0.0001);
+  }, [settings]);
 
   useEffect(() => {
     if (!lodRef.current || !candles) return;

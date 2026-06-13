@@ -45,3 +45,17 @@ export async function fetchBistSymbols(signal?: AbortSignal): Promise<string[]> 
     return [];
   }
 }
+
+// Last close (c) + previous close (pc) for every symbol — one small file used by
+// the watchlist and portfolio.
+export type Quotes = Record<string, { c: number; pc: number }>;
+
+export async function fetchBistQuotes(signal?: AbortSignal): Promise<Quotes> {
+  try {
+    const res = await fetch(`${base}data/bist/quotes.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Quotes;
+  } catch {
+    return {};
+  }
+}

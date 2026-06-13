@@ -87,6 +87,7 @@ def main() -> int:
     total = len(symbols)
     print(f"[bist] {total} sembol çekiliyor…")
     ok: list[str] = []
+    quotes: dict = {}
     done = 0
     try:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
@@ -98,6 +99,9 @@ def main() -> int:
                     with open(OUT / f"{sym}.json", "w", encoding="utf-8") as f:
                         json.dump({"data": recs}, f, separators=(",", ":"))
                     ok.append(sym)
+                    last = recs[-1]["c"]
+                    prev = recs[-2]["c"] if len(recs) >= 2 else last
+                    quotes[sym] = {"c": last, "pc": prev}
                 if done % 50 == 0 or done == total:
                     print(f"[bist] {done}/{total}  ok={len(ok)}")
     except Exception as e:  # noqa
@@ -107,6 +111,9 @@ def main() -> int:
     # symbols.json'u her durumda yaz ki uygulama 404 almasın.
     with open(OUT / "symbols.json", "w", encoding="utf-8") as f:
         json.dump({"symbols": ok}, f)
+    # quotes.json: izleme listesi/portföy için tüm son fiyatlar (tek dosya).
+    with open(OUT / "quotes.json", "w", encoding="utf-8") as f:
+        json.dump(quotes, f, separators=(",", ":"))
     print(f"[bist] bitti: {len(ok)}/{total} sembol")
     return 0  # kısmi başarısızlık deploy'u düşürmesin
 

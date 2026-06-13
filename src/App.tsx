@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Chart, HoverInfo } from './components/Chart';
+import { Chart, HoverInfo, IndicatorSettings } from './components/Chart';
 import { SymbolSearch } from './components/SymbolSearch';
+import { Watchlist } from './components/Watchlist';
+import { Portfolio, Holding } from './components/Portfolio';
+import { IndicatorMenu } from './components/IndicatorMenu';
 import { Candles, BIST_SYMBOLS } from './data/types';
-import { fetchBistStatic, fetchBistSymbols } from './data/bistStatic';
+import { fetchBistStatic, fetchBistSymbols, fetchBistQuotes, Quotes } from './data/bistStatic';
 import { generateSynthetic } from './data/synthetic';
 import { resample, TF } from './data/resample';
 
 type Provider = 'bist' | 'synthetic';
 
-const SYNTH_BARS = 4_000_000; // sabit maksimum (seçilemez)
-
+const SYNTH_BARS = 4_000_000;
 const TF_LABEL: Record<TF, string> = { D: 'Günlük', W: 'Haftalık', M: 'Aylık' };
+
+function lsGet<T>(key: string, def: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : def;
+  } catch {
+    return def;
+  }
+}
 
 export default function App() {
   const [provider, setProvider] = useState<Provider>('bist');
@@ -24,10 +35,21 @@ export default function App() {
   const [hover, setHover] = useState<HoverInfo | null>(null);
   const [fitOnLoad, setFitOnLoad] = useState(true);
 
+  const [quotes, setQuotes] = useState<Quotes>({});
+  const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
+  const [portfolio, setPortfolio] = useState<Holding[]>(() => lsGet('borsaPortfolio', []));
+  const [settings, setSettings] = useState<IndicatorSettings>(() =>
+    lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true }),
+  );
+
   const abortRef = useRef<AbortController | null>(null);
-  const dailyRef = useRef<Candles | null>(null); // cached daily BIST for resampling
+  const dailyRef = useRef<Candles | null>(null);
   const firstRef = useRef(true);
   const lastKeyRef = useRef<string | null>(null);
+
+  useEffect(() => localStorage.setItem('borsaWatch', JSON.stringify(watchlist)), [watchlist]);
+  useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
+  useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
 
   const load = useCallback(
     async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
@@ -45,7 +67,7 @@ export default function App() {
       try {
         let c: Candles;
         if (prov === 'synthetic') {
-          await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
+          await new Promise((r) => setTimeout(r, 0));
           c = generateSynthetic(sym || 'SYNTH', SYNTH_BARS, 60);
           dailyRef.current = null;
         } else {
@@ -70,7 +92,6 @@ export default function App() {
     [provider, symbol, tf],
   );
 
-  // Switch BIST timeframe without re-fetching: resample the cached daily data.
   const changeTf = (newTf: TF) => {
     setTf(newTf);
     if (provider !== 'bist' || !dailyRef.current) return;
@@ -81,6 +102,15 @@ export default function App() {
     setStatus(`${c.length.toLocaleString()} mum`);
   };
 
+  // Select a symbol from the sidebar → always BIST.
+  const selectSymbol = (s: string) => {
+    setProvider('bist');
+    setSymbol(s);
+    void load({ provider: 'bist', symbol: s });
+  };
+  const toggleWatch = (s: string) =>
+    setWatchlist((w) => (w.includes(s) ? w.filter((x) => x !== s) : [s, ...w]));
+
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,12 +119,14 @@ export default function App() {
     fetchBistSymbols()
       .then((s) => setSymbols(s.length ? s : BIST_SYMBOLS))
       .catch(() => setSymbols(BIST_SYMBOLS));
+    fetchBistQuotes().then(setQuotes).catch(() => setQuotes({}));
   }, []);
 
   const up = hover ? hover.close >= hover.open : true;
   const chg = hover ? hover.close - hover.open : 0;
   const chgPct = hover && hover.open ? (chg / hover.open) * 100 : 0;
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
+  const starred = watchlist.includes(symbol);
 
   return (
     <div className="app">
@@ -117,6 +149,13 @@ export default function App() {
         {provider === 'bist' ? (
           <>
             <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load({ symbol: s })} />
+            <button
+              className={'ctl star' + (starred ? ' on' : '')}
+              title={starred ? 'İzlemeden çıkar' : 'İzlemeye ekle'}
+              onClick={() => toggleWatch(symbol)}
+            >
+              {starred ? '★' : '☆'}
+            </button>
             <div className="seg">
               {(['D', 'W', 'M'] as TF[]).map((t) => (
                 <button key={t} className={t === tf ? 'active' : ''} onClick={() => changeTf(t)}>
@@ -129,49 +168,66 @@ export default function App() {
           <span className="hint">4.000.000 mum (maks)</span>
         )}
 
+        <IndicatorMenu settings={settings} onChange={setSettings} />
+
         <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
           ⟳
         </button>
 
         <span className="spacer" />
-        <span className="hint">sürükle: kaydır · tekerlek: zoom · çift tık: sığdır</span>
+        <span className="hint">sürükle · tekerlek: zoom · çift tık: sığdır</span>
       </header>
 
-      <div className="chart-wrap">
-        <div className="legend">
-          <div className="legend-top">
-            <b>{provider === 'bist' ? symbol : 'SENTETİK'}</b>
-            <span className="muted">{tfLabel}</span>
-            {hover && (
-              <>
-                <span className={up ? 'price up' : 'price down'}>{fmtPrice(hover.close)}</span>
-                <span className={up ? 'up' : 'down'}>
-                  {chg >= 0 ? '+' : ''}
-                  {fmtPrice(chg)} ({chgPct >= 0 ? '+' : ''}
-                  {chgPct.toFixed(2)}%)
-                </span>
-              </>
-            )}
-          </div>
-          {hover && (
-            <div className="legend-ohlc">
-              <span>A <b>{fmtPrice(hover.open)}</b></span>
-              <span>Y <b>{fmtPrice(hover.high)}</b></span>
-              <span>D <b>{fmtPrice(hover.low)}</b></span>
-              <span>K <b className={up ? 'up' : 'down'}>{fmtPrice(hover.close)}</b></span>
-              <span>Hac <b>{fmtVol(hover.volume)}</b></span>
+      <div className="body">
+        <aside className="sidebar">
+          <Watchlist items={watchlist} quotes={quotes} active={symbol} onSelect={selectSymbol} onRemove={toggleWatch} />
+          <Portfolio
+            holdings={portfolio}
+            quotes={quotes}
+            onAdd={(h) => setPortfolio((p) => [...p, h])}
+            onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
+            onSelect={selectSymbol}
+          />
+        </aside>
+
+        <main className="main">
+          <div className="chart-wrap">
+            <div className="legend">
+              <div className="legend-top">
+                <b>{provider === 'bist' ? symbol : 'SENTETİK'}</b>
+                <span className="muted">{tfLabel}</span>
+                {hover && (
+                  <>
+                    <span className={up ? 'price up' : 'price down'}>{fmtPrice(hover.close)}</span>
+                    <span className={up ? 'up' : 'down'}>
+                      {chg >= 0 ? '+' : ''}
+                      {fmtPrice(chg)} ({chgPct >= 0 ? '+' : ''}
+                      {chgPct.toFixed(2)}%)
+                    </span>
+                  </>
+                )}
+              </div>
+              {hover && (
+                <div className="legend-ohlc">
+                  <span>A <b>{fmtPrice(hover.open)}</b></span>
+                  <span>Y <b>{fmtPrice(hover.high)}</b></span>
+                  <span>D <b>{fmtPrice(hover.low)}</b></span>
+                  <span>K <b className={up ? 'up' : 'down'}>{fmtPrice(hover.close)}</b></span>
+                  <span>Hac <b>{fmtVol(hover.volume)}</b></span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {loading && (
-          <div className="loading">
-            <div className="spinner" />
-            <span>{status}</span>
+            {loading && (
+              <div className="loading">
+                <div className="spinner" />
+                <span>{status}</span>
+              </div>
+            )}
+
+            <Chart candles={candles} onHover={setHover} fitOnLoad={fitOnLoad} settings={settings} />
           </div>
-        )}
-
-        <Chart candles={candles} onHover={setHover} fitOnLoad={fitOnLoad} />
+        </main>
       </div>
 
       <footer className="status">
