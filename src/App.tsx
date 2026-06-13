@@ -187,7 +187,7 @@ export default function App() {
         </button>
 
         <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
-          ⟳
+          <span className={loading ? 'spinning' : ''}>⟳</span>
         </button>
 
         {strategy && (

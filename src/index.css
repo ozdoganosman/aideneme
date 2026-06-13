@@ -1,3 +1,19 @@
+/* Dark theme scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a2e3a;
+  border-radius: 5px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #3a4150;
+}
+
 :root {
   color-scheme: dark;
   --bg: #0e0f13;
@@ -68,6 +84,18 @@ body {
 
 .ctl:hover {
   border-color: #313747;
+}
+
+/* Active/pressed toggle buttons (Log, etc.) */
+.ctl.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.spinning {
+  display: inline-block;
+  animation: spin 0.8s linear infinite;
 }
 
 .search input:focus {
@@ -290,7 +318,10 @@ button.ctl:disabled {
   font-size: 12px;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  background: rgba(14, 15, 19, 0.6);
+  border: 1px solid #1c1f2a;
+  border-radius: 7px;
+  padding: 5px 9px;
 }
 
 /* ---- Modal (backtest) ---- */

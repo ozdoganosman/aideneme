@@ -13,9 +13,10 @@ const ITEMS: [keyof IndicatorSettings, string][] = [
 ];
 
 export function IndicatorMenu({ settings, onChange }: Props) {
+  const on = ITEMS.filter(([k]) => settings[k]).length;
   return (
     <details className="menu">
-      <summary className="ctl">İndikatörler ▾</summary>
+      <summary className="ctl">İndikatörler {on}/{ITEMS.length} ▾</summary>
       <div className="menu-pop">
         {ITEMS.map(([key, label]) => (
           <label key={key} className="menu-item">
