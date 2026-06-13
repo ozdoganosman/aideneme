@@ -88,6 +88,21 @@ def _quote(recs: list) -> dict:
     return {"c": last, "pc": prev}
 
 
+def _spark(recs: list) -> list:
+    return [r["c"] for r in recs[-30:]]
+
+
+def load_names() -> dict:
+    try:
+        data = json.load(open(SYMBOLS_FILE, encoding="utf-8"))
+        out = {}
+        for s in data.get("stocks", []) + data.get("indices", []):
+            out[s["name"]] = s.get("displayName", s["name"])
+        return out
+    except Exception:  # noqa
+        return {}
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     symbols = load_symbols()
@@ -96,6 +111,7 @@ def main() -> int:
 
     ok: list[str] = []
     quotes: dict = {}
+    spark: dict = {}
     to_fetch: list[str] = []
 
     # Incremental: keep symbols that already have a JSON, fetch only the missing
@@ -108,6 +124,7 @@ def main() -> int:
                 if recs:
                     ok.append(sym)
                     quotes[sym] = _quote(recs)
+                    spark[sym] = _spark(recs)
                     continue
             except Exception:  # noqa
                 pass
@@ -126,6 +143,7 @@ def main() -> int:
                         json.dump({"data": recs}, f, separators=(",", ":"))
                     ok.append(sym)
                     quotes[sym] = _quote(recs)
+                    spark[sym] = _spark(recs)
                 if to_fetch and (done % 50 == 0 or done == len(to_fetch)):
                     print(f"[bist] {done}/{len(to_fetch)}  ok_total={len(ok)}")
     except Exception as e:  # noqa
@@ -138,6 +156,12 @@ def main() -> int:
     # quotes.json: izleme listesi/portföy için tüm son fiyatlar (tek dosya).
     with open(OUT / "quotes.json", "w", encoding="utf-8") as f:
         json.dump(quotes, f, separators=(",", ":"))
+    # names.json: sembol -> şirket adı; spark.json: son 30 kapanış (sparkline).
+    names = load_names()
+    with open(OUT / "names.json", "w", encoding="utf-8") as f:
+        json.dump({s: names.get(s, s) for s in ok}, f, ensure_ascii=False, separators=(",", ":"))
+    with open(OUT / "spark.json", "w", encoding="utf-8") as f:
+        json.dump(spark, f, separators=(",", ":"))
     print(f"[bist] bitti: {len(ok)}/{total} sembol")
     return 0  # kısmi başarısızlık deploy'u düşürmesin
 

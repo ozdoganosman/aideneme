@@ -86,3 +86,23 @@ export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesF
     return null;
   }
 }
+
+export async function fetchBistNames(signal?: AbortSignal): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${base}data/bist/names.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchBistSpark(signal?: AbortSignal): Promise<Record<string, number[]>> {
+  try {
+    const res = await fetch(`${base}data/bist/spark.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, number[]>;
+  } catch {
+    return {};
+  }
+}

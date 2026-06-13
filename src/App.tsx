@@ -9,7 +9,14 @@ import { Backtest } from './components/Backtest';
 import { computeStats } from './indicators/stats';
 import type { Trade } from './indicators/backtest';
 import { Candles, BIST_SYMBOLS } from './data/types';
-import { fetchBistStatic, fetchBistSymbols, fetchBistQuotes, Quotes } from './data/bistStatic';
+import {
+  fetchBistStatic,
+  fetchBistSymbols,
+  fetchBistQuotes,
+  fetchBistNames,
+  fetchBistSpark,
+  Quotes,
+} from './data/bistStatic';
 import { generateSynthetic } from './data/synthetic';
 import { resample, TF } from './data/resample';
 
@@ -43,6 +50,8 @@ export default function App() {
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
 
   const [quotes, setQuotes] = useState<Quotes>({});
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [spark, setSpark] = useState<Record<string, number[]>>({});
   const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
   const [portfolio, setPortfolio] = useState<Holding[]>(() => lsGet('borsaPortfolio', []));
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
@@ -130,11 +139,38 @@ export default function App() {
       .then((s) => setSymbols(s.length ? s : BIST_SYMBOLS))
       .catch(() => setSymbols(BIST_SYMBOLS));
     fetchBistQuotes().then(setQuotes).catch(() => setQuotes({}));
+    fetchBistNames().then(setNames).catch(() => setNames({}));
+    fetchBistSpark().then(setSpark).catch(() => setSpark({}));
   }, []);
+
+  // Keyboard shortcuts: / search, L log, 1/2/3 timeframe, F backtest.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        (document.querySelector('.search input') as HTMLInputElement | null)?.focus();
+      } else if (e.key === 'l' || e.key === 'L') setLog((v) => !v);
+      else if (e.key === '1') changeTf('D');
+      else if (e.key === '2') changeTf('W');
+      else if (e.key === '3') changeTf('M');
+      else if (e.key === 'f' || e.key === 'F') {
+        if (candles) setShowBt(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles, provider]);
 
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
   const starred = watchlist.includes(symbol);
   const stats = useMemo(() => computeStats(candles), [candles]);
+  const lastC = candles && candles.length ? candles.close[candles.length - 1] : NaN;
+  const prevC = candles && candles.length > 1 ? candles.close[candles.length - 2] : NaN;
+  const dChg = isFinite(lastC) && isFinite(prevC) && prevC ? ((lastC - prevC) / prevC) * 100 : 0;
+  const company = provider === 'bist' ? names[symbol] || '' : 'Sentetik veri';
 
   return (
     <div className="app">
@@ -207,7 +243,14 @@ export default function App() {
 
       <div className="body">
         <aside className="sidebar">
-          <Watchlist items={watchlist} quotes={quotes} active={symbol} onSelect={selectSymbol} onRemove={toggleWatch} />
+          <Watchlist
+            items={watchlist}
+            quotes={quotes}
+            spark={spark}
+            active={symbol}
+            onSelect={selectSymbol}
+            onRemove={toggleWatch}
+          />
           <Portfolio
             holdings={portfolio}
             quotes={quotes}
@@ -229,6 +272,19 @@ export default function App() {
         </aside>
 
         <main className="main">
+          <div className="symhead">
+            <span className="sh-ticker">{provider === 'bist' ? symbol : 'SENTETİK'}</span>
+            {company && <span className="sh-name">{company}</span>}
+            <span className="spacer" />
+            {isFinite(lastC) && (
+              <>
+                <span className="sh-price">{fp(lastC)}</span>
+                <span className={'sh-badge ' + (dChg >= 0 ? 'pos' : 'neg')}>
+                  {dChg >= 0 ? '▲' : '▼'} {Math.abs(dChg).toFixed(2)}%
+                </span>
+              </>
+            )}
+          </div>
           <div className="chart-wrap">
             {stats && (
               <div className="statsbox">

@@ -691,6 +691,56 @@ button.ctl:disabled {
   flex-direction: column;
 }
 
+/* Symbol header strip */
+.symhead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.sh-ticker {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+}
+.sh-name {
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sh-price {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sh-badge {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.sh-badge.pos {
+  color: var(--up);
+  background: rgba(38, 166, 154, 0.15);
+}
+.sh-badge.neg {
+  color: var(--down);
+  background: rgba(239, 83, 80, 0.15);
+}
+
+/* Watchlist row with sparkline */
+.wl-row {
+  grid-template-columns: 1fr 46px auto auto 16px;
+}
+.spark {
+  display: block;
+}
+
 /* ---- Sidebar panels (watchlist / portfolio) ---- */
 .panel {
   padding: 8px 10px;
