@@ -38,12 +38,11 @@ jobs:
           if [ -d _site/data/bist ]; then cp -r _site/data/bist public/data/; fi
           rm -rf _site
 
-      - name: Refresh BIST data (scheduled / manual / first time only)
-        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || hashFiles('public/data/bist/symbols.json') == '' }}
+      - name: BIST data (incremental every deploy; full refresh on schedule)
         continue-on-error: true
         env:
-          # Scheduled run = full refresh (fresh prices); manual/first = incremental
-          # (only fetch newly-added symbols like recent IPOs).
+          # Incremental on pushes (fetch only newly-added symbols / IPOs, fast);
+          # full re-fetch on the scheduled run for fresh prices.
           FORCE_ALL: ${{ github.event_name == 'schedule' && '1' || '' }}
         run: |
           python -m pip install --quiet borsapy numpy

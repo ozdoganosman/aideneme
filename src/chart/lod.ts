@@ -35,6 +35,7 @@ export class LodController {
   private win = { i0: 0, i1: 0, stride: 1 };
   private raf = 0;
   private hasView = false; // becomes true after the first render
+  private decLen = 0; // length of the currently rendered (decimated) series
 
   constructor(
     private chart: IChartApi,
@@ -45,11 +46,18 @@ export class LodController {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
   }
 
-  // fit=true frames the latest bars; fit=false preserves the current visible
-  // time range + zoom (used when only the symbol changes).
+  // fit=true frames the latest bars; fit=false preserves the current zoom (visible
+  // bar count) and the gap from the right edge (used when only the symbol changes).
   setData(full: Candles, extraVals: Float64Array[], fit = true) {
-    const savedRange =
-      !fit && this.hasView ? this.chart.timeScale().getVisibleRange() : null;
+    let preserve: { visReal: number; gapReal: number } | null = null;
+    if (!fit && this.hasView && this.full) {
+      const lr = this.chart.timeScale().getVisibleLogicalRange();
+      if (lr) {
+        const visReal = Math.max(1, (lr.to - lr.from) * this.win.stride);
+        const gapReal = (this.decLen - lr.to) * this.win.stride; // bars from view-right to data end
+        preserve = { visReal, gapReal };
+      }
+    }
 
     this.full = full;
     this.extraVals = extraVals;
@@ -61,8 +69,8 @@ export class LodController {
       return;
     }
 
-    if (savedRange) {
-      this.renderForRange(Number(savedRange.from), Number(savedRange.to));
+    if (preserve) {
+      this.renderForView(preserve.visReal, preserve.gapReal);
     } else {
       const show = Math.min(400, full.length);
       this.renderWindow(full.length - show, full.length, true);
@@ -70,23 +78,22 @@ export class LodController {
     this.hasView = true;
   }
 
-  // Render the new dataset keeping the given time window (preserves zoom + X).
-  private renderForRange(t0: number, t1: number) {
+  // Render the new dataset keeping the same zoom (visReal bars across the view)
+  // and the same distance from the right edge (gapReal).
+  private renderForView(visReal: number, gapReal: number) {
     if (!this.full) return;
     const len = this.full.length;
-    const i0 = lowerBound(this.full.time, t0);
-    const i1 = Math.max(i0, lowerBound(this.full.time, t1));
-    const visBars = Math.max(1, i1 - i0);
-    const stride = strideFor(visBars, this.targetBuckets);
-    const margin = Math.max(visBars, this.targetBuckets);
-    let w0 = Math.floor(i0 - margin);
-    let w1 = Math.ceil(i1 + margin);
+    const toReal = len - gapReal;
+    const fromReal = toReal - visReal;
+    const stride = strideFor(visReal, this.targetBuckets);
+    const margin = Math.max(visReal, this.targetBuckets);
+    let w0 = Math.floor(fromReal - margin);
+    let w1 = Math.ceil(toReal + margin);
     if (w0 < 0) w0 = 0;
     if (w1 > len) w1 = len;
 
     const { candles, volumes } = decimate(this.full, w0, w1, stride);
     if (candles.length === 0) {
-      // Saved window doesn't overlap the new data — just frame the latest.
       const show = Math.min(400, len);
       this.renderWindow(len - show, len, true);
       return;
@@ -101,7 +108,12 @@ export class LodController {
       this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
     }
     this.win = { i0: w0, i1: w1, stride };
-    this.chart.timeScale().setVisibleRange({ from: t0 as UTCTimestamp, to: t1 as UTCTimestamp });
+    this.decLen = candles.length;
+    // Map the desired real-index viewport into decimated logical coordinates.
+    this.chart.timeScale().setVisibleLogicalRange({
+      from: (fromReal - w0) / stride,
+      to: (toReal - w0) / stride,
+    });
     requestAnimationFrame(() => {
       this.applying = false;
     });
@@ -163,6 +175,7 @@ export class LodController {
       this.extras[k].series.setData(buildExtra(this.full, vals, i0, i1, s, this.extras[k]) as never);
     }
     this.win = { i0, i1, stride: s };
+    this.decLen = candles.length;
 
     if (fit) {
       const from = candles[Math.max(0, candles.length - 120)].time;
@@ -288,18 +301,6 @@ function buildExtra(
 function strideFor(bars: number, target: number): number {
   const s = Math.max(1, Math.ceil(bars / target));
   return 1 << Math.ceil(Math.log2(s));
-}
-
-// First index whose time is >= x (binary search over ascending times).
-function lowerBound(arr: Float64Array, x: number): number {
-  let lo = 0;
-  let hi = arr.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (arr[mid] < x) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
 }
 
 function appendCandle(c: Candles, b: LiveBar): Candles {
