@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Candles } from '../data/types';
-import { optimize, StrategyResult } from '../indicators/backtest';
+import { optimize, StrategyResult, explainStrategy } from '../indicators/backtest';
 import { fetchStrategies, StrategiesFile } from '../data/bistStatic';
 
 interface Props {
@@ -52,9 +52,28 @@ export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
         </div>
 
         <div className="modal-body">
-          {tab === 'market'
-            ? renderMarket(market, marketLoaded, pick)
-            : renderSymbol(data, pick)}
+          <details className="bt-glossary">
+            <summary>ℹ️ Stratejiler ne demek? (basitçe)</summary>
+            <div>
+              <p>
+                <b>EMA kesişimi:</b> İki hareketli ortalamadan kısa olan uzunu yukarı keserse AL, aşağı keserse SAT
+                (trend takibi).
+              </p>
+              <p>
+                <b>MACD:</b> Kısa ve uzun ortalamanın farkının yönüne/sinyaline göre AL-SAT (momentum).
+              </p>
+              <p>
+                <b>Williams %R:</b> Fiyatın son N günün neresinde olduğunu ölçer; dipten dönüşte AL, tepeden dönüşte SAT
+                (aşırı alım/satım).
+              </p>
+              <p className="lg-muted">
+                Sayılar (örn. 9/21) gün sayısıdır — küçük = hızlı/çok sinyal, büyük = yavaş/az sinyal. Her satırdaki ⓘ
+                üstüne gelince o stratejinin açıklamasını gösterir.
+              </p>
+            </div>
+          </details>
+
+          {tab === 'market' ? renderMarket(market, marketLoaded, pick) : renderSymbol(data, pick)}
           <div className="bt-hint">
             Çubuk = getiri. Bir stratejiye <b>tıkla</b> → grafikte AL/SAT noktaları işaretlenir.
             <br />⚠️ Geçmişe dönük (in-sample); geçmiş performans geleceği garanti etmez.
@@ -156,7 +175,7 @@ function renderSymbol(data: { results: StrategyResult[]; holdPct: number } | nul
 
 function Winner({ name, big, stats, onClick }: { name: string; big: string; stats: string; onClick: () => void }) {
   return (
-    <div className="bt-winner clickable" onClick={onClick} title="Grafikte göster">
+    <div className="bt-winner clickable" onClick={onClick} title={explainStrategy(name)}>
       <div className="bt-winner-l">
         <div className="bt-winner-badge">🏆 En iyi</div>
         <div className="bt-winner-name">{name}</div>
@@ -190,6 +209,9 @@ function Row({
       <div className="bt-srow-head">
         <span className="bt-rank">{rank}</span>
         <span className="bt-srow-name">{name}</span>
+        <span className="bt-info" title={explainStrategy(name)} onClick={(e) => e.stopPropagation()}>
+          ⓘ
+        </span>
         <span className={'bt-srow-val ' + (value >= 0 ? 'up' : 'down')}>{label}</span>
       </div>
       <div className="bt-barwrap">

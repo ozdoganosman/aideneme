@@ -114,6 +114,22 @@ export function strategyList(): StrategyDef[] {
   return defs;
 }
 
+// Plain-language explanation of a strategy (for beginners).
+export function explainStrategy(name: string): string {
+  let m: RegExpMatchArray | null;
+  if ((m = name.match(/^EMA (\d+)\/(\d+)/)))
+    return `${m[1]} günlük ortalama, ${m[2]} günlük ortalamanın ÜSTÜNE çıkınca AL; ALTINA inince SAT. Yükseliş trendini takip eder.`;
+  if ((m = name.match(/^MACD (\d+)\/(\d+)\/(\d+) > Sinyal/)))
+    return `Hızlı (${m[1]} gün) ve yavaş (${m[2]} gün) ortalamanın farkı (MACD), kendi ${m[3]} günlük sinyal çizgisini yukarı kesince AL, aşağı kesince SAT. Momentum.`;
+  if ((m = name.match(/^MACD (\d+)\/(\d+) > 0/)))
+    return `${m[1]} günlük ortalama ${m[2]} günlüğün üstündeyken (MACD sıfırın üzerinde) AL, altına inince SAT. Basit trend filtresi.`;
+  if ((m = name.match(/^%R (\d+) \((\d+)\/(\d+)\)/)))
+    return `Williams %R (${m[1]} gün): fiyat son ${m[1]} günün DİBİNDEN dönüp ${m[2]} seviyesini yukarı geçince AL (aşırı satımdan çıkış); TEPEDEN dönüp ${m[3]} altına inince SAT.`;
+  if ((m = name.match(/^%R (\d+) > 50/)))
+    return `Williams %R (${m[1]} gün) 50'nin üstündeyken (fiyat son ${m[1]} günün üst yarısında = güçlü) AL, altına inince SAT.`;
+  return 'Gösterge tabanlı al/sat stratejisi.';
+}
+
 function simulate(close: Float64Array, long: Uint8Array, holdPct: number, name: string): StrategyResult {
   const n = close.length;
   let equity = 1;

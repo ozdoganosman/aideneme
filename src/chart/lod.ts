@@ -119,6 +119,46 @@ export class LodController {
     });
   }
 
+  // Zoom to a specific date range at full detail (used to inspect one trade).
+  focusRange(t0: number, t1: number) {
+    if (!this.full || this.full.length === 0) return;
+    const len = this.full.length;
+    const i0 = lb(this.full.time, t0);
+    let i1 = lb(this.full.time, t1);
+    if (i1 < i0) i1 = i0;
+    const span = Math.max(2, i1 - i0);
+    const pad = Math.max(3, Math.round(span * 0.3));
+    const visLo = Math.max(0, i0 - pad);
+    const visHi = Math.min(len - 1, i1 + pad);
+    const stride = strideFor(visHi - visLo + 1, this.targetBuckets);
+    const margin = Math.max(span, this.targetBuckets);
+    let w0 = Math.floor(visLo - margin);
+    let w1 = Math.ceil(visHi + margin + 1);
+    if (w0 < 0) w0 = 0;
+    if (w1 > len) w1 = len;
+
+    const { candles, volumes } = decimate(this.full, w0, w1, stride);
+    if (candles.length === 0) return;
+
+    this.applying = true;
+    this.candle.setData(candles);
+    this.volume.setData(volumes);
+    for (let k = 0; k < this.extras.length; k++) {
+      const vals = this.extraVals[k];
+      if (!vals) continue;
+      this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
+    }
+    this.win = { i0: w0, i1: w1, stride };
+    this.decLen = candles.length;
+    this.chart.timeScale().setVisibleRange({
+      from: this.full.time[visLo] as UTCTimestamp,
+      to: this.full.time[visHi] as UTCTimestamp,
+    });
+    requestAnimationFrame(() => {
+      this.applying = false;
+    });
+  }
+
   private onRange = (range: LogicalRange | null) => {
     if (this.applying || !this.full || !range) return;
     cancelAnimationFrame(this.raf);
@@ -301,6 +341,18 @@ function buildExtra(
 function strideFor(bars: number, target: number): number {
   const s = Math.max(1, Math.ceil(bars / target));
   return 1 << Math.ceil(Math.log2(s));
+}
+
+// First index whose time is >= x (ascending binary search).
+function lb(arr: Float64Array, x: number): number {
+  let lo = 0;
+  let hi = arr.length;
+  while (lo < hi) {
+    const m = (lo + hi) >>> 1;
+    if (arr[m] < x) lo = m + 1;
+    else hi = m;
+  }
+  return lo;
 }
 
 function appendCandle(c: Candles, b: LiveBar): Candles {

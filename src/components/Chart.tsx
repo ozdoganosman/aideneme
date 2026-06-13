@@ -43,6 +43,7 @@ interface Props {
   tfLabel: string;
   strategy?: string | null; // overlay this strategy's buy/sell signals
   log?: boolean; // logarithmic price scale
+  focus?: { entryTime: number; exitTime: number | null } | null; // zoom to one trade
 }
 
 interface LegendVals {
@@ -75,7 +76,7 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
 });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(
-  { candles, fitOnLoad, settings, symbol, tfLabel, strategy, log },
+  { candles, fitOnLoad, settings, symbol, tfLabel, strategy, log, focus },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -280,6 +281,13 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       .priceScale()
       .applyOptions({ mode: log ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal });
   }, [log]);
+
+  // Zoom to a single trade when one is picked from the trade list.
+  useEffect(() => {
+    if (!focus || !candles) return;
+    const t1 = focus.exitTime ?? candles.time[candles.length - 1];
+    lodRef.current?.focusRange(focus.entryTime, t1);
+  }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useImperativeHandle(
     ref,

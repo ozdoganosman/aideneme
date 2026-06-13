@@ -7,6 +7,7 @@ import { IndicatorMenu } from './components/IndicatorMenu';
 import { Trades } from './components/Trades';
 import { Backtest } from './components/Backtest';
 import { computeStats } from './indicators/stats';
+import type { Trade } from './indicators/backtest';
 import { Candles, BIST_SYMBOLS } from './data/types';
 import { fetchBistStatic, fetchBistSymbols, fetchBistQuotes, Quotes } from './data/bistStatic';
 import { generateSynthetic } from './data/synthetic';
@@ -39,6 +40,7 @@ export default function App() {
   const [showBt, setShowBt] = useState(false);
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
+  const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
 
   const [quotes, setQuotes] = useState<Quotes>({});
   const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
@@ -67,6 +69,7 @@ export default function App() {
       setLoading(true);
       setError(null);
       setStatus('Yükleniyor…');
+      setFocusTrade(null);
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
@@ -100,6 +103,7 @@ export default function App() {
 
   const changeTf = (newTf: TF) => {
     setTf(newTf);
+    setFocusTrade(null);
     if (provider !== 'bist' || !dailyRef.current) return;
     const c = resample(dailyRef.current, newTf);
     setFitOnLoad(true);
@@ -212,7 +216,16 @@ export default function App() {
             onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
             onSelect={selectSymbol}
           />
-          {strategy && candles && <Trades strategy={strategy} candles={candles} />}
+          {strategy && candles && (
+            <Trades
+              strategy={strategy}
+              candles={candles}
+              onSelectTrade={(t) => {
+                setFocusTrade(t);
+                setLog(true);
+              }}
+            />
+          )}
         </aside>
 
         <main className="main">
@@ -233,6 +246,32 @@ export default function App() {
               </div>
             )}
 
+            {focusTrade && (
+              <div className="tradecard">
+                <button className="tradecard-x" onClick={() => setFocusTrade(null)} title="Kapat">×</button>
+                <div className="tradecard-row">
+                  <span className="up">AL</span> {fmtD(focusTrade.entryTime)} @ {fp(focusTrade.entryPrice)}
+                  {'  →  '}
+                  {focusTrade.open ? (
+                    <span className="lg-muted">açık</span>
+                  ) : (
+                    <>
+                      <span className="down">SAT</span> {fmtD(focusTrade.exitTime as number)} @ {fp(focusTrade.exitPrice)}
+                    </>
+                  )}
+                </div>
+                <div className="tradecard-pnl">
+                  <b className={focusTrade.retPct >= 0 ? 'up' : 'down'}>
+                    {(focusTrade.retPct >= 0 ? '+' : '') + focusTrade.retPct.toFixed(2)}% kâr/zarar
+                  </b>
+                  <span className="lg-muted">
+                    {' · '}
+                    {Math.round(((focusTrade.exitTime ?? Date.now() / 1000) - focusTrade.entryTime) / 86400)} gün
+                  </span>
+                </div>
+              </div>
+            )}
+
             {loading && (
               <div className="loading">
                 <div className="spinner" />
@@ -248,6 +287,7 @@ export default function App() {
               tfLabel={tfLabel}
               strategy={strategy}
               log={log}
+              focus={focusTrade ? { entryTime: focusTrade.entryTime, exitTime: focusTrade.exitTime } : null}
             />
           </div>
         </main>
@@ -288,4 +328,8 @@ function fv(v: number): string {
   if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
   if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
   return v.toFixed(0);
+}
+
+function fmtD(t: number): string {
+  return new Date(t * 1000).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }

@@ -1,12 +1,13 @@
 import { Candles } from '../data/types';
-import { tradesFor } from '../indicators/backtest';
+import { tradesFor, Trade } from '../indicators/backtest';
 
 interface Props {
   strategy: string;
   candles: Candles;
+  onSelectTrade: (t: Trade) => void;
 }
 
-export function Trades({ strategy, candles }: Props) {
+export function Trades({ strategy, candles, onSelectTrade }: Props) {
   const trades = tradesFor(strategy, candles);
   const wins = trades.filter((t) => t.retPct >= 0).length;
 
@@ -21,7 +22,13 @@ export function Trades({ strategy, candles }: Props) {
             {trades.length} işlem · {Math.round((wins / trades.length) * 100)}% kazanç
           </div>
           {trades.map((t, i) => (
-            <div key={i} className="row" style={{ gridTemplateColumns: '1fr auto' }}>
+            <div
+              key={i}
+              className="row"
+              style={{ gridTemplateColumns: '1fr auto', cursor: 'pointer' }}
+              onClick={() => onSelectTrade(t)}
+              title="Grafikte göster"
+            >
               <span className="row-sym" style={{ fontWeight: 400 }}>
                 {fmtDate(t.entryTime)} → {t.open ? 'açık' : fmtDate(t.exitTime as number)}
                 <small>

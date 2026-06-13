@@ -324,6 +324,63 @@ button.ctl:disabled {
   padding: 5px 9px;
 }
 
+/* Trade focus card (over the chart) */
+.tradecard {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  background: rgba(20, 23, 31, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 30px 8px 12px;
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.tradecard-pnl {
+  margin-top: 2px;
+  font-size: 14px;
+}
+.tradecard-x {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.tradecard-x:hover {
+  color: var(--down);
+}
+
+/* Backtest glossary + info icon */
+.bt-glossary {
+  font-size: 12px;
+}
+.bt-glossary summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.bt-glossary p {
+  margin: 6px 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+.bt-info {
+  color: var(--muted);
+  cursor: help;
+  font-size: 12px;
+}
+.bt-info:hover {
+  color: var(--accent);
+}
+
 /* ---- Modal (backtest) ---- */
 .modal-backdrop {
   position: fixed;
