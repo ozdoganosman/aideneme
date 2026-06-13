@@ -10,6 +10,7 @@ okur: proxy/key/CORS gerekmez.
 from __future__ import annotations
 
 import json
+import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -81,17 +82,42 @@ def _fetch_one(sym: str):
     return sym, None
 
 
+def _quote(recs: list) -> dict:
+    last = recs[-1]["c"]
+    prev = recs[-2]["c"] if len(recs) >= 2 else last
+    return {"c": last, "pc": prev}
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     symbols = load_symbols()
     total = len(symbols)
-    print(f"[bist] {total} sembol çekiliyor…")
+    force_all = os.environ.get("FORCE_ALL") == "1"
+
     ok: list[str] = []
     quotes: dict = {}
+    to_fetch: list[str] = []
+
+    # Incremental: keep symbols that already have a JSON, fetch only the missing
+    # ones. FORCE_ALL=1 (scheduled run) re-fetches everything for fresh prices.
+    for sym in symbols:
+        path = OUT / f"{sym}.json"
+        if path.exists() and not force_all:
+            try:
+                recs = json.load(open(path, encoding="utf-8"))["data"]
+                if recs:
+                    ok.append(sym)
+                    quotes[sym] = _quote(recs)
+                    continue
+            except Exception:  # noqa
+                pass
+        to_fetch.append(sym)
+
+    print(f"[bist] {len(to_fetch)}/{total} cekilecek (mevcut {len(ok)} korunuyor, force={force_all})")
     done = 0
     try:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            futs = {pool.submit(_fetch_one, s): s for s in symbols}
+            futs = {pool.submit(_fetch_one, s): s for s in to_fetch}
             for fut in as_completed(futs):
                 done += 1
                 sym, recs = fut.result()
@@ -99,11 +125,9 @@ def main() -> int:
                     with open(OUT / f"{sym}.json", "w", encoding="utf-8") as f:
                         json.dump({"data": recs}, f, separators=(",", ":"))
                     ok.append(sym)
-                    last = recs[-1]["c"]
-                    prev = recs[-2]["c"] if len(recs) >= 2 else last
-                    quotes[sym] = {"c": last, "pc": prev}
-                if done % 50 == 0 or done == total:
-                    print(f"[bist] {done}/{total}  ok={len(ok)}")
+                    quotes[sym] = _quote(recs)
+                if to_fetch and (done % 50 == 0 or done == len(to_fetch)):
+                    print(f"[bist] {done}/{len(to_fetch)}  ok_total={len(ok)}")
     except Exception as e:  # noqa
         print(f"[bist] toplu hata: {e}")
 

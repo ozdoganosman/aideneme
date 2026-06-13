@@ -41,6 +41,10 @@ jobs:
       - name: Refresh BIST data (scheduled / manual / first time only)
         if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || hashFiles('public/data/bist/symbols.json') == '' }}
         continue-on-error: true
+        env:
+          # Scheduled run = full refresh (fresh prices); manual/first = incremental
+          # (only fetch newly-added symbols like recent IPOs).
+          FORCE_ALL: ${{ github.event_name == 'schedule' && '1' || '' }}
         run: |
           python -m pip install --quiet borsapy numpy
           python scripts/build_bist.py
