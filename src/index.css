@@ -1,0 +1,130 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #0e0f13;
+  color: #cfd2dc;
+  font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #1c1f2a;
+  flex-wrap: wrap;
+}
+
+.toolbar label {
+  color: #8b90a0;
+  font-size: 12px;
+  margin-right: 2px;
+}
+
+.chart-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.status {
+  display: flex;
+  gap: 18px;
+  padding: 6px 12px;
+  border-top: 1px solid #1c1f2a;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+select,
+input,
+button {
+  background: #1a1d27;
+  color: #cfd2dc;
+  border: 1px solid #2a2e3a;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+input:focus,
+select:focus {
+  border-color: #3b6ea5;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #222633;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.accent {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.accent:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Symbol autocomplete */
+.search {
+  position: relative;
+}
+
+.search input {
+  width: 170px;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  background: #161922;
+  border: 1px solid #2a2e3a;
+  border-radius: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 20;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.search-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-item:hover,
+.search-item.active {
+  background: #26304a;
+}

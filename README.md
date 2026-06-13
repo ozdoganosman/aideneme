@@ -1,124 +1,77 @@
-# Borsa — Yüksek Performanslı Mum Grafiği (C++ / ImGui + ImPlot)
+# Borsa — Yüksek Performanslı Web Grafiği
 
-Milyonlarca mumu **kasmadan** pan/zoom edebilen, native (GPU hızlandırmalı) bir
-borsa/trading grafik uygulaması. Dear ImGui + ImPlot + GLFW/OpenGL üzerine
-kuruludur. Veri kaynağı olarak **API key gerektirmeyen, ücretsiz Binance public
-API** ile gerçek piyasa verisini ve offline stres testi için **sentetik üreteci**
-kullanır.
+Milyonlarca mumu **kasmadan** pan/zoom edebilen, web tabanlı borsa/trading grafiği.
+**React + TypeScript + Vite** ve **TradingView Lightweight Charts** üzerine kurulu.
+Veri: **API key gerektirmeyen, ücretsiz Binance public API** (gerçek piyasa, canlı
+WebSocket) + offline stres testi için **sentetik üreteç**.
 
-## Neden kasmıyor? (Mimarinin özü)
+## Canlı demo
 
-Performans dilden (C++/JS) değil, iki tasarım kararından gelir:
+GitHub Pages'e her push'ta otomatik yayınlanır:
+**https://ozdoganosman.github.io/aideneme/**
 
-1. **GPU hızlandırmalı immediate-mode çizim** (ImGui/ImPlot → OpenGL). DOM/SVG
-   gibi düğüm tabanlı bir yapı yok.
-2. **Viewport min/max decimation** — asıl numara bu. Ekran ~2000px geniştir;
-   10.000.000 mumu 2000 piksele çizmenin anlamı yok. Her karede yalnızca
-   **görünen** aralık alınır ve piksel başına ~1 "kova"ya indirgenir. Her kova tek
-   bir sentetik muma toplanır (open=ilk, close=son, high=max, low=min, vol=Σ).
-   Sonuç: **çizilen mum sayısı veri boyutundan bağımsız**, ekran genişliğiyle
-   sınırlıdır. Yakınlaştırınca tam detay görünür.
+(İlk yayında repo'da **Settings → Pages → Source: GitHub Actions** seçili olmalı;
+workflow bunu otomatik etkinleştirmeye çalışır.)
 
-Bkz. `src/chart/Decimate.hpp`.
+## Neden kasmıyor?
 
-### Ölçülen performans (sadece veri tarafı, tek çekirdek; GPU çizimi hariç)
+Performansın sırrı kütüphane değil, **viewport decimation + LOD**'dur
+(`src/chart/lod.ts`):
 
-| Veri seti | Üretim | Tam zoom-out decimation (en kötü durum) | Çizilen mum |
-|-----------|--------|------------------------------------------|-------------|
-| 1.000.000 | 121 ms | **2.2 ms/kare** | 2000 |
-| 4.000.000 | 491 ms | **8.8 ms/kare** | 2000 |
-| 10.000.000| 1.2 s  | **21.8 ms/kare** | 2000 |
+- Tüm veri seti bellekte tutulur (kolon bazlı `Float64Array`'ler).
+- Grafiğe **her zaman yalnızca görünen aralığın, ekran çözünürlüğüne indirgenmiş
+  bir penceresi** beslenir (min/max OHLC kovaları, ~4000 nokta).
+- Çizilen nokta sayısı **veri boyutundan bağımsız**; yakınlaştıkça detay artar
+  (LOD adımları 2'nin katı stride ile).
 
-Zoom yapınca görünür aralık küçülür ve maliyet doğrusal olarak düşer (ör. 100
-mum görünüyorsa yalnızca 100 mum çizilir, tam detay). En kötü durum yalnızca
-*tüm* veriye birden tam zoom-out yapıldığında geçerlidir.
+Sonuç: 1m, 100k veya milyonlarca mum — pan/zoom hep akıcı.
 
-## Veri kaynakları
-
-- **Binance (canlı, ücretsiz, API key YOK)** — `GET /api/v3/klines`. 1m mumlarını
-  sayfalayarak yüz binlerce nokta çeker. WebSocket yerine basit REST polling ile
-  canlı güncelleme. Tek istek başına çekilen mum, kibar olmak için `kMaxBars`
-  (100.000) ile sınırlandırılmıştır.
-- **Sentetik (offline)** — geometrik Brownian hareketiyle anında milyonlarca mum.
-  İnternet gerektirmez; "kasmama" iddiasını kanıtlamak için idealdir.
-
-> **BIST / ABD hisseleri:** Tick seviyesinde ücretsiz + key'siz kaynak pratikte
-> yoktur (Finnhub/Alpha Vantage/TwelveData hepsi key ister). `DataProvider`
-> arayüzü (`src/data/DataProvider.hpp`) sayesinde keyli bir sağlayıcı sonradan
-> kolayca eklenebilir.
-
-## Derleme
-
-### Bağımlılıklar
-
-Sistem kütüphaneleri (pencere + GL + HTTP), ImGui/ImPlot/json ise CMake
-FetchContent ile GitHub'dan otomatik çekilir.
-
-**Linux (Debian/Ubuntu):**
-```bash
-sudo apt-get install -y build-essential cmake \
-    libglfw3-dev libgl1-mesa-dev libcurl4-openssl-dev xorg-dev
-```
-
-**macOS:**
-```bash
-brew install cmake glfw curl
-```
-
-**Windows:** vcpkg ile `glfw3` ve `curl` kurun, ardından
-`-DCMAKE_TOOLCHAIN_FILE=...vcpkg.cmake` ile yapılandırın.
-
-### Build
+## Çalıştırma
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-./build/borsa
+npm install
+npm run dev      # http://localhost:5173
+# veya
+npm run build && npm run preview
 ```
 
 ## Kullanım
 
-Üst çubuktan:
 - **Kaynak**: Sentetik (offline) veya Binance (canlı)
-- **Sembol**: ör. `BTCUSDT`, `ETHUSDT` (Binance için)
+- **Sembol**: kutuya yaz → otomatik tamamlama önerir (Binance seçiliyken tüm
+  pariteler ~2000+; offline'da yerleşik liste). Öneriden seç veya Enter.
 - **Periyot**: 1m / 5m / 15m / 1h / 4h / 1d
-- **Mum sayısı**: çekilecek/üretilecek bar sayısı (Sentetik'te milyonlar deneyin)
-- **Yükle**: veriyi arka plan thread'inde yükler (UI donmaz)
-- **Canlı**: ~1 sn'de bir son mumu günceller
-
-Grafikte: sürükle = pan, tekerlek = zoom, üzerine gel = OHLCV tooltip. Fiyat ve
-hacim panelleri ortak x-ekseninde birlikte hareket eder.
+- **Mum**: üretilecek/çekilecek bar sayısı (Sentetik'te milyonları dene)
+- **Yükle** · **Canlı** (Binance'de WebSocket, sentetikte simülasyon)
+- Grafik: sürükle = kaydır, tekerlek = zoom, çift tık = sığdır, üzerine gel = OHLCV
 
 ## Mimari
 
 ```
 src/
-├── main.cpp              GLFW + OpenGL + ImGui/ImPlot kurulumu, kare döngüsü
-├── App.{hpp,cpp}         Durum, kontroller, arka plan yükleme/canlı thread'leri
+├── main.tsx               React girişi
+├── App.tsx                durum + toolbar + canlı feed
+├── index.css             koyu tema / yerleşim
+├── components/
+│   ├── Chart.tsx          Lightweight Charts sarmalayıcı (mum + hacim)
+│   └── SymbolSearch.tsx   otomatik tamamlamalı sembol arama
 ├── chart/
-│   ├── ChartView.{hpp,cpp}  ImPlot mum + hacim çizimi, crosshair, tooltip
-│   └── Decimate.hpp         Viewport min/max decimation (performansın kalbi)
-├── data/
-│   ├── Types.hpp            Candle / CandleSeries (kolon bazlı tipli diziler)
-│   ├── DataProvider.hpp     Soyut kaynak arayüzü
-│   ├── SyntheticProvider.*  GBM ile milyonlarca mum
-│   └── BinanceProvider.*    Ücretsiz, key'siz REST klines
-└── net/Http.{hpp,cpp}   libcurl HTTP GET sarmalayıcı
+│   └── lod.ts             viewport decimation + LOD (performansın kalbi)
+└── data/
+    ├── types.ts           Candles (kolon bazlı tipli diziler), periyotlar
+    ├── synthetic.ts       GBM ile milyonlarca mum (offline)
+    └── binance.ts         ücretsiz/key'siz REST klines + exchangeInfo + WS
 ```
 
-Veri kolon bazlı (her alan ayrı dizi) tutulur: hem cache-dostu (decimation
-taraması için) hem de ImPlot'un beklediği ham `double` dizi formatına uygun.
-Ağ/üretim işleri arka plan thread'lerinde, UI ana thread'de.
+## Veri kaynakları
 
-## Bilinen sınırlar / sonraki adımlar
+- **Binance** (ücretsiz, **API key YOK**): `klines` (geçmiş), `exchangeInfo`
+  (sembol listesi), `@kline` WebSocket (canlı). Tarayıcıdan CORS ile çalışır.
+- **Sentetik**: geometrik Brownian hareketi; internet gerekmez.
+- BIST/ABD hisseleri tick seviyesinde ücretsiz+key'siz yok; `binance.ts`
+  benzeri bir sağlayıcı sonradan eklenebilir.
 
-- **10M+ tam zoom-out** için her karede tüm veri taranır (~45 fps). Çok seviyeli
-  bir **mip/piramit ön-decimation** cache'i ile bu sabit zamana indirilebilir.
-- Canlı veri şu an **REST polling**; gerçek tick akışı için **WebSocket**
-  (Binance stream) eklenebilir.
-- İndikatörler (MA/EMA/RSI), çoklu sembol, çizim araçları eklenebilir.
-- Keyli **BIST/ABD hisse** sağlayıcısı `DataProvider` arkasına eklenebilir.
+## Dağıtım
 
-## Lisans
-
-Eğitim/demonstrasyon amaçlıdır. ImGui/ImPlot/nlohmann-json kendi lisanslarına tabidir.
+`.github/workflows/deploy.yml` her push'ta build alır ve GitHub Pages'e yayınlar.
+`vite.config.ts` içinde `base: './'` olduğundan alt-yol (`/aideneme/`) altında sorunsuz çalışır.

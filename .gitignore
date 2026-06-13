@@ -1,8 +1,13 @@
+# Dependencies
+node_modules/
+
 # Build output
-build/
-build-win/
-out/
-cmake-build-*/
+dist/
+dist-ssr/
+
+# Logs
+*.log
+npm-debug.log*
 
 # Editor / IDE
 .vscode/
@@ -13,3 +18,8 @@ cmake-build-*/
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright
+/test-results/
+/playwright-report/
+.cache/
