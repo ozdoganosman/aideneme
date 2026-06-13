@@ -42,8 +42,8 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
 
   const add = () => {
     const s = sym.toUpperCase().trim();
-    const q = parseFloat(qty);
-    const c = parseFloat(cost);
+    const q = parseNum(qty);
+    const c = parseNum(cost);
     if (!s || !(q > 0) || !(c > 0)) return;
     onAdd({ symbol: s, qty: q, cost: c });
     setSym('');
@@ -144,6 +144,18 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
       )}
     </div>
   );
+}
+
+// Accept both "17,42" (TR comma decimal) and "1.234,56" (TR thousands) as well
+// as "17.42" / "1234".
+function parseNum(s: string): number {
+  let t = s.trim().replace(/\s/g, '');
+  if (t.includes(',') && t.includes('.')) {
+    t = t.replace(/\./g, '').replace(',', '.');
+  } else if (t.includes(',')) {
+    t = t.replace(',', '.');
+  }
+  return parseFloat(t);
 }
 
 function rank(symbols: string[], q: string): string[] {
