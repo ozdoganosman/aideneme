@@ -39,6 +39,43 @@ int main(int, char**) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
     ImGui::StyleColorsDark();
+
+    // DPI-aware scaling + a larger, crisp font. ImGui's built-in 13px font is
+    // tiny on modern/high-DPI displays, which made the UI hard to read.
+    {
+        float xscale = 1.0f, yscale = 1.0f;
+        glfwGetWindowContentScale(window, &xscale, &yscale);
+        const float uiScale = (xscale > 1.0f ? xscale : 1.0f) * 1.35f;
+        const float fontPx  = 17.0f * uiScale;
+
+        const char* candidates[] = {
+#ifdef _WIN32
+            "C:\\Windows\\Fonts\\segoeui.ttf",
+            "C:\\Windows\\Fonts\\arial.ttf",
+#elif defined(__APPLE__)
+            "/System/Library/Fonts/SFNS.ttf",
+            "/Library/Fonts/Arial.ttf",
+#else
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+#endif
+        };
+        bool fontLoaded = false;
+        for (const char* p : candidates) {
+            if (FILE* f = std::fopen(p, "rb")) {
+                std::fclose(f);
+                io.Fonts->AddFontFromFileTTF(p, fontPx);
+                fontLoaded = true;
+                break;
+            }
+        }
+        if (!fontLoaded) {
+            ImFontConfig cfg;
+            cfg.SizePixels = fontPx;
+            io.Fonts->AddFontDefault(&cfg);
+        }
+        ImGui::GetStyle().ScaleAllSizes(uiScale);
+    }
+
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glslVersion);
 

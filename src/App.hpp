@@ -41,7 +41,9 @@ private:
     int   tfIndex_        = 0;
     int   providerIndex_  = 0;   // 0 = synthetic, 1 = binance
     int   requestBars_    = 100000;
-    std::string status_   = "Hazir. Bir kaynak secip 'Yukle'ye bas.";
+    int   popularIndex_   = 0;   // selection in the quick-pick symbol combo
+    bool  firstFrame_     = true; // auto-load once on startup so it's not empty
+    std::string status_   = "Hazir.";
 
     // Selection that series_ currently represents (the live feed targets this so
     // its ticks never merge into a mismatched series).

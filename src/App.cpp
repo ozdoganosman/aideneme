@@ -7,9 +7,20 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <ctime>
 #include <random>
 #include <string>
+
+namespace {
+// Quick-pick list for the symbol combo. For Binance these are real pairs; for
+// the synthetic provider the name only seeds the generator.
+const char* const kPopularSymbols[] = {
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT",
+    "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "TRXUSDT", "DOTUSDT", "LTCUSDT",
+};
+const int kPopularCount = sizeof(kPopularSymbols) / sizeof(kPopularSymbols[0]);
+} // namespace
 
 App::App()
     : synthetic_(std::make_unique<SyntheticProvider>()),
@@ -191,13 +202,22 @@ void App::drainResults() {
 void App::draw() {
     drainResults();
 
+    // Load something immediately so the first screen isn't an empty chart.
+    if (firstFrame_) {
+        firstFrame_ = false;
+        startLoad();
+    }
+
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(vp->WorkPos);
     ImGui::SetNextWindowSize(vp->WorkSize);
+    // NoScrollWithMouse: let the mouse wheel zoom the chart instead of being
+    // swallowed by the window as a scroll.
     ImGui::Begin("Borsa", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-                 ImGuiWindowFlags_NoBringToFrontOnFocus);
+                 ImGuiWindowFlags_NoBringToFrontOnFocus |
+                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
     // --- control row ---
     const char* providers[] = {"Sentetik (offline)", "Binance (canli)"};
@@ -207,6 +227,14 @@ void App::draw() {
 
     ImGui::SetNextItemWidth(120);
     ImGui::InputText("Sembol", symbolBuf_, sizeof symbolBuf_);
+    ImGui::SameLine();
+
+    // Quick-pick popular symbols: selecting one fills the box and loads it.
+    ImGui::SetNextItemWidth(130);
+    if (ImGui::Combo("Hizli", &popularIndex_, kPopularSymbols, kPopularCount)) {
+        std::snprintf(symbolBuf_, sizeof symbolBuf_, "%s", kPopularSymbols[popularIndex_]);
+        startLoad();
+    }
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(70);
@@ -240,8 +268,11 @@ void App::draw() {
     }
 
     // --- status row ---
-    ImGui::Text("Durum: %s   |   Mum: %zu   |   FPS: %.0f   |   Cizim: <=ekran genisligi",
+    ImGui::Text("Durum: %s   |   Mum: %zu   |   FPS: %.0f",
                 status_.c_str(), series_.size(), ImGui::GetIO().Framerate);
+    ImGui::TextDisabled(
+        "Fare: surukle = kaydir   tekerlek = yakinlastir/uzaklastir   "
+        "cift tiklama = ekrana sigdir");
     ImGui::Separator();
 
     // --- chart ---
