@@ -59,19 +59,16 @@ export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
             <summary>ℹ️ Stratejiler ne demek? (basitçe)</summary>
             <div>
               <p>
-                <b>EMA kesişimi:</b> İki hareketli ortalamadan kısa olan uzunu yukarı keserse AL, aşağı keserse SAT
-                (trend takibi).
+                <b>📈 Trend takibi (EMA / MACD):</b> Fiyat yükselişe geçince AL, düşüşe dönünce SAT — "yükselen ata bin".
+                Trendli piyasada kazandırır, yatay piyasada yıpratır.
               </p>
               <p>
-                <b>MACD:</b> Kısa ve uzun ortalamanın farkının yönüne/sinyaline göre AL-SAT (momentum).
-              </p>
-              <p>
-                <b>Williams %R:</b> Fiyatın son N günün neresinde olduğunu ölçer; dipten dönüşte AL, tepeden dönüşte SAT
-                (aşırı alım/satım).
+                <b>🔄 Dipten al, tepeden sat (Williams %R):</b> Fiyat aşırı düşünce AL, aşırı yükselince SAT. Dalgalı/yatay
+                piyasada iyi, güçlü trendde geç kalır.
               </p>
               <p className="lg-muted">
-                Sayılar (örn. 9/21) gün sayısıdır — küçük = hızlı/çok sinyal, büyük = yavaş/az sinyal. Her satırdaki ⓘ
-                üstüne gelince o stratejinin açıklamasını gösterir.
+                Sayılar gün sayısıdır: küçük = hızlı/çok işlem (kısa vadeli), büyük = yavaş/az işlem (uzun vadeli). Her
+                stratejinin altında mantığı yazıyor.
               </p>
             </div>
           </details>

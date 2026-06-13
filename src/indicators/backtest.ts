@@ -114,20 +114,28 @@ export function strategyList(): StrategyDef[] {
   return defs;
 }
 
-// Plain-language explanation of a strategy (for beginners).
+// Plain-language LOGIC of a strategy (no jargon) for beginners.
 export function explainStrategy(name: string): string {
   let m: RegExpMatchArray | null;
-  if ((m = name.match(/^EMA (\d+)\/(\d+)/)))
-    return `${m[1]} günlük ortalama, ${m[2]} günlük ortalamanın ÜSTÜNE çıkınca AL; ALTINA inince SAT. Yükseliş trendini takip eder.`;
-  if ((m = name.match(/^MACD (\d+)\/(\d+)\/(\d+) > Sinyal/)))
-    return `Hızlı (${m[1]} gün) ve yavaş (${m[2]} gün) ortalamanın farkı (MACD), kendi ${m[3]} günlük sinyal çizgisini yukarı kesince AL, aşağı kesince SAT. Momentum.`;
-  if ((m = name.match(/^MACD (\d+)\/(\d+) > 0/)))
-    return `${m[1]} günlük ortalama ${m[2]} günlüğün üstündeyken (MACD sıfırın üzerinde) AL, altına inince SAT. Basit trend filtresi.`;
-  if ((m = name.match(/^%R (\d+) \((\d+)\/(\d+)\)/)))
-    return `Williams %R (${m[1]} gün): fiyat son ${m[1]} günün DİBİNDEN dönüp ${m[2]} seviyesini yukarı geçince AL (aşırı satımdan çıkış); TEPEDEN dönüp ${m[3]} altına inince SAT.`;
+  if ((m = name.match(/^EMA (\d+)\//)))
+    return '📈 Trend takibi: Fiyat yükseliş eğilimine girince AL, eğilim bozulup düşüşe dönünce SAT. "Yükselen trende katıl, dönünce çık."' + speed(+m[1]);
+  if ((m = name.match(/^MACD (\d+)\/.* > Sinyal/)))
+    return '🚀 Momentum: Yükseliş ivmesi güç kazanınca AL, ivme zayıflamaya başlayınca SAT. Hızlanmayı yakalar.' + speed(+m[1]);
+  if ((m = name.match(/^MACD (\d+)\/.* > 0/)))
+    return '📈 Trend filtresi: Fiyat uzun vadeli ortalamasının üstüne (yükselişe) geçince AL, altına inince SAT.' + speed(+m[1]);
+  if ((m = name.match(/^%R (\d+) \(/)))
+    return '🔄 Dipten al, tepeden sat: Fiyat aşırı düşüp dipten dönünce AL, aşırı yükselip tepeden dönünce SAT (tepki/salınım stratejisi).' + speed(+m[1]);
   if ((m = name.match(/^%R (\d+) > 50/)))
-    return `Williams %R (${m[1]} gün) 50'nin üstündeyken (fiyat son ${m[1]} günün üst yarısında = güçlü) AL, altına inince SAT.`;
+    return '💪 Güç takibi: Fiyat son dönemin üst yarısında (güçlüyken) AL, alt yarısına düşünce (zayıflayınca) SAT.' + speed(+m[1]);
   return 'Gösterge tabanlı al/sat stratejisi.';
+}
+
+function speed(len: number): string {
+  return len <= 20
+    ? ' (Hızlı: sık işlem, kısa vadeli.)'
+    : len >= 100
+      ? ' (Yavaş: az işlem, uzun vadeli.)'
+      : ' (Orta hızlı.)';
 }
 
 function simulate(close: Float64Array, long: Uint8Array, holdPct: number, name: string): StrategyResult {
