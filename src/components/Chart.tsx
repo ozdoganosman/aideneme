@@ -150,14 +150,18 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mHist, mMacd, mSignal, mEma, mDelta };
 
     const computeTops = () => {
-      const n = chart.panes().length;
-      const t: number[] = [];
-      let acc = 0;
-      for (let i = 0; i < n; i++) {
-        t.push(acc);
-        acc += chart.paneSize(i).height + 1;
+      try {
+        const panes = chart.panes();
+        const t: number[] = [];
+        let acc = 0;
+        for (let i = 0; i < panes.length; i++) {
+          t.push(acc);
+          acc += panes[i].getHeight() + 1;
+        }
+        setTops(t);
+      } catch {
+        /* chart not laid out yet — legends position on the next tick */
       }
-      setTops(t);
     };
 
     const num = (x: unknown): number => (typeof x === 'number' && isFinite(x) ? x : NaN);
