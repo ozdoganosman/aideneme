@@ -7,9 +7,14 @@ interface Props {
   candles: Candles;
   symbol: string;
   onClose: () => void;
+  onSelect: (name: string) => void;
 }
 
-export function Backtest({ candles, symbol, onClose }: Props) {
+export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
+  const pick = (name: string) => {
+    onSelect(name);
+    onClose();
+  };
   const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number } | null>(null);
   const [market, setMarket] = useState<StrategiesFile | null>(null);
   const [marketLoaded, setMarketLoaded] = useState(false);
@@ -63,7 +68,7 @@ export function Backtest({ candles, symbol, onClose }: Props) {
                 </thead>
                 <tbody>
                   {market.results.slice(0, 12).map((r, i) => (
-                    <tr key={r.name} className={i === 0 ? 'best' : ''}>
+                    <tr key={r.name} className={'clickable' + (i === 0 ? ' best' : '')} onClick={() => pick(r.name)} title="Grafikte göster">
                       <td>{r.name}</td>
                       <td className={r.avgRet >= 0 ? 'up' : 'down'}>{pct(r.avgRet)}</td>
                       <td className={r.medRet >= 0 ? 'up' : 'down'}>{pct(r.medRet)}</td>
@@ -102,7 +107,7 @@ export function Backtest({ candles, symbol, onClose }: Props) {
                 </thead>
                 <tbody>
                   {data.results.slice(0, 12).map((r, i) => (
-                    <tr key={r.name} className={i === 0 ? 'best' : ''}>
+                    <tr key={r.name} className={'clickable' + (i === 0 ? ' best' : '')} onClick={() => pick(r.name)} title="Grafikte göster">
                       <td>{r.name}</td>
                       <td className={r.retPct >= 0 ? 'up' : 'down'}>{pct(r.retPct)}</td>
                       <td className={r.retPct - r.holdPct >= 0 ? 'up' : 'down'}>{pct(r.retPct - r.holdPct)}</td>

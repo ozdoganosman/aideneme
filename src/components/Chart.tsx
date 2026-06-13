@@ -1,6 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   createChart,
+  createSeriesMarkers,
+  ISeriesMarkersPluginApi,
+  SeriesMarker,
+  Time,
+  UTCTimestamp,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -16,6 +21,7 @@ import {
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
 import { computeIndicators } from '../indicators/calc';
+import { signalsFor } from '../indicators/backtest';
 
 export interface IndicatorSettings {
   ema: boolean;
@@ -34,6 +40,7 @@ interface Props {
   settings: IndicatorSettings;
   symbol: string;
   tfLabel: string;
+  strategy?: string | null; // overlay this strategy's buy/sell signals
 }
 
 interface LegendVals {
@@ -66,13 +73,14 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
 });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(
-  { candles, fitOnLoad, settings, symbol, tfLabel },
+  { candles, fitOnLoad, settings, symbol, tfLabel, strategy },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
   const lodRef = useRef<LodController | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<SeriesBag | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const lastValsRef = useRef<LegendVals | null>(null);
   const hoveringRef = useRef(false);
   const fitRef = useRef(true);
@@ -148,6 +156,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     lodRef.current = lod;
     chartApiRef.current = chart;
     seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mHist, mMacd, mSignal, mEma, mDelta };
+    markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
       try {
@@ -200,6 +209,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       lodRef.current = null;
       chartApiRef.current = null;
       seriesRef.current = null;
+      markersRef.current = null;
       chart.remove();
     };
   }, []);
@@ -245,6 +255,22 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     panes[2]?.setStretchFactor(settings.williams ? 2 : 0.0001);
     panes[3]?.setStretchFactor(settings.macd ? 2.2 : 0.0001);
   }, [settings]);
+
+  // Overlay a chosen strategy's buy/sell signals as markers.
+  useEffect(() => {
+    const m = markersRef.current;
+    if (!m) return;
+    if (!strategy || !candles) {
+      m.setMarkers([]);
+      return;
+    }
+    const markers: SeriesMarker<Time>[] = signalsFor(strategy, candles).map((s) =>
+      s.kind === 'buy'
+        ? { time: s.time as UTCTimestamp, position: 'belowBar' as const, color: '#26a69a', shape: 'arrowUp' as const, text: 'AL' }
+        : { time: s.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: 'SAT' },
+    );
+    m.setMarkers(markers);
+  }, [strategy, candles]);
 
   useImperativeHandle(
     ref,

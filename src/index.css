@@ -376,6 +376,42 @@ button.ctl:disabled {
   background: #16271f;
 }
 
+.bt-table tr.clickable {
+  cursor: pointer;
+}
+
+.bt-table tr.clickable:hover td {
+  background: #1d2740;
+}
+
+/* Active strategy chip in the toolbar */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #16271f;
+  border: 1px solid #2c6b5f;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chip button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+}
+
+.chip button:hover {
+  color: var(--down);
+}
+
 /* Loading overlay */
 .loading {
   position: absolute;

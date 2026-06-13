@@ -36,6 +36,7 @@ export default function App() {
   const [symbols, setSymbols] = useState<string[]>(BIST_SYMBOLS);
   const [fitOnLoad, setFitOnLoad] = useState(true);
   const [showBt, setShowBt] = useState(false);
+  const [strategy, setStrategy] = useState<string | null>(null);
 
   const [quotes, setQuotes] = useState<Quotes>({});
   const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
@@ -178,6 +179,13 @@ export default function App() {
           ⟳
         </button>
 
+        {strategy && (
+          <span className="chip">
+            {strategy}
+            <button onClick={() => setStrategy(null)} title="İşaretleri kaldır">×</button>
+          </span>
+        )}
+
         <span className="spacer" />
         <span className="hint">sürükle · tekerlek: zoom · çift tık: sığdır</span>
       </header>
@@ -226,6 +234,7 @@ export default function App() {
               settings={settings}
               symbol={provider === 'bist' ? symbol : 'SENTETİK'}
               tfLabel={tfLabel}
+              strategy={strategy}
             />
           </div>
         </main>
@@ -238,7 +247,12 @@ export default function App() {
       </footer>
 
       {showBt && candles && (
-        <Backtest candles={candles} symbol={provider === 'bist' ? symbol : 'SENTETİK'} onClose={() => setShowBt(false)} />
+        <Backtest
+          candles={candles}
+          symbol={provider === 'bist' ? symbol : 'SENTETİK'}
+          onClose={() => setShowBt(false)}
+          onSelect={(name) => setStrategy(name)}
+        />
       )}
     </div>
   );
