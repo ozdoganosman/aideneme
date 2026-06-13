@@ -184,6 +184,7 @@ export default function App() {
           <Portfolio
             holdings={portfolio}
             quotes={quotes}
+            symbols={symbols}
             onAdd={(h) => setPortfolio((p) => [...p, h])}
             onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
             onSelect={selectSymbol}

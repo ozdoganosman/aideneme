@@ -10,15 +10,20 @@ export interface Holding {
 interface Props {
   holdings: Holding[];
   quotes: Quotes;
+  symbols: string[];
   onAdd: (h: Holding) => void;
   onRemove: (index: number) => void;
   onSelect: (s: string) => void;
 }
 
-export function Portfolio({ holdings, quotes, onAdd, onRemove, onSelect }: Props) {
+export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect }: Props) {
   const [sym, setSym] = useState('');
   const [qty, setQty] = useState('');
   const [cost, setCost] = useState('');
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+
+  const matches = open && sym ? rank(symbols, sym.toUpperCase()) : [];
 
   let totVal = 0;
   let totCost = 0;
@@ -44,13 +49,60 @@ export function Portfolio({ holdings, quotes, onAdd, onRemove, onSelect }: Props
     setSym('');
     setQty('');
     setCost('');
+    setOpen(false);
   };
 
   return (
     <div className="panel">
       <div className="panel-title">Portföy</div>
       <div className="pf-form">
-        <input placeholder="Sembol" value={sym} onChange={(e) => setSym(e.target.value.toUpperCase())} />
+        <div className="ac">
+          <input
+            placeholder="Sembol"
+            value={sym}
+            spellCheck={false}
+            onChange={(e) => {
+              setSym(e.target.value.toUpperCase());
+              setOpen(true);
+              setActive(0);
+            }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown') {
+                setActive((a) => Math.min(a + 1, matches.length - 1));
+                e.preventDefault();
+              } else if (e.key === 'ArrowUp') {
+                setActive((a) => Math.max(a - 1, 0));
+                e.preventDefault();
+              } else if (e.key === 'Enter') {
+                if (matches[active]) {
+                  setSym(matches[active]);
+                  setOpen(false);
+                  e.preventDefault();
+                }
+              } else if (e.key === 'Escape') {
+                setOpen(false);
+              }
+            }}
+          />
+          {matches.length > 0 && (
+            <div className="search-dropdown">
+              {matches.map((m, i) => (
+                <div
+                  key={m}
+                  className={'search-item' + (i === active ? ' active' : '')}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setSym(m);
+                    setOpen(false);
+                  }}
+                >
+                  {m}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <input placeholder="Adet" value={qty} inputMode="decimal" onChange={(e) => setQty(e.target.value)} />
         <input placeholder="Maliyet" value={cost} inputMode="decimal" onChange={(e) => setCost(e.target.value)} />
         <button onClick={add} title="Ekle">+</button>
@@ -92,6 +144,20 @@ export function Portfolio({ holdings, quotes, onAdd, onRemove, onSelect }: Props
       )}
     </div>
   );
+}
+
+function rank(symbols: string[], q: string): string[] {
+  const pre: string[] = [];
+  const sub: string[] = [];
+  for (const s of symbols) {
+    if (s.startsWith(q)) {
+      if (pre.length < 8) pre.push(s);
+    } else if (s.includes(q)) {
+      if (sub.length < 8) sub.push(s);
+    }
+    if (pre.length >= 8) break;
+  }
+  return [...pre, ...sub].slice(0, 8);
 }
 
 function fmt(v: number): string {

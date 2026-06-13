@@ -405,6 +405,15 @@ button.ctl:disabled {
   margin-bottom: 6px;
 }
 
+/* autocomplete wrapper inside the portfolio form */
+.ac {
+  position: relative;
+}
+
+.ac input {
+  width: 100%;
+}
+
 .pf-form input {
   min-width: 0;
   background: var(--panel-2);
