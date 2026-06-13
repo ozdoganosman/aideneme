@@ -31,6 +31,7 @@ export interface ChartHandle {
 interface Props {
   candles: Candles | null;
   onHover?: (info: HoverInfo | null) => void;
+  fitOnLoad?: boolean; // false → preserve zoom + visible range (symbol switch)
 }
 
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
@@ -41,12 +42,14 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
   title,
 });
 
-export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, onHover }, ref) {
+export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, onHover, fitOnLoad }, ref) {
   const elRef = useRef<HTMLDivElement>(null);
   const lodRef = useRef<LodController | null>(null);
   const onHoverRef = useRef(onHover);
   onHoverRef.current = onHover;
   const hoveringRef = useRef(false);
+  const fitRef = useRef(true);
+  fitRef.current = fitOnLoad ?? true;
 
   useEffect(() => {
     const chart: IChartApi = createChart(elRef.current!, {
@@ -154,7 +157,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, on
       ind.eMacDN,
       ind.deltaN,
     ];
-    lodRef.current.setData(candles, extraVals);
+    lodRef.current.setData(candles, extraVals, fitRef.current);
     if (!hoveringRef.current) onHoverRef.current?.(lodRef.current.lastBar());
   }, [candles]);
 

@@ -1,53 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Chart, ChartHandle, HoverInfo } from './components/Chart';
+import { Chart, HoverInfo } from './components/Chart';
 import { SymbolSearch } from './components/SymbolSearch';
-import { Candles, TIMEFRAMES, BUILTIN_SYMBOLS, BIST_SYMBOLS } from './data/types';
-import { generateSynthetic } from './data/synthetic';
-import { fetchHistory, fetchSymbols, openKlineStream } from './data/binance';
+import { Candles, BIST_SYMBOLS } from './data/types';
 import { fetchBistStatic, fetchBistSymbols } from './data/bistStatic';
 
-type Provider = 'synthetic' | 'binance' | 'bist';
-
-// Keep the symbol sensible when switching data sources.
-function adaptSymbol(p: Provider, cur: string): string {
-  if (p === 'bist') return /usdt$/i.test(cur) || cur === '' ? 'THYAO' : cur;
-  return /usdt$/i.test(cur) ? cur : 'BTCUSDT';
-}
-
-const BAR_OPTIONS = [10_000, 50_000, 100_000, 500_000, 1_000_000, 4_000_000];
-
-interface LoadOpts {
-  symbol?: string;
-  tfIndex?: number;
-  provider?: Provider;
-  bars?: number;
-}
-
 export default function App() {
-  const [provider, setProvider] = useState<Provider>('synthetic');
-  const [symbol, setSymbol] = useState('BTCUSDT');
-  const [tfIndex, setTfIndex] = useState(0);
-  const [bars, setBars] = useState(100_000);
+  const [symbol, setSymbol] = useState('THYAO');
   const [candles, setCandles] = useState<Candles | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('Hazır');
   const [error, setError] = useState<string | null>(null);
-  const [live, setLive] = useState(false);
-  const [symbols, setSymbols] = useState<string[]>(BUILTIN_SYMBOLS);
+  const [symbols, setSymbols] = useState<string[]>(BIST_SYMBOLS);
   const [hover, setHover] = useState<HoverInfo | null>(null);
+  const [fitOnLoad, setFitOnLoad] = useState(true);
 
-  const chartRef = useRef<ChartHandle>(null);
-  const candlesRef = useRef<Candles | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const firstRef = useRef(true);
 
   const load = useCallback(
-    async (opts?: LoadOpts) => {
-      const prov = opts?.provider ?? provider;
-      const sym = (opts?.symbol ?? symbol).toUpperCase().trim();
-      const tf = opts?.tfIndex ?? tfIndex;
-      const n = opts?.bars ?? bars;
+    async (symbolOverride?: string) => {
+      const sym = (symbolOverride ?? symbol).toUpperCase().trim();
       if (!sym) return;
-
       setLoading(true);
       setError(null);
       setStatus('Yükleniyor…');
@@ -55,22 +28,11 @@ export default function App() {
       const ac = new AbortController();
       abortRef.current = ac;
       try {
-        let c: Candles;
-        if (prov === 'synthetic') {
-          await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
-          c = generateSynthetic(sym, n, TIMEFRAMES[tf].seconds);
-        } else if (prov === 'bist') {
-          c = await fetchBistStatic(sym, ac.signal); // daily, same-origin static JSON
-        } else {
-          c = await fetchHistory(
-            sym,
-            TIMEFRAMES[tf].binance,
-            n,
-            (cur, tot) => setStatus(`Yükleniyor ${cur.toLocaleString()}/${tot.toLocaleString()}`),
-            ac.signal,
-          );
-        }
-        candlesRef.current = c;
+        const c = await fetchBistStatic(sym, ac.signal);
+        // First load frames the latest bars; later loads (symbol switches) keep
+        // the current zoom + visible date range.
+        setFitOnLoad(firstRef.current);
+        firstRef.current = false;
         setCandles(c);
         setStatus(`${c.length.toLocaleString()} mum`);
       } catch (e) {
@@ -81,52 +43,19 @@ export default function App() {
         setLoading(false);
       }
     },
-    [provider, symbol, tfIndex, bars],
+    [symbol],
   );
 
-  // Auto-load on startup.
+  // Initial load + symbol list.
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Pull the full Binance symbol universe for autocomplete when needed.
   useEffect(() => {
-    if (provider === 'binance') {
-      fetchSymbols().then(setSymbols).catch(() => setSymbols(BUILTIN_SYMBOLS));
-    } else if (provider === 'bist') {
-      fetchBistSymbols().then((s) => setSymbols(s.length ? s : BIST_SYMBOLS)).catch(() => setSymbols(BIST_SYMBOLS));
-    } else {
-      setSymbols(BUILTIN_SYMBOLS);
-    }
-  }, [provider]);
-
-  // Live feed: WebSocket for Binance, simulated ticks for synthetic.
-  useEffect(() => {
-    if (!live || provider === 'bist') return; // BIST static data has no live stream
-    const tf = TIMEFRAMES[tfIndex];
-    if (provider === 'binance') {
-      return openKlineStream(symbol, tf.binance, (b) => chartRef.current?.updateLast(b));
-    }
-    const c = candlesRef.current;
-    let last = c && c.length > 0 ? c.close[c.length - 1] : 100;
-    const id = setInterval(() => {
-      const now = Math.floor(Date.now() / 1000);
-      const t = now - (now % tf.seconds);
-      const close = last * Math.exp(0.001 * (Math.random() * 2 - 1));
-      chartRef.current?.updateLast({
-        time: t,
-        open: last,
-        high: Math.max(last, close),
-        low: Math.min(last, close),
-        close,
-        volume: Math.random() * 500,
-        closed: false,
-      });
-      last = close;
-    }, 1000);
-    return () => clearInterval(id);
-  }, [live, provider, symbol, tfIndex]);
+    fetchBistSymbols()
+      .then((s) => setSymbols(s.length ? s : BIST_SYMBOLS))
+      .catch(() => setSymbols(BIST_SYMBOLS));
+  }, []);
 
   const up = hover ? hover.close >= hover.open : true;
   const chg = hover ? hover.close - hover.open : 0;
@@ -135,77 +64,23 @@ export default function App() {
   return (
     <div className="app">
       <header className="toolbar">
-        <span className="brand">⚡ Borsa</span>
+        <span className="brand">⚡ Borsa · BIST</span>
 
-        <select
-          className="ctl"
-          value={provider}
-          onChange={(e) => {
-            const p = e.target.value as Provider;
-            const s = adaptSymbol(p, symbol);
-            setProvider(p);
-            setSymbol(s);
-            void load({ provider: p, symbol: s });
-          }}
-        >
-          <option value="synthetic">Sentetik</option>
-          <option value="binance">Binance (kripto)</option>
-          <option value="bist">BIST (günlük)</option>
-        </select>
-
-        <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load({ symbol: s })} />
-
-        <div className="seg">
-          {TIMEFRAMES.map((tf, i) => (
-            <button
-              key={tf.label}
-              className={i === tfIndex ? 'active' : ''}
-              onClick={() => {
-                setTfIndex(i);
-                void load({ tfIndex: i });
-              }}
-            >
-              {tf.label}
-            </button>
-          ))}
-        </div>
-
-        <select
-          className="ctl"
-          value={bars}
-          title="Mum sayısı"
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            setBars(n);
-            void load({ bars: n });
-          }}
-        >
-          {BAR_OPTIONS.map((n) => (
-            <option key={n} value={n}>
-              {n.toLocaleString()} mum
-            </option>
-          ))}
-        </select>
+        <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load(s)} />
 
         <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
           ⟳
         </button>
-
-        <label className={'live-toggle' + (live ? ' on' : '')}>
-          <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} />
-          <span className="dot" /> Canlı
-        </label>
 
         <span className="spacer" />
         <span className="hint">sürükle: kaydır · tekerlek: zoom · çift tık: sığdır</span>
       </header>
 
       <div className="chart-wrap">
-        {/* Crosshair / live OHLC readout */}
         <div className="legend">
           <div className="legend-top">
             <b>{symbol}</b>
-            <span className="muted">{TIMEFRAMES[tfIndex].label}</span>
+            <span className="muted">1G</span>
             {hover && (
               <>
                 <span className={up ? 'price up' : 'price down'}>{fmtPrice(hover.close)}</span>
@@ -235,13 +110,11 @@ export default function App() {
           </div>
         )}
 
-        <Chart ref={chartRef} candles={candles} onHover={setHover} />
+        <Chart candles={candles} onHover={setHover} fitOnLoad={fitOnLoad} />
       </div>
 
       <footer className="status">
-        <span>
-          {provider === 'binance' ? 'Binance · kripto' : provider === 'bist' ? 'BIST · günlük (statik)' : 'Sentetik · offline'}
-        </span>
+        <span>BIST · günlük (statik)</span>
         <span>Mum: {candles ? candles.length.toLocaleString() : 0}</span>
         <span className={error ? 'down' : ''}>{error ? `Hata: ${error}` : status}</span>
       </footer>
