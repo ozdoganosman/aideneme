@@ -1,14 +1,19 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import {
   createChart,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  AreaSeries,
   CrosshairMode,
+  LineStyle,
   IChartApi,
-  ISeriesApi,
   CandlestickData,
   HistogramData,
 } from 'lightweight-charts';
 import { Candles, LiveBar } from '../data/types';
-import { LodController } from '../chart/lod';
+import { LodController, ExtraSpec } from '../chart/lod';
+import { computeIndicators } from '../indicators/calc';
 
 export interface HoverInfo {
   time: number;
@@ -27,6 +32,14 @@ interface Props {
   candles: Candles | null;
   onHover?: (info: HoverInfo | null) => void;
 }
+
+const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
+  color,
+  lineWidth: width,
+  priceLineVisible: false,
+  lastValueVisible: false,
+  title,
+});
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, onHover }, ref) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -53,21 +66,57 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, on
       timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false },
     });
 
-    const candle: ISeriesApi<'Candlestick'> = chart.addCandlestickSeries({
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-    });
+    // Pane 0 — price + long EMAs
+    const candle = chart.addSeries(
+      CandlestickSeries,
+      { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' },
+      0,
+    );
+    const ema377 = chart.addSeries(LineSeries, lineOpts('#f0b90b', 1, 'EMA 377'), 0);
+    const ema610 = chart.addSeries(LineSeries, lineOpts('#9aa0b0', 1, 'EMA 610'), 0);
 
-    const volume: ISeriesApi<'Histogram'> = chart.addHistogramSeries({
-      priceFormat: { type: 'volume' },
-      priceScaleId: '',
-    });
-    volume.priceScale().applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+    // Pane 1 — volume
+    const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
 
-    const lod = new LodController(chart, candle, volume);
+    // Pane 2 — Williams %R (Williams Paşa)
+    const wilR = chart.addSeries(LineSeries, lineOpts('#7E57C2', 2, 'Williams %R'), 2);
+    const wilEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1), 2);
+    wilR.createPriceLine({ price: 98, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '98' });
+    wilR.createPriceLine({ price: 50, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
+    wilR.createPriceLine({ price: 5, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '5' });
+
+    // Pane 3 — NizamiCedid (MACD variant, normalized by fast EMA)
+    const mHist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, 3);
+    const mDelta = chart.addSeries(
+      AreaSeries,
+      { lineColor: 'rgba(83,76,175,0.7)', topColor: 'rgba(83,76,175,0.35)', bottomColor: 'rgba(83,76,175,0.02)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false },
+      3,
+    );
+    const mMacd = chart.addSeries(LineSeries, lineOpts('#ff2fa6', 1, 'MACD'), 3);
+    const mSignal = chart.addSeries(LineSeries, lineOpts('#FF6D00', 1, 'Signal'), 3);
+    const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, 'eMACD'), 3);
+    mMacd.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
+
+    // Pane heights
+    const panes = chart.panes();
+    panes[0]?.setStretchFactor(6);
+    panes[1]?.setStretchFactor(1.1);
+    panes[2]?.setStretchFactor(2);
+    panes[3]?.setStretchFactor(2.2);
+    volume.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: 0 } });
+
+    const extras: ExtraSpec[] = [
+      { series: ema377, kind: 'line' },
+      { series: ema610, kind: 'line' },
+      { series: wilR, kind: 'line' },
+      { series: wilEma, kind: 'line' },
+      { series: mHist, kind: 'hist', momentumColor: true },
+      { series: mMacd, kind: 'line' },
+      { series: mSignal, kind: 'line' },
+      { series: mEma, kind: 'line' },
+      { series: mDelta, kind: 'area' },
+    ];
+    const lod = new LodController(chart, candle, volume, extras);
     lodRef.current = lod;
 
     chart.subscribeCrosshairMove((param) => {
@@ -76,14 +125,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, on
         const v = param.seriesData.get(volume) as HistogramData | undefined;
         if (c) {
           hoveringRef.current = true;
-          onHoverRef.current?.({
-            time: Number(param.time),
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: v?.value ?? 0,
-          });
+          onHoverRef.current?.({ time: Number(param.time), open: c.open, high: c.high, low: c.low, close: c.close, volume: v?.value ?? 0 });
           return;
         }
       }
@@ -99,10 +141,21 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart({ candles, on
   }, []);
 
   useEffect(() => {
-    if (lodRef.current && candles) {
-      lodRef.current.setData(candles);
-      if (!hoveringRef.current) onHoverRef.current?.(lodRef.current.lastBar());
-    }
+    if (!lodRef.current || !candles) return;
+    const ind = computeIndicators(candles);
+    const extraVals = [
+      ind.ema377p,
+      ind.ema610p,
+      ind.percentR,
+      ind.emawil,
+      ind.histN,
+      ind.macdN,
+      ind.signalN,
+      ind.eMacDN,
+      ind.deltaN,
+    ];
+    lodRef.current.setData(candles, extraVals);
+    if (!hoveringRef.current) onHoverRef.current?.(lodRef.current.lastBar());
   }, [candles]);
 
   useImperativeHandle(

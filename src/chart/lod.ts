@@ -4,19 +4,32 @@ import {
   UTCTimestamp,
   CandlestickData,
   HistogramData,
+  LineData,
   LogicalRange,
 } from 'lightweight-charts';
 import { Candles, LiveBar, emptyCandles } from '../data/types';
 
 const UP_VOL = 'rgba(38,166,154,0.5)';
 const DOWN_VOL = 'rgba(239,83,80,0.5)';
+const UP = '#26a69a';
+const UP_SOFT = '#1b5e54';
+const DOWN = '#ef5350';
+const DOWN_SOFT = '#7f3a39';
 
-// Level-of-detail controller. Holds the *full* dataset and only ever feeds the
-// chart a viewport-sized, decimated window (min/max OHLC buckets, ~one per
-// pixel-ish). So the number of points the chart renders is bounded regardless of
-// dataset size — this is what keeps pan/zoom smooth at millions of bars.
+// An extra indicator series rendered alongside the candles. Its full-data values
+// are decimated with the same buckets as the candles each frame.
+export interface ExtraSpec {
+  series: ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Area'>;
+  kind: 'line' | 'hist' | 'area';
+  momentumColor?: boolean; // histogram coloring like the MACD script
+}
+
+// Level-of-detail controller: holds the full dataset and only ever feeds the
+// chart a viewport-sized, decimated window — so render cost is bounded by the
+// screen, not the dataset size. Indicators ride along on the same buckets.
 export class LodController {
   private full: Candles | null = null;
+  private extraVals: Float64Array[] = [];
   private readonly targetBuckets = 4000;
   private applying = false;
   private win = { i0: 0, i1: 0, stride: 1 };
@@ -26,15 +39,18 @@ export class LodController {
     private chart: IChartApi,
     private candle: ISeriesApi<'Candlestick'>,
     private volume: ISeriesApi<'Histogram'>,
+    private extras: ExtraSpec[],
   ) {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
   }
 
-  setData(full: Candles) {
+  setData(full: Candles, extraVals: Float64Array[]) {
     this.full = full;
+    this.extraVals = extraVals;
     if (full.length === 0) {
       this.candle.setData([]);
       this.volume.setData([]);
+      this.extras.forEach((e) => e.series.setData([]));
       return;
     }
     const show = Math.min(400, full.length);
@@ -53,7 +69,6 @@ export class LodController {
     const { i0: w0, i1: w1, stride } = this.win;
     const count = Math.ceil((w1 - w0) / stride);
 
-    // Visible original-bar indices, clamped to the data (for stride/detail).
     const fromIdx = Math.max(0, Math.floor(range.from));
     const toIdx = Math.min(count, Math.ceil(range.to));
     const visLo = w0 + fromIdx * stride;
@@ -61,17 +76,14 @@ export class LodController {
     const visBars = Math.max(1, visHi - visLo);
     const desiredStride = strideFor(visBars, this.targetBuckets);
 
-    // Raw (unclamped) edges so we can tell when the user is scrolling past the
-    // data into the whitespace.
     const rawLo = w0 + range.from * stride;
     const rawHi = w0 + range.to * stride;
     const pad = (w1 - w0) * 0.15;
     const nearLeft = rawLo < w0 + pad;
     const nearRight = rawHi > w1 - pad;
 
-    // Reflow only when detail must change, or we're approaching a window edge
-    // that still has more data to load. At the *data* boundary we do nothing, so
-    // the chart scrolls freely into the empty space instead of snapping/zooming.
+    // At the data boundary we do nothing, so the chart scrolls into whitespace
+    // instead of snapping/zooming.
     const needReflow =
       desiredStride !== stride || (nearLeft && w0 > 0) || (nearRight && w1 < len);
     if (!needReflow) return;
@@ -95,6 +107,11 @@ export class LodController {
     this.applying = true;
     this.candle.setData(candles);
     this.volume.setData(volumes);
+    for (let k = 0; k < this.extras.length; k++) {
+      const vals = this.extraVals[k];
+      if (!vals) continue;
+      this.extras[k].series.setData(buildExtra(this.full, vals, i0, i1, s, this.extras[k]) as never);
+    }
     this.win = { i0, i1, stride: s };
 
     if (fit) {
@@ -109,7 +126,6 @@ export class LodController {
     });
   }
 
-  // Live update: mutate the last bar (or append a new one) and reflect it.
   updateLast(b: LiveBar) {
     if (!this.full) return;
     const n = this.full.length;
@@ -126,10 +142,9 @@ export class LodController {
     }
 
     const atEdge = this.win.i1 >= n - 1;
-    if (!atEdge) return; // viewing history; it'll appear when panned to
+    if (!atEdge) return;
 
     if (this.win.stride === 1) {
-      // Full detail at the edge: cheapest path, lets the chart auto-scroll.
       this.applying = true;
       const t = b.time as UTCTimestamp;
       this.candle.update({ time: t, open: b.open, high: b.high, low: b.low, close: b.close });
@@ -143,7 +158,6 @@ export class LodController {
     }
   }
 
-  // Latest bar from the full dataset (for the legend / live readout).
   lastBar(): { time: number; open: number; high: number; low: number; close: number; volume: number } | null {
     if (!this.full || this.full.length === 0) return null;
     const n = this.full.length - 1;
@@ -189,8 +203,38 @@ function decimate(c: Candles, i0: number, i1: number, stride: number) {
   return { candles, volumes };
 }
 
-// Round the needed stride up to a power of two so detail changes in stable steps
-// (avoids re-decimating on every tiny zoom).
+function buildExtra(
+  c: Candles,
+  vals: Float64Array,
+  i0: number,
+  i1: number,
+  stride: number,
+  spec: ExtraSpec,
+): Array<LineData | HistogramData> {
+  const out: Array<LineData | HistogramData> = [];
+  if (i1 > c.length) i1 = c.length;
+  let prev = NaN;
+  for (let s = i0; s < i1; s += stride) {
+    const e = Math.min(s + stride, i1);
+    const v = vals[e - 1];
+    if (v === undefined || !Number.isFinite(v)) continue;
+    const t = c.time[s] as UTCTimestamp;
+    if (spec.kind === 'hist') {
+      let color: string;
+      if (spec.momentumColor) {
+        color = v >= 0 ? (v >= prev ? UP : UP_SOFT) : v <= prev ? DOWN : DOWN_SOFT;
+      } else {
+        color = v >= 0 ? UP : DOWN;
+      }
+      out.push({ time: t, value: v, color });
+    } else {
+      out.push({ time: t, value: v });
+    }
+    prev = v;
+  }
+  return out;
+}
+
 function strideFor(bars: number, target: number): number {
   const s = Math.max(1, Math.ceil(bars / target));
   return 1 << Math.ceil(Math.log2(s));
