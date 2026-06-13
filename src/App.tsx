@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Chart, ChartHandle, HoverInfo } from './components/Chart';
 import { SymbolSearch } from './components/SymbolSearch';
-import { Candles, TIMEFRAMES, BUILTIN_SYMBOLS } from './data/types';
+import { Candles, TIMEFRAMES, BUILTIN_SYMBOLS, BIST_SYMBOLS } from './data/types';
 import { generateSynthetic } from './data/synthetic';
 import { fetchHistory, fetchSymbols, openKlineStream } from './data/binance';
+import { fetchYahoo } from './data/yahoo';
 
-type Provider = 'synthetic' | 'binance';
+type Provider = 'synthetic' | 'binance' | 'yahoo';
+
+const DEFAULT_PROXY = 'https://api.allorigins.win/raw?url=';
+
+// Keep the symbol sensible when switching data sources.
+function adaptSymbol(p: Provider, cur: string): string {
+  if (p === 'yahoo') return /usdt$/i.test(cur) || cur === '' ? 'THYAO' : cur.replace(/\.IS$/i, '');
+  return /usdt$/i.test(cur) ? cur : 'BTCUSDT';
+}
 
 const BAR_OPTIONS = [10_000, 50_000, 100_000, 500_000, 1_000_000, 4_000_000];
 
@@ -28,6 +37,11 @@ export default function App() {
   const [live, setLive] = useState(false);
   const [symbols, setSymbols] = useState<string[]>(BUILTIN_SYMBOLS);
   const [hover, setHover] = useState<HoverInfo | null>(null);
+  const [proxy, setProxy] = useState<string>(() => localStorage.getItem('borsaProxy') ?? DEFAULT_PROXY);
+
+  useEffect(() => {
+    localStorage.setItem('borsaProxy', proxy);
+  }, [proxy]);
 
   const chartRef = useRef<ChartHandle>(null);
   const candlesRef = useRef<Candles | null>(null);
@@ -52,6 +66,9 @@ export default function App() {
         if (prov === 'synthetic') {
           await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
           c = generateSynthetic(sym, n, TIMEFRAMES[tf].seconds);
+        } else if (prov === 'yahoo') {
+          const ysym = /\.IS$/i.test(sym) ? sym : sym + '.IS';
+          c = await fetchYahoo(ysym, TIMEFRAMES[tf].yahoo, proxy, ac.signal);
         } else {
           c = await fetchHistory(
             sym,
@@ -72,7 +89,7 @@ export default function App() {
         setLoading(false);
       }
     },
-    [provider, symbol, tfIndex, bars],
+    [provider, symbol, tfIndex, bars, proxy],
   );
 
   // Auto-load on startup.
@@ -84,13 +101,17 @@ export default function App() {
   // Pull the full Binance symbol universe for autocomplete when needed.
   useEffect(() => {
     if (provider === 'binance') {
-      fetchSymbols().then(setSymbols).catch(() => {/* keep built-in list offline */});
+      fetchSymbols().then(setSymbols).catch(() => setSymbols(BUILTIN_SYMBOLS));
+    } else if (provider === 'yahoo') {
+      setSymbols(BIST_SYMBOLS);
+    } else {
+      setSymbols(BUILTIN_SYMBOLS);
     }
   }, [provider]);
 
   // Live feed: WebSocket for Binance, simulated ticks for synthetic.
   useEffect(() => {
-    if (!live) return;
+    if (!live || provider === 'yahoo') return; // Yahoo has no free live stream
     const tf = TIMEFRAMES[tfIndex];
     if (provider === 'binance') {
       return openKlineStream(symbol, tf.binance, (b) => chartRef.current?.updateLast(b));
@@ -129,12 +150,15 @@ export default function App() {
           value={provider}
           onChange={(e) => {
             const p = e.target.value as Provider;
+            const s = adaptSymbol(p, symbol);
             setProvider(p);
-            void load({ provider: p });
+            setSymbol(s);
+            void load({ provider: p, symbol: s });
           }}
         >
           <option value="synthetic">Sentetik</option>
-          <option value="binance">Binance</option>
+          <option value="binance">Binance (kripto)</option>
+          <option value="yahoo">BIST (Yahoo)</option>
         </select>
 
         <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load({ symbol: s })} />
@@ -180,6 +204,18 @@ export default function App() {
           <span className="dot" /> Canlı
         </label>
 
+        {provider === 'yahoo' && (
+          <input
+            className="ctl"
+            style={{ width: 220 }}
+            value={proxy}
+            onChange={(e) => setProxy(e.target.value)}
+            placeholder="CORS proxy URL"
+            title="Yahoo için CORS proxy — kendi Cloudflare Worker URL'ini yapıştırabilirsin"
+            spellCheck={false}
+          />
+        )}
+
         <span className="spacer" />
         <span className="hint">sürükle: kaydır · tekerlek: zoom · çift tık: sığdır</span>
       </header>
@@ -223,7 +259,9 @@ export default function App() {
       </div>
 
       <footer className="status">
-        <span>{provider === 'binance' ? 'Binance · canlı veri' : 'Sentetik · offline'}</span>
+        <span>
+          {provider === 'binance' ? 'Binance · kripto' : provider === 'yahoo' ? 'BIST · Yahoo' : 'Sentetik · offline'}
+        </span>
         <span>Mum: {candles ? candles.length.toLocaleString() : 0}</span>
         <span className={error ? 'down' : ''}>{error ? `Hata: ${error}` : status}</span>
       </footer>

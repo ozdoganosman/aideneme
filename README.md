@@ -69,8 +69,20 @@ src/
 - **Binance** (ücretsiz, **API key YOK**): `klines` (geçmiş), `exchangeInfo`
   (sembol listesi), `@kline` WebSocket (canlı). Tarayıcıdan CORS ile çalışır.
 - **Sentetik**: geometrik Brownian hareketi; internet gerekmez.
-- BIST/ABD hisseleri tick seviyesinde ücretsiz+key'siz yok; `binance.ts`
-  benzeri bir sağlayıcı sonradan eklenebilir.
+- **BIST (Yahoo Finance)**: `.IS` sembolleri (THYAO, GARAN…), **key'siz**. Yahoo
+  CORS göndermediği için bir **CORS proxy** gerekir — toolbar'daki alandan
+  ayarlanır (varsayılan public proxy). Güvenilir olması için `cloudflare-worker.js`
+  ile **kendi ücretsiz proxy'ni** 2 dakikada kurup URL'ini yapıştırabilirsin.
+  Yahoo'da canlı WebSocket yoktur (veri ~15dk gecikmeli).
+
+## İndikatörler
+
+İki özel indikatör (kullanıcının Pine script'lerinden) tüm veri üzerinde
+hesaplanır (`src/indicators/calc.ts`) ve mumlarla aynı kovalara indirgenir:
+
+- **Williams Paşa** — Williams %R(+100), length 260, EMA'sı, 98/50/5 çizgileri
+- **NizamiCedid (3. Selim)** — MACD (EMA 120/260, signal 50), VWMA-185 "eMACD",
+  fast EMA'ya normalize histogram/çizgiler + delta alanı, EMA 377/610 overlay
 
 ## Dağıtım
 
