@@ -15,18 +15,23 @@ from datetime import timezone
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "bist"
+SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
 
-# Likit BIST hisseleri (gerekirse genişlet).
-SYMBOLS = [
-    "THYAO", "GARAN", "AKBNK", "ASELS", "KCHOL", "SISE", "EREGL", "BIMAS",
-    "SAHOL", "TUPRS", "FROTO", "PGSUS", "TCELL", "ISCTR", "YKBNK", "KOZAL",
-    "KOZAA", "SASA", "HEKTS", "TOASO", "TTKOM", "PETKM", "ENKAI", "KRDMD",
-    "VESTL", "GUBRF", "ARCLK", "OYAKC", "TAVHL", "DOHOL", "EKGYO", "ALARK",
-    "MGROS", "ULKER", "SOKM", "TKFEN", "AEFES", "BRSAN", "KONTR", "SMRTG",
-    "ODAS", "CIMSA", "AKSEN", "ENJSA", "ZOREN", "OTKAR", "CCOLA", "TTRAK",
-]
 
-MAX_WORKERS = 8
+def load_symbols() -> list[str]:
+    """Tüm BIST hisseleri (+ endeksleri) bist_symbols.json'dan."""
+    try:
+        with open(SYMBOLS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        syms = [s["name"] for s in data.get("stocks", [])]
+        syms += [s["name"] for s in data.get("indices", [])]
+        return syms
+    except Exception as e:  # noqa
+        print(f"[bist] sembol listesi okunamadı: {e}")
+        return ["THYAO", "GARAN", "AKBNK", "ASELS", "SISE"]
+
+
+MAX_WORKERS = 10
 
 
 def _epoch(idx) -> int:
@@ -66,17 +71,23 @@ def _fetch_one(sym: str):
 
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
+    symbols = load_symbols()
+    total = len(symbols)
+    print(f"[bist] {total} sembol çekiliyor…")
     ok: list[str] = []
+    done = 0
     try:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            futs = {pool.submit(_fetch_one, s): s for s in SYMBOLS}
+            futs = {pool.submit(_fetch_one, s): s for s in symbols}
             for fut in as_completed(futs):
+                done += 1
                 sym, recs = fut.result()
                 if recs:
                     with open(OUT / f"{sym}.json", "w", encoding="utf-8") as f:
                         json.dump({"data": recs}, f, separators=(",", ":"))
                     ok.append(sym)
-                    print(f"[bist] {sym}: {len(recs)} bar")
+                if done % 50 == 0 or done == total:
+                    print(f"[bist] {done}/{total}  ok={len(ok)}")
     except Exception as e:  # noqa
         print(f"[bist] toplu hata: {e}")
 
@@ -84,7 +95,7 @@ def main() -> int:
     # symbols.json'u her durumda yaz ki uygulama 404 almasın.
     with open(OUT / "symbols.json", "w", encoding="utf-8") as f:
         json.dump({"symbols": ok}, f)
-    print(f"[bist] bitti: {len(ok)}/{len(SYMBOLS)} sembol")
+    print(f"[bist] bitti: {len(ok)}/{total} sembol")
     return 0  # kısmi başarısızlık deploy'u düşürmesin
 
 
