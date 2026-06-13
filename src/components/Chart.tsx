@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   createChart,
   CandlestickSeries,
@@ -11,6 +11,7 @@ import {
   ISeriesApi,
   CandlestickData,
   HistogramData,
+  LineData,
 } from 'lightweight-charts';
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
@@ -23,27 +24,27 @@ export interface IndicatorSettings {
   macd: boolean;
 }
 
-export interface HoverInfo {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
 export interface ChartHandle {
   updateLast: (b: LiveBar) => void;
 }
 
 interface Props {
   candles: Candles | null;
-  onHover?: (info: HoverInfo | null) => void;
-  fitOnLoad?: boolean; // false → preserve zoom + visible range (symbol switch)
-  settings?: IndicatorSettings; // which indicator panes/overlays are shown
+  fitOnLoad?: boolean;
+  settings: IndicatorSettings;
+  symbol: string;
+  tfLabel: string;
+}
+
+interface LegendVals {
+  o: number; h: number; l: number; c: number; v: number;
+  ema377: number; ema610: number;
+  wilR: number; wilEma: number;
+  macd: number; signal: number; emacd: number; delta: number;
 }
 
 type SeriesBag = {
+  candle: ISeriesApi<'Candlestick'>;
   ema377: ISeriesApi<'Line'>;
   ema610: ISeriesApi<'Line'>;
   volume: ISeriesApi<'Histogram'>;
@@ -65,18 +66,20 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
 });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(
-  { candles, onHover, fitOnLoad, settings },
+  { candles, fitOnLoad, settings, symbol, tfLabel },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
   const lodRef = useRef<LodController | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<SeriesBag | null>(null);
-  const onHoverRef = useRef(onHover);
-  onHoverRef.current = onHover;
+  const lastValsRef = useRef<LegendVals | null>(null);
   const hoveringRef = useRef(false);
   const fitRef = useRef(true);
   fitRef.current = fitOnLoad ?? true;
+
+  const [legend, setLegend] = useState<LegendVals | null>(null);
+  const [tops, setTops] = useState<number[]>([]);
 
   useEffect(() => {
     const chart: IChartApi = createChart(elRef.current!, {
@@ -96,7 +99,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false },
     });
 
-    // Pane 0 — price + long EMAs
     const candle = chart.addSeries(
       CandlestickSeries,
       { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' },
@@ -105,17 +107,14 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const ema377 = chart.addSeries(LineSeries, lineOpts('#f0b90b', 1, 'EMA 377'), 0);
     const ema610 = chart.addSeries(LineSeries, lineOpts('#9aa0b0', 1, 'EMA 610'), 0);
 
-    // Pane 1 — volume
     const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
 
-    // Pane 2 — Williams %R (Williams Paşa)
     const wilR = chart.addSeries(LineSeries, lineOpts('#7E57C2', 2, 'Williams %R'), 2);
     const wilEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1), 2);
     wilR.createPriceLine({ price: 98, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '98' });
     wilR.createPriceLine({ price: 50, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
     wilR.createPriceLine({ price: 5, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '5' });
 
-    // Pane 3 — NizamiCedid (MACD variant, normalized by fast EMA)
     const mHist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, 3);
     const mDelta = chart.addSeries(
       AreaSeries,
@@ -127,7 +126,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, 'eMACD'), 3);
     mMacd.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
-    // Pane heights
     const panes = chart.panes();
     panes[0]?.setStretchFactor(6);
     panes[1]?.setStretchFactor(1.1);
@@ -149,23 +147,51 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const lod = new LodController(chart, candle, volume, extras);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { ema377, ema610, volume, wilR, wilEma, mHist, mMacd, mSignal, mEma, mDelta };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mHist, mMacd, mSignal, mEma, mDelta };
+
+    const computeTops = () => {
+      const n = chart.panes().length;
+      const t: number[] = [];
+      let acc = 0;
+      for (let i = 0; i < n; i++) {
+        t.push(acc);
+        acc += chart.paneSize(i).height + 1;
+      }
+      setTops(t);
+    };
+
+    const num = (x: unknown): number => (typeof x === 'number' && isFinite(x) ? x : NaN);
 
     chart.subscribeCrosshairMove((param) => {
+      const s = seriesRef.current!;
       if (param.time && param.seriesData.size) {
-        const c = param.seriesData.get(candle) as CandlestickData | undefined;
-        const v = param.seriesData.get(volume) as HistogramData | undefined;
+        const c = param.seriesData.get(s.candle) as CandlestickData | undefined;
         if (c) {
           hoveringRef.current = true;
-          onHoverRef.current?.({ time: Number(param.time), open: c.open, high: c.high, low: c.low, close: c.close, volume: v?.value ?? 0 });
+          const lv = (ser: ISeriesApi<'Line'>) => num((param.seriesData.get(ser) as LineData | undefined)?.value);
+          const hv = (ser: ISeriesApi<'Histogram'>) => num((param.seriesData.get(ser) as HistogramData | undefined)?.value);
+          setLegend({
+            o: c.open, h: c.high, l: c.low, c: c.close, v: hv(s.volume),
+            ema377: lv(s.ema377), ema610: lv(s.ema610),
+            wilR: lv(s.wilR), wilEma: lv(s.wilEma),
+            macd: lv(s.mMacd), signal: lv(s.mSignal), emacd: lv(s.mEma),
+            delta: num((param.seriesData.get(s.mDelta) as LineData | undefined)?.value),
+          });
+          computeTops();
           return;
         }
       }
       hoveringRef.current = false;
-      onHoverRef.current?.(lod.lastBar());
+      if (lastValsRef.current) setLegend(lastValsRef.current);
+      computeTops();
     });
 
+    const ro = new ResizeObserver(() => computeTops());
+    ro.observe(elRef.current!);
+    computeTops();
+
     return () => {
+      ro.disconnect();
       lod.destroy();
       lodRef.current = null;
       chartApiRef.current = null;
@@ -174,54 +200,120 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     };
   }, []);
 
-  // Toggle indicator overlays/panes without rebuilding the chart (keeps zoom).
+  // Load data + compute indicators; cache last values for the (non-hover) legend.
+  useEffect(() => {
+    if (!lodRef.current || !candles) return;
+    const ind = computeIndicators(candles);
+    const n = candles.length;
+    const lastFin = (a: Float64Array) => {
+      for (let i = a.length - 1; i >= 0; i--) if (isFinite(a[i])) return a[i];
+      return NaN;
+    };
+    const lv: LegendVals = {
+      o: candles.open[n - 1], h: candles.high[n - 1], l: candles.low[n - 1],
+      c: candles.close[n - 1], v: candles.volume[n - 1],
+      ema377: lastFin(ind.ema377p), ema610: lastFin(ind.ema610p),
+      wilR: lastFin(ind.percentR), wilEma: lastFin(ind.emawil),
+      macd: lastFin(ind.macdN), signal: lastFin(ind.signalN), emacd: lastFin(ind.eMacDN), delta: lastFin(ind.deltaN),
+    };
+    lastValsRef.current = lv;
+
+    lodRef.current.setData(
+      candles,
+      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.histN, ind.macdN, ind.signalN, ind.eMacDN, ind.deltaN],
+      fitRef.current,
+    );
+    if (!hoveringRef.current) setLegend(lv);
+  }, [candles]);
+
+  // Indicator visibility toggles.
   useEffect(() => {
     const s = seriesRef.current;
     const chart = chartApiRef.current;
     if (!s || !chart) return;
-    const st = settings ?? { ema: true, volume: true, williams: true, macd: true };
-
-    s.ema377.applyOptions({ visible: st.ema });
-    s.ema610.applyOptions({ visible: st.ema });
-    s.volume.applyOptions({ visible: st.volume });
-    [s.wilR, s.wilEma].forEach((x) => x.applyOptions({ visible: st.williams }));
-    [s.mHist, s.mMacd, s.mSignal, s.mEma, s.mDelta].forEach((x) => x.applyOptions({ visible: st.macd }));
-
-    // Collapse hidden panes to ~0 height (pane order: 0 price,1 vol,2 %R,3 MACD).
+    s.ema377.applyOptions({ visible: settings.ema });
+    s.ema610.applyOptions({ visible: settings.ema });
+    s.volume.applyOptions({ visible: settings.volume });
+    [s.wilR, s.wilEma].forEach((x) => x.applyOptions({ visible: settings.williams }));
+    [s.mHist, s.mMacd, s.mSignal, s.mEma, s.mDelta].forEach((x) => x.applyOptions({ visible: settings.macd }));
     const panes = chart.panes();
-    panes[1]?.setStretchFactor(st.volume ? 1.1 : 0.0001);
-    panes[2]?.setStretchFactor(st.williams ? 2 : 0.0001);
-    panes[3]?.setStretchFactor(st.macd ? 2.2 : 0.0001);
+    panes[1]?.setStretchFactor(settings.volume ? 1.1 : 0.0001);
+    panes[2]?.setStretchFactor(settings.williams ? 2 : 0.0001);
+    panes[3]?.setStretchFactor(settings.macd ? 2.2 : 0.0001);
   }, [settings]);
-
-  useEffect(() => {
-    if (!lodRef.current || !candles) return;
-    const ind = computeIndicators(candles);
-    const extraVals = [
-      ind.ema377p,
-      ind.ema610p,
-      ind.percentR,
-      ind.emawil,
-      ind.histN,
-      ind.macdN,
-      ind.signalN,
-      ind.eMacDN,
-      ind.deltaN,
-    ];
-    lodRef.current.setData(candles, extraVals, fitRef.current);
-    if (!hoveringRef.current) onHoverRef.current?.(lodRef.current.lastBar());
-  }, [candles]);
 
   useImperativeHandle(
     ref,
     () => ({
       updateLast: (b) => {
         lodRef.current?.updateLast(b);
-        if (!hoveringRef.current) onHoverRef.current?.(lodRef.current?.lastBar() ?? null);
       },
     }),
     [],
   );
 
-  return <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />;
+  const up = legend ? legend.c >= legend.o : true;
+
+  return (
+    <>
+      <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />
+      {legend && (
+        <>
+          <div className="pane-legend" style={{ top: (tops[0] ?? 0) + 6 }}>
+            <b>{symbol}</b> <span className="lg-muted">{tfLabel}</span>{' '}
+            <span className="lg-muted">A</span> {fp(legend.o)} <span className="lg-muted">Y</span> {fp(legend.h)}{' '}
+            <span className="lg-muted">D</span> {fp(legend.l)} <span className="lg-muted">K</span>{' '}
+            <span className={up ? 'up' : 'down'}>{fp(legend.c)}</span>
+            {settings.ema && (
+              <>
+                {'  '}
+                <span style={{ color: '#f0b90b' }}>EMA377 {fp(legend.ema377)}</span>{' '}
+                <span style={{ color: '#9aa0b0' }}>EMA610 {fp(legend.ema610)}</span>
+              </>
+            )}
+          </div>
+
+          {settings.volume && tops[1] != null && (
+            <div className="pane-legend" style={{ top: tops[1] + 6 }}>
+              <span className="lg-muted">Hacim</span> {fv(legend.v)}
+            </div>
+          )}
+
+          {settings.williams && tops[2] != null && (
+            <div className="pane-legend" style={{ top: tops[2] + 6 }}>
+              <span style={{ color: '#7E57C2' }}>Williams %R 260</span> {fn(legend.wilR, 1)}{' '}
+              <span style={{ color: '#26a69a' }}>EMA {fn(legend.wilEma, 1)}</span>
+            </div>
+          )}
+
+          {settings.macd && tops[3] != null && (
+            <div className="pane-legend" style={{ top: tops[3] + 6 }}>
+              <span className="lg-muted">NizamiCedid</span>{' '}
+              <span style={{ color: '#ff2fa6' }}>MACD {fn(legend.macd, 4)}</span>{' '}
+              <span style={{ color: '#FF6D00' }}>Signal {fn(legend.signal, 4)}</span>{' '}
+              <span style={{ color: '#e6e6e6' }}>eMACD {fn(legend.emacd, 4)}</span>{' '}
+              <span style={{ color: '#8a83d6' }}>Δ {fn(legend.delta, 4)}</span>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
 });
+
+function fp(v: number): string {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  const d = a >= 1 ? 2 : a >= 0.01 ? 4 : 8;
+  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function fn(v: number, d: number): string {
+  return isFinite(v) ? v.toFixed(d) : '—';
+}
+function fv(v: number): string {
+  if (!isFinite(v)) return '—';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+  return v.toFixed(0);
+}

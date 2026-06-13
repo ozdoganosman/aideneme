@@ -259,6 +259,26 @@ button.ctl:disabled {
   color: var(--down);
 }
 
+/* Per-pane indicator legends (name + value at crosshair) */
+.pane-legend {
+  position: absolute;
+  left: 10px;
+  z-index: 5;
+  pointer-events: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.pane-legend b {
+  color: #fff;
+}
+
+.lg-muted {
+  color: var(--muted);
+}
+
 /* Loading overlay */
 .loading {
   position: absolute;

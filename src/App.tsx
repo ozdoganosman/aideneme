@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Chart, HoverInfo, IndicatorSettings } from './components/Chart';
+import { Chart, IndicatorSettings } from './components/Chart';
 import { SymbolSearch } from './components/SymbolSearch';
 import { Watchlist } from './components/Watchlist';
 import { Portfolio, Holding } from './components/Portfolio';
@@ -32,7 +32,6 @@ export default function App() {
   const [status, setStatus] = useState('Hazır');
   const [error, setError] = useState<string | null>(null);
   const [symbols, setSymbols] = useState<string[]>(BIST_SYMBOLS);
-  const [hover, setHover] = useState<HoverInfo | null>(null);
   const [fitOnLoad, setFitOnLoad] = useState(true);
 
   const [quotes, setQuotes] = useState<Quotes>({});
@@ -122,9 +121,6 @@ export default function App() {
     fetchBistQuotes().then(setQuotes).catch(() => setQuotes({}));
   }, []);
 
-  const up = hover ? hover.close >= hover.open : true;
-  const chg = hover ? hover.close - hover.open : 0;
-  const chgPct = hover && hover.open ? (chg / hover.open) * 100 : 0;
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
   const starred = watchlist.includes(symbol);
 
@@ -193,32 +189,6 @@ export default function App() {
 
         <main className="main">
           <div className="chart-wrap">
-            <div className="legend">
-              <div className="legend-top">
-                <b>{provider === 'bist' ? symbol : 'SENTETİK'}</b>
-                <span className="muted">{tfLabel}</span>
-                {hover && (
-                  <>
-                    <span className={up ? 'price up' : 'price down'}>{fmtPrice(hover.close)}</span>
-                    <span className={up ? 'up' : 'down'}>
-                      {chg >= 0 ? '+' : ''}
-                      {fmtPrice(chg)} ({chgPct >= 0 ? '+' : ''}
-                      {chgPct.toFixed(2)}%)
-                    </span>
-                  </>
-                )}
-              </div>
-              {hover && (
-                <div className="legend-ohlc">
-                  <span>A <b>{fmtPrice(hover.open)}</b></span>
-                  <span>Y <b>{fmtPrice(hover.high)}</b></span>
-                  <span>D <b>{fmtPrice(hover.low)}</b></span>
-                  <span>K <b className={up ? 'up' : 'down'}>{fmtPrice(hover.close)}</b></span>
-                  <span>Hac <b>{fmtVol(hover.volume)}</b></span>
-                </div>
-              )}
-            </div>
-
             {loading && (
               <div className="loading">
                 <div className="spinner" />
@@ -226,7 +196,13 @@ export default function App() {
               </div>
             )}
 
-            <Chart candles={candles} onHover={setHover} fitOnLoad={fitOnLoad} settings={settings} />
+            <Chart
+              candles={candles}
+              fitOnLoad={fitOnLoad}
+              settings={settings}
+              symbol={provider === 'bist' ? symbol : 'SENTETİK'}
+              tfLabel={tfLabel}
+            />
           </div>
         </main>
       </div>
@@ -238,18 +214,4 @@ export default function App() {
       </footer>
     </div>
   );
-}
-
-function fmtPrice(v: number): string {
-  if (!isFinite(v)) return '-';
-  const a = Math.abs(v);
-  const d = a >= 1 ? 2 : a >= 0.01 ? 4 : 8;
-  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-}
-
-function fmtVol(v: number): string {
-  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
-  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
-  if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
-  return v.toFixed(2);
 }
