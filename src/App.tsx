@@ -3,9 +3,19 @@ import { Chart, HoverInfo } from './components/Chart';
 import { SymbolSearch } from './components/SymbolSearch';
 import { Candles, BIST_SYMBOLS } from './data/types';
 import { fetchBistStatic, fetchBistSymbols } from './data/bistStatic';
+import { generateSynthetic } from './data/synthetic';
+import { resample, TF } from './data/resample';
+
+type Provider = 'bist' | 'synthetic';
+
+const SYNTH_BARS = 4_000_000; // sabit maksimum (seçilemez)
+
+const TF_LABEL: Record<TF, string> = { D: 'Günlük', W: 'Haftalık', M: 'Aylık' };
 
 export default function App() {
+  const [provider, setProvider] = useState<Provider>('bist');
   const [symbol, setSymbol] = useState('THYAO');
+  const [tf, setTf] = useState<TF>('D');
   const [candles, setCandles] = useState<Candles | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('Hazır');
@@ -15,12 +25,17 @@ export default function App() {
   const [fitOnLoad, setFitOnLoad] = useState(true);
 
   const abortRef = useRef<AbortController | null>(null);
+  const dailyRef = useRef<Candles | null>(null); // cached daily BIST for resampling
   const firstRef = useRef(true);
+  const lastKeyRef = useRef<string | null>(null);
 
   const load = useCallback(
-    async (symbolOverride?: string) => {
-      const sym = (symbolOverride ?? symbol).toUpperCase().trim();
-      if (!sym) return;
+    async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
+      const prov = opts?.provider ?? provider;
+      const sym = (opts?.symbol ?? symbol).toUpperCase().trim();
+      const tframe = opts?.tf ?? tf;
+      if (prov === 'bist' && !sym) return;
+
       setLoading(true);
       setError(null);
       setStatus('Yükleniyor…');
@@ -28,11 +43,20 @@ export default function App() {
       const ac = new AbortController();
       abortRef.current = ac;
       try {
-        const c = await fetchBistStatic(sym, ac.signal);
-        // First load frames the latest bars; later loads (symbol switches) keep
-        // the current zoom + visible date range.
-        setFitOnLoad(firstRef.current);
+        let c: Candles;
+        if (prov === 'synthetic') {
+          await new Promise((r) => setTimeout(r, 0)); // let the spinner paint
+          c = generateSynthetic(sym || 'SYNTH', SYNTH_BARS, 60);
+          dailyRef.current = null;
+        } else {
+          const daily = await fetchBistStatic(sym, ac.signal);
+          dailyRef.current = daily;
+          c = resample(daily, tframe);
+        }
+        const key = prov === 'synthetic' ? 'synthetic' : `bist|${tframe}`;
+        setFitOnLoad(firstRef.current || key !== lastKeyRef.current);
         firstRef.current = false;
+        lastKeyRef.current = key;
         setCandles(c);
         setStatus(`${c.length.toLocaleString()} mum`);
       } catch (e) {
@@ -43,10 +67,20 @@ export default function App() {
         setLoading(false);
       }
     },
-    [symbol],
+    [provider, symbol, tf],
   );
 
-  // Initial load + symbol list.
+  // Switch BIST timeframe without re-fetching: resample the cached daily data.
+  const changeTf = (newTf: TF) => {
+    setTf(newTf);
+    if (provider !== 'bist' || !dailyRef.current) return;
+    const c = resample(dailyRef.current, newTf);
+    setFitOnLoad(true);
+    lastKeyRef.current = `bist|${newTf}`;
+    setCandles(c);
+    setStatus(`${c.length.toLocaleString()} mum`);
+  };
+
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,13 +94,40 @@ export default function App() {
   const up = hover ? hover.close >= hover.open : true;
   const chg = hover ? hover.close - hover.open : 0;
   const chgPct = hover && hover.open ? (chg / hover.open) * 100 : 0;
+  const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
 
   return (
     <div className="app">
       <header className="toolbar">
-        <span className="brand">⚡ Borsa · BIST</span>
+        <span className="brand">⚡ Borsa</span>
 
-        <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load(s)} />
+        <select
+          className="ctl"
+          value={provider}
+          onChange={(e) => {
+            const p = e.target.value as Provider;
+            setProvider(p);
+            void load({ provider: p });
+          }}
+        >
+          <option value="bist">BIST</option>
+          <option value="synthetic">Sentetik (stres)</option>
+        </select>
+
+        {provider === 'bist' ? (
+          <>
+            <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load({ symbol: s })} />
+            <div className="seg">
+              {(['D', 'W', 'M'] as TF[]).map((t) => (
+                <button key={t} className={t === tf ? 'active' : ''} onClick={() => changeTf(t)}>
+                  {TF_LABEL[t]}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <span className="hint">4.000.000 mum (maks)</span>
+        )}
 
         <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
           ⟳
@@ -79,8 +140,8 @@ export default function App() {
       <div className="chart-wrap">
         <div className="legend">
           <div className="legend-top">
-            <b>{symbol}</b>
-            <span className="muted">1G</span>
+            <b>{provider === 'bist' ? symbol : 'SENTETİK'}</b>
+            <span className="muted">{tfLabel}</span>
             {hover && (
               <>
                 <span className={up ? 'price up' : 'price down'}>{fmtPrice(hover.close)}</span>
@@ -114,7 +175,7 @@ export default function App() {
       </div>
 
       <footer className="status">
-        <span>BIST · günlük (statik)</span>
+        <span>{provider === 'bist' ? `BIST · ${TF_LABEL[tf]}` : 'Sentetik · stres testi'}</span>
         <span>Mum: {candles ? candles.length.toLocaleString() : 0}</span>
         <span className={error ? 'down' : ''}>{error ? `Hata: ${error}` : status}</span>
       </footer>
