@@ -10,6 +10,8 @@ okur: proxy/key/CORS gerekmez.
 from __future__ import annotations
 
 import json
+import random
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import timezone
 from pathlib import Path
@@ -31,7 +33,7 @@ def load_symbols() -> list[str]:
         return ["THYAO", "GARAN", "AKBNK", "ASELS", "SISE"]
 
 
-MAX_WORKERS = 10
+MAX_WORKERS = 6
 
 
 def _epoch(idx) -> int:
@@ -46,27 +48,37 @@ def _epoch(idx) -> int:
     return int(ts.timestamp())
 
 
+RETRIES = 4
+
+
 def _fetch_one(sym: str):
-    try:
-        import borsapy as bp
-        df = bp.Ticker(sym).history(period="max", interval="1d")
-        if df is None or df.empty or len(df) < 5:
-            return sym, None
-        recs = []
-        for idx, row in df.iterrows():
-            v = row["Volume"]
-            recs.append({
-                "t": _epoch(idx),
-                "o": round(float(row["Open"]), 4),
-                "h": round(float(row["High"]), 4),
-                "l": round(float(row["Low"]), 4),
-                "c": round(float(row["Close"]), 4),
-                "v": 0 if (v is None or v != v) else int(v),
-            })
-        return sym, recs
-    except Exception as e:  # noqa
-        print(f"[bist] {sym} FAIL: {e}")
-        return sym, None
+    import borsapy as bp
+    last = ""
+    for attempt in range(RETRIES):
+        try:
+            time.sleep(random.uniform(0.05, 0.35))  # jitter to ease rate limits
+            df = bp.Ticker(sym).history(period="max", interval="1d")
+            if df is None or df.empty or len(df) < 5:
+                last = "empty"
+                raise RuntimeError("empty")
+            recs = []
+            for idx, row in df.iterrows():
+                v = row["Volume"]
+                recs.append({
+                    "t": _epoch(idx),
+                    "o": round(float(row["Open"]), 4),
+                    "h": round(float(row["High"]), 4),
+                    "l": round(float(row["Low"]), 4),
+                    "c": round(float(row["Close"]), 4),
+                    "v": 0 if (v is None or v != v) else int(v),
+                })
+            return sym, recs
+        except Exception as e:  # noqa
+            last = str(e) or last
+            if attempt < RETRIES - 1:
+                time.sleep(1.0 + attempt * 1.5 + random.random())  # backoff
+    print(f"[bist] {sym} FAIL: {last}")
+    return sym, None
 
 
 def main() -> int:
