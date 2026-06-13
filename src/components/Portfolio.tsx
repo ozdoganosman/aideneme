@@ -75,10 +75,12 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
                 setActive((a) => Math.max(a - 1, 0));
                 e.preventDefault();
               } else if (e.key === 'Enter') {
-                if (matches[active]) {
+                if (open && matches[active]) {
                   setSym(matches[active]);
                   setOpen(false);
                   e.preventDefault();
+                } else {
+                  add();
                 }
               } else if (e.key === 'Escape') {
                 setOpen(false);
@@ -103,8 +105,20 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
             </div>
           )}
         </div>
-        <input placeholder="Adet" value={qty} inputMode="decimal" onChange={(e) => setQty(e.target.value)} />
-        <input placeholder="Maliyet" value={cost} inputMode="decimal" onChange={(e) => setCost(e.target.value)} />
+        <input
+          placeholder="Adet"
+          value={qty}
+          inputMode="decimal"
+          onChange={(e) => setQty(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
+        <input
+          placeholder="Maliyet"
+          value={cost}
+          inputMode="decimal"
+          onChange={(e) => setCost(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
         <button onClick={add} title="Ekle">+</button>
       </div>
 
