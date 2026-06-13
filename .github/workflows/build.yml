@@ -2,7 +2,13 @@ name: build
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Cancel superseded runs and avoid duplicate push+PR runs on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Native Linux build (also validates the non-Windows code paths).
