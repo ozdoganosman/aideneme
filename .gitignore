@@ -26,3 +26,5 @@ Thumbs.db
 
 # Generated BIST data (built in CI)
 public/data/
+__pycache__/
+*.pyc
