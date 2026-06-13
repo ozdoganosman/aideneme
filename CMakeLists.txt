@@ -8,14 +8,19 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-# ---- System dependencies -----------------------------------------------------
-# Linux:   apt install libglfw3-dev libgl1-mesa-dev libcurl4-openssl-dev xorg-dev
-# macOS:   brew install glfw curl   (OpenGL ships with the OS)
-# Windows: use vcpkg (glfw3, curl) or set CMAKE_PREFIX_PATH accordingly.
-find_package(OpenGL REQUIRED)
-find_package(glfw3 REQUIRED)
-find_package(CURL REQUIRED)
+# ---- Dependencies ------------------------------------------------------------
+# Linux/macOS pull GLFW + libcurl from the system; Windows builds GLFW from
+# source and uses the OS WinHTTP + opengl32, so no external dev packages are
+# needed there (great for a self-contained .exe, incl. MinGW cross-compiles).
+#   Linux: apt install libglfw3-dev libgl1-mesa-dev libcurl4-openssl-dev xorg-dev
+#   macOS: brew install glfw curl
 find_package(Threads REQUIRED)
+
+if(NOT WIN32)
+    find_package(OpenGL REQUIRED)
+    find_package(glfw3 REQUIRED)
+    find_package(CURL REQUIRED)
+endif()
 
 # ---- Fetched dependencies (Dear ImGui, ImPlot, nlohmann/json) -----------------
 include(FetchContent)
@@ -40,6 +45,18 @@ FetchContent_Declare(implot
 FetchContent_MakeAvailable(json)
 FetchContent_MakeAvailable(imgui)
 FetchContent_MakeAvailable(implot)
+
+# On Windows, build GLFW from source (static) so users need no dev packages.
+if(WIN32)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE INTERNAL "")
+    set(GLFW_BUILD_TESTS    OFF CACHE INTERNAL "")
+    set(GLFW_BUILD_DOCS     OFF CACHE INTERNAL "")
+    FetchContent_Declare(glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG        3.4
+        GIT_SHALLOW    TRUE)
+    FetchContent_MakeAvailable(glfw)
+endif()
 
 # ---- Executable ---------------------------------------------------------------
 add_executable(borsa
@@ -71,13 +88,17 @@ target_include_directories(borsa PRIVATE
 )
 
 target_link_libraries(borsa PRIVATE
-    glfw
-    OpenGL::GL
-    CURL::libcurl
     nlohmann_json::nlohmann_json
     Threads::Threads
     ${CMAKE_DL_LIBS}
 )
+
+if(WIN32)
+    # GLFW (static) + system OpenGL + WinHTTP
+    target_link_libraries(borsa PRIVATE glfw opengl32 winhttp)
+else()
+    target_link_libraries(borsa PRIVATE glfw OpenGL::GL CURL::libcurl)
+endif()
 
 if(MSVC)
     target_compile_options(borsa PRIVATE /O2)

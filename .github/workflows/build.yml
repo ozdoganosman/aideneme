@@ -1,0 +1,44 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Native Linux build (also validates the non-Windows code paths).
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential \
+            libglfw3-dev libgl1-mesa-dev libcurl4-openssl-dev xorg-dev
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build -j
+
+  # Windows x64 .exe, cross-compiled with MinGW-w64 (statically linked, single
+  # file). Downloadable from the run's Artifacts section.
+  windows-exe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MinGW-w64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++-mingw-w64-x86-64
+      - name: Configure
+        run: >
+          cmake -S . -B build-win
+          -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build-win -j
+      - name: Upload borsa.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: borsa-windows-x64
+          path: build-win/borsa.exe
