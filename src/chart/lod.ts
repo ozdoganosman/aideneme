@@ -143,6 +143,20 @@ export class LodController {
     }
   }
 
+  // Latest bar from the full dataset (for the legend / live readout).
+  lastBar(): { time: number; open: number; high: number; low: number; close: number; volume: number } | null {
+    if (!this.full || this.full.length === 0) return null;
+    const n = this.full.length - 1;
+    return {
+      time: this.full.time[n],
+      open: this.full.open[n],
+      high: this.full.high[n],
+      low: this.full.low[n],
+      close: this.full.close[n],
+      volume: this.full.volume[n],
+    };
+  }
+
   destroy() {
     cancelAnimationFrame(this.raf);
     this.chart.timeScale().unsubscribeVisibleLogicalRangeChange(this.onRange);
