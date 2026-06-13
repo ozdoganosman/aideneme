@@ -7,11 +7,12 @@ WebSocket) + offline stres testi için **sentetik üreteç**.
 
 ## Canlı demo
 
-GitHub Pages'e her push'ta otomatik yayınlanır:
+Her push'ta build alınıp `gh-pages` branch'ine yayınlanır:
 **https://ozdoganosman.github.io/aideneme/**
 
-(İlk yayında repo'da **Settings → Pages → Source: GitHub Actions** seçili olmalı;
-workflow bunu otomatik etkinleştirmeye çalışır.)
+**Tek seferlik kurulum:** Repo → **Settings → Pages → Build and deployment →
+Source: "Deploy from a branch" → Branch: `gh-pages` / `(root)` → Save.**
+Sonrasında her push siteyi otomatik günceller.
 
 ## Neden kasmıyor?
 
