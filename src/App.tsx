@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Chart, IndicatorSettings } from './components/Chart';
 import { SymbolSearch } from './components/SymbolSearch';
 import { Watchlist } from './components/Watchlist';
 import { Portfolio, Holding } from './components/Portfolio';
 import { IndicatorMenu } from './components/IndicatorMenu';
+import { Backtest } from './components/Backtest';
+import { computeStats } from './indicators/stats';
 import { Candles, BIST_SYMBOLS } from './data/types';
 import { fetchBistStatic, fetchBistSymbols, fetchBistQuotes, Quotes } from './data/bistStatic';
 import { generateSynthetic } from './data/synthetic';
@@ -33,6 +35,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [symbols, setSymbols] = useState<string[]>(BIST_SYMBOLS);
   const [fitOnLoad, setFitOnLoad] = useState(true);
+  const [showBt, setShowBt] = useState(false);
 
   const [quotes, setQuotes] = useState<Quotes>({});
   const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
@@ -123,6 +126,7 @@ export default function App() {
 
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
   const starred = watchlist.includes(symbol);
+  const stats = useMemo(() => computeStats(candles), [candles]);
 
   return (
     <div className="app">
@@ -166,6 +170,10 @@ export default function App() {
 
         <IndicatorMenu settings={settings} onChange={setSettings} />
 
+        <button className="ctl" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
+          Strateji
+        </button>
+
         <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
           ⟳
         </button>
@@ -189,6 +197,22 @@ export default function App() {
 
         <main className="main">
           <div className="chart-wrap">
+            {stats && (
+              <div className="statsbox">
+                <div>
+                  <span className="lg-muted">52H</span> {fp(stats.hi52)} / {fp(stats.lo52)}
+                </div>
+                <div>
+                  <span className="lg-muted">1A</span> <span className={stats.r1m >= 0 ? 'up' : 'down'}>{pct(stats.r1m)}</span>{' · '}
+                  <span className="lg-muted">3A</span> <span className={stats.r3m >= 0 ? 'up' : 'down'}>{pct(stats.r3m)}</span>{' · '}
+                  <span className="lg-muted">1Y</span> <span className={stats.r1y >= 0 ? 'up' : 'down'}>{pct(stats.r1y)}</span>
+                </div>
+                <div>
+                  <span className="lg-muted">Ort.Hac</span> {fv(stats.avgVol)}
+                </div>
+              </div>
+            )}
+
             {loading && (
               <div className="loading">
                 <div className="spinner" />
@@ -212,6 +236,29 @@ export default function App() {
         <span>Mum: {candles ? candles.length.toLocaleString() : 0}</span>
         <span className={error ? 'down' : ''}>{error ? `Hata: ${error}` : status}</span>
       </footer>
+
+      {showBt && candles && (
+        <Backtest candles={candles} symbol={provider === 'bist' ? symbol : 'SENTETİK'} onClose={() => setShowBt(false)} />
+      )}
     </div>
   );
+}
+
+function pct(v: number): string {
+  return isFinite(v) ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : '—';
+}
+
+function fp(v: number): string {
+  if (!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  const d = a >= 1 ? 2 : a >= 0.01 ? 4 : 8;
+  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function fv(v: number): string {
+  if (!isFinite(v)) return '—';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(2) + 'K';
+  return v.toFixed(0);
 }

@@ -279,6 +279,97 @@ button.ctl:disabled {
   color: var(--muted);
 }
 
+/* Returns & stats box (top-right of chart) */
+.statsbox {
+  position: absolute;
+  top: 8px;
+  right: 72px;
+  z-index: 5;
+  pointer-events: none;
+  text-align: right;
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+/* ---- Modal (backtest) ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  width: min(720px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+
+.modal-body {
+  padding: 12px 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bt-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bt-table th {
+  text-align: right;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bt-table th:first-child {
+  text-align: left;
+}
+
+.bt-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #1a1d27;
+  text-align: right;
+}
+
+.bt-table td:first-child {
+  text-align: left;
+}
+
+.bt-table tr.best {
+  background: #16271f;
+}
+
 /* Loading overlay */
 .loading {
   position: absolute;
