@@ -1,13 +1,14 @@
 name: deploy
 
-# Build the app and publish it to the `gh-pages` branch on every push, so there
-# is always a live URL with the latest version. Uses the built-in GITHUB_TOKEN
-# (contents: write) — no Pages API enablement needed.
+# Publish the app to gh-pages on every push. To keep code deploys FAST, the BIST
+# data is NOT re-fetched on pushes — the already-published data on gh-pages is
+# reused. The (slow) data fetch only runs on a schedule / manual trigger / first
+# time. Uses the built-in GITHUB_TOKEN; no Pages API enablement needed.
 on:
   push:
     branches: [main, claude/tender-ritchie-kn4ocg]
   schedule:
-    - cron: '30 15 * * 1-5' # hafta içi ~BIST kapanışı sonrası (15:00 UTC) veriyi tazele
+    - cron: '30 15 * * 1-5' # weekdays after BIST close (15:00 UTC) → refresh data
   workflow_dispatch:
 
 permissions:
@@ -29,13 +30,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build BIST static data (server-side, no CORS)
-        continue-on-error: true # veri hatası deploy'u düşürmesin
+
+      - name: Reuse already-published BIST data (avoid slow re-fetch)
+        run: |
+          git clone --depth 1 -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" _site 2>/dev/null || true
+          mkdir -p public/data
+          if [ -d _site/data/bist ]; then cp -r _site/data/bist public/data/; fi
+          rm -rf _site
+
+      - name: Refresh BIST data (scheduled / manual / first time only)
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || hashFiles('public/data/bist/symbols.json') == '' }}
+        continue-on-error: true
         run: |
           python -m pip install --quiet borsapy numpy
           python scripts/build_bist.py
+
       - run: npm ci
       - run: npm run build
+
       - name: Publish to gh-pages
         run: |
           touch dist/.nojekyll
