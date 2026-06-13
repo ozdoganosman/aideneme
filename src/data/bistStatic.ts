@@ -68,6 +68,8 @@ export interface StrategyAgg {
   beatPct: number;
   avgWin: number;
   avgDD: number;
+  avgHold?: number; // average holding period in bars
+  avgTrades?: number;
   n: number;
 }
 export interface StrategiesFile {

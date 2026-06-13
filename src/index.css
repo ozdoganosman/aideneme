@@ -599,6 +599,12 @@ button.ctl:disabled {
   color: var(--muted);
   font-size: 11px;
 }
+.bt-srow-explain {
+  margin: 2px 0 0 26px;
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.4;
+}
 
 /* Active strategy chip in the toolbar */
 .chip {

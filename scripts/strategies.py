@@ -91,6 +91,19 @@ def strategies_for(close, high, low):
 
 
 def main() -> int:
+    # Self-gate: skip if strategies.json is already up to date (has avgHold),
+    # unless FORCE_ALL=1 (scheduled full refresh). Lets the step run every deploy
+    # but stay fast when nothing changed.
+    sj = OUT / "strategies.json"
+    if os.environ.get("FORCE_ALL") != "1" and sj.exists():
+        try:
+            cur = json.load(open(sj, encoding="utf-8"))
+            if cur.get("results") and "avgHold" in cur["results"][0]:
+                print("[strategies] güncel, atlanıyor")
+                return 0
+        except Exception:  # noqa
+            pass
+
     agg: dict[str, dict] = {}
     holds = []
     nsym = 0
@@ -113,15 +126,18 @@ def main() -> int:
         hold = (close[-1] / close[0] - 1) * 100.0
         holds.append(hold)
         nsym += 1
+        nbars = len(close)
         for sname, pos in strategies_for(close, high, low).items():
             bt = backtest(close, pos)
             if not bt:
                 continue
-            ret, _trades, win, dd = bt
-            a = agg.setdefault(sname, {"rets": [], "wins": [], "dds": [], "beats": 0, "n": 0})
+            ret, trades, win, dd = bt
+            a = agg.setdefault(sname, {"rets": [], "wins": [], "dds": [], "holds": [], "trd": [], "beats": 0, "n": 0})
             a["rets"].append(ret)
             a["wins"].append(win)
             a["dds"].append(dd)
+            a["holds"].append(nbars / trades if trades > 0 else nbars)  # avg holding (bars)
+            a["trd"].append(trades)
             a["n"] += 1
             if ret > hold:
                 a["beats"] += 1
@@ -136,6 +152,8 @@ def main() -> int:
             "beatPct": round(a["beats"] / a["n"] * 100.0, 1),
             "avgWin": round(float(np.mean(a["wins"])), 1),
             "avgDD": round(float(np.mean(a["dds"])), 1),
+            "avgHold": round(float(np.mean(a["holds"])), 0),
+            "avgTrades": round(float(np.mean(a["trd"])), 0),
             "n": a["n"],
         })
     results.sort(key=lambda x: x["avgRet"], reverse=True)

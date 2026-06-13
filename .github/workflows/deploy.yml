@@ -48,9 +48,10 @@ jobs:
           python -m pip install --quiet borsapy numpy pandas
           python scripts/build_bist.py
 
-      - name: Market-wide strategy scan (schedule / first time)
-        if: ${{ github.event_name == 'schedule' || hashFiles('public/data/bist/strategies.json') == '' }}
+      - name: Market-wide strategy scan (self-gates; recomputes when stale)
         continue-on-error: true
+        env:
+          FORCE_ALL: ${{ github.event_name == 'schedule' && '1' || '' }}
         run: python scripts/strategies.py
 
       - run: npm ci

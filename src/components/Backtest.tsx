@@ -10,6 +10,9 @@ interface Props {
   onSelect: (name: string) => void;
 }
 
+// Exclude short-term / high-turnover strategies (avg holding < ~5 weeks).
+const MIN_HOLD = 25;
+
 export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
   const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number } | null>(null);
   const [market, setMarket] = useState<StrategiesFile | null>(null);
@@ -73,7 +76,7 @@ export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
             </div>
           </details>
 
-          {tab === 'market' ? renderMarket(market, marketLoaded, pick) : renderSymbol(data, pick)}
+          {tab === 'market' ? renderMarket(market, marketLoaded, pick) : renderSymbol(data, pick, candles.length)}
           <div className="bt-hint">
             Çubuk = getiri. Bir stratejiye <b>tıkla</b> → grafikte AL/SAT noktaları işaretlenir.
             <br />⚠️ Geçmişe dönük (in-sample); geçmiş performans geleceği garanti etmez.
@@ -93,15 +96,18 @@ function renderMarket(
   if (!market || market.results.length === 0)
     return <div className="bt-note">Piyasa geneli sonuç henüz hazır değil (CI bir sonraki dağıtımda üretecek).</div>;
 
-  const rows = market.results.slice(0, 12);
+  const filtered = market.results.filter((r) => (r.avgHold ?? 999) >= MIN_HOLD);
+  const list = filtered.length ? filtered : market.results;
+  const rows = list.slice(0, 12);
   const max = Math.max(...rows.map((r) => Math.abs(r.avgRet)), 1);
-  const w = market.results[0];
+  const w = list[0];
 
   return (
     <>
       <p className="bt-intro">
-        ~{market.nSymbols} BIST hissesinin tümünde geçmiş günlük veriyle test edildi; aşağıdaki <b>ortalama getiri</b>ye
-        göre sıralı. Karşılaştırma — <b>Al-Tut</b> ortalaması: <b className="up">{fmtX(market.holdAvg)}</b>
+        ~{market.nSymbols} BIST hissesinin tümünde geçmiş günlük veriyle test edildi; <b>ortalama getiri</b>ye göre
+        sıralı (kısa vadeli / çok işlem yapanlar hariç). Karşılaştırma — <b>Al-Tut</b> ortalaması:{' '}
+        <b className="up">{fmtX(market.holdAvg)}</b>
       </p>
 
       <Winner
@@ -129,7 +135,11 @@ function renderMarket(
   );
 }
 
-function renderSymbol(data: { results: StrategyResult[]; holdPct: number } | null, pick: (n: string) => void) {
+function renderSymbol(
+  data: { results: StrategyResult[]; holdPct: number } | null,
+  pick: (n: string) => void,
+  nBars: number,
+) {
   if (!data)
     return (
       <div className="bt-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -137,15 +147,17 @@ function renderSymbol(data: { results: StrategyResult[]; holdPct: number } | nul
       </div>
     );
 
-  const rows = data.results.slice(0, 12);
+  const filtered = data.results.filter((r) => r.trades > 0 && nBars / r.trades >= MIN_HOLD);
+  const list = filtered.length ? filtered : data.results;
+  const rows = list.slice(0, 12);
   const max = Math.max(...rows.map((r) => Math.abs(r.retPct)), Math.abs(data.holdPct), 1);
-  const w = data.results[0];
+  const w = list[0];
 
   return (
     <>
       <p className="bt-intro">
-        Bu hissede her strateji geçmişte otomatik uygulanırsa ne kazandırırdı. Karşılaştırma — <b>Al-Tut</b>:{' '}
-        <b className={data.holdPct >= 0 ? 'up' : 'down'}>{fmtX(data.holdPct)}</b>
+        Bu hissede her strateji geçmişte otomatik uygulanırsa ne kazandırırdı (kısa vadeli / çok işlem yapanlar hariç).
+        Karşılaştırma — <b>Al-Tut</b>: <b className={data.holdPct >= 0 ? 'up' : 'down'}>{fmtX(data.holdPct)}</b>
       </p>
 
       <Winner
@@ -209,15 +221,13 @@ function Row({
       <div className="bt-srow-head">
         <span className="bt-rank">{rank}</span>
         <span className="bt-srow-name">{name}</span>
-        <span className="bt-info" title={explainStrategy(name)} onClick={(e) => e.stopPropagation()}>
-          ⓘ
-        </span>
         <span className={'bt-srow-val ' + (value >= 0 ? 'up' : 'down')}>{label}</span>
       </div>
       <div className="bt-barwrap">
         <div className={'bt-bar ' + (value >= 0 ? 'pos' : 'neg')} style={{ width: width + '%' }} />
       </div>
       <div className="bt-srow-sub">{sub}</div>
+      <div className="bt-srow-explain">{explainStrategy(name)}</div>
     </div>
   );
 }
