@@ -243,14 +243,6 @@ export default function App() {
 
       <div className="body">
         <aside className="sidebar">
-          <Watchlist
-            items={watchlist}
-            quotes={quotes}
-            spark={spark}
-            active={symbol}
-            onSelect={selectSymbol}
-            onRemove={toggleWatch}
-          />
           <Portfolio
             holdings={portfolio}
             quotes={quotes}
@@ -347,6 +339,17 @@ export default function App() {
             />
           </div>
         </main>
+
+        <aside className="sidebar right">
+          <Watchlist
+            items={watchlist}
+            quotes={quotes}
+            spark={spark}
+            active={symbol}
+            onSelect={selectSymbol}
+            onRemove={toggleWatch}
+          />
+        </aside>
       </div>
 
       <footer className="status">

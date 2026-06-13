@@ -25,20 +25,29 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
 
   const matches = open && sym ? rank(symbols, sym.toUpperCase()) : [];
 
-  let totVal = 0;
-  let totCost = 0;
   const rows = holdings.map((h) => {
-    const price = quotes[h.symbol]?.c ?? 0;
+    const q = quotes[h.symbol];
+    const price = q ? q.c : 0;
+    const pc = q ? q.pc : price;
     const val = price * h.qty;
-    const cst = h.cost * h.qty;
-    totVal += val;
-    totCost += cst;
-    const pnl = val - cst;
-    const pnlPct = cst ? (pnl / cst) * 100 : 0;
-    return { h, val, pnl, pnlPct };
+    const cost = h.cost * h.qty;
+    const pnl = val - cost;
+    return {
+      h,
+      price,
+      val,
+      pnl,
+      pnlPct: cost ? (pnl / cost) * 100 : 0,
+      dayPL: (price - pc) * h.qty,
+      dayPct: pc ? ((price - pc) / pc) * 100 : 0,
+    };
   });
+  const totVal = rows.reduce((s, r) => s + r.val, 0);
+  const totCost = holdings.reduce((s, h) => s + h.cost * h.qty, 0);
   const totPnl = totVal - totCost;
   const totPct = totCost ? (totPnl / totCost) * 100 : 0;
+  const totDay = rows.reduce((s, r) => s + r.dayPL, 0);
+  const totDayPct = totVal - totDay ? (totDay / (totVal - totDay)) * 100 : 0;
 
   const add = () => {
     const s = sym.toUpperCase().trim();
@@ -54,7 +63,8 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
 
   return (
     <div className="panel">
-      <div className="panel-title">Portföy</div>
+      <div className="panel-title">Portföy {holdings.length > 0 && `· ${holdings.length}`}</div>
+
       <div className="pf-form">
         <div className="ac">
           <input
@@ -105,71 +115,86 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
             </div>
           )}
         </div>
-        <input
-          placeholder="Adet"
-          value={qty}
-          inputMode="decimal"
-          onChange={(e) => setQty(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-        />
-        <input
-          placeholder="Maliyet"
-          value={cost}
-          inputMode="decimal"
-          onChange={(e) => setCost(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-        />
+        <input placeholder="Adet" value={qty} inputMode="decimal" onChange={(e) => setQty(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
+        <input placeholder="Maliyet" value={cost} inputMode="decimal" onChange={(e) => setCost(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
         <button onClick={add} title="Ekle">+</button>
       </div>
 
-      {holdings.length === 0 && <div className="panel-empty">Pozisyon ekle</div>}
-      {rows.map((r, i) => (
-        <div key={i} className="row" onClick={() => onSelect(r.h.symbol)}>
-          <span className="row-sym">
-            {r.h.symbol}
-            <small>{r.h.qty}×{fmt(r.h.cost)}</small>
-          </span>
-          <span className="row-num">{fmt(r.val)}</span>
-          <span className={'row-num ' + (r.pnl >= 0 ? 'up' : 'down')}>
-            {(r.pnl >= 0 ? '+' : '') + fmt(r.pnl)}
-            <small>{(r.pnlPct >= 0 ? '+' : '') + r.pnlPct.toFixed(1)}%</small>
-          </span>
-          <button
-            className="row-x"
-            title="Kaldır"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove(i);
-            }}
-          >
-            ×
-          </button>
-        </div>
-      ))}
+      {holdings.length === 0 && <div className="panel-empty">Pozisyon ekle (sembol · adet · maliyet)</div>}
+
+      {rows.map((r, i) => {
+        const weight = totVal ? (r.val / totVal) * 100 : 0;
+        return (
+          <div key={i} className="pf-card" onClick={() => onSelect(r.h.symbol)} title="Grafikte aç">
+            <div className="pf-card-top">
+              <b>{r.h.symbol}</b>
+              <span className="pf-weight">%{weight.toFixed(0)}</span>
+              <span className="pf-val">{money(r.val)}</span>
+              <button
+                className="row-x"
+                title="Kaldır"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(i);
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div className="pf-card-mid">
+              {r.h.qty} × {money(r.h.cost)} · son {money(r.price)}{' '}
+              <span className={r.dayPct >= 0 ? 'up' : 'down'}>
+                ({r.dayPct >= 0 ? '+' : ''}
+                {r.dayPct.toFixed(2)}%)
+              </span>
+            </div>
+            <div className="pf-card-pnl">
+              <span className={r.pnl >= 0 ? 'up' : 'down'}>
+                K/Z {r.pnl >= 0 ? '+' : ''}
+                {money(r.pnl)} ({r.pnlPct >= 0 ? '+' : ''}
+                {r.pnlPct.toFixed(1)}%)
+              </span>
+              <span className="lg-muted">
+                {' · '}bugün{' '}
+                <span className={r.dayPL >= 0 ? 'up' : 'down'}>
+                  {r.dayPL >= 0 ? '+' : ''}
+                  {money(r.dayPL)}
+                </span>
+              </span>
+            </div>
+            <div className="pf-weightbar">
+              <div className="pf-weightfill" style={{ width: weight + '%' }} />
+            </div>
+          </div>
+        );
+      })}
 
       {holdings.length > 0 && (
-        <div className="pf-total">
-          <span>Toplam</span>
-          <span>{fmt(totVal)}</span>
-          <span className={totPnl >= 0 ? 'up' : 'down'}>
-            {(totPnl >= 0 ? '+' : '') + fmt(totPnl)} ({(totPct >= 0 ? '+' : '') + totPct.toFixed(1)}%)
-          </span>
+        <div className="pf-summary">
+          <div className="pf-summary-row">
+            <span className="lg-muted">Toplam değer</span>
+            <b>{money(totVal)}</b>
+          </div>
+          <div className="pf-summary-row">
+            <span className="lg-muted">Toplam K/Z</span>
+            <b className={totPnl >= 0 ? 'up' : 'down'}>
+              {totPnl >= 0 ? '+' : ''}
+              {money(totPnl)} ({totPct >= 0 ? '+' : ''}
+              {totPct.toFixed(1)}%)
+            </b>
+          </div>
+          <div className="pf-summary-row">
+            <span className="lg-muted">Bugün</span>
+            <b className={totDay >= 0 ? 'up' : 'down'}>
+              {totDay >= 0 ? '+' : ''}
+              {money(totDay)} ({totDayPct >= 0 ? '+' : ''}
+              {totDayPct.toFixed(2)}%)
+            </b>
+          </div>
         </div>
       )}
     </div>
   );
-}
-
-// Accept both "17,42" (TR comma decimal) and "1.234,56" (TR thousands) as well
-// as "17.42" / "1234".
-function parseNum(s: string): number {
-  let t = s.trim().replace(/\s/g, '');
-  if (t.includes(',') && t.includes('.')) {
-    t = t.replace(/\./g, '').replace(',', '.');
-  } else if (t.includes(',')) {
-    t = t.replace(',', '.');
-  }
-  return parseFloat(t);
 }
 
 function rank(symbols: string[], q: string): string[] {
@@ -186,8 +211,14 @@ function rank(symbols: string[], q: string): string[] {
   return [...pre, ...sub].slice(0, 8);
 }
 
-function fmt(v: number): string {
-  const a = Math.abs(v);
-  const d = a >= 1 ? 2 : a >= 0.01 ? 4 : 8;
-  return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+function parseNum(s: string): number {
+  let t = s.trim().replace(/\s/g, '');
+  if (t.includes(',') && t.includes('.')) t = t.replace(/\./g, '').replace(',', '.');
+  else if (t.includes(',')) t = t.replace(',', '.');
+  return parseFloat(t);
+}
+
+function money(v: number): string {
+  if (!isFinite(v)) return '—';
+  return v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : 2 });
 }

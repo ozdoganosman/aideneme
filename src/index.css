@@ -689,6 +689,73 @@ button.ctl:disabled {
   background: var(--panel);
   border-right: 1px solid var(--border);
 }
+.sidebar.right {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+/* Rich portfolio cards */
+.pf-card {
+  padding: 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  border-bottom: 1px solid #161922;
+}
+.pf-card:hover {
+  background: var(--panel-2);
+}
+.pf-card-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.pf-card-top b {
+  font-size: 13px;
+}
+.pf-weight {
+  font-size: 10px;
+  color: var(--muted);
+}
+.pf-val {
+  margin-left: auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pf-card-mid {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.pf-card-pnl {
+  margin-top: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.pf-weightbar {
+  height: 3px;
+  margin-top: 5px;
+  background: #1a1d27;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.pf-weightfill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.pf-summary {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.pf-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
 
 .main {
   flex: 1;
