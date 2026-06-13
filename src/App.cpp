@@ -33,13 +33,27 @@ void App::startLoad() {
     if (loading_.load()) return;
     joinLoader();  // reap a previously finished thread
 
+    // If the live feed is running it captured the *previous* selection, so its
+    // ticks must not bleed into the newly loaded series. Pause it now and resume
+    // (against the new selection) once the load is applied.
+    if (live_.load()) {
+        stopLive();
+        restartLiveAfterLoad_ = true;
+    }
+
     loading_   = true;
     progCur_   = 0;
     progTot_   = 0;
     status_    = "Yukleniyor...";
 
-    const std::string sym(symbolBuf_);
-    const int         tf   = tfIndex_;
+    // Capture the selection this load represents so the live feed and tick-merge
+    // logic stay consistent with what ends up on screen.
+    pendingSymbol_        = symbolBuf_;
+    pendingTf_            = tfIndex_;
+    pendingProviderIndex_ = providerIndex_;
+
+    const std::string sym  = pendingSymbol_;
+    const int         tf   = pendingTf_;
     const std::size_t bars = static_cast<std::size_t>(requestBars_ < 100 ? 100 : requestBars_);
     DataProvider*     prov = currentProvider();
 
@@ -66,9 +80,11 @@ void App::startLive() {
     live_ = true;
     liveLastClose_ = series_.empty() ? 30000.0 : series_.c.back();
 
-    const std::string sym(symbolBuf_);
-    const int         tf  = tfIndex_;
-    const int         pidx = providerIndex_;
+    // Target the selection that series_ actually represents — not the live UI
+    // widgets, which may have been changed without a reload.
+    const std::string sym  = loadedSymbol_;
+    const int         tf   = loadedTf_;
+    const int         pidx = loadedProviderIndex_;
 
     liveThread_ = std::thread([this, sym, tf, pidx]() {
         std::mt19937_64 rng(std::random_device{}());
@@ -131,10 +147,19 @@ void App::drainResults() {
         if (r.ok) {
             series_ = std::move(r.series);
             chart_.resetView();
+            // series_ now represents the selection captured at load start.
+            loadedSymbol_        = pendingSymbol_;
+            loadedTf_            = pendingTf_;
+            loadedProviderIndex_ = pendingProviderIndex_;
             status_ = "Yuklendi: " + std::to_string(series_.size()) + " mum";
             liveLastClose_ = series_.empty() ? liveLastClose_.load() : series_.c.back();
         } else {
             status_ = "Hata: " + r.error;
+        }
+        // Resume the live feed (paused in startLoad) against the loaded selection.
+        if (restartLiveAfterLoad_) {
+            restartLiveAfterLoad_ = false;
+            startLive();
         }
     }
 
@@ -199,11 +224,15 @@ void App::draw() {
     if (busy) ImGui::EndDisabled();
     ImGui::SameLine();
 
+    // Disabled during a load: startLoad/drainResults manage the live feed across
+    // a load so it always matches the displayed series.
+    if (busy) ImGui::BeginDisabled();
     bool liveUi = live_.load();
     if (ImGui::Checkbox("Canli", &liveUi)) {
         if (liveUi) startLive();
         else        stopLive();
     }
+    if (busy) ImGui::EndDisabled();
 
     if (busy) {
         ImGui::SameLine();

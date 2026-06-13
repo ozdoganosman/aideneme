@@ -43,6 +43,17 @@ private:
     int   requestBars_    = 100000;
     std::string status_   = "Hazir. Bir kaynak secip 'Yukle'ye bas.";
 
+    // Selection that series_ currently represents (the live feed targets this so
+    // its ticks never merge into a mismatched series).
+    std::string loadedSymbol_        = "BTCUSDT";
+    int         loadedTf_            = 0;
+    int         loadedProviderIndex_ = 0;
+    // Selection captured for the in-flight load, promoted to loaded* on success.
+    std::string pendingSymbol_        = "BTCUSDT";
+    int         pendingTf_            = 0;
+    int         pendingProviderIndex_ = 0;
+    bool        restartLiveAfterLoad_ = false;
+
     // --- background loader ---
     std::thread          loader_;
     std::atomic<bool>    loading_{false};
