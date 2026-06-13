@@ -4,6 +4,7 @@ import { SymbolSearch } from './components/SymbolSearch';
 import { Watchlist } from './components/Watchlist';
 import { Portfolio, Holding } from './components/Portfolio';
 import { IndicatorMenu } from './components/IndicatorMenu';
+import { Trades } from './components/Trades';
 import { Backtest } from './components/Backtest';
 import { computeStats } from './indicators/stats';
 import { Candles, BIST_SYMBOLS } from './data/types';
@@ -37,6 +38,7 @@ export default function App() {
   const [fitOnLoad, setFitOnLoad] = useState(true);
   const [showBt, setShowBt] = useState(false);
   const [strategy, setStrategy] = useState<string | null>(null);
+  const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
 
   const [quotes, setQuotes] = useState<Quotes>({});
   const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
@@ -53,6 +55,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('borsaWatch', JSON.stringify(watchlist)), [watchlist]);
   useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
+  useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
 
   const load = useCallback(
     async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
@@ -171,6 +174,14 @@ export default function App() {
 
         <IndicatorMenu settings={settings} onChange={setSettings} />
 
+        <button
+          className={'ctl' + (log ? ' on' : '')}
+          onClick={() => setLog((v) => !v)}
+          title="Logaritmik fiyat ölçeği"
+        >
+          Log
+        </button>
+
         <button className="ctl" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
           Strateji
         </button>
@@ -201,6 +212,7 @@ export default function App() {
             onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
             onSelect={selectSymbol}
           />
+          {strategy && candles && <Trades strategy={strategy} candles={candles} />}
         </aside>
 
         <main className="main">
@@ -235,6 +247,7 @@ export default function App() {
               symbol={provider === 'bist' ? symbol : 'SENTETİK'}
               tfLabel={tfLabel}
               strategy={strategy}
+              log={log}
             />
           </div>
         </main>

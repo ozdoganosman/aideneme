@@ -165,6 +165,40 @@ export function buildPositionByName(name: string, c: Candles): Uint8Array | null
   return d ? d.build(c) : null;
 }
 
+export interface Trade {
+  entryTime: number;
+  exitTime: number | null;
+  entryPrice: number;
+  exitPrice: number;
+  retPct: number;
+  open: boolean;
+}
+
+// Trades of a named strategy, newest first.
+export function tradesFor(name: string, c: Candles): Trade[] {
+  const pos = buildPositionByName(name, c);
+  if (!pos) return [];
+  const trades: Trade[] = [];
+  const mk = (ei: number, xi: number, open: boolean): Trade => {
+    const ep = c.close[ei];
+    const xp = c.close[xi];
+    return { entryTime: c.time[ei], exitTime: open ? null : c.time[xi], entryPrice: ep, exitPrice: xp, retPct: (xp / ep - 1) * 100, open };
+  };
+  let inPos = false;
+  let ei = 0;
+  for (let i = 1; i < c.length; i++) {
+    if (pos[i] && !pos[i - 1]) {
+      inPos = true;
+      ei = i;
+    } else if (!pos[i] && pos[i - 1] && inPos) {
+      inPos = false;
+      trades.push(mk(ei, i, false));
+    }
+  }
+  if (inPos) trades.push(mk(ei, c.length - 1, true));
+  return trades.reverse();
+}
+
 // Entry/exit signals (for chart markers) of a named strategy.
 export function signalsFor(name: string, c: Candles): { time: number; kind: 'buy' | 'sell' }[] {
   const pos = buildPositionByName(name, c);

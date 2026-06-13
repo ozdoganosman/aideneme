@@ -12,6 +12,7 @@ import {
   AreaSeries,
   CrosshairMode,
   LineStyle,
+  PriceScaleMode,
   IChartApi,
   ISeriesApi,
   CandlestickData,
@@ -41,6 +42,7 @@ interface Props {
   symbol: string;
   tfLabel: string;
   strategy?: string | null; // overlay this strategy's buy/sell signals
+  log?: boolean; // logarithmic price scale
 }
 
 interface LegendVals {
@@ -73,7 +75,7 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
 });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(
-  { candles, fitOnLoad, settings, symbol, tfLabel, strategy },
+  { candles, fitOnLoad, settings, symbol, tfLabel, strategy, log },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -271,6 +273,13 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     );
     m.setMarkers(markers);
   }, [strategy, candles]);
+
+  // Logarithmic / normal price scale.
+  useEffect(() => {
+    seriesRef.current?.candle
+      .priceScale()
+      .applyOptions({ mode: log ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal });
+  }, [log]);
 
   useImperativeHandle(
     ref,

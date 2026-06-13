@@ -384,6 +384,134 @@ button.ctl:disabled {
   background: #1d2740;
 }
 
+/* ---- Backtest panel (tabs + bar charts) ---- */
+.bt-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bt-tabs button {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.bt-tabs button:hover {
+  color: var(--text);
+}
+.bt-tabs button.active {
+  color: #fff;
+  border-bottom-color: var(--accent);
+}
+
+.bt-intro {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+.bt-hint {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.bt-winner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(90deg, #16271f, #14171f);
+  border: 1px solid #2c6b5f;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.bt-winner.clickable {
+  cursor: pointer;
+}
+.bt-winner-badge {
+  font-size: 11px;
+  color: #9fe7c9;
+}
+.bt-winner-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+.bt-winner-stats {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.bt-winner-big {
+  font-size: 22px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.bt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bt-srow {
+  padding: 7px 6px;
+  border-radius: 6px;
+}
+.bt-srow.clickable {
+  cursor: pointer;
+}
+.bt-srow.clickable:hover {
+  background: var(--panel-2);
+}
+.bt-srow-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bt-rank {
+  width: 18px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 11px;
+}
+.bt-srow-name {
+  flex: 1;
+  font-size: 13px;
+}
+.bt-srow-val {
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.bt-barwrap {
+  height: 6px;
+  margin: 4px 0 0 26px;
+  background: #1a1d27;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.bt-bar {
+  height: 100%;
+  border-radius: 3px;
+}
+.bt-bar.pos {
+  background: linear-gradient(90deg, #1b8a6b, #26a69a);
+}
+.bt-bar.neg {
+  background: linear-gradient(90deg, #b23b3f, #ef5350);
+}
+.bt-srow-sub {
+  margin: 3px 0 0 26px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 /* Active strategy chip in the toolbar */
 .chip {
   display: inline-flex;
