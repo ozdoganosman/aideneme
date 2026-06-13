@@ -23,3 +23,6 @@ Thumbs.db
 /test-results/
 /playwright-report/
 .cache/
+
+# Generated BIST data (built in CI)
+public/data/

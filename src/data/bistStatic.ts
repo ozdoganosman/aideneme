@@ -1,0 +1,47 @@
+import { Candles, emptyCandles } from './types';
+
+// Reads pre-built BIST OHLCV from same-origin static JSON (generated in CI by
+// scripts/build_bist.py). No proxy, no key, no CORS — the data ships with the
+// site. Daily candles.
+
+interface Rec {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+const base = import.meta.env.BASE_URL; // './' (works under /aideneme/ on Pages)
+
+export async function fetchBistStatic(symbol: string, signal?: AbortSignal): Promise<Candles> {
+  const res = await fetch(`${base}data/bist/${symbol}.json`, { signal });
+  if (!res.ok) {
+    throw new Error(`"${symbol}" için statik BIST verisi yok (CI henüz üretmemiş olabilir)`);
+  }
+  const j = (await res.json()) as { data: Rec[] };
+  const d = j.data ?? [];
+  const c = emptyCandles(d.length);
+  for (let i = 0; i < d.length; i++) {
+    const r = d[i];
+    c.time[i] = r.t;
+    c.open[i] = r.o;
+    c.high[i] = r.h;
+    c.low[i] = r.l;
+    c.close[i] = r.c;
+    c.volume[i] = r.v;
+  }
+  return c;
+}
+
+export async function fetchBistSymbols(signal?: AbortSignal): Promise<string[]> {
+  try {
+    const res = await fetch(`${base}data/bist/symbols.json`, { signal });
+    if (!res.ok) return [];
+    const j = (await res.json()) as { symbols: string[] };
+    return j.symbols ?? [];
+  } catch {
+    return [];
+  }
+}

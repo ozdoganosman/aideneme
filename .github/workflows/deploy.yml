@@ -6,6 +6,8 @@ name: deploy
 on:
   push:
     branches: [main, claude/tender-ritchie-kn4ocg]
+  schedule:
+    - cron: '30 15 * * 1-5' # hafta içi ~BIST kapanışı sonrası (15:00 UTC) veriyi tazele
   workflow_dispatch:
 
 permissions:
@@ -24,6 +26,14 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build BIST static data (server-side, no CORS)
+        continue-on-error: true # veri hatası deploy'u düşürmesin
+        run: |
+          python -m pip install --quiet borsapy numpy
+          python scripts/build_bist.py
       - run: npm ci
       - run: npm run build
       - name: Publish to gh-pages

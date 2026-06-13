@@ -69,11 +69,12 @@ src/
 - **Binance** (ücretsiz, **API key YOK**): `klines` (geçmiş), `exchangeInfo`
   (sembol listesi), `@kline` WebSocket (canlı). Tarayıcıdan CORS ile çalışır.
 - **Sentetik**: geometrik Brownian hareketi; internet gerekmez.
-- **BIST (Yahoo Finance)**: `.IS` sembolleri (THYAO, GARAN…), **key'siz**. Yahoo
-  CORS göndermediği için bir **CORS proxy** gerekir — toolbar'daki alandan
-  ayarlanır (varsayılan public proxy). Güvenilir olması için `cloudflare-worker.js`
-  ile **kendi ücretsiz proxy'ni** 2 dakikada kurup URL'ini yapıştırabilirsin.
-  Yahoo'da canlı WebSocket yoktur (veri ~15dk gecikmeli).
+- **BIST (statik, key'siz, proxy'siz)**: Veri **CI'da sunucu tarafında**
+  `scripts/build_bist.py` ile (`borsapy` paketi) çekilip `public/data/bist/*.json`
+  olarak yazılır; uygulama bu JSON'ları **kendi origin'inden** okur — yani
+  tarayıcıda CORS/key/proxy derdi yok. Günlük (1g) OHLCV. Veri her deploy'da ve
+  hafta içi zamanlanmış çalışmada tazelenir (`.github/workflows/deploy.yml`).
+  Sembol listesi `scripts/build_bist.py` içinden genişletilebilir.
 
 ## İndikatörler
 
