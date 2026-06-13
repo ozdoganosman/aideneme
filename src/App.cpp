@@ -2,15 +2,22 @@
 
 #include "data/SyntheticProvider.hpp"
 #include "data/BinanceProvider.hpp"
+#include "net/Http.hpp"
 
 #include "imgui.h"
+#include "imgui_internal.h"   // ImGui::ClearActiveID
+#include <nlohmann/json.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <random>
 #include <string>
+
+using json = nlohmann::json;
 
 namespace {
 // Quick-pick list for the symbol combo. For Binance these are real pairs; for
@@ -20,16 +27,125 @@ const char* const kPopularSymbols[] = {
     "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "TRXUSDT", "DOTUSDT", "LTCUSDT",
 };
 const int kPopularCount = sizeof(kPopularSymbols) / sizeof(kPopularSymbols[0]);
+
+// Built-in symbol universe used for autocomplete before (or instead of) the full
+// Binance list. Covers the common pairs so suggestions work offline.
+const char* const kBuiltinSymbols[] = {
+    "BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT",
+    "AVAXUSDT","LINKUSDT","TRXUSDT","DOTUSDT","LTCUSDT","MATICUSDT","SHIBUSDT",
+    "BCHUSDT","UNIUSDT","XLMUSDT","ATOMUSDT","ETCUSDT","FILUSDT","APTUSDT",
+    "NEARUSDT","ARBUSDT","OPUSDT","INJUSDT","SUIUSDT","AAVEUSDT","GRTUSDT",
+    "ALGOUSDT","EOSUSDT","SANDUSDT","MANAUSDT","AXSUSDT","FTMUSDT","THETAUSDT",
+    "EGLDUSDT","FLOWUSDT","XTZUSDT","CHZUSDT","ENJUSDT","RUNEUSDT","SNXUSDT",
+    "CRVUSDT","FETUSDT","RNDRUSDT","IMXUSDT","PEPEUSDT","WIFUSDT","TIAUSDT",
+    "SEIUSDT","BTCFDUSD","ETHFDUSD","BTCBUSD","ETHBTC","BNBBTC","SOLBTC",
+};
+const int kBuiltinCount = sizeof(kBuiltinSymbols) / sizeof(kBuiltinSymbols[0]);
+
+std::string toUpper(const char* s) {
+    std::string r(s);
+    for (char& ch : r) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    return r;
+}
+bool startsWith(const std::string& s, const std::string& p) {
+    return s.size() >= p.size() && std::equal(p.begin(), p.end(), s.begin());
+}
 } // namespace
 
 App::App()
     : synthetic_(std::make_unique<SyntheticProvider>()),
-      binance_(std::make_unique<BinanceProvider>()) {}
+      binance_(std::make_unique<BinanceProvider>()) {
+    symbolList_.assign(kBuiltinSymbols, kBuiltinSymbols + kBuiltinCount);
+}
 
 App::~App() {
     live_ = false;
     if (liveThread_.joinable()) liveThread_.join();
+    if (symbolFetch_.joinable()) symbolFetch_.join();
     joinLoader();
+}
+
+void App::startSymbolFetch() {
+    symbolFetch_ = std::thread([this]() {
+        HttpResponse resp = httpGet("https://api.binance.com/api/v3/exchangeInfo", 25);
+        if (!resp.error.empty() || resp.status != 200) return;
+
+        json j = json::parse(resp.body, nullptr, false);
+        if (j.is_discarded() || !j.contains("symbols") || !j["symbols"].is_array()) return;
+
+        std::vector<std::string> out;
+        out.reserve(j["symbols"].size());
+        for (const auto& s : j["symbols"]) {
+            if (s.value("status", std::string()) == "TRADING")
+                out.push_back(s.value("symbol", std::string()));
+        }
+        std::sort(out.begin(), out.end());
+
+        if (!out.empty()) {
+            std::lock_guard<std::mutex> lk(symbolMutex_);
+            symbolIncoming_ = std::move(out);
+            symbolReady_    = true;
+        }
+    });
+}
+
+void App::drawSymbolSuggestions(float x, float y, float width, bool inputActive) {
+    // Show while the box is focused, or while the popup itself is hovered (so a
+    // click on a suggestion registers even as the box loses focus).
+    if ((!inputActive && !suggestHovered_) || symbolBuf_[0] == '\0') {
+        suggestHovered_ = false;
+        return;
+    }
+
+    const std::string q = toUpper(symbolBuf_);
+
+    // Prefix matches first, then substring matches; cap the list.
+    std::vector<const std::string*> matches;
+    matches.reserve(12);
+    for (const auto& s : symbolList_) {
+        if (startsWith(s, q)) {
+            matches.push_back(&s);
+            if (matches.size() >= 12) break;
+        }
+    }
+    if (matches.size() < 12) {
+        for (const auto& s : symbolList_) {
+            if (!startsWith(s, q) && s.find(q) != std::string::npos) {
+                matches.push_back(&s);
+                if (matches.size() >= 12) break;
+            }
+        }
+    }
+
+    // Nothing useful to suggest (no matches, or the only match is exactly typed).
+    if (matches.empty() || (matches.size() == 1 && *matches[0] == q)) {
+        suggestHovered_ = false;
+        return;
+    }
+
+    if (width < 170.0f) width = 170.0f;
+    ImGui::SetNextWindowPos(ImVec2(x, y));
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoNav;
+
+    bool picked = false;
+    if (ImGui::Begin("##sym_suggest", nullptr, flags)) {
+        for (const std::string* m : matches) {
+            if (ImGui::Selectable(m->c_str())) {
+                std::snprintf(symbolBuf_, sizeof symbolBuf_, "%s", m->c_str());
+                startLoad();
+                picked = true;
+            }
+        }
+        suggestHovered_ = picked ? false : ImGui::IsWindowHovered();
+    }
+    ImGui::End();
+
+    if (picked) ImGui::ClearActiveID();   // drop focus so the popup closes
 }
 
 DataProvider* App::currentProvider() {
@@ -143,6 +259,15 @@ void App::stopLive() {
 }
 
 void App::drainResults() {
+    // Full symbol list arrived?
+    {
+        std::lock_guard<std::mutex> lk(symbolMutex_);
+        if (symbolReady_) {
+            symbolList_   = std::move(symbolIncoming_);
+            symbolReady_  = false;
+        }
+    }
+
     // Finished history load?
     bool apply = false;
     FetchResult r;
@@ -225,8 +350,25 @@ void App::draw() {
     ImGui::Combo("Kaynak", &providerIndex_, providers, 2);
     ImGui::SameLine();
 
+    // First time Binance is selected, pull the full symbol universe in the
+    // background so autocomplete can suggest any real pair.
+    if (providerIndex_ == 1 && !symbolFetchStarted_) {
+        symbolFetchStarted_ = true;
+        startSymbolFetch();
+    }
+
+    // Symbol box with autocomplete (suggestion popup is drawn below, once the
+    // control row is complete, so it doesn't disturb the row layout).
     ImGui::SetNextItemWidth(120);
-    ImGui::InputText("Sembol", symbolBuf_, sizeof symbolBuf_);
+    if (ImGui::InputText("Sembol", symbolBuf_, sizeof symbolBuf_,
+                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+        startLoad();
+        ImGui::ClearActiveID();   // hide suggestions after pressing Enter
+    }
+    const bool   symInputActive = ImGui::IsItemActive();
+    const ImVec2 symMin = ImGui::GetItemRectMin();
+    const ImVec2 symMax = ImGui::GetItemRectMax();
+    const float  symW   = symMax.x - symMin.x;
     ImGui::SameLine();
 
     // Quick-pick popular symbols: selecting one fills the box and loads it.
@@ -274,6 +416,9 @@ void App::draw() {
         "Fare: surukle = kaydir   tekerlek = yakinlastir/uzaklastir   "
         "cift tiklama = ekrana sigdir");
     ImGui::Separator();
+
+    // Autocomplete dropdown under the symbol box (overlay).
+    drawSymbolSuggestions(symMin.x, symMax.y, symW, symInputActive);
 
     // --- chart ---
     chart_.draw(series_, tfIndex_);

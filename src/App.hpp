@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 class App {
 public:
@@ -27,6 +28,9 @@ private:
     void startLive();
     void stopLive();
     void joinLoader();
+    void startSymbolFetch();      // pull the full Binance symbol list (once)
+    // Floating suggestion popup under the symbol box; selecting one loads it.
+    void drawSymbolSuggestions(float x, float y, float width, bool inputActive);
 
     // --- providers ---
     std::unique_ptr<DataProvider> synthetic_;
@@ -72,4 +76,13 @@ private:
     std::mutex           liveMutex_;
     bool                 liveHas_ = false;
     Candle               liveCandle_;
+
+    // --- symbol universe for autocomplete ---
+    std::vector<std::string> symbolList_;          // main-thread owned
+    bool                     suggestHovered_ = false;   // popup hovered last frame
+    bool                     symbolFetchStarted_ = false;
+    std::thread              symbolFetch_;
+    std::mutex               symbolMutex_;
+    std::vector<std::string> symbolIncoming_;
+    bool                     symbolReady_ = false;
 };
