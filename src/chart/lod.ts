@@ -49,23 +49,38 @@ export class LodController {
 
   private maybeReflow(range: LogicalRange) {
     if (!this.full) return;
-    const count = Math.ceil((this.win.i1 - this.win.i0) / this.win.stride);
-    const visFrom = this.win.i0 + Math.max(0, Math.floor(range.from)) * this.win.stride;
-    const visTo = this.win.i0 + Math.min(count, Math.ceil(range.to)) * this.win.stride;
-    const visBars = Math.max(1, visTo - visFrom);
+    const len = this.full.length;
+    const { i0: w0, i1: w1, stride } = this.win;
+    const count = Math.ceil((w1 - w0) / stride);
+
+    // Visible original-bar indices, clamped to the data (for stride/detail).
+    const fromIdx = Math.max(0, Math.floor(range.from));
+    const toIdx = Math.min(count, Math.ceil(range.to));
+    const visLo = w0 + fromIdx * stride;
+    const visHi = w0 + toIdx * stride;
+    const visBars = Math.max(1, visHi - visLo);
     const desiredStride = strideFor(visBars, this.targetBuckets);
 
-    // If detail is right and the view sits inside the loaded window, the chart's
-    // own panning handles it — nothing to do.
-    const innerPad = (this.win.i1 - this.win.i0) * 0.15;
-    const inside = visFrom > this.win.i0 + innerPad && visTo < this.win.i1 - innerPad;
-    if (desiredStride === this.win.stride && inside) return;
+    // Raw (unclamped) edges so we can tell when the user is scrolling past the
+    // data into the whitespace.
+    const rawLo = w0 + range.from * stride;
+    const rawHi = w0 + range.to * stride;
+    const pad = (w1 - w0) * 0.15;
+    const nearLeft = rawLo < w0 + pad;
+    const nearRight = rawHi > w1 - pad;
 
-    const margin = visBars * 1.5;
-    let i0 = Math.floor(visFrom - margin);
-    let i1 = Math.ceil(visTo + margin);
+    // Reflow only when detail must change, or we're approaching a window edge
+    // that still has more data to load. At the *data* boundary we do nothing, so
+    // the chart scrolls freely into the empty space instead of snapping/zooming.
+    const needReflow =
+      desiredStride !== stride || (nearLeft && w0 > 0) || (nearRight && w1 < len);
+    if (!needReflow) return;
+
+    const margin = Math.max(visBars, this.targetBuckets);
+    let i0 = Math.floor(visLo - margin);
+    let i1 = Math.ceil(visHi + margin);
     if (i0 < 0) i0 = 0;
-    if (i1 > this.full.length) i1 = this.full.length;
+    if (i1 > len) i1 = len;
     this.renderWindow(i0, i1, false, desiredStride);
   }
 
