@@ -4,7 +4,7 @@ import { fetchBistStatic, Quotes } from '../data/bistStatic';
 import { analyzeHolding, HoldingAnalysis } from '../indicators/analysis';
 import { evalPosition, StrategyResult } from '../indicators/backtest';
 import { CustomStrategy, buildCustomPosition, candidateStrategies } from '../indicators/customStrategy';
-import { inflationDailyRates } from '../data/inflation';
+import { inflationDailyRates, inflationAvgAnnual } from '../data/inflation';
 import { IndicatorParams } from '../indicators/calc';
 import { Holding } from './Portfolio';
 
@@ -93,7 +93,7 @@ export function PortfolioAnalysis({ holdings, quotes, strats, params, onClose, o
               {renderConcentration(rows)}
               {series && <ValueChartCard pv={series.pv} xv={series.xv} chg={series.chg} xchg={series.xchg} t0={series.t0} t1={series.t1} />}
               {risk && <AdvancedRiskCard risk={risk} />}
-              <StrategyBacktestCard rows={rows} hist={hist} strats={strats} params={params} onSelect={pick} />
+              <StrategyBacktestCard rows={rows} hist={hist} strats={strats} params={params} xu={xu} onSelect={pick} />
               {renderRisk(rows, bench, risk)}
               {renderTech(rows, pick)}
               <div className="bt-hint">
@@ -322,17 +322,13 @@ interface Pick {
   pos: Uint8Array;
   rates: Float64Array;
 }
-function buildCombined(picks: Pick[]) {
+function buildCombined(picks: Pick[], xu: Candles | null) {
   if (picks.length === 0) return null;
   const startT = Math.max(...picks.map((p) => p.c.time[0]));
   const set = new Set<number>();
   for (const p of picks) for (let i = 0; i < p.c.length; i++) if (p.c.time[i] >= startT) set.add(p.c.time[i]);
   const axis = [...set].sort((a, b) => a - b);
   if (axis.length < 3) return null;
-  const step = Math.max(1, Math.floor(axis.length / 120));
-  const sampled: number[] = [];
-  for (let i = 0; i < axis.length; i += step) sampled.push(axis[i]);
-  sampled.push(axis[axis.length - 1]);
   const wsum = picks.reduce((s, p) => s + p.weight, 0) || 1;
   const eq = picks.map((p) => equitySeries(p.c, p.pos, p.rates));
   const baseIdx = picks.map((p) => {
@@ -341,9 +337,9 @@ function buildCombined(picks: Pick[]) {
     return Math.min(i, p.c.length - 1);
   });
   const ptr = picks.map(() => 0);
-  const strat: number[] = [];
-  const hold: number[] = [];
-  for (const t of sampled) {
+  const stratF: number[] = [];
+  const holdF: number[] = [];
+  for (const t of axis) {
     let sV = 0;
     let hV = 0;
     for (let k = 0; k < picks.length; k++) {
@@ -351,22 +347,74 @@ function buildCombined(picks: Pick[]) {
       while (ptr[k] < c.length && c.time[ptr[k]] <= t) ptr[k]++;
       const idx = Math.max(baseIdx[k], ptr[k] - 1);
       const w = picks[k].weight / wsum;
-      const eb = eq[k][baseIdx[k]] || 1;
-      const cb = c.close[baseIdx[k]] || 1;
-      sV += w * (eq[k][idx] / eb);
-      hV += w * (c.close[idx] / cb);
+      sV += w * (eq[k][idx] / (eq[k][baseIdx[k]] || 1));
+      hV += w * (c.close[idx] / (c.close[baseIdx[k]] || 1));
     }
-    strat.push(sV * 100);
-    hold.push(hV * 100);
+    stratF.push(sV);
+    holdF.push(hV);
   }
+  let xuF: number[] | null = null;
+  if (xu && xu.length) {
+    let bi = 0;
+    while (bi < xu.length && xu.time[bi] < startT) bi++;
+    bi = Math.min(bi, xu.length - 1);
+    const base = xu.close[bi] || 1;
+    let p = 0;
+    xuF = [];
+    for (const t of axis) {
+      while (p < xu.length && xu.time[p] <= t) p++;
+      xuF.push(xu.close[Math.max(bi, p - 1)] / base);
+    }
+  }
+  const years = Math.max((axis[axis.length - 1] - axis[0]) / (365.25 * 86400), 1e-6);
+  const ann = (v: number) => (Math.pow(Math.max(v, 1e-9), 1 / years) - 1) * 100;
+  const annStrat = ann(stratF[stratF.length - 1]);
+  const annHold = ann(holdF[holdF.length - 1]);
+  const avgInfl = inflationAvgAnnual(axis, axis.length);
+  const real = (a: number) => ((1 + a / 100) / (1 + avgInfl / 100) - 1) * 100;
+  // Sharpe over inflation (risk-free = inflation), from daily combined returns.
+  const rp: number[] = [];
+  let m = 0;
+  for (let i = 1; i < stratF.length; i++) {
+    const r = stratF[i] / stratF[i - 1] - 1;
+    rp.push(r);
+    m += r;
+  }
+  m /= rp.length || 1;
+  let v = 0;
+  for (const r of rp) v += (r - m) * (r - m);
+  const sd = Math.sqrt(rp.length > 1 ? v / (rp.length - 1) : 0);
+  const rfDaily = Math.pow(1 + avgInfl / 100, 1 / 252) - 1;
+  const sharpe = sd > 0 ? ((m - rfDaily) / sd) * Math.sqrt(252) : 0;
   let peak = -Infinity;
   let dd = 0;
-  for (const v of strat) {
-    if (v > peak) peak = v;
-    const d = (peak - v) / peak;
+  for (const x of stratF) {
+    if (x > peak) peak = x;
+    const d = (peak - x) / peak;
     if (d > dd) dd = d;
   }
-  return { strat, hold, chg: strat[strat.length - 1] - 100, holdChg: hold[hold.length - 1] - 100, maxDD: dd * 100, t0: sampled[0], t1: sampled[sampled.length - 1] };
+  const step = Math.max(1, Math.floor(axis.length / 120));
+  const samp = (arr: number[]) => {
+    const o: number[] = [];
+    for (let i = 0; i < arr.length; i += step) o.push(arr[i] * 100);
+    o.push(arr[arr.length - 1] * 100);
+    return o;
+  };
+  return {
+    strat: samp(stratF),
+    hold: samp(holdF),
+    xu: xuF ? samp(xuF) : null,
+    chg: (stratF[stratF.length - 1] - 1) * 100,
+    holdChg: (holdF[holdF.length - 1] - 1) * 100,
+    xuChg: xuF ? (xuF[xuF.length - 1] - 1) * 100 : null,
+    maxDD: dd * 100,
+    sharpe,
+    realStrat: real(annStrat),
+    realHold: real(annHold),
+    avgInfl,
+    t0: axis[0],
+    t1: axis[axis.length - 1],
+  };
 }
 
 function StrategyBacktestCard({
@@ -374,12 +422,14 @@ function StrategyBacktestCard({
   hist,
   strats,
   params,
+  xu,
   onSelect,
 }: {
   rows: Row[];
   hist: Map<string, Candles>;
   strats: CustomStrategy[];
   params: IndicatorParams;
+  xu: Candles | null;
   onSelect: (s: string) => void;
 }) {
   const [mode, setMode] = useState<'saved' | 'best'>(strats.length ? 'saved' : 'best');
@@ -416,8 +466,8 @@ function StrategyBacktestCard({
     const wsum = out.reduce((s, o) => s + o.weight, 0) || 1;
     const cAnn = out.reduce((s, o) => s + (o.weight / wsum) * o.ann, 0);
     const cHold = out.reduce((s, o) => s + (o.weight / wsum) * o.hold, 0);
-    return { out: out.sort((a, b) => b.weight - a.weight), cAnn, cHold, n: out.length, curve: buildCombined(picks) };
-  }, [rows, hist, mode, sel, params]);
+    return { out: out.sort((a, b) => b.weight - a.weight), cAnn, cHold, n: out.length, curve: buildCombined(picks, xu) };
+  }, [rows, hist, mode, sel, params, xu]);
 
   const beat = res.cAnn >= res.cHold;
   return (
@@ -468,7 +518,7 @@ function fmtP(v: number): string {
 }
 
 function CombinedCurve({ cv }: { cv: NonNullable<ReturnType<typeof buildCombined>> }) {
-  const all = [...cv.strat, ...cv.hold].filter((v) => isFinite(v));
+  const all = [...cv.strat, ...cv.hold, ...(cv.xu ?? [])].filter((v) => isFinite(v));
   if (all.length < 2) return null;
   const min = Math.min(...all);
   const max = Math.max(...all);
@@ -493,6 +543,7 @@ function CombinedCurve({ cv }: { cv: NonNullable<ReturnType<typeof buildCombined
       </div>
       <svg className="pv-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
         <polygon points={area} fill={up ? 'rgba(38,166,154,0.16)' : 'rgba(239,83,80,0.16)'} />
+        {cv.xu && <polyline points={line(cv.xu)} fill="none" stroke="#8ab4f8" strokeWidth="1.2" strokeDasharray="2 3" />}
         <polyline points={line(cv.hold)} fill="none" stroke="#6b7280" strokeWidth="1.2" strokeDasharray="4 3" />
         <polyline points={line(cv.strat)} fill="none" stroke={col} strokeWidth="1.8" />
       </svg>
@@ -503,7 +554,18 @@ function CombinedCurve({ cv }: { cv: NonNullable<ReturnType<typeof buildCombined
         <span>
           <i className="pv-dot pv-dash" /> Al-Tut <b className={cv.holdChg >= 0 ? 'up' : 'down'}>{fmtP(cv.holdChg)}</b>
         </span>
+        {cv.xu != null && cv.xuChg != null && (
+          <span>
+            <i className="pv-dot" style={{ background: '#8ab4f8' }} /> XU100 <b className={cv.xuChg >= 0 ? 'up' : 'down'}>{fmtP(cv.xuChg)}</b>
+          </span>
+        )}
         <span className="lg-muted">en sert düşüş -{cv.maxDD.toFixed(0)}%</span>
+      </div>
+      <div className="pa-portrisk">
+        Sharpe (enf. üstü) <b>{cv.sharpe.toFixed(2)}</b> <span className="lg-muted">(1+ iyi)</span> · Reel yıllık: strateji{' '}
+        <b className={cv.realStrat >= 0 ? 'up' : 'down'}>{fmtP(cv.realStrat)}</b> · Al-Tut{' '}
+        <b className={cv.realHold >= 0 ? 'up' : 'down'}>{fmtP(cv.realHold)}</b>{' '}
+        <span className="lg-muted">(enflasyon ~%{cv.avgInfl.toFixed(0)}/yıl arındırıldı)</span>
       </div>
     </div>
   );
