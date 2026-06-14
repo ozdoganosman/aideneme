@@ -1630,6 +1630,14 @@ button.ctl:disabled {
   margin-top: 8px;
   font-size: 12px;
 }
+.pa-techroll {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
 .pa-verdict.warn,
 .warn {
   color: #f59e0b;

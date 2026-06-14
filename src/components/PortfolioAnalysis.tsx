@@ -61,6 +61,7 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
   }, [holdings, quotes]);
 
   const series = useMemo(() => buildValueSeries(holdings, hist, xu), [holdings, hist, xu]);
+  const risk = useMemo(() => (rows ? portfolioRisk(rows, hist, xu) : null), [rows, hist, xu]);
 
   const pick = (s: string) => {
     onSelect(s);
@@ -85,7 +86,8 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
             <>
               {renderConcentration(rows)}
               {series && <ValueChartCard pv={series.pv} xv={series.xv} chg={series.chg} xchg={series.xchg} t0={series.t0} t1={series.t1} />}
-              {renderRisk(rows, bench)}
+              {risk && <AdvancedRiskCard risk={risk} />}
+              {renderRisk(rows, bench, risk)}
               {renderTech(rows, pick)}
               <div className="bt-hint">
                 ⚠️ Bu analiz geçmiş fiyatlara dayalı, otomatik ve eğitim amaçlıdır — yatırım tavsiyesi değildir.
@@ -144,7 +146,7 @@ function renderConcentration(rows: Row[]) {
   );
 }
 
-function renderRisk(rows: Row[], bench: number | null) {
+function renderRisk(rows: Row[], bench: number | null, risk: RiskStats | null) {
   const withA = rows.filter((r) => r.a);
   const pvol = withA.reduce((s, r) => s + (r.weight / 100) * r.a!.volPct, 0);
   const pr1y = withA.reduce((s, r) => s + (r.weight / 100) * r.a!.r1y, 0);
@@ -195,6 +197,11 @@ function renderRisk(rows: Row[], bench: number | null) {
                     {(r.a.r1y - bench).toFixed(0)}%
                   </span>
                 )}
+                {risk?.betas.get(r.sym) != null && (
+                  <span className="lg-muted" title="XU100'e duyarlılık (beta). >1 endeksten oynak.">
+                    β {risk.betas.get(r.sym)!.toFixed(2)}
+                  </span>
+                )}
               </>
             ) : (
               <span className="lg-muted">veri yok</span>
@@ -207,9 +214,22 @@ function renderRisk(rows: Row[], bench: number | null) {
 }
 
 function renderTech(rows: Row[], pick: (s: string) => void) {
+  const withA = rows.filter((r) => r.a);
+  const up = withA.filter((r) => r.a!.trend.toLowerCase().includes('yukar')).length;
+  const ob = withA.filter((r) => r.a!.rsi >= 70).length;
+  const os = withA.filter((r) => r.a!.rsi <= 30).length;
+  const pos = withA.filter((r) => r.a!.lean === 'Olumlu').length;
   return (
     <div className="pa-card">
       <div className="pa-card-title">🧭 Teknik Analiz (sade)</div>
+      {withA.length > 0 && (
+        <div className="pa-techroll">
+          <span className="up">{up}/{withA.length} yukarı trend</span>
+          <span className="up">{pos} olumlu</span>
+          {ob > 0 && <span className="warn">{ob} aşırı alım</span>}
+          {os > 0 && <span className="down">{os} aşırı satım</span>}
+        </div>
+      )}
       {rows.map((r) => (
         <div key={r.sym} className="pa-tech" onClick={() => pick(r.sym)} title="Grafikte aç">
           <div className="pa-tech-head">
@@ -232,6 +252,192 @@ function renderTech(rows: Row[], pick: (s: string) => void) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Advanced portfolio risk (correlation-aware) ──────────────────────────────
+interface RiskStats {
+  realVol: number; // annualized vol incl. correlation
+  naiveVol: number; // weighted sum of individual vols (no diversification)
+  divBenefit: number; // naiveVol − realVol
+  beta: number | null; // portfolio beta vs XU100
+  maxDD: number; // portfolio max drawdown over the window
+  annRet: number; // annualized portfolio return over the window
+  retOverRisk: number; // annRet / realVol
+  avgCorr: number | null;
+  topPair: { a: string; b: string; corr: number } | null;
+  betas: Map<string, number>;
+  n: number;
+  years: number;
+}
+
+function ffill(c: Candles, axis: number[]): number[] {
+  const out = new Array<number>(axis.length).fill(NaN);
+  let p = 0;
+  let last = NaN;
+  for (let i = 0; i < axis.length; i++) {
+    while (p < c.length && c.time[p] <= axis[i]) {
+      last = c.close[p];
+      p++;
+    }
+    out[i] = last;
+  }
+  return out;
+}
+function toReturns(arr: number[]): Float64Array {
+  const out = new Float64Array(Math.max(0, arr.length - 1));
+  for (let i = 1; i < arr.length; i++) {
+    const a = arr[i - 1];
+    const b = arr[i];
+    out[i - 1] = Number.isFinite(a) && Number.isFinite(b) && a > 0 ? b / a - 1 : 0;
+  }
+  return out;
+}
+function mean(a: ArrayLike<number>): number {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += a[i];
+  return a.length ? s / a.length : 0;
+}
+function varr(a: ArrayLike<number>): number {
+  const m = mean(a);
+  let v = 0;
+  for (let i = 0; i < a.length; i++) v += (a[i] - m) * (a[i] - m);
+  return a.length > 1 ? v / (a.length - 1) : 0;
+}
+function std(a: ArrayLike<number>): number {
+  return Math.sqrt(varr(a));
+}
+function covv(a: ArrayLike<number>, b: ArrayLike<number>): number {
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return 0;
+  const ma = mean(a);
+  const mb = mean(b);
+  let s = 0;
+  for (let i = 0; i < n; i++) s += (a[i] - ma) * (b[i] - mb);
+  return s / (n - 1);
+}
+function corr(a: ArrayLike<number>, b: ArrayLike<number>): number {
+  const sa = std(a);
+  const sb = std(b);
+  return sa > 0 && sb > 0 ? covv(a, b) / (sa * sb) : NaN;
+}
+
+function portfolioRisk(rows: Row[], hist: Map<string, Candles>, xu: Candles | null): RiskStats | null {
+  const items = rows.filter((r) => r.weight > 0 && hist.get(r.sym)).map((r) => ({ sym: r.sym, w: r.weight, c: hist.get(r.sym)! }));
+  if (items.length === 0) return null;
+  const startT = Math.max(...items.map((x) => x.c.time[0]));
+  const set = new Set<number>();
+  for (const it of items) for (let i = 0; i < it.c.length; i++) if (it.c.time[i] >= startT) set.add(it.c.time[i]);
+  const axis = [...set].sort((a, b) => a - b);
+  if (axis.length < 30) return null;
+  const wsum = items.reduce((s, it) => s + it.w, 0) || 1;
+  const w = items.map((it) => it.w / wsum);
+  const rets = items.map((it) => toReturns(ffill(it.c, axis)));
+  const xret = xu ? toReturns(ffill(xu, axis)) : null;
+  const m = axis.length - 1;
+  const rp = new Float64Array(m);
+  for (let i = 0; i < m; i++) {
+    let v = 0;
+    for (let k = 0; k < items.length; k++) v += w[k] * rets[k][i];
+    rp[i] = v;
+  }
+  const realVol = std(rp) * Math.sqrt(252) * 100;
+  const naiveVol = items.reduce((s, _it, k) => s + w[k] * std(rets[k]) * Math.sqrt(252) * 100, 0);
+  let beta: number | null = null;
+  const betas = new Map<string, number>();
+  if (xret) {
+    const vm = varr(xret) || 1;
+    beta = covv(rp, xret) / vm;
+    for (let k = 0; k < items.length; k++) betas.set(items[k].sym, covv(rets[k], xret) / vm);
+  }
+  let eq = 1;
+  let peak = 1;
+  let dd = 0;
+  for (let i = 0; i < m; i++) {
+    eq *= 1 + rp[i];
+    if (eq > peak) peak = eq;
+    const d = (peak - eq) / peak;
+    if (d > dd) dd = d;
+  }
+  const years = Math.max((axis[axis.length - 1] - axis[0]) / (365.25 * 86400), 1e-6);
+  const annRet = (Math.pow(Math.max(eq, 1e-9), 1 / years) - 1) * 100;
+  let avgCorr: number | null = null;
+  let topPair: RiskStats['topPair'] = null;
+  if (items.length >= 2) {
+    let s = 0;
+    let cnt = 0;
+    let best = -2;
+    for (let i = 0; i < items.length; i++)
+      for (let j = i + 1; j < items.length; j++) {
+        const cc = corr(rets[i], rets[j]);
+        if (!Number.isFinite(cc)) continue;
+        s += cc;
+        cnt++;
+        if (cc > best) {
+          best = cc;
+          topPair = { a: items[i].sym, b: items[j].sym, corr: cc };
+        }
+      }
+    avgCorr = cnt ? s / cnt : null;
+  }
+  return { realVol, naiveVol, divBenefit: Math.max(0, naiveVol - realVol), beta, maxDD: dd * 100, annRet, retOverRisk: realVol > 0 ? annRet / realVol : 0, avgCorr, topPair, betas, n: items.length, years };
+}
+
+function AdvancedRiskCard({ risk }: { risk: RiskStats }) {
+  const betaTxt = risk.beta == null ? '—' : risk.beta.toFixed(2);
+  const betaNote = risk.beta == null ? '' : risk.beta > 1.1 ? 'endeksten oynak' : risk.beta < 0.9 ? 'endeksten sakin' : 'endeksle benzer';
+  const rr = risk.retOverRisk;
+  const rrCls = rr >= 1 ? 'up' : rr >= 0.5 ? 'warn' : 'down';
+  return (
+    <div className="pa-card">
+      <div className="pa-card-title">🧮 Gerçek Risk (çeşitlendirme dahil)</div>
+      <div className="pa-grid">
+        <div>
+          <span className="lg-muted">Gerçek oynaklık</span>
+          <b>~%{risk.realVol.toFixed(0)}/yıl</b>
+        </div>
+        <div>
+          <span className="lg-muted">Beta (XU100)</span>
+          <b>{betaTxt}</b>
+        </div>
+        <div>
+          <span className="lg-muted">En sert düşüş</span>
+          <b className="down">-{risk.maxDD.toFixed(0)}%</b>
+        </div>
+        <div>
+          <span className="lg-muted">Getiri / Risk</span>
+          <b className={rrCls}>{rr.toFixed(2)}</b>
+        </div>
+      </div>
+      <div className="pa-verdict">
+        🧩 Çeşitlendirme: korelasyonsuz üst sınır <b>~%{risk.naiveVol.toFixed(0)}</b> iken hisseler tam birlikte hareket
+        etmediği için gerçek oynaklık <b>~%{risk.realVol.toFixed(0)}</b> — çeşitlendirme riski{' '}
+        <b className="up">~%{risk.divBenefit.toFixed(0)} azalttı</b>.
+      </div>
+      {risk.beta != null && (
+        <div className="pa-portrisk">
+          Beta <b>{betaTxt}</b> → piyasa %10 oynarsa portföy ~%{(risk.beta * 10).toFixed(0)} oynar <span className="lg-muted">({betaNote})</span>.
+        </div>
+      )}
+      {risk.avgCorr != null && (
+        <div className="pa-portrisk">
+          Ortalama korelasyon <b>{risk.avgCorr.toFixed(2)}</b>{' '}
+          <span className="lg-muted">
+            ({risk.avgCorr >= 0.6 ? 'yüksek — birlikte hareket ediyorlar, gizli yoğunlaşma' : risk.avgCorr >= 0.3 ? 'orta' : 'düşük — iyi çeşitlenmiş'})
+          </span>
+          {risk.topPair && (
+            <>
+              {' '}· en korele: <b>{risk.topPair.a}–{risk.topPair.b}</b> ({risk.topPair.corr.toFixed(2)})
+            </>
+          )}
+        </div>
+      )}
+      <div className="bt-note">
+        Getiri/Risk = yıllık getiri ÷ oynaklık ({risk.annRet >= 0 ? '+' : ''}
+        {risk.annRet.toFixed(0)}% / %{risk.realVol.toFixed(0)}); 1'in üstü iyidir. {risk.years.toFixed(1)} yıllık ortak
+        dönem, günlük getirilerden hesaplanır.
+      </div>
     </div>
   );
 }
