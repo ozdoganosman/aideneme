@@ -166,6 +166,17 @@ export default function App() {
       setShowRight(false);
     }
   };
+  // On mobile the panels are bottom sheets — only one open at a time.
+  const toggleLeft = () => {
+    const nv = !showLeft;
+    setShowLeft(nv);
+    if (nv && window.innerWidth < 760) setShowRight(false);
+  };
+  const toggleRight = () => {
+    const nv = !showRight;
+    setShowRight(nv);
+    if (nv && window.innerWidth < 760) setShowLeft(false);
+  };
   const addToWatch = (syms: string[], mode: 'add' | 'replace') => {
     setWatchlist((w) => Array.from(new Set(mode === 'replace' ? syms : [...syms, ...w])));
   };
@@ -319,14 +330,14 @@ export default function App() {
         <div className="tb-group">
           <button
             className={'ctl tgl' + (showLeft ? ' on' : '')}
-            onClick={() => setShowLeft((v) => !v)}
+            onClick={toggleLeft}
             title="Sol panel (Portföy / İşlemler) — kısayol ["
           >
             ◧
           </button>
           <button
             className={'ctl tgl' + (showRight ? ' on' : '')}
-            onClick={() => setShowRight((v) => !v)}
+            onClick={toggleRight}
             title="Sağ panel (İzleme Listesi) — kısayol ]"
           >
             ◨
@@ -484,6 +495,16 @@ export default function App() {
             <span className="edge-ic">‹</span>
             <span className="edge-label">İzleme Listesi</span>
           </button>
+        )}
+
+        {(showLeft || showRight) && (
+          <div
+            className="drawer-backdrop"
+            onClick={() => {
+              setShowLeft(false);
+              setShowRight(false);
+            }}
+          />
         )}
       </div>
 

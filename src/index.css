@@ -1698,6 +1698,9 @@ button.ctl:disabled {
 .lefttabs .lt-hide {
   margin-left: auto;
 }
+.drawer-backdrop {
+  display: none;
+}
 .edge-handle {
   flex: none;
   width: 22px;
@@ -1989,10 +1992,31 @@ button.ctl:disabled {
     height: 100dvh;
   }
 
-  /* Compact toolbar */
+  /* Compact single-row toolbar (horizontally scrollable) */
   .toolbar {
     gap: 6px;
     padding: 6px 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .toolbar::-webkit-scrollbar {
+    height: 0;
+  }
+  .toolbar > * {
+    flex: 0 0 auto;
+  }
+  .spacer {
+    display: none;
+  }
+  /* Dropdowns float (fixed) so the scrollable toolbar doesn't clip them */
+  .search-dropdown,
+  .menu-pop {
+    position: fixed;
+    top: 48px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
   }
   .brand,
   .hint,
@@ -2016,22 +2040,37 @@ button.ctl:disabled {
     font-size: 14px;
   }
 
-  /* Sidebars become slide-over drawers; the chart keeps the full width */
+  /* Panels become bottom sheets over a dimmed backdrop (chart visible behind) */
   .sidebar {
     position: fixed;
-    top: 0;
-    bottom: 0;
-    width: 86vw;
-    max-width: 360px;
-    z-index: 70;
-    box-shadow: 0 0 50px rgba(0, 0, 0, 0.7);
-  }
-  .sidebar:not(.right) {
     left: 0;
-  }
-  .sidebar.right {
     right: 0;
-    left: auto;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-width: none;
+    height: 78dvh;
+    z-index: 70;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 50px rgba(0, 0, 0, 0.7);
+    padding-top: 6px;
+  }
+  .sidebar::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 2px auto 8px;
+    border-radius: 2px;
+    background: #3a4150;
+  }
+  .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 65;
   }
   .edge-handle {
     display: none;
