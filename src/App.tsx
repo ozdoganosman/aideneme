@@ -288,6 +288,10 @@ export default function App() {
                   <span className="lg-muted">3A</span> <span className={stats.r3m >= 0 ? 'up' : 'down'}>{pct(stats.r3m)}</span>{' · '}
                   <span className="lg-muted">1Y</span> <span className={stats.r1y >= 0 ? 'up' : 'down'}>{pct(stats.r1y)}</span>
                 </div>
+                <div title={`Geçmiş ${stats.years.toFixed(1)} yılın yıllık ortalama bileşik getirisi (CAGR)`}>
+                  <span className="lg-muted">Yıllık</span> <span className={stats.cagr >= 0 ? 'up' : 'down'}>{pct(stats.cagr)}</span>{' · '}
+                  <span className="lg-muted">Max düşüş</span> <span className="down">-{stats.maxDD.toFixed(0)}%</span>
+                </div>
                 <div>
                   <span className="lg-muted">Ort.Hac</span> {fv(stats.avgVol)}
                 </div>
