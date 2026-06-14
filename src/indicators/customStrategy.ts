@@ -188,7 +188,18 @@ function macdSeries(c: Candles): { macd: Float64Array; signal: Float64Array; ema
   for (let i = 0; i < n; i++) macd[i] = fast[i] - slow[i];
   const signal = emaArr(macd, 50);
   const emacd = rollingVWMA(macd, c.volume, 185);
-  return { macd, signal, emacd };
+  // Normalize by the fast EMA — exactly like the on-chart NizamiCedid plot — so a
+  // threshold like "MACD > 0.01" means the same value shown in the chart legend.
+  const macdN = new Float64Array(n);
+  const sigN = new Float64Array(n);
+  const emN = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const inv = fast[i] !== 0 ? 1 / fast[i] : NaN;
+    macdN[i] = macd[i] * inv;
+    sigN[i] = signal[i] * inv;
+    emN[i] = emacd[i] * inv;
+  }
+  return { macd: macdN, signal: sigN, emacd: emN };
 }
 
 function supertrendDir(c: Candles, len: number, mult: number): Float64Array {
