@@ -121,31 +121,38 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const ema377 = chart.addSeries(LineSeries, lineOpts('#f0b90b', 1, 'EMA 377'), 0);
     const ema610 = chart.addSeries(LineSeries, lineOpts('#9aa0b0', 1, 'EMA 610'), 0);
 
-    const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, 1);
+    // Volume overlays the bottom of the price pane on its own scale, so its
+    // value label ("barem") shows at the bottom-right of the price window.
+    const volume = chart.addSeries(
+      HistogramSeries,
+      { priceFormat: { type: 'volume' }, priceScaleId: 'volume', priceLineVisible: false, lastValueVisible: true },
+      0,
+    );
 
-    const wilR = chart.addSeries(LineSeries, lineOpts('#7E57C2', 2, 'Williams %R'), 2);
-    const wilEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1), 2);
+    const wilR = chart.addSeries(LineSeries, lineOpts('#7E57C2', 2, 'Williams %R'), 1);
+    const wilEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1), 1);
     wilR.createPriceLine({ price: 98, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '98' });
     wilR.createPriceLine({ price: 50, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
     wilR.createPriceLine({ price: 5, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '5' });
 
-    const mHist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, 3);
+    const mHist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, 2);
     const mDelta = chart.addSeries(
       AreaSeries,
       { lineColor: 'rgba(83,76,175,0.7)', topColor: 'rgba(83,76,175,0.35)', bottomColor: 'rgba(83,76,175,0.02)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false },
-      3,
+      2,
     );
-    const mMacd = chart.addSeries(LineSeries, lineOpts('#ff2fa6', 1, 'MACD'), 3);
-    const mSignal = chart.addSeries(LineSeries, lineOpts('#FF6D00', 1, 'Signal'), 3);
-    const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, 'eMACD'), 3);
+    const mMacd = chart.addSeries(LineSeries, lineOpts('#ff2fa6', 1, 'MACD'), 2);
+    const mSignal = chart.addSeries(LineSeries, lineOpts('#FF6D00', 1, 'Signal'), 2);
+    const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, 'eMACD'), 2);
     mMacd.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
     const panes = chart.panes();
     panes[0]?.setStretchFactor(6);
-    panes[1]?.setStretchFactor(1.1);
-    panes[2]?.setStretchFactor(2);
-    panes[3]?.setStretchFactor(2.2);
-    volume.priceScale().applyOptions({ scaleMargins: { top: 0.12, bottom: 0 } });
+    panes[1]?.setStretchFactor(2); // Williams %R
+    panes[2]?.setStretchFactor(2.2); // MACD
+    // Volume fills the bottom ~22% of the price pane; price keeps the top ~78%.
+    volume.priceScale().applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+    candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.22 } });
 
     const extras: ExtraSpec[] = [
       { series: ema377, kind: 'line' },
@@ -257,9 +264,10 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     [s.wilR, s.wilEma].forEach((x) => x.applyOptions({ visible: settings.williams }));
     [s.mHist, s.mMacd, s.mSignal, s.mEma, s.mDelta].forEach((x) => x.applyOptions({ visible: settings.macd }));
     const panes = chart.panes();
-    panes[1]?.setStretchFactor(settings.volume ? 1.1 : 0.0001);
-    panes[2]?.setStretchFactor(settings.williams ? 2 : 0.0001);
-    panes[3]?.setStretchFactor(settings.macd ? 2.2 : 0.0001);
+    panes[1]?.setStretchFactor(settings.williams ? 2 : 0.0001);
+    panes[2]?.setStretchFactor(settings.macd ? 2.2 : 0.0001);
+    // Reserve the bottom slice of the price pane for volume only when shown.
+    s.candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: settings.volume ? 0.22 : 0.04 } });
   }, [settings]);
 
   // Overlay a chosen strategy's buy/sell signals as markers.
@@ -341,23 +349,23 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
                 <span style={{ color: '#9aa0b0' }}>EMA610 {fp(legend.ema610)}</span>
               </>
             )}
+            {settings.volume && (
+              <>
+                {'  '}
+                <span className="lg-muted">Hac</span> {fv(legend.v)}
+              </>
+            )}
           </div>
 
-          {settings.volume && tops[1] != null && (
+          {settings.williams && tops[1] != null && (
             <div className="pane-legend" style={{ top: tops[1] + 6 }}>
-              <span className="lg-muted">Hacim</span> {fv(legend.v)}
-            </div>
-          )}
-
-          {settings.williams && tops[2] != null && (
-            <div className="pane-legend" style={{ top: tops[2] + 6 }}>
               <span style={{ color: '#7E57C2' }}>Williams %R 260</span> {fn(legend.wilR, 1)}{' '}
               <span style={{ color: '#26a69a' }}>EMA {fn(legend.wilEma, 1)}</span>
             </div>
           )}
 
-          {settings.macd && tops[3] != null && (
-            <div className="pane-legend" style={{ top: tops[3] + 6 }}>
+          {settings.macd && tops[2] != null && (
+            <div className="pane-legend" style={{ top: tops[2] + 6 }}>
               <span className="lg-muted">NizamiCedid</span>{' '}
               <span style={{ color: '#ff2fa6' }}>MACD {fn(legend.macd, 4)}</span>{' '}
               <span style={{ color: '#FF6D00' }}>Signal {fn(legend.signal, 4)}</span>{' '}
