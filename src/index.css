@@ -2584,42 +2584,95 @@ button.ctl:disabled {
 .opt-head .lg-muted {
   flex: 1;
 }
+.opt-explain {
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 2px 0 8px;
+}
+.opt-tr {
+  color: #8ab4f8;
+} /* Geçmiş (eğitim) */
+.opt-te {
+  color: #e0a52e;
+} /* Test (görülmemiş) */
 .opt-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 .opt-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 4px;
-  border-bottom: 1px solid #1a1d27;
+  padding: 6px;
+  border-radius: 6px;
   font-size: 12px;
 }
-.opt-name {
-  flex: 0 0 auto;
-  min-width: 132px;
-  font-weight: 600;
+.opt-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
 }
-.opt-vals {
+.opt-hrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  background: none !important;
+}
+.opt-robust {
+  background: rgba(38, 166, 154, 0.08) !important;
+}
+.opt-main {
   flex: 1;
+  min-width: 0;
+}
+.opt-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.opt-periods {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 3px 8px;
+  gap: 3px 14px;
+  margin-top: 2px;
   font-variant-numeric: tabular-nums;
 }
+.opt-per {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.opt-per-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.opt-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--up);
+  background: rgba(38, 166, 154, 0.15);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 .opt-use {
+  flex: 0 0 auto;
   background: var(--accent-weak);
   border: 1px solid var(--accent);
   color: #cfe0ff;
   border-radius: 6px;
-  padding: 4px 9px;
+  padding: 5px 10px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
 }
 .opt-use:hover {
   background: rgba(59, 130, 246, 0.26);
+}
+.opt-use-sp {
+  flex: 0 0 auto;
+  width: 58px;
 }

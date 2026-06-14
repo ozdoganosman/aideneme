@@ -360,8 +360,10 @@ function simulate(
   time?: ArrayLike<number>,
   dailyRates?: ArrayLike<number>, // per-bar per-calendar-day rate earned while flat
   fromIdx = 0, // measure only from this bar (keeps full indicator warmup before it)
+  toIdx?: number, // …up to this bar (defaults to the last); enables train/test windows
 ): StrategyResult {
   const n = close.length;
+  const to = toIdx === undefined ? n - 1 : Math.max(fromIdx, Math.min(toIdx, n - 1));
   let equity = 1; // realistic: invested days track price, cash days earn inflation
   let priceEq = 1; // pure: cash idle (price-only)
   let peak = 1;
@@ -372,7 +374,7 @@ function simulate(
   let inPos = false;
   let daysIn = 0;
   let daysOut = 0;
-  for (let i = Math.max(1, fromIdx + 1); i < n; i++) {
+  for (let i = Math.max(1, fromIdx + 1); i <= to; i++) {
     // Calendar days between bars (cash earns interest every real day, weekends
     // included). Cap a single gap so a trading halt can't fabricate interest.
     const cal = time ? Math.min(Math.max((time[i] - time[i - 1]) / 86400, 0), 31) : 1;
@@ -399,7 +401,7 @@ function simulate(
   }
   if (inPos) {
     trades++;
-    if (close[n - 1] > entry) wins++;
+    if (close[to] > entry) wins++;
   }
   // Annualized (compound) return — normalizes by how long it ran so a huge total
   // that took 20 years can be compared fairly to a quick winner.
@@ -452,15 +454,17 @@ export function evalPosition(
   c: Candles,
   pos: Uint8Array,
   dailyRates: ArrayLike<number> = inflationDailyRates(c.time, c.length),
-  fromIdx = 0, // measure only the window [fromIdx … end] (full warmup kept before it)
+  fromIdx = 0, // measure only the window [fromIdx … toIdx] (full warmup kept before it)
+  toIdx?: number,
 ): StrategyResult {
   const close = c.close;
   const n = c.length;
   const f = Math.max(0, Math.min(fromIdx, n - 1));
-  const years = n > 1 ? Math.max((c.time[n - 1] - c.time[f]) / (365.25 * 86400), 1e-6) : 0;
-  const holdPct = n > 1 ? (close[n - 1] / close[f] - 1) * 100 : 0;
-  const holdAnn = years > 0 && close[f] > 0 ? (Math.pow(close[n - 1] / close[f], 1 / years) - 1) * 100 : 0;
-  return simulate(close, pos, holdPct, holdAnn, '', years, c.time, dailyRates, f);
+  const t = toIdx === undefined ? n - 1 : Math.max(f, Math.min(toIdx, n - 1));
+  const years = n > 1 ? Math.max((c.time[t] - c.time[f]) / (365.25 * 86400), 1e-6) : 0;
+  const holdPct = n > 1 ? (close[t] / close[f] - 1) * 100 : 0;
+  const holdAnn = years > 0 && close[f] > 0 ? (Math.pow(close[t] / close[f], 1 / years) - 1) * 100 : 0;
+  return simulate(close, pos, holdPct, holdAnn, '', years, c.time, dailyRates, f, t);
 }
 
 // First bar index at or after `years` ago (from the last bar). Binary search.

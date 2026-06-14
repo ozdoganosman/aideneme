@@ -40,15 +40,18 @@ interface Combo {
   avg: number;
 }
 
-// One optimizer result: a candidate strategy's average performance.
+// One optimizer result: a candidate's train (in-sample) vs test (out-of-sample)
+// performance. Ranked by the worst-period excess over Al-Tut (robustness).
 interface OptRow {
   strat: CustomStrategy;
-  ann: number; // avg annualized incl. inflation on cash
-  pure: number; // avg annualized, price only
-  hold: number; // avg Buy & Hold annualized
-  beat: number; // % of stocks where it beat Al-Tut
-  n: number; // stocks counted (trades > 0)
-  trades: number; // avg trades (current-symbol mode: that symbol's trades)
+  trainAnn: number; // avg annualized (incl. inflation) over the older ~70%
+  trainHold: number; // avg Al-Tut annualized over train
+  testAnn: number; // avg annualized over the unseen newest ~30%
+  testHold: number; // avg Al-Tut annualized over test
+  score: number; // min(trainAnn − trainHold, testAnn − testHold) — worst-period edge
+  robustPct: number; // % of stocks beating Al-Tut in BOTH periods (universe mode)
+  n: number; // stocks counted (traded in both periods)
+  trades: number; // avg test-period trades
 }
 
 // ── En İyi 20 scan cache (persisted + incremental) ───────────────────────────
@@ -242,15 +245,21 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
   const optimizeCurrent = () => {
     const cands = candidateStrategies();
     const cache = new Map<string, Float64Array>(); // share indicator series across candidates
+    const n = candles.length;
+    const split = Math.floor(n * 0.7); // older 70% = train, newest 30% = test (unseen)
     const rows: OptRow[] = [];
     for (const s of cands) {
-      const r = evalPosition(candles, buildCustomPosition(candles, s, cache), inflRates);
-      if (r.trades > 0) {
-        const ann = r.annRate ?? r.annPct;
-        rows.push({ strat: s, ann, pure: r.annPct, hold: r.holdAnn, beat: ann >= r.holdAnn ? 100 : 0, n: 1, trades: r.trades });
+      const pos = buildCustomPosition(candles, s, cache);
+      const tr = evalPosition(candles, pos, inflRates, 0, split);
+      const te = evalPosition(candles, pos, inflRates, split, n - 1);
+      if (tr.trades > 0 && te.trades > 0) {
+        const trainAnn = tr.annRate ?? tr.annPct;
+        const testAnn = te.annRate ?? te.annPct;
+        const score = Math.min(trainAnn - tr.holdAnn, testAnn - te.holdAnn);
+        rows.push({ strat: s, trainAnn, trainHold: tr.holdAnn, testAnn, testHold: te.holdAnn, score, robustPct: score >= 0 ? 100 : 0, n: 1, trades: te.trades });
       }
     }
-    rows.sort((a, b) => b.ann - a.ann);
+    rows.sort((a, b) => b.score - a.score);
     setOpt({ mode: 'cur', running: false, done: 0, total: 0, rows });
   };
 
@@ -259,7 +268,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
     setOpt({ mode: 'uni', running: true, done: 0, total: 0, rows: [] });
     const syms = await getScanSymbols();
     setOpt({ mode: 'uni', running: true, done: 0, total: syms.length, rows: [] });
-    const acc = cands.map((s) => ({ s, sumAnn: 0, sumPure: 0, sumHold: 0, sumTr: 0, beat: 0, n: 0 }));
+    const acc = cands.map((s) => ({ s, trA: 0, trH: 0, teA: 0, teH: 0, robust: 0, sumTr: 0, n: 0 }));
     let done = 0;
     const queue = [...syms];
     const worker = async () => {
@@ -274,19 +283,24 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
             c = undefined;
           }
         }
-        if (c && c.length >= 80) {
+        if (c && c.length >= 160) {
           const rates = inflationDailyRates(c.time, c.length);
           const cache = new Map<string, Float64Array>();
+          const split = Math.floor(c.length * 0.7);
           for (let k = 0; k < cands.length; k++) {
-            const r = evalPosition(c, buildCustomPosition(c, cands[k], cache), rates);
-            if (r.trades > 0) {
+            const pos = buildCustomPosition(c, cands[k], cache);
+            const tr = evalPosition(c, pos, rates, 0, split);
+            const te = evalPosition(c, pos, rates, split, c.length - 1);
+            if (tr.trades > 0 && te.trades > 0) {
               const a = acc[k];
-              const ann = r.annRate ?? r.annPct;
-              a.sumAnn += ann;
-              a.sumPure += r.annPct;
-              a.sumHold += r.holdAnn;
-              a.sumTr += r.trades;
-              if (ann >= r.holdAnn) a.beat++;
+              const trainAnn = tr.annRate ?? tr.annPct;
+              const testAnn = te.annRate ?? te.annPct;
+              a.trA += trainAnn;
+              a.trH += tr.holdAnn;
+              a.teA += testAnn;
+              a.teH += te.holdAnn;
+              if (trainAnn >= tr.holdAnn && testAnn >= te.holdAnn) a.robust++;
+              a.sumTr += te.trades;
               a.n++;
             }
           }
@@ -297,13 +311,19 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
-    // A combo must trade on enough stocks to be trusted (not 2 lucky names).
+    // A combo must trade on enough stocks (in both periods) to be trusted.
     const minN = Math.max(10, Math.floor(syms.length * 0.15));
     const mapped = acc
       .filter((a) => a.n > 0)
-      .map((a) => ({ strat: a.s, ann: a.sumAnn / a.n, pure: a.sumPure / a.n, hold: a.sumHold / a.n, beat: (a.beat / a.n) * 100, n: a.n, trades: a.sumTr / a.n }));
+      .map((a) => {
+        const trainAnn = a.trA / a.n;
+        const trainHold = a.trH / a.n;
+        const testAnn = a.teA / a.n;
+        const testHold = a.teH / a.n;
+        return { strat: a.s, trainAnn, trainHold, testAnn, testHold, score: Math.min(trainAnn - trainHold, testAnn - testHold), robustPct: (a.robust / a.n) * 100, n: a.n, trades: a.sumTr / a.n };
+      });
     const robust = mapped.filter((r) => r.n >= minN);
-    const rows: OptRow[] = (robust.length ? robust : mapped).sort((x, y) => y.ann - x.ann);
+    const rows: OptRow[] = (robust.length ? robust : mapped).sort((x, y) => y.score - x.score);
     setOpt({ mode: 'uni', running: false, done, total: syms.length, rows });
   };
 
@@ -508,40 +528,69 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                 <div className="opt-panel">
                   <div className="opt-head">
                     <b>🎯 En iyi kombinasyonlar</b>
-                    <span className="lg-muted">
-                      {N_CANDIDATES} kombinasyon ·{' '}
-                      {opt.mode === 'uni'
-                        ? `${opt.total} hissenin ortalaması · enf. dahil yıllık`
-                        : `${symbol} · enf. dahil yıllık`}
-                    </span>
                     <button className="row-x" onClick={() => setOpt(null)} title="Kapat">×</button>
+                  </div>
+                  <div className="opt-explain lg-muted">
+                    {N_CANDIDATES} kombinasyon {opt.mode === 'uni' ? `${opt.total} hissede` : <b>{symbol}</b>} denendi. Veri ikiye
+                    bölündü: <b className="opt-tr">Geçmiş %70</b> (öğrenme) + <b className="opt-te">Test %30</b> (görülmemiş son
+                    dönem). Yalnızca geçmişte iyi olan çoğu strateji testte çöker; o yüzden sıralama{' '}
+                    <b>iki dönemde de Al-Tut'u en çok geçene</b> göre. Yıllık getiriler <b>enflasyon dahil</b>.
                   </div>
                   {opt.running && opt.rows.length === 0 ? (
                     <div className="bt-note">Hesaplanıyor… {opt.done}/{opt.total}</div>
                   ) : opt.rows.length === 0 ? (
-                    <div className="bt-note">Sonuç yok.</div>
+                    <div className="bt-note">{opt.running ? `Hesaplanıyor… ${opt.done}/${opt.total}` : 'Sonuç yok.'}</div>
                   ) : (
                     <div className="opt-list">
-                      {opt.rows.slice(0, 15).map((o, i) => {
-                        const beatR = o.ann >= o.hold;
+                      <div className="opt-row opt-hrow">
+                        <span className="bt-rank">#</span>
+                        <div className="opt-main">
+                          <div className="opt-name">Strateji</div>
+                          <div className="opt-periods">
+                            <span className="opt-per"><span className="opt-per-lbl opt-tr">Geçmiş</span> strat / Al-Tut</span>
+                            <span className="opt-per"><span className="opt-per-lbl opt-te">Test</span> strat / Al-Tut</span>
+                          </div>
+                        </div>
+                        <span className="opt-use-sp" />
+                      </div>
+                      {opt.rows.slice(0, 12).map((o, i) => {
+                        const robust = o.score >= 0; // beat Al-Tut in BOTH periods
+                        const trBeat = o.trainAnn >= o.trainHold;
+                        const teBeat = o.testAnn >= o.testHold;
                         return (
-                          <div className="opt-row" key={o.strat.id}>
+                          <div className={'opt-row' + (robust ? ' opt-robust' : '')} key={o.strat.id}>
                             <span className="bt-rank">{i + 1}</span>
-                            <span className="opt-name">{o.strat.name}</span>
-                            <span className="opt-vals">
-                              <b className={beatR ? 'rv-win' : 'rv-lose'}>{fmtPct(o.ann)}</b>
-                              <span className="lg-muted">
-                                saf {fmtPct(o.pure)} · Al-Tut {fmtPct(o.hold)}
-                                {opt.mode === 'uni' ? ` · geçme %${o.beat.toFixed(0)} · ${o.n} hisse` : ` · ${o.trades} işlem`}
-                              </span>
-                            </span>
-                            <button className="opt-use" onClick={() => useCandidate(o.strat)}>Kullan</button>
+                            <div className="opt-main">
+                              <div className="opt-name">
+                                {o.strat.name}
+                                {robust && <span className="opt-badge" title="Hem geçmiş hem test döneminde Al-Tut'u geçti">✓✓ tutarlı</span>}
+                              </div>
+                              <div className="opt-periods">
+                                <span className="opt-per">
+                                  <span className="opt-per-lbl opt-tr">Geçmiş</span>
+                                  <b className={trBeat ? 'rv-win' : 'rv-lose'}>{fmtPct(o.trainAnn)}</b>
+                                  <span className="lg-muted">/ {fmtPct(o.trainHold)}</span>
+                                </span>
+                                <span className="opt-per">
+                                  <span className="opt-per-lbl opt-te">Test</span>
+                                  <b className={teBeat ? 'rv-win' : 'rv-lose'}>{fmtPct(o.testAnn)}</b>
+                                  <span className="lg-muted">/ {fmtPct(o.testHold)}</span>
+                                </span>
+                                <span className="lg-muted">
+                                  {opt.mode === 'uni' ? `${o.robustPct.toFixed(0)}% hissede tutarlı · ${o.n} hisse` : `${Math.round(o.trades)} işlem (test)`}
+                                </span>
+                              </div>
+                            </div>
+                            <button className="opt-use" onClick={() => useCandidate(o.strat)} title="Kuralı düzenleyiciye yükle">Kullan →</button>
                           </div>
                         );
                       })}
                     </div>
                   )}
-                  <div className="bt-note">"Kullan" → kuralı yukarıdaki düzenleyiciye yükler; isim verip kaydedebilirsin.</div>
+                  <div className="bt-note">
+                    <span className="rv-win">✓✓ tutarlı</span> = hem geçmişte hem testte Al-Tut'u geçti (güvenilir). "Kullan" → kuralı
+                    yukarıdaki düzenleyiciye yükler; ismini verip kaydet.
+                  </div>
                 </div>
               )}
 
