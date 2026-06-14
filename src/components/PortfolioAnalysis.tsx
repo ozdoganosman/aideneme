@@ -19,6 +19,7 @@ interface Props {
 
 export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [bench, setBench] = useState<number | null>(null); // XU100 1Y return %
 
   useEffect(() => {
     let cancel = false;
@@ -37,6 +38,11 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
     ).then((out) => {
       if (!cancel) setRows(out.sort((x, y) => y.weight - x.weight));
     });
+    fetchBistStatic('XU100')
+      .then((c) => {
+        if (!cancel) setBench(analyzeHolding(c)?.r1y ?? null);
+      })
+      .catch(() => {});
     return () => {
       cancel = true;
     };
@@ -64,7 +70,7 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
           ) : (
             <>
               {renderConcentration(rows)}
-              {renderRisk(rows)}
+              {renderRisk(rows, bench)}
               {renderTech(rows, pick)}
               <div className="bt-hint">
                 ⚠️ Bu analiz geçmiş fiyatlara dayalı, otomatik ve eğitim amaçlıdır — yatırım tavsiyesi değildir.
@@ -123,20 +129,37 @@ function renderConcentration(rows: Row[]) {
   );
 }
 
-function renderRisk(rows: Row[]) {
+function renderRisk(rows: Row[], bench: number | null) {
   const withA = rows.filter((r) => r.a);
   const pvol = withA.reduce((s, r) => s + (r.weight / 100) * r.a!.volPct, 0);
+  const pr1y = withA.reduce((s, r) => s + (r.weight / 100) * r.a!.r1y, 0);
   let plabel = 'Düşük';
   if (pvol >= 80) plabel = 'Çok yüksek';
   else if (pvol >= 50) plabel = 'Yüksek';
   else if (pvol >= 30) plabel = 'Orta';
+  const rel = bench != null ? pr1y - bench : null;
   return (
     <div className="pa-card">
-      <div className="pa-card-title">⚠️ Risk</div>
+      <div className="pa-card-title">⚠️ Risk & XU100'e görece</div>
       <div className="pa-portrisk">
         Portföy oynaklığı (yaklaşık): <b>~%{pvol.toFixed(0)}/yıl</b> · {plabel}{' '}
         <span className="lg-muted">(korelasyon hariç üst sınır)</span>
       </div>
+      {bench != null && (
+        <div className="pa-portrisk">
+          Portföy 1Y:{' '}
+          <b className={pr1y >= 0 ? 'up' : 'down'}>
+            {pr1y >= 0 ? '+' : ''}
+            {pr1y.toFixed(0)}%
+          </b>{' '}
+          · XU100: <b>{bench >= 0 ? '+' : ''}{bench.toFixed(0)}%</b> · Görece:{' '}
+          <b className={(rel ?? 0) >= 0 ? 'up' : 'down'}>
+            {(rel ?? 0) >= 0 ? '+' : ''}
+            {(rel ?? 0).toFixed(0)}%
+          </b>{' '}
+          <span className="lg-muted">({(rel ?? 0) >= 0 ? 'endeksi yendi' : 'endeksin altında'})</span>
+        </div>
+      )}
       <div className="pa-risk-list">
         {rows.map((r) => (
           <div key={r.sym} className="pa-risk-row">
@@ -151,6 +174,12 @@ function renderRisk(rows: Row[]) {
                   1Y {r.a.r1y >= 0 ? '+' : ''}
                   {r.a.r1y.toFixed(0)}%
                 </span>
+                {bench != null && (
+                  <span className={r.a.r1y - bench >= 0 ? 'up' : 'down'} title="XU100'e görece 1Y">
+                    XU {r.a.r1y - bench >= 0 ? '+' : ''}
+                    {(r.a.r1y - bench).toFixed(0)}%
+                  </span>
+                )}
               </>
             ) : (
               <span className="lg-muted">veri yok</span>

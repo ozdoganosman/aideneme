@@ -1437,6 +1437,36 @@ button.ctl:disabled {
 .pf-analyze:hover {
   background: rgba(59, 130, 246, 0.26);
 }
+.pf-io {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.pf-io button,
+.pf-io-imp {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pf-io button:hover:not(:disabled),
+.pf-io-imp:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.pf-io button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
 /* Portfolio analysis modal */
 .pa-card {

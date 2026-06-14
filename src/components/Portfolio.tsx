@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { ChangeEvent, useState } from 'react';
 import { Quotes } from '../data/bistStatic';
 
 export interface Holding {
@@ -16,6 +16,7 @@ interface Props {
   onRemove: (index: number) => void;
   onSelect: (s: string) => void;
   onAnalyze: () => void;
+  onImport: (h: Holding[]) => void;
 }
 
 // Stable per-holding colors — same color ties a card to its donut slice.
@@ -24,7 +25,7 @@ const PALETTE = [
   '#ec4899', '#f97316', '#84cc16', '#06b6d4', '#eab308', '#8b5cf6',
 ];
 
-export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, onSelect, onAnalyze }: Props) {
+export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, onSelect, onAnalyze, onImport }: Props) {
   const [sym, setSym] = useState('');
   const [qty, setQty] = useState('');
   const [cost, setCost] = useState('');
@@ -59,6 +60,39 @@ export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, o
   const totDay = rows.reduce((s, r) => s + r.dayPL, 0);
   const totDayBase = totVal - totDay;
   const totDayPct = totDayBase ? (totDay / totDayBase) * 100 : 0;
+
+  const exportCsv = () => {
+    const lines = ['symbol,qty,cost', ...holdings.map((h) => `${h.symbol},${h.qty},${h.cost}`)];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'portfoy.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const importCsv = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const out: Holding[] = [];
+      for (const line of String(reader.result || '').split(/\r?\n/)) {
+        const t = line.trim();
+        if (!t) continue;
+        const parts = t.split(/[,;\t]/);
+        if (parts.length < 3) continue;
+        const s = parts[0].trim().toUpperCase();
+        if (!s || s === 'SYMBOL' || s === 'SEMBOL') continue;
+        const q = parseNum(parts[1]);
+        const c = parseNum(parts[2]);
+        if (s && q > 0 && c > 0) out.push({ symbol: s, qty: q, cost: c });
+      }
+      if (out.length) onImport(out);
+    };
+    reader.readAsText(file);
+  };
 
   const add = () => {
     const s = sym.toUpperCase().trim();
@@ -140,6 +174,16 @@ export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, o
           📊 Risk & Teknik Analiz
         </button>
       )}
+
+      <div className="pf-io">
+        <button onClick={exportCsv} disabled={!holdings.length} title="Portföyü CSV olarak indir">
+          ⬇ Dışa (CSV)
+        </button>
+        <label className="pf-io-imp" title="CSV'den portföy yükle (mevcut pozisyonların yerine geçer)">
+          ⬆ İçe (CSV)
+          <input type="file" accept=".csv,text/csv" onChange={importCsv} hidden />
+        </label>
+      </div>
 
       {rows.map((r) => {
         const weight = totVal ? (r.val / totVal) * 100 : 0;

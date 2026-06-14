@@ -357,6 +357,7 @@ export default function App() {
                   onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
                   onSelect={selectSymbol}
                   onAnalyze={() => setShowAnalysis(true)}
+                  onImport={(h) => setPortfolio(h)}
                 />
               ) : (
                 <Trades
