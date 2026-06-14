@@ -48,6 +48,8 @@ interface Filter {
   key: Key;
   op: string;
   val: number;
+  mode?: 'val' | 'field'; // compare against a fixed value (default) or another column
+  key2?: Key;
 }
 
 const PRESETS: { label: string; fs: Filter[] }[] = [
@@ -68,6 +70,8 @@ export function Screener({ onClose, onSelect }: Props) {
   const [fk, setFk] = useState<Key>('wr');
   const [op, setOp] = useState('gt');
   const [val, setVal] = useState('50');
+  const [cmp, setCmp] = useState<'val' | 'field'>('val');
+  const [fk2, setFk2] = useState<Key>('r3m');
 
   useEffect(() => {
     fetchScreener().then(setData).catch(() => setData(null)).finally(() => setLoaded(true));
@@ -87,12 +91,15 @@ export function Screener({ onClose, onSelect }: Props) {
     let f: Filter;
     if (kind === 'bool') {
       f = { key: fk, op: 'is', val: Number(val) || 0 };
+    } else if (cmp === 'field') {
+      if (fk2 === fk) return;
+      f = { key: fk, op, mode: 'field', key2: fk2, val: 0 };
     } else {
       const v = parseFloat(val.replace(',', '.'));
       if (!isFinite(v)) return;
-      f = { key: fk, op, val: v };
+      f = { key: fk, op, mode: 'val', val: v };
     }
-    setFilters((fs) => [...fs.filter((x) => !(x.key === f.key && x.op === f.op)), f]);
+    setFilters((fs) => [...fs.filter((x) => !(x.key === f.key && x.op === f.op && x.key2 === f.key2)), f]);
   };
   const toggleSort = (k: Key) =>
     setSort((s) => (s.key === k ? { key: k, dir: (s.dir * -1) as 1 | -1 } : { key: k, dir: -1 }));
@@ -157,13 +164,27 @@ export function Screener({ onClose, onSelect }: Props) {
                       <option value="lte">≤</option>
                       <option value="eq">= eşit</option>
                     </select>
-                    <input
-                      value={val}
-                      inputMode="decimal"
-                      placeholder="değer"
-                      onChange={(e) => setVal(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addFilter()}
-                    />
+                    <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir veri mi?">
+                      <option value="val">Değer</option>
+                      <option value="field">Veri (kolon)</option>
+                    </select>
+                    {cmp === 'val' ? (
+                      <input
+                        value={val}
+                        inputMode="decimal"
+                        placeholder="değer"
+                        onChange={(e) => setVal(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addFilter()}
+                      />
+                    ) : (
+                      <select value={fk2} onChange={(e) => setFk2(e.target.value as Key)}>
+                        {COLS.filter((c) => c.kind !== 'bool').map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </>
                 )}
                 <button className="scr-add" onClick={addFilter}>
@@ -241,17 +262,18 @@ export function Screener({ onClose, onSelect }: Props) {
 
 function passF(it: ScreenerItem, f: Filter): boolean {
   const v = it[f.key] as number;
+  const t = f.mode === 'field' && f.key2 != null ? (it[f.key2] as number) : f.val;
   switch (f.op) {
     case 'gt':
-      return v > f.val;
+      return v > t;
     case 'gte':
-      return v >= f.val;
+      return v >= t;
     case 'lt':
-      return v < f.val;
+      return v < t;
     case 'lte':
-      return v <= f.val;
+      return v <= t;
     case 'eq':
-      return Math.round(v) === f.val;
+      return Math.round(v) === Math.round(t);
     case 'is':
       return (v ? 1 : 0) === f.val;
     default:
@@ -262,7 +284,8 @@ function passF(it: ScreenerItem, f: Filter): boolean {
 function opLabel(f: Filter): string {
   if (f.op === 'is') return f.val ? 'Evet' : 'Hayır';
   const m: Record<string, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
-  return `${m[f.op]} ${f.val}`;
+  const target = f.mode === 'field' && f.key2 != null ? COL(f.key2).label : String(f.val);
+  return `${m[f.op]} ${target}`;
 }
 
 function cell(it: ScreenerItem, c: ColDef) {
