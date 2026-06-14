@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Candles } from '../data/types';
 import { optimize, StrategyResult, explainStrategy } from '../indicators/backtest';
-import { fetchStrategies, StrategiesFile } from '../data/bistStatic';
+import { fetchStrategies, StrategiesFile, TopCombo } from '../data/bistStatic';
 
 interface Props {
   candles: Candles;
@@ -173,6 +173,41 @@ function renderMarket(
   );
 }
 
+// Aggregate which indicator families dominate the Top-20 and feature them.
+function renderWinners(top: TopCombo[]) {
+  if (!top || top.length === 0) return null;
+  const fam = new Map<string, { n: number; sum: number }>();
+  for (const t of top) {
+    const f = indicatorFamily(t.name);
+    const e = fam.get(f) ?? { n: 0, sum: 0 };
+    e.n += 1;
+    e.sum += t.ann;
+    fam.set(f, e);
+  }
+  const ranked = [...fam.entries()]
+    .map(([name, v]) => ({ name, n: v.n, avg: v.sum / v.n }))
+    .sort((a, b) => b.n - a.n || b.avg - a.avg);
+  const champ = ranked[0];
+  return (
+    <div className="bt-winners">
+      <div className="bt-winners-title">🏆 Öne çıkan göstergeler (bu listede en çok kazandıranlar)</div>
+      <div className="bt-winners-chips">
+        {ranked.map((r, i) => (
+          <span key={r.name} className={'bt-wchip' + (i === 0 ? ' top' : '')} title={`Ortalama yıllık ${fmtPct(r.avg)}`}>
+            {r.name} <b>×{r.n}</b> <span className="lg-muted">{fmtPct(r.avg)}</span>
+          </span>
+        ))}
+      </div>
+      {champ && (
+        <div className="bt-winners-note">
+          En baskın: <b>{champ.name}</b> — Top-20'de <b>{champ.n}</b> hissede zirvede, ortalama{' '}
+          <b className="up">{fmtPct(champ.avg)}</b>/yıl. Strateji seçerken bunlara odaklanmak mantıklı.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function renderTop(
   market: StrategiesFile | null,
   loaded: boolean,
@@ -191,6 +226,9 @@ function renderTop(
         <b>en az {market?.topMinYears ?? 10} yıllık</b> geçmişi olan firmalar). Bir satıra <b>tıkla</b> → o hisseyi açar
         ve stratejiyi grafiğe işaretler.
       </p>
+
+      {renderWinners(top)}
+
       <div className="bt-list">
         {top.map((t, i) => (
           <div
@@ -354,6 +392,19 @@ function fmtX(r: number): string {
 function fmtPct(r: number): string {
   if (!isFinite(r)) return '—';
   return (r >= 0 ? '+' : '') + (Math.abs(r) < 10 ? r.toFixed(1) : Math.round(r).toString()) + '%';
+}
+
+// Normalize a strategy name to its underlying indicator family.
+function indicatorFamily(name: string): string {
+  if (name.startsWith('Supertrend')) return 'Supertrend';
+  if (name.startsWith('Donchian')) return 'Donchian kırılımı';
+  if (name.startsWith('Momentum')) return 'Momentum (ROC)';
+  if (name.startsWith('Paşa+Cedid')) return 'Paşa+Cedid';
+  if (name.startsWith('RSI')) return 'RSI';
+  if (name.startsWith('%R')) return 'Williams %R';
+  if (name.startsWith('MACD')) return 'MACD';
+  if (name.startsWith('EMA')) return 'EMA kesişimi';
+  return name;
 }
 
 // Daily-compounded equivalent of an annualized return ("gün başına" kâr).
