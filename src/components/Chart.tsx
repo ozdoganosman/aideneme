@@ -69,6 +69,21 @@ type SeriesBag = {
 
 const BAND_POOL = 48; // max trades shown as P&L bands (typical strategies have far fewer)
 
+interface MPt {
+  time: number;
+  price: number;
+}
+interface MeasureView {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+  dPrice: number;
+  dPct: number;
+  days: number;
+  up: boolean;
+}
+
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
   color,
   lineWidth: width,
@@ -92,9 +107,14 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const hoveringRef = useRef(false);
   const fitRef = useRef(true);
   fitRef.current = fitOnLoad ?? true;
+  // Measure tool: Shift+click an anchor, move to compare, Shift+click again to
+  // freeze. Tracks two {time, price} points → Δ price, Δ % and days between.
+  const shiftRef = useRef(false);
+  const measureRef = useRef<{ a: MPt; b: MPt | null; frozen: boolean } | null>(null);
 
   const [legend, setLegend] = useState<LegendVals | null>(null);
   const [tops, setTops] = useState<number[]>([]);
+  const [measure, setMeasure] = useState<MeasureView | null>(null);
 
   useEffect(() => {
     const chart: IChartApi = createChart(elRef.current!, {
@@ -216,7 +236,65 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
     const num = (x: unknown): number => (typeof x === 'number' && isFinite(x) ? x : NaN);
 
+    // ── Measure tool ──────────────────────────────────────────────────────────
+    const refreshMeasure = () => {
+      const m = measureRef.current;
+      if (!m || !m.b) {
+        setMeasure(null);
+        return;
+      }
+      const ts = chart.timeScale();
+      const ax = ts.timeToCoordinate(m.a.time as Time);
+      const bx = ts.timeToCoordinate(m.b.time as Time);
+      const ay = candle.priceToCoordinate(m.a.price);
+      const by = candle.priceToCoordinate(m.b.price);
+      if (ax == null || bx == null || ay == null || by == null) {
+        setMeasure(null);
+        return;
+      }
+      const dPrice = m.b.price - m.a.price;
+      const dPct = m.a.price ? (m.b.price / m.a.price - 1) * 100 : 0;
+      setMeasure({ ax, ay, bx, by, dPrice, dPct, days: Math.round((m.b.time - m.a.time) / 86400), up: dPrice >= 0 });
+    };
+    chart.subscribeClick((param) => {
+      const m = measureRef.current;
+      if (!param.point || param.time == null) return;
+      if (!shiftRef.current) {
+        if (m) {
+          measureRef.current = null;
+          setMeasure(null);
+        }
+        return;
+      }
+      const price = candle.coordinateToPrice(param.point.y);
+      if (price == null) return;
+      const pt: MPt = { time: param.time as number, price: price as number };
+      if (!m || m.frozen) measureRef.current = { a: pt, b: pt, frozen: false };
+      else measureRef.current = { a: m.a, b: pt, frozen: true };
+      refreshMeasure();
+    });
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      if (measureRef.current?.b) refreshMeasure();
+    });
+    const onKey = (e: KeyboardEvent) => {
+      shiftRef.current = e.shiftKey;
+      if (e.key === 'Escape' && measureRef.current) {
+        measureRef.current = null;
+        setMeasure(null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+
     chart.subscribeCrosshairMove((param) => {
+      const m = measureRef.current;
+      if (m && !m.frozen && param.point && param.time != null) {
+        const p = seriesRef.current?.candle.coordinateToPrice(param.point.y);
+        if (p != null) {
+          m.b = { time: param.time as number, price: p as number };
+          refreshMeasure();
+        }
+      }
       const s = seriesRef.current!;
       if (param.time && param.seriesData.size) {
         const c = param.seriesData.get(s.candle) as CandlestickData | undefined;
@@ -245,6 +323,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
     return () => {
       ro.disconnect();
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
       lod.destroy();
       lodRef.current = null;
       chartApiRef.current = null;
@@ -388,6 +468,39 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   return (
     <>
       <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />
+      {measure && (
+        <>
+          <svg className="measure-overlay" width="100%" height="100%">
+            <rect
+              x={Math.min(measure.ax, measure.bx)}
+              y={Math.min(measure.ay, measure.by)}
+              width={Math.abs(measure.bx - measure.ax)}
+              height={Math.abs(measure.by - measure.ay)}
+              fill={measure.up ? 'rgba(38,166,154,0.10)' : 'rgba(239,83,80,0.10)'}
+            />
+            <line
+              x1={measure.ax}
+              y1={measure.ay}
+              x2={measure.bx}
+              y2={measure.by}
+              stroke={measure.up ? '#26a69a' : '#ef5350'}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+            <circle cx={measure.ax} cy={measure.ay} r={3} fill={measure.up ? '#26a69a' : '#ef5350'} />
+            <circle cx={measure.bx} cy={measure.by} r={3} fill={measure.up ? '#26a69a' : '#ef5350'} />
+          </svg>
+          <div
+            className="measure-label"
+            style={{ left: Math.min(measure.bx + 10, 9999), top: Math.max(measure.by - 12, 2), borderColor: measure.up ? '#26a69a' : '#ef5350' }}
+          >
+            <b className={measure.up ? 'up' : 'down'}>{(measure.dPct >= 0 ? '+' : '') + measure.dPct.toFixed(2)}%</b>{' '}
+            <span className="lg-muted">
+              {(measure.dPrice >= 0 ? '+' : '') + measure.dPrice.toFixed(2)} · {measure.days}g
+            </span>
+          </div>
+        </>
+      )}
       {legend && (
         <>
           <div className="pane-legend" style={{ top: (tops[0] ?? 0) + 6 }}>

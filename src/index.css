@@ -409,6 +409,28 @@ button.ctl:disabled {
   color: #fff;
 }
 
+/* Measure tool (Shift+click) */
+.measure-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.measure-label {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  background: rgba(14, 15, 19, 0.92);
+  border: 1px solid #26a69a;
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
 .lg-muted {
   color: var(--muted);
 }
