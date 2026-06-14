@@ -514,6 +514,15 @@ export default function App() {
         <span className={error ? 'down' : ''}>{error ? `Hata: ${error}` : status}</span>
       </footer>
 
+      <nav className="mobilebar">
+        <button className={showLeft ? 'active' : ''} onClick={toggleLeft}>
+          📊 Portföy / İşlemler
+        </button>
+        <button className={showRight ? 'active' : ''} onClick={toggleRight}>
+          ⭐ Favoriler
+        </button>
+      </nav>
+
       {showBt && candles && (
         <Backtest
           candles={candles}
