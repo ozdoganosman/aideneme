@@ -709,6 +709,8 @@ export default function App() {
         <PortfolioAnalysis
           holdings={portfolio}
           quotes={quotes}
+          strats={customStrats}
+          params={indParams}
           onClose={() => setShowAnalysis(false)}
           onSelect={selectSymbol}
         />

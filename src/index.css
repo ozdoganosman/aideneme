@@ -1720,6 +1720,18 @@ button.ctl:disabled {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+.pa-bt-row {
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 5px;
+}
+.pa-bt-row:hover {
+  background: #1a1d27;
+}
+.pa-bt-name {
+  color: #8ab4f8;
+  font-size: 11px;
+}
 .pa-risk-sym {
   font-weight: 700;
   min-width: 56px;

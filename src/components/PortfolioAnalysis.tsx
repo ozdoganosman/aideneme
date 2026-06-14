@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Candles } from '../data/types';
 import { fetchBistStatic, Quotes } from '../data/bistStatic';
 import { analyzeHolding, HoldingAnalysis } from '../indicators/analysis';
+import { evalPosition, StrategyResult } from '../indicators/backtest';
+import { CustomStrategy, buildCustomPosition, candidateStrategies } from '../indicators/customStrategy';
+import { inflationDailyRates } from '../data/inflation';
+import { IndicatorParams } from '../indicators/calc';
 import { Holding } from './Portfolio';
 
 interface Row {
@@ -14,11 +18,13 @@ interface Row {
 interface Props {
   holdings: Holding[];
   quotes: Quotes;
+  strats: CustomStrategy[];
+  params: IndicatorParams;
   onClose: () => void;
   onSelect: (s: string) => void;
 }
 
-export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props) {
+export function PortfolioAnalysis({ holdings, quotes, strats, params, onClose, onSelect }: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [bench, setBench] = useState<number | null>(null); // XU100 1Y return %
   const [hist, setHist] = useState<Map<string, Candles>>(new Map());
@@ -87,6 +93,7 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
               {renderConcentration(rows)}
               {series && <ValueChartCard pv={series.pv} xv={series.xv} chg={series.chg} xchg={series.xchg} t0={series.t0} t1={series.t1} />}
               {risk && <AdvancedRiskCard risk={risk} />}
+              <StrategyBacktestCard rows={rows} hist={hist} strats={strats} params={params} onSelect={pick} />
               {renderRisk(rows, bench, risk)}
               {renderTech(rows, pick)}
               <div className="bt-hint">
@@ -254,6 +261,123 @@ function renderTech(rows: Row[], pick: (s: string) => void) {
       ))}
     </div>
   );
+}
+
+// ── Strategy backtest across the whole portfolio ─────────────────────────────
+interface BtRow {
+  sym: string;
+  weight: number;
+  ann: number; // strategy annualized (incl. inflation on cash)
+  hold: number; // Al-Tut annualized
+  trades: number;
+  name: string; // which strategy (for "best per holding" mode)
+  ok: boolean;
+}
+function bestForHolding(c: Candles, params: IndicatorParams): { strat: CustomStrategy; r: StrategyResult } | null {
+  const rates = inflationDailyRates(c.time, c.length);
+  const split = Math.floor(c.length * 0.7);
+  const cache = new Map<string, Float64Array>();
+  let bestScore = -Infinity;
+  let bestStrat: CustomStrategy | null = null;
+  let bestPos: Uint8Array | null = null;
+  for (const s of candidateStrategies()) {
+    const pos = buildCustomPosition(c, s, cache, params);
+    const tr = evalPosition(c, pos, rates, 0, split);
+    const te = evalPosition(c, pos, rates, split, c.length - 1);
+    if (tr.trades > 0 && te.trades > 0) {
+      const score = Math.min((tr.annRate ?? 0) - tr.holdAnn, (te.annRate ?? 0) - te.holdAnn);
+      if (score > bestScore) {
+        bestScore = score;
+        bestStrat = s;
+        bestPos = pos;
+      }
+    }
+  }
+  if (!bestStrat || !bestPos) return null;
+  return { strat: bestStrat, r: evalPosition(c, bestPos, rates) };
+}
+
+function StrategyBacktestCard({
+  rows,
+  hist,
+  strats,
+  params,
+  onSelect,
+}: {
+  rows: Row[];
+  hist: Map<string, Candles>;
+  strats: CustomStrategy[];
+  params: IndicatorParams;
+  onSelect: (s: string) => void;
+}) {
+  const [mode, setMode] = useState<'saved' | 'best'>(strats.length ? 'saved' : 'best');
+  const [sid, setSid] = useState<string>(strats[0]?.id ?? '');
+  const sel = strats.find((s) => s.id === sid) ?? strats[0];
+
+  const res = useMemo(() => {
+    const out: BtRow[] = [];
+    for (const r of rows) {
+      const c = hist.get(r.sym);
+      if (!c || c.length < 60) continue;
+      if (mode === 'best') {
+        const b = bestForHolding(c, params);
+        if (b) out.push({ sym: r.sym, weight: r.weight, ann: b.r.annRate ?? b.r.annPct, hold: b.r.holdAnn, trades: b.r.trades, name: b.strat.name, ok: true });
+      } else if (sel) {
+        const rr = evalPosition(c, buildCustomPosition(c, sel, undefined, params), inflationDailyRates(c.time, c.length));
+        out.push({ sym: r.sym, weight: r.weight, ann: rr.annRate ?? rr.annPct, hold: rr.holdAnn, trades: rr.trades, name: sel.name, ok: rr.trades > 0 });
+      }
+    }
+    const wsum = out.reduce((s, o) => s + o.weight, 0) || 1;
+    const cAnn = out.reduce((s, o) => s + (o.weight / wsum) * o.ann, 0);
+    const cHold = out.reduce((s, o) => s + (o.weight / wsum) * o.hold, 0);
+    return { out: out.sort((a, b) => b.weight - a.weight), cAnn, cHold, n: out.length };
+  }, [rows, hist, mode, sel, params]);
+
+  const beat = res.cAnn >= res.cHold;
+  return (
+    <div className="pa-card">
+      <div className="pa-card-title">🤖 Strateji ile Portföy Backtest</div>
+      <div className="bt-rate">
+        <select value={mode === 'best' ? '__best' : sid} onChange={(e) => (e.target.value === '__best' ? setMode('best') : (setMode('saved'), setSid(e.target.value)))}>
+          {strats.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+          <option value="__best">🎯 Her hisseye en iyi (otomatik)</option>
+        </select>
+        <span className="lg-muted">enf. dahil yıllık · ağırlıklı</span>
+      </div>
+      {res.n === 0 ? (
+        <div className="bt-note">{strats.length === 0 && mode === 'saved' ? 'Önce strateji oluştur ya da "Her hisseye en iyi" seç.' : 'Yeterli geçmişli hisse yok.'}</div>
+      ) : (
+        <>
+          <div className="pa-verdict">
+            Portföy (ağırlıklı): strateji <b className={beat ? 'up' : 'down'}>{fmtP(res.cAnn)}</b> · Al-Tut{' '}
+            <b className={res.cHold >= 0 ? 'up' : 'down'}>{fmtP(res.cHold)}</b>{' '}
+            <span className={beat ? 'rv-win' : 'rv-lose'}>{beat ? '✓ geçti' : 'geçemedi'}</span>
+          </div>
+          <div className="pa-risk-list">
+            {res.out.map((o) => (
+              <div key={o.sym} className="pa-risk-row pa-bt-row" onClick={() => onSelect(o.sym)} title="Grafikte aç">
+                <span className="pa-risk-sym">{o.sym}</span>
+                <span className="lg-muted">%{o.weight.toFixed(0)}</span>
+                <span className={o.ann >= o.hold ? 'up' : 'down'}>strat {fmtP(o.ann)}</span>
+                <span className="lg-muted">Al-Tut {fmtP(o.hold)}</span>
+                <span className="lg-muted">{o.trades} işlem</span>
+                {mode === 'best' && <span className="pa-bt-name">{o.name}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="bt-note">
+            Her hisseye strateji ayrı uygulanır (nakitteyken enflasyon kazanır); portföy = mevcut ağırlıklarla ortalama.
+            {mode === 'best' && ' "Her hisseye en iyi": geçmiş+test döneminde Al-Tut\'u en tutarlı geçen kombinasyon.'}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+function fmtP(v: number): string {
+  return (v >= 0 ? '+' : '') + Math.round(v) + '%';
 }
 
 // ── Advanced portfolio risk (correlation-aware) ──────────────────────────────
