@@ -222,8 +222,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const donHi = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian üst'), 0);
     const donLo = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian alt'), 0);
     // ADX (14) pane + ROC (100) pane — collapsed unless toggled on.
-    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, 'ADX (260)'), 3);
-    const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, 'ADX EMA (260)'), 3);
+    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, 'ADX (28)'), 3);
+    const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, 'ADX EMA (14)'), 3);
     adx.createPriceLine({ price: 25, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '25' });
     const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, 'ROC (260)'), 4);
     roc.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
@@ -596,8 +596,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
           {settings.adx && tops[3] != null && (
             <div className="pane-legend" style={{ top: tops[3] + 6 }}>
-              <span style={{ color: '#ab47bc' }}>ADX (260)</span> {fn(legend.adx, 1)}{' '}
-              <span style={{ color: '#26a69a' }}>EMA (260) {fn(legend.adxEma, 1)}</span>{' '}
+              <span style={{ color: '#ab47bc' }}>ADX (28)</span> {fn(legend.adx, 1)}{' '}
+              <span style={{ color: '#26a69a' }}>EMA (14) {fn(legend.adxEma, 1)}</span>{' '}
               <span className="lg-muted">{legend.adx >= 25 ? '· güçlü trend' : '· zayıf/yatay'}</span>
             </div>
           )}

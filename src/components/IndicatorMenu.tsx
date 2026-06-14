@@ -12,7 +12,7 @@ const ITEMS: [keyof IndicatorSettings, string][] = [
   ['macd', 'MACD'],
   ['bollinger', 'Bollinger (260,2σ)'],
   ['donchian', 'Donchian (260)'],
-  ['adx', 'ADX (260) — trend gücü'],
+  ['adx', 'ADX (28) — trend gücü'],
   ['roc', 'Momentum / ROC (260)'],
 ];
 

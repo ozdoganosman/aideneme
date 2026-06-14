@@ -166,8 +166,11 @@ export interface ExtraBundle {
   roc: Float64Array;
 }
 export function computeExtras(c: Candles): ExtraBundle {
-  // All on the app's 260-day (≈1 yıl) paradigm, like Williams %R 260 / EMA 377-610.
-  const adx = adxArr(c, 260);
+  // Lookback indicators on the app's 260-day (≈1 yıl) paradigm (Williams %R 260 /
+  // EMA 377-610). EXCEPTION: ADX is a *smoothing* parameter — at 260 it flattens
+  // to ~5 and never crosses 25, so it stays at a longer-than-default but still
+  // functional 28 (with a 14 EMA signal).
+  const adx = adxArr(c, 28);
   return {
     bbUp: bollingerBand(c, 260, 'up'),
     bbMid: bollingerBand(c, 260, 'mid'),
@@ -175,7 +178,7 @@ export function computeExtras(c: Candles): ExtraBundle {
     donHi: donchianBound(c, 260, true),
     donLo: donchianBound(c, 260, false),
     adx,
-    adxEma: emaArr(adx, 260),
+    adxEma: emaArr(adx, 14),
     roc: rocArr(c.close, 260),
   };
 }
