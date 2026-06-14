@@ -22,7 +22,7 @@ import {
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
 import { computeIndicators } from '../indicators/calc';
-import { signalsFor } from '../indicators/backtest';
+import { signalsFor, buildPositionByName } from '../indicators/backtest';
 
 export interface IndicatorSettings {
   ema: boolean;
@@ -64,6 +64,7 @@ type SeriesBag = {
   mMacd: ISeriesApi<'Line'>;
   mSignal: ISeriesApi<'Line'>;
   mEma: ISeriesApi<'Line'>;
+  posShade: ISeriesApi<'Histogram'>;
 };
 
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
@@ -110,6 +111,15 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false },
     });
 
+    // Strategy "in-position" shade: full-height histogram on its own scale,
+    // created first so it sits behind the candles; fills bars where long.
+    const posShade = chart.addSeries(
+      HistogramSeries,
+      { priceScaleId: 'posshade', base: 0, color: 'rgba(38,166,154,0.12)', priceLineVisible: false, lastValueVisible: false },
+      0,
+    );
+    posShade.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 } });
+
     const candle = chart.addSeries(
       CandlestickSeries,
       { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' },
@@ -153,11 +163,12 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: mMacd, kind: 'line' },
       { series: mSignal, kind: 'line' },
       { series: mEma, kind: 'line' },
+      { series: posShade, kind: 'hist' },
     ];
     const lod = new LodController(chart, candle, volume, extras);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma, posShade };
     markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
@@ -235,7 +246,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
     lodRef.current.setData(
       candles,
-      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN],
+      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN, new Float64Array(n).fill(NaN)],
       fitRef.current,
     );
     if (!hoveringRef.current) setLegend(lv);
@@ -258,20 +269,28 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     s.candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: settings.volume ? 0.22 : 0.04 } });
   }, [settings]);
 
-  // Overlay a chosen strategy's buy/sell signals as markers.
+  // Overlay a chosen strategy's buy/sell signals as markers + shade the periods
+  // the strategy is in a position (full-height green band behind the candles).
   useEffect(() => {
     const m = markersRef.current;
-    if (!m) return;
+    const s = seriesRef.current;
+    const lod = lodRef.current;
+    if (!m || !s) return;
     if (!strategy || !candles) {
       m.setMarkers([]);
+      if (lod) lod.updateExtra(s.posShade, new Float64Array(0));
       return;
     }
-    const markers: SeriesMarker<Time>[] = signalsFor(strategy, candles).map((s) =>
-      s.kind === 'buy'
-        ? { time: s.time as UTCTimestamp, position: 'belowBar' as const, color: '#26a69a', shape: 'arrowUp' as const, text: 'AL' }
-        : { time: s.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: 'SAT' },
+    const markers: SeriesMarker<Time>[] = signalsFor(strategy, candles).map((sig) =>
+      sig.kind === 'buy'
+        ? { time: sig.time as UTCTimestamp, position: 'belowBar' as const, color: '#26a69a', shape: 'arrowUp' as const, text: 'AL' }
+        : { time: sig.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: 'SAT' },
     );
     m.setMarkers(markers);
+    const pos = buildPositionByName(strategy, candles);
+    const shade = new Float64Array(candles.length).fill(NaN);
+    if (pos) for (let i = 0; i < pos.length; i++) if (pos[i]) shade[i] = 1;
+    if (lod) lod.updateExtra(s.posShade, shade);
   }, [strategy, candles]);
 
   // Portfolio average-cost line on the price pane (Portföy sekmesi açıkken).
