@@ -376,22 +376,20 @@ button.ctl:disabled {
   color: var(--muted);
 }
 
-/* Returns & stats box (top-right of chart) */
-.statsbox {
-  position: absolute;
-  top: 8px;
-  right: 72px;
-  z-index: 5;
-  pointer-events: none;
-  text-align: right;
+/* Returns & stats — a compact strip under the symbol header (not over the chart) */
+.symstats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 16px;
+  padding: 5px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
-  line-height: 1.5;
   font-variant-numeric: tabular-nums;
-  background: rgba(14, 15, 19, 0.74);
-  backdrop-filter: blur(4px);
-  border: 1px solid #1c1f2a;
-  border-radius: 7px;
-  padding: 6px 10px;
+}
+.symstats > span {
+  white-space: nowrap;
 }
 
 /* Trade focus card (over the chart) */
@@ -2169,12 +2167,10 @@ button.ctl:disabled {
   .sh-name {
     display: none;
   }
-  .statsbox {
-    top: 6px;
-    right: 56px;
-    font-size: 10px;
-    line-height: 1.45;
-    padding: 4px 7px;
+  .symstats {
+    gap: 4px 12px;
+    padding: 4px 8px;
+    font-size: 11px;
   }
   .pane-legend {
     font-size: 10px;
@@ -2209,9 +2205,10 @@ button.ctl:disabled {
   }
 }
 
-/* Landscape phones (short): hide the symbol header to give the chart height */
+/* Landscape phones (short): hide the symbol header + stats to give chart height */
 @media (max-height: 540px) {
-  .symhead {
+  .symhead,
+  .symstats {
     display: none;
   }
 }

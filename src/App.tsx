@@ -440,27 +440,32 @@ export default function App() {
               </>
             )}
           </div>
+          {stats && (
+            <div className="symstats">
+              <span>
+                <span className="lg-muted">52H</span> {fp(stats.hi52)} / {fp(stats.lo52)}
+              </span>
+              <span>
+                <span className="lg-muted">1A</span> <span className={stats.r1m >= 0 ? 'up' : 'down'}>{pct(stats.r1m)}</span>
+              </span>
+              <span>
+                <span className="lg-muted">3A</span> <span className={stats.r3m >= 0 ? 'up' : 'down'}>{pct(stats.r3m)}</span>
+              </span>
+              <span>
+                <span className="lg-muted">1Y</span> <span className={stats.r1y >= 0 ? 'up' : 'down'}>{pct(stats.r1y)}</span>
+              </span>
+              <span title={`Geçmiş ${stats.years.toFixed(1)} yılın yıllık ortalama bileşik getirisi (CAGR)`}>
+                <span className="lg-muted">Yıllık</span> <span className={stats.cagr >= 0 ? 'up' : 'down'}>{pct(stats.cagr)}</span>
+              </span>
+              <span>
+                <span className="lg-muted">Max düşüş</span> <span className="down">-{stats.maxDD.toFixed(0)}%</span>
+              </span>
+              <span>
+                <span className="lg-muted">Ort.Hac</span> {fv(stats.avgVol)}
+              </span>
+            </div>
+          )}
           <div className="chart-wrap">
-            {stats && (
-              <div className="statsbox">
-                <div>
-                  <span className="lg-muted">52H</span> {fp(stats.hi52)} / {fp(stats.lo52)}
-                </div>
-                <div>
-                  <span className="lg-muted">1A</span> <span className={stats.r1m >= 0 ? 'up' : 'down'}>{pct(stats.r1m)}</span>{' · '}
-                  <span className="lg-muted">3A</span> <span className={stats.r3m >= 0 ? 'up' : 'down'}>{pct(stats.r3m)}</span>{' · '}
-                  <span className="lg-muted">1Y</span> <span className={stats.r1y >= 0 ? 'up' : 'down'}>{pct(stats.r1y)}</span>
-                </div>
-                <div title={`Geçmiş ${stats.years.toFixed(1)} yılın yıllık ortalama bileşik getirisi (CAGR)`}>
-                  <span className="lg-muted">Yıllık</span> <span className={stats.cagr >= 0 ? 'up' : 'down'}>{pct(stats.cagr)}</span>{' · '}
-                  <span className="lg-muted">Max düşüş</span> <span className="down">-{stats.maxDD.toFixed(0)}%</span>
-                </div>
-                <div>
-                  <span className="lg-muted">Ort.Hac</span> {fv(stats.avgVol)}
-                </div>
-              </div>
-            )}
-
             {reflectTrades && focusTrade && (
               <div className="tradecard">
                 <button className="tradecard-x" onClick={() => setFocusTrade(null)} title="Kapat">×</button>
