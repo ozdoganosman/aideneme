@@ -844,6 +844,65 @@ button.ctl:disabled {
   line-height: 1;
   padding: 0 4px;
 }
+.scr-saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.scr-savedchip {
+  display: inline-flex;
+  align-items: center;
+  background: #1f2430;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.scr-savedchip button {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.scr-savedchip button:hover {
+  color: #fff;
+}
+.scr-savedx {
+  color: var(--muted) !important;
+  border-left: 1px solid var(--border) !important;
+}
+.scr-saveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.scr-saveform input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+  width: 120px;
+}
+.scr-saveform input:focus {
+  border-color: var(--accent);
+}
+.scr-savebtn {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .scr-count {
   display: flex;
   align-items: center;

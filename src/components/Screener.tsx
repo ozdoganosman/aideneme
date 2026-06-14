@@ -82,11 +82,22 @@ export function Screener({ onClose, onSelect }: Props) {
   const [cmp, setCmp] = useState<'val' | 'field'>('val');
   const [fk2, setFk2] = useState<Key>('r3m');
   const [q, setQ] = useState('');
+  const [saved, setSaved] = useState<{ name: string; view: number; filters: Filter[] }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('borsaScreens') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [saveName, setSaveName] = useState('');
 
   useEffect(() => {
     fetchScreener().then(setData).catch(() => setData(null)).finally(() => setLoaded(true));
     fetchBistSpark().then(setSpark).catch(() => {});
   }, []);
+  useEffect(() => {
+    localStorage.setItem('borsaScreens', JSON.stringify(saved));
+  }, [saved]);
 
   const kind = COL(fk).kind;
 
@@ -141,6 +152,12 @@ export function Screener({ onClose, onSelect }: Props) {
   };
   const toggleSort = (k: Key) =>
     setSort((s) => (s.key === k ? { key: k, dir: (s.dir * -1) as 1 | -1 } : { key: k, dir: -1 }));
+  const saveScreen = () => {
+    const nm = saveName.trim();
+    if (!nm) return;
+    setSaved((s) => [...s.filter((x) => x.name !== nm), { name: nm, view, filters }]);
+    setSaveName('');
+  };
   const pick = (s: string) => {
     onSelect(s);
     onClose();
@@ -251,6 +268,45 @@ export function Screener({ onClose, onSelect }: Props) {
                       <button onClick={() => setFilters((fs) => fs.filter((_, idx) => idx !== i))}>×</button>
                     </span>
                   ))}
+                </div>
+              )}
+
+              {(saved.length > 0 || filters.length > 0) && (
+                <div className="scr-saved">
+                  <span className="lg-muted">💾 Taramalarım:</span>
+                  {saved.map((sc) => (
+                    <span key={sc.name} className="scr-savedchip">
+                      <button
+                        onClick={() => {
+                          setView(sc.view);
+                          setFilters(sc.filters);
+                        }}
+                        title="Bu taramayı yükle"
+                      >
+                        📁 {sc.name}
+                      </button>
+                      <button
+                        className="scr-savedx"
+                        onClick={() => setSaved((s) => s.filter((x) => x.name !== sc.name))}
+                        title="Sil"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {filters.length > 0 && (
+                    <span className="scr-saveform">
+                      <input
+                        placeholder="Tarama adı…"
+                        value={saveName}
+                        onChange={(e) => setSaveName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && saveScreen()}
+                      />
+                      <button className="scr-savebtn" onClick={saveScreen}>
+                        Kaydet
+                      </button>
+                    </span>
+                  )}
                 </div>
               )}
 
