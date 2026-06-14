@@ -42,6 +42,32 @@ function isNarrow(): boolean {
   return typeof window !== 'undefined' && (window.innerWidth < 760 || window.innerHeight < 540);
 }
 
+// Multiple named watchlists. Migrates the old single 'borsaWatch' list on first run.
+interface WatchList {
+  id: string;
+  name: string;
+  items: string[];
+}
+function loadLists(): { lists: WatchList[]; activeId: string } {
+  try {
+    const lists = JSON.parse(localStorage.getItem('borsaWatchLists') || 'null') as WatchList[] | null;
+    if (Array.isArray(lists) && lists.length) {
+      const saved = localStorage.getItem('borsaActiveList') || '';
+      return { lists, activeId: lists.some((l) => l.id === saved) ? saved : lists[0].id };
+    }
+  } catch {
+    /* fall through to migration */
+  }
+  let items = ['THYAO', 'GARAN', 'ASELS'];
+  try {
+    const old = JSON.parse(localStorage.getItem('borsaWatch') || 'null');
+    if (Array.isArray(old) && old.length) items = old;
+  } catch {
+    /* keep defaults */
+  }
+  return { lists: [{ id: 'default', name: 'Takip', items }], activeId: 'default' };
+}
+
 // Drag the bottom sheet down by its grab handle; release past a threshold closes.
 function dragSheet(e: RPointerEvent<HTMLElement>, close: () => void): void {
   const sheet = e.currentTarget.closest('.sidebar') as HTMLElement | null;
@@ -89,7 +115,14 @@ export default function App() {
   const [quotes, setQuotes] = useState<Quotes>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [spark, setSpark] = useState<Record<string, number[]>>({});
-  const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
+  const initLists = useMemo(() => loadLists(), []);
+  const [lists, setLists] = useState<WatchList[]>(initLists.lists);
+  const [activeListId, setActiveListId] = useState<string>(initLists.activeId);
+  const activeList = lists.find((l) => l.id === activeListId) ?? lists[0];
+  const watchlist = activeList ? activeList.items : [];
+  // Update the ACTIVE list's items (keeps every existing setWatchlist call site working).
+  const setWatchlist = (updater: string[] | ((w: string[]) => string[])) =>
+    setLists((ls) => ls.map((l) => (l.id === activeListId ? { ...l, items: typeof updater === 'function' ? updater(l.items) : updater } : l)));
   const [watchAdded, setWatchAdded] = useState<Record<string, { t: number; p: number }>>(() =>
     lsGet('borsaWatchAdded', {}),
   );
@@ -104,7 +137,8 @@ export default function App() {
   const firstRef = useRef(true);
   const lastKeyRef = useRef<string | null>(null);
 
-  useEffect(() => localStorage.setItem('borsaWatch', JSON.stringify(watchlist)), [watchlist]);
+  useEffect(() => localStorage.setItem('borsaWatchLists', JSON.stringify(lists)), [lists]);
+  useEffect(() => localStorage.setItem('borsaActiveList', activeListId), [activeListId]);
   useEffect(() => localStorage.setItem('borsaWatchAdded', JSON.stringify(watchAdded)), [watchAdded]);
   // Backfill the "tracked since" baseline (date + price) for any watched symbol
   // that has none yet (e.g. added before this feature) once its quote is known.
@@ -218,15 +252,40 @@ export default function App() {
   const toggleWatch = (s: string) => {
     if (watchlist.includes(s)) {
       setWatchlist((w) => w.filter((x) => x !== s));
-      setWatchAdded((m) => {
-        const n = { ...m };
-        delete n[s];
-        return n;
-      });
+      // Drop the "tracked since" baseline only if it isn't kept in another list.
+      const elsewhere = lists.some((l) => l.id !== activeListId && l.items.includes(s));
+      if (!elsewhere)
+        setWatchAdded((m) => {
+          const n = { ...m };
+          delete n[s];
+          return n;
+        });
     } else {
       setWatchlist((w) => [s, ...w]);
       setWatchAdded((m) => ({ ...m, [s]: { t: Math.floor(Date.now() / 1000), p: quotes[s]?.c ?? 0 } }));
     }
+  };
+
+  // ── Watchlist management ───────────────────────────────────────────────────
+  const addList = () => {
+    const name = (window.prompt('Yeni liste adı:', `Liste ${lists.length + 1}`) || '').trim();
+    if (!name) return;
+    const id = String(Date.now());
+    setLists((ls) => [...ls, { id, name, items: [] }]);
+    setActiveListId(id);
+  };
+  const renameList = (id: string) => {
+    const cur = lists.find((l) => l.id === id);
+    const name = (window.prompt('Liste adı:', cur?.name || '') || '').trim();
+    if (name) setLists((ls) => ls.map((l) => (l.id === id ? { ...l, name } : l)));
+  };
+  const deleteList = (id: string) => {
+    if (lists.length <= 1) return;
+    const cur = lists.find((l) => l.id === id);
+    if (!window.confirm(`"${cur?.name}" listesi silinsin mi?`)) return;
+    const next = lists.filter((l) => l.id !== id);
+    setLists(next);
+    if (activeListId === id) setActiveListId(next[0].id);
   };
 
   useEffect(() => {
@@ -528,6 +587,35 @@ export default function App() {
         {showRight ? (
           <aside className="sidebar right">
             <div className="sheet-grab" onPointerDown={(e) => dragSheet(e, () => setShowRight(false))} />
+            <div className="wl-tabs" role="tablist">
+              {lists.map((l) => (
+                <button
+                  key={l.id}
+                  className={'wl-tab' + (l.id === activeListId ? ' active' : '')}
+                  onClick={() => setActiveListId(l.id)}
+                  onDoubleClick={() => renameList(l.id)}
+                  title="Tıkla: seç · çift tıkla: yeniden adlandır"
+                >
+                  {l.name} <span className="wl-tab-n">{l.items.length}</span>
+                  {l.id === activeListId && lists.length > 1 && (
+                    <span
+                      className="wl-tab-x"
+                      role="button"
+                      title="Listeyi sil"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteList(l.id);
+                      }}
+                    >
+                      ×
+                    </span>
+                  )}
+                </button>
+              ))}
+              <button className="wl-tab wl-tab-add" onClick={addList} title="Yeni liste">
+                ＋
+              </button>
+            </div>
             <Watchlist
               items={watchlist}
               quotes={quotes}

@@ -1792,6 +1792,56 @@ button.ctl:disabled {
   color: var(--down);
 }
 
+/* Multiple watchlists: tab strip */
+.wl-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px 0;
+}
+.wl-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #161922;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 7px 7px 0 0;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wl-tab.active {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.wl-tab-n {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 0 5px;
+}
+.wl-tab-x {
+  margin-left: 2px;
+  color: var(--muted);
+  font-weight: 700;
+}
+.wl-tab-x:hover {
+  color: var(--down);
+}
+.wl-tab-add {
+  color: var(--accent);
+  max-width: none;
+}
+
 .wl-head {
   display: flex;
   align-items: center;
