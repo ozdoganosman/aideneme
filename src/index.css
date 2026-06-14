@@ -577,6 +577,15 @@ button.ctl:disabled {
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
+.bt-tag {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  margin-left: 4px;
+  vertical-align: middle;
+}
 .bt-barwrap {
   height: 6px;
   margin: 4px 0 0 26px;
@@ -826,6 +835,41 @@ button.ctl:disabled {
   letter-spacing: 0.6px;
   color: var(--muted);
   margin-bottom: 6px;
+}
+
+.panel-title.clickable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 6px;
+}
+.panel.collapsed .panel-title.clickable {
+  margin-bottom: 0;
+}
+.panel-title.clickable:hover {
+  color: var(--text);
+}
+.panel-caret {
+  font-size: 9px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+  color: var(--muted);
+}
+.panel.collapsed .panel-caret {
+  transform: rotate(-90deg);
+}
+.panel-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  background: #1a1d27;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 1px 7px;
+  letter-spacing: 0;
 }
 
 .panel-empty {

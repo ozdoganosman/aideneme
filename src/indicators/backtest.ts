@@ -3,11 +3,13 @@ import { emaArr, rollingHighest, rollingLowest } from './calc';
 
 export interface StrategyResult {
   name: string;
-  retPct: number;
+  retPct: number; // total return %
+  annPct: number; // annualized return % (period-normalized, ~per-day compounded)
   trades: number;
   winRate: number;
   maxDD: number;
   holdPct: number;
+  holdAnn: number; // buy & hold annualized %
 }
 
 export interface StrategyDef {
@@ -138,7 +140,14 @@ function speed(len: number): string {
       : ' (Orta hızlı.)';
 }
 
-function simulate(close: Float64Array, long: Uint8Array, holdPct: number, name: string): StrategyResult {
+function simulate(
+  close: Float64Array,
+  long: Uint8Array,
+  holdPct: number,
+  holdAnn: number,
+  name: string,
+  years: number,
+): StrategyResult {
   const n = close.length;
   let equity = 1;
   let peak = 1;
@@ -165,23 +174,32 @@ function simulate(close: Float64Array, long: Uint8Array, holdPct: number, name: 
     trades++;
     if (close[n - 1] > entry) wins++;
   }
+  // Annualized (compound) return — normalizes by how long the trade was held so a
+  // huge total that took 20 years can be compared fairly to a quick winner.
+  const annPct = years > 0 && equity > 0 ? (Math.pow(equity, 1 / years) - 1) * 100 : 0;
   return {
     name,
     retPct: (equity - 1) * 100,
+    annPct,
     trades,
     winRate: trades ? (wins / trades) * 100 : 0,
     maxDD: maxDD * 100,
     holdPct,
+    holdAnn,
   };
 }
 
-export function optimize(c: Candles): { results: StrategyResult[]; holdPct: number } {
+export function optimize(c: Candles): { results: StrategyResult[]; holdPct: number; holdAnn: number } {
   const close = c.close;
   const n = c.length;
   const holdPct = n > 1 ? (close[n - 1] / close[0] - 1) * 100 : 0;
-  const out = strategyList().map((d) => simulate(close, d.build(c), holdPct, d.name));
-  out.sort((x, y) => y.retPct - x.retPct);
-  return { results: out, holdPct };
+  // Real calendar span (time is unix seconds) — works for daily/weekly/monthly.
+  const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
+  const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
+  const out = strategyList().map((d) => simulate(close, d.build(c), holdPct, holdAnn, d.name, years));
+  // Rank by annualized (per-day-normalized) return, not raw total.
+  out.sort((x, y) => y.annPct - x.annPct);
+  return { results: out, holdPct, holdAnn };
 }
 
 export function buildPositionByName(name: string, c: Candles): Uint8Array | null {

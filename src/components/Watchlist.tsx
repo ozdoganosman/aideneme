@@ -1,3 +1,4 @@
+import { usePanelCollapse } from './usePanelCollapse';
 import { Quotes } from '../data/bistStatic';
 
 interface Props {
@@ -10,11 +11,18 @@ interface Props {
 }
 
 export function Watchlist({ items, quotes, spark, active, onSelect, onRemove }: Props) {
+  const [collapsed, toggle] = usePanelCollapse('wl_collapsed');
   return (
-    <div className="panel">
-      <div className="panel-title">İzleme Listesi</div>
-      {items.length === 0 && <div className="panel-empty">Üstteki ★ ile hisse ekle</div>}
-      {items.map((sym) => {
+    <div className={'panel' + (collapsed ? ' collapsed' : '')}>
+      <div className="panel-title clickable" onClick={toggle} title={collapsed ? 'Aç' : 'Kapat'}>
+        <span className="panel-caret">▾</span>
+        <span>İzleme Listesi</span>
+        {items.length > 0 && <span className="panel-count">{items.length}</span>}
+      </div>
+      {collapsed ? null : (
+        <>
+          {items.length === 0 && <div className="panel-empty">Üstteki ★ ile hisse ekle</div>}
+          {items.map((sym) => {
         const q = quotes[sym];
         const pct = q && q.pc ? ((q.c - q.pc) / q.pc) * 100 : 0;
         const up = pct >= 0;
@@ -42,7 +50,9 @@ export function Watchlist({ items, quotes, spark, active, onSelect, onRemove }: 
             </button>
           </div>
         );
-      })}
+          })}
+        </>
+      )}
     </div>
   );
 }

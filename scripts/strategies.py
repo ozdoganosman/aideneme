@@ -35,7 +35,8 @@ def backtest(close: np.ndarray, pos: np.ndarray):
     rets = close[1:] / close[:-1]
     held = np.where(pos[:-1] > 0, rets, 1.0)
     eq = np.cumprod(held)
-    ret = (eq[-1] - 1) * 100.0
+    mult = float(eq[-1])  # final equity multiple (1.0 = flat)
+    ret = (mult - 1) * 100.0
     peak = np.maximum.accumulate(eq)
     dd = float(((peak - eq) / peak).max() * 100.0)
 
@@ -51,7 +52,7 @@ def backtest(close: np.ndarray, pos: np.ndarray):
         if close[x] > close[e]:
             wins += 1
     win = (wins / trades * 100.0) if trades else 0.0
-    return ret, trades, win, dd
+    return ret, trades, win, dd, mult
 
 
 def strategies_for(close, high, low):
@@ -98,7 +99,7 @@ def main() -> int:
     if os.environ.get("FORCE_ALL") != "1" and sj.exists():
         try:
             cur = json.load(open(sj, encoding="utf-8"))
-            if cur.get("results") and "avgHold" in cur["results"][0]:
+            if cur.get("results") and "avgAnn" in cur["results"][0]:
                 print("[strategies] güncel, atlanıyor")
                 return 0
         except Exception:  # noqa
@@ -106,6 +107,7 @@ def main() -> int:
 
     agg: dict[str, dict] = {}
     holds = []
+    hold_anns = []
     nsym = 0
 
     for fp in sorted(glob.glob(str(OUT / "*.json"))):
@@ -123,17 +125,33 @@ def main() -> int:
         if not np.all(np.isfinite(close)) or close.min() <= 0:
             continue
 
+        nbars = len(close)
+        # Calendar span (t is unix seconds); fall back to daily-bar count. Floor at
+        # 0.75y so a short-history rocket can't explode the annualized figure.
+        t0 = recs[0].get("t")
+        t1 = recs[-1].get("t")
+        if t0 and t1 and t1 > t0:
+            years = (t1 - t0) / (365.25 * 86400.0)
+        else:
+            years = nbars / 252.0
+        years = max(years, 0.75)
+
         hold = (close[-1] / close[0] - 1) * 100.0
         holds.append(hold)
+        hold_anns.append(((close[-1] / close[0]) ** (1.0 / years) - 1) * 100.0)
         nsym += 1
-        nbars = len(close)
         for sname, pos in strategies_for(close, high, low).items():
             bt = backtest(close, pos)
             if not bt:
                 continue
-            ret, trades, win, dd = bt
-            a = agg.setdefault(sname, {"rets": [], "wins": [], "dds": [], "holds": [], "trd": [], "beats": 0, "n": 0})
+            ret, trades, win, dd, mult = bt
+            ann = (mult ** (1.0 / years) - 1) * 100.0 if mult > 0 else -100.0
+            a = agg.setdefault(
+                sname,
+                {"rets": [], "anns": [], "wins": [], "dds": [], "holds": [], "trd": [], "beats": 0, "n": 0},
+            )
             a["rets"].append(ret)
+            a["anns"].append(ann)
             a["wins"].append(win)
             a["dds"].append(dd)
             a["holds"].append(nbars / trades if trades > 0 else nbars)  # avg holding (bars)
@@ -145,10 +163,13 @@ def main() -> int:
     results = []
     for sname, a in agg.items():
         rets = np.array(a["rets"])
+        anns = np.array(a["anns"])
         results.append({
             "name": sname,
             "avgRet": round(float(rets.mean()), 1),
             "medRet": round(float(np.median(rets)), 1),
+            "avgAnn": round(float(anns.mean()), 1),
+            "medAnn": round(float(np.median(anns)), 1),
             "beatPct": round(a["beats"] / a["n"] * 100.0, 1),
             "avgWin": round(float(np.mean(a["wins"])), 1),
             "avgDD": round(float(np.mean(a["dds"])), 1),
@@ -156,7 +177,8 @@ def main() -> int:
             "avgTrades": round(float(np.mean(a["trd"])), 0),
             "n": a["n"],
         })
-    results.sort(key=lambda x: x["avgRet"], reverse=True)
+    # Rank by annualized (per-day-normalized) return, not raw total.
+    results.sort(key=lambda x: x["avgAnn"], reverse=True)
 
     OUT.mkdir(parents=True, exist_ok=True)
     with open(OUT / "strategies.json", "w", encoding="utf-8") as f:
@@ -164,6 +186,7 @@ def main() -> int:
             "generated": int(time.time()),
             "nSymbols": nsym,
             "holdAvg": round(float(np.mean(holds)), 1) if holds else 0,
+            "holdAnnAvg": round(float(np.mean(hold_anns)), 1) if hold_anns else 0,
             "results": results,
         }, f, separators=(",", ":"))
     print(f"[strategies] {nsym} hisse, {len(results)} strateji -> strategies.json")

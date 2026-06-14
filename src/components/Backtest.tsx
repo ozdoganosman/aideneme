@@ -14,7 +14,7 @@ interface Props {
 const MIN_HOLD = 25;
 
 export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
-  const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number } | null>(null);
+  const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number; holdAnn: number } | null>(null);
   const [market, setMarket] = useState<StrategiesFile | null>(null);
   const [marketLoaded, setMarketLoaded] = useState(false);
   const [tab, setTab] = useState<'market' | 'symbol'>('market');
@@ -70,12 +70,18 @@ export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
                 Sayılar gün sayısıdır: küçük = hızlı/çok işlem (kısa vadeli), büyük = yavaş/az işlem (uzun vadeli). Her
                 stratejinin altında mantığı yazıyor.
               </p>
+              <p className="lg-muted">
+                <b>Yıllık / gün başına:</b> Sıralama artık toplam getiriye değil, <b>yıllık ortalama (gün başına)
+                kâra</b> göre — 20 yılda biriken dev bir toplam, hızlı bir kazançla adil kıyaslansın diye. Böylece çoğu
+                stratejinin aslında <b>Al-Tut</b>'u zor geçtiği görülür.
+              </p>
             </div>
           </details>
 
           {tab === 'market' ? renderMarket(market, marketLoaded, pick) : renderSymbol(data, pick, candles.length)}
           <div className="bt-hint">
-            Çubuk = getiri. Bir stratejiye <b>tıkla</b> → grafikte AL/SAT noktaları işaretlenir.
+            Çubuk = <b>yıllık getiri</b> (gün başına kâra göre normalize — uzun sürede biriken büyük toplamlar artık
+            haksız öne çıkmıyor). Bir stratejiye <b>tıkla</b> → grafikte AL/SAT noktaları işaretlenir.
             <br />⚠️ Geçmişe dönük (in-sample); geçmiş performans geleceği garanti etmez.
           </div>
         </div>
@@ -93,24 +99,41 @@ function renderMarket(
   if (!market || market.results.length === 0)
     return <div className="bt-note">Piyasa geneli sonuç henüz hazır değil (CI bir sonraki dağıtımda üretecek).</div>;
 
+  const hasAnn = market.results.some((r) => r.avgAnn != null);
+  const key = (r: StrategiesFile['results'][number]) => (hasAnn ? r.avgAnn ?? -999 : r.avgRet);
   const filtered = market.results.filter((r) => (r.avgHold ?? 999) >= MIN_HOLD);
-  const list = filtered.length ? filtered : market.results;
+  const list = (filtered.length ? filtered : market.results).slice().sort((a, b) => key(b) - key(a));
   const rows = list.slice(0, 12);
-  const max = Math.max(...rows.map((r) => Math.abs(r.avgRet)), 1);
+  const max = Math.max(...rows.map((r) => Math.abs(key(r))), 1);
   const w = list[0];
+  const holdAnn = market.holdAnnAvg;
 
   return (
     <>
       <p className="bt-intro">
-        ~{market.nSymbols} BIST hissesinin tümünde geçmiş günlük veriyle test edildi; <b>ortalama getiri</b>ye göre
-        sıralı (kısa vadeli / çok işlem yapanlar hariç). Karşılaştırma — <b>Al-Tut</b> ortalaması:{' '}
-        <b className="up">{fmtX(market.holdAvg)}</b>
+        ~{market.nSymbols} BIST hissesinin tümünde geçmiş günlük veriyle test edildi;{' '}
+        {hasAnn ? <b>yıllık (gün başına) getiri</b> : <b>ortalama getiri</b>}ye göre sıralı (kısa vadeli / çok işlem
+        yapanlar hariç). Karşılaştırma — <b>Al-Tut</b>{' '}
+        {hasAnn && holdAnn != null ? (
+          <>
+            yıllık ort.: <b className="up">{fmtPct(holdAnn)}</b>
+          </>
+        ) : (
+          <>
+            ort.: <b className="up">{fmtX(market.holdAvg)}</b>
+          </>
+        )}
       </p>
 
       <Winner
         name={w.name}
-        big={fmtX(w.avgRet)}
-        stats={`Medyan ${fmtX(w.medRet)} · Hisselerin %${w.beatPct.toFixed(0)}'inde Al-Tut'u geçti · Kazanma %${w.avgWin.toFixed(0)}`}
+        big={hasAnn ? fmtPct(w.avgAnn!) : fmtX(w.avgRet)}
+        tag={hasAnn ? 'yıllık' : ''}
+        stats={
+          hasAnn
+            ? `gün başına ${perDay(w.avgAnn!)} · toplam ${fmtX(w.avgRet)} · Al-Tut'u %${w.beatPct.toFixed(0)} geçti · Kazanma %${w.avgWin.toFixed(0)}`
+            : `Medyan ${fmtX(w.medRet)} · Hisselerin %${w.beatPct.toFixed(0)}'inde Al-Tut'u geçti · Kazanma %${w.avgWin.toFixed(0)}`
+        }
         onClick={() => pick(w.name)}
       />
 
@@ -120,10 +143,15 @@ function renderMarket(
             key={r.name}
             rank={i + 1}
             name={r.name}
-            value={r.avgRet}
+            value={hasAnn ? r.avgAnn ?? 0 : r.avgRet}
             max={max}
-            label={fmtX(r.avgRet)}
-            sub={`Al-Tut'u geçme %${r.beatPct.toFixed(0)} · Kazanma %${r.avgWin.toFixed(0)} · DD -${r.avgDD.toFixed(0)}%`}
+            label={hasAnn ? fmtPct(r.avgAnn!) : fmtX(r.avgRet)}
+            tag={hasAnn ? 'yıl' : ''}
+            sub={
+              hasAnn
+                ? `gün başına ${perDay(r.avgAnn!)} · toplam ${fmtX(r.avgRet)} · Al-Tut %${r.beatPct.toFixed(0)} · DD -${r.avgDD.toFixed(0)}%`
+                : `Al-Tut'u geçme %${r.beatPct.toFixed(0)} · Kazanma %${r.avgWin.toFixed(0)} · DD -${r.avgDD.toFixed(0)}%`
+            }
             onClick={() => pick(r.name)}
           />
         ))}
@@ -133,7 +161,7 @@ function renderMarket(
 }
 
 function renderSymbol(
-  data: { results: StrategyResult[]; holdPct: number } | null,
+  data: { results: StrategyResult[]; holdPct: number; holdAnn: number } | null,
   pick: (n: string) => void,
   nBars: number,
 ) {
@@ -147,20 +175,22 @@ function renderSymbol(
   const filtered = data.results.filter((r) => r.trades > 0 && nBars / r.trades >= MIN_HOLD);
   const list = filtered.length ? filtered : data.results;
   const rows = list.slice(0, 12);
-  const max = Math.max(...rows.map((r) => Math.abs(r.retPct)), Math.abs(data.holdPct), 1);
+  const max = Math.max(...rows.map((r) => Math.abs(r.annPct)), Math.abs(data.holdAnn), 1);
   const w = list[0];
 
   return (
     <>
       <p className="bt-intro">
-        Bu hissede her strateji geçmişte otomatik uygulanırsa ne kazandırırdı (kısa vadeli / çok işlem yapanlar hariç).
-        Karşılaştırma — <b>Al-Tut</b>: <b className={data.holdPct >= 0 ? 'up' : 'down'}>{fmtX(data.holdPct)}</b>
+        Bu hissede her strateji geçmişte otomatik uygulanırsa ne kazandırırdı — <b>yıllık (gün başına)</b> getiriye göre
+        sıralı (kısa vadeli / çok işlem yapanlar hariç). Karşılaştırma — <b>Al-Tut</b> yıllık:{' '}
+        <b className={data.holdAnn >= 0 ? 'up' : 'down'}>{fmtPct(data.holdAnn)}</b>
       </p>
 
       <Winner
         name={w.name}
-        big={fmtX(w.retPct)}
-        stats={`Al-Tut'a göre ${fmtX(w.retPct - data.holdPct)} · ${w.trades} işlem · Kazanma %${w.winRate.toFixed(0)} · DD -${w.maxDD.toFixed(0)}%`}
+        big={fmtPct(w.annPct)}
+        tag="yıllık"
+        stats={`gün başına ${perDay(w.annPct)} · toplam ${fmtX(w.retPct)} · Al-Tut'a ${fmtPct(w.annPct - data.holdAnn)} · ${w.trades} işlem · Kazanma %${w.winRate.toFixed(0)}`}
         onClick={() => pick(w.name)}
       />
 
@@ -170,10 +200,11 @@ function renderSymbol(
             key={r.name}
             rank={i + 1}
             name={r.name}
-            value={r.retPct}
+            value={r.annPct}
             max={max}
-            label={fmtX(r.retPct)}
-            sub={`Al-Tut'a ${fmtX(r.retPct - data.holdPct)} · ${r.trades} işlem · Kazanma %${r.winRate.toFixed(0)} · DD -${r.maxDD.toFixed(0)}%`}
+            label={fmtPct(r.annPct)}
+            tag="yıl"
+            sub={`gün başına ${perDay(r.annPct)} · toplam ${fmtX(r.retPct)} · Al-Tut'a ${fmtPct(r.annPct - data.holdAnn)} · ${r.trades} işlem · DD -${r.maxDD.toFixed(0)}%`}
             onClick={() => pick(r.name)}
           />
         ))}
@@ -182,7 +213,19 @@ function renderSymbol(
   );
 }
 
-function Winner({ name, big, stats, onClick }: { name: string; big: string; stats: string; onClick: () => void }) {
+function Winner({
+  name,
+  big,
+  tag,
+  stats,
+  onClick,
+}: {
+  name: string;
+  big: string;
+  tag?: string;
+  stats: string;
+  onClick: () => void;
+}) {
   return (
     <div className="bt-winner clickable" onClick={onClick} title={explainStrategy(name)}>
       <div className="bt-winner-l">
@@ -190,7 +233,10 @@ function Winner({ name, big, stats, onClick }: { name: string; big: string; stat
         <div className="bt-winner-name">{name}</div>
         <div className="bt-winner-stats">{stats}</div>
       </div>
-      <div className="bt-winner-big up">{big}</div>
+      <div className="bt-winner-big up">
+        {big}
+        {tag && <span className="bt-tag">{tag}</span>}
+      </div>
     </div>
   );
 }
@@ -201,6 +247,7 @@ function Row({
   value,
   max,
   label,
+  tag,
   sub,
   onClick,
 }: {
@@ -209,6 +256,7 @@ function Row({
   value: number;
   max: number;
   label: string;
+  tag?: string;
   sub: string;
   onClick: () => void;
 }) {
@@ -218,7 +266,10 @@ function Row({
       <div className="bt-srow-head">
         <span className="bt-rank">{rank}</span>
         <span className="bt-srow-name">{name}</span>
-        <span className={'bt-srow-val ' + (value >= 0 ? 'up' : 'down')}>{label}</span>
+        <span className={'bt-srow-val ' + (value >= 0 ? 'up' : 'down')}>
+          {label}
+          {tag && <span className="bt-tag">{tag}</span>}
+        </span>
       </div>
       <div className="bt-barwrap">
         <div className={'bt-bar ' + (value >= 0 ? 'pos' : 'neg')} style={{ width: width + '%' }} />
@@ -237,4 +288,17 @@ function fmtX(r: number): string {
     return (m >= 100 ? m.toFixed(0) : m.toFixed(1)) + 'x';
   }
   return (r >= 0 ? '+' : '') + Math.round(r) + '%';
+}
+
+// Annualized return as a plain percent (always sensible-sized, no x).
+function fmtPct(r: number): string {
+  if (!isFinite(r)) return '—';
+  return (r >= 0 ? '+' : '') + (Math.abs(r) < 10 ? r.toFixed(1) : Math.round(r).toString()) + '%';
+}
+
+// Daily-compounded equivalent of an annualized return ("gün başına" kâr).
+function perDay(ann: number): string {
+  if (!isFinite(ann) || ann <= -100) return '—';
+  const d = (Math.pow(1 + ann / 100, 1 / 365.25) - 1) * 100;
+  return (d >= 0 ? '+' : '') + d.toFixed(3) + '%';
 }

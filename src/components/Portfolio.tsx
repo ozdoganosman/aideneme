@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { usePanelCollapse } from './usePanelCollapse';
 import { Quotes } from '../data/bistStatic';
 
 export interface Holding {
@@ -22,6 +23,7 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
   const [cost, setCost] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [collapsed, toggle] = usePanelCollapse('pf_collapsed');
 
   const matches = open && sym ? rank(symbols, sym.toUpperCase()) : [];
 
@@ -62,9 +64,15 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
   };
 
   return (
-    <div className="panel">
-      <div className="panel-title">Portföy {holdings.length > 0 && `· ${holdings.length}`}</div>
+    <div className={'panel' + (collapsed ? ' collapsed' : '')}>
+      <div className="panel-title clickable" onClick={toggle} title={collapsed ? 'Aç' : 'Kapat'}>
+        <span className="panel-caret">▾</span>
+        <span>Portföy</span>
+        {holdings.length > 0 && <span className="panel-count">{holdings.length}</span>}
+      </div>
 
+      {collapsed ? null : (
+        <>
       <div className="pf-form">
         <div className="ac">
           <input
@@ -192,6 +200,8 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
             </b>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

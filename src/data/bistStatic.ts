@@ -65,6 +65,8 @@ export interface StrategyAgg {
   name: string;
   avgRet: number;
   medRet: number;
+  avgAnn?: number; // average annualized (per-day-normalized) return %
+  medAnn?: number; // median annualized return %
   beatPct: number;
   avgWin: number;
   avgDD: number;
@@ -76,6 +78,7 @@ export interface StrategiesFile {
   generated: number;
   nSymbols: number;
   holdAvg: number;
+  holdAnnAvg?: number; // average annualized buy & hold %
   results: StrategyAgg[];
 }
 
