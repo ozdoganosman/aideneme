@@ -28,7 +28,12 @@ const COLS: ColDef[] = [
   { key: 'ch', label: 'Günlük %', kind: 'pct' },
   { key: 'rsi', label: 'RSI', kind: 'num' },
   { key: 'wr', label: 'Williams %R', kind: 'num' },
-  { key: 'wre', label: '%R EMA', kind: 'num' },
+  { key: 'wre', label: '%R EMA (260)', kind: 'num' },
+  { key: 'wre2', label: '%R EMA (120)', kind: 'num' },
+  { key: 'adx', label: 'ADX (28)', kind: 'num' },
+  { key: 'roc', label: 'Momentum %', kind: 'pct' },
+  { key: 'dcp', label: 'Donchian konum %', kind: 'num' },
+  { key: 'bbp', label: 'Bollinger %b', kind: 'num' },
   { key: 'mc', label: 'MACD (NC)', kind: 'dec' },
   { key: 'sg', label: 'Signal (NC)', kind: 'dec' },
   { key: 'em', label: 'eMACD (NC)', kind: 'dec' },
@@ -53,6 +58,7 @@ const VIEWS: { label: string; cols: Key[] }[] = [
   { label: 'Genel', cols: ['p', 'ch', 'rsi', 'r1y', 'vol', 'e200'] },
   { label: 'Williams Paşa (%R)', cols: ['p', 'wr', 'wre', 'rsi', 'e200', 'st'] },
   { label: 'NizamiCedid (MACD)', cols: ['p', 'mc', 'sg', 'em', 'dl'] },
+  { label: 'ADX / Momentum', cols: ['p', 'adx', 'roc', 'dcp', 'bbp'] },
   { label: 'Trend / EMA', cols: ['p', 'e50', 'e200', 'gc', 'st'] },
   { label: 'MACD & momentum', cols: ['p', 'mu', 'ch', 'r3m', 'r1y'] },
   { label: 'Getiri', cols: ['p', 'r1m', 'r3m', 'r1y'] },
@@ -72,6 +78,8 @@ const PRESETS: { label: string; fs: Filter[] }[] = [
   { label: '🎯 52H zirveye yakın', fs: [{ key: 'e200', op: 'is', val: 1 }, { key: 'fh', op: 'gte', val: -5 }] },
   { label: '🛡️ Supertrend AL', fs: [{ key: 'st', op: 'is', val: 1 }, { key: 'e200', op: 'is', val: 1 }] },
   { label: '💪 %R > 50', fs: [{ key: 'wr', op: 'gt', val: 50 }, { key: 'e200', op: 'is', val: 1 }] },
+  { label: '🧭 ADX > 25 (güçlü trend)', fs: [{ key: 'adx', op: 'gt', val: 25 }] },
+  { label: '🚀 Momentum > 0 + Trend', fs: [{ key: 'roc', op: 'gt', val: 0 }, { key: 'e200', op: 'is', val: 1 }] },
   { label: '🟢 RSI < 35', fs: [{ key: 'rsi', op: 'lt', val: 35 }] },
   { label: '🔴 RSI > 70', fs: [{ key: 'rsi', op: 'gt', val: 70 }] },
 ];
@@ -447,10 +455,11 @@ function opLabel(f: Filter): string {
 }
 
 function cell(it: ScreenerItem, c: ColDef) {
-  const v = it[c.key] as number;
+  const v = it[c.key] as number | undefined;
+  if (c.kind === 'bool') return v ? <span className="scr-pill up">✓</span> : <span className="scr-pill mut">–</span>;
+  if (v == null || !Number.isFinite(v)) return <span className="lg-muted">—</span>;
   if (c.key === 'rsi') return gauge(v, 'rsi');
   if (c.key === 'wr') return gauge(v, 'wr');
-  if (c.kind === 'bool') return v ? <span className="scr-pill up">✓</span> : <span className="scr-pill mut">–</span>;
   if (c.kind === 'dec') return <span className={v >= 0 ? 'up' : 'down'}>{v.toFixed(3)}</span>;
   if (c.kind === 'price') return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (c.key === 'av') return fv(v);

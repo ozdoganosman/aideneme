@@ -142,6 +142,11 @@ export interface ScreenerItem {
   dd: number; // max drawdown %
   av: number; // avg volume (20d)
   yr: number; // years of history
+  adx?: number; // ADX (28) trend strength
+  wre2?: number; // Williams %R EMA (120)
+  roc?: number; // Momentum / ROC (260) %
+  bbp?: number; // Bollinger %b (0 = lower band, 100 = upper)
+  dcp?: number; // Donchian (260) position (0 = 52w low, 100 = 52w high)
 }
 export interface ScreenerFile {
   generated: number;

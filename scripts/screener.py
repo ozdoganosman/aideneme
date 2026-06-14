@@ -24,7 +24,45 @@ from strategies import ema, rsi_arr, supertrend_pos  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "bist"
 SKIP = {"symbols.json", "quotes.json", "strategies.json", "names.json", "spark.json", "screener.json"}
-SCHEMA_VERSION = 2  # bump when item fields change to force a recompute
+SCHEMA_VERSION = 3  # bump when item fields change to force a recompute
+
+
+def adx_wilder(high, low, close, length: int):
+    """Wilder ADX (0–100). Mirrors the in-app indicators/calc.ts implementation."""
+    n = len(close)
+    out = np.full(n, np.nan)
+    if n < length + 1:
+        return out
+    tr = np.zeros(n)
+    pdm = np.zeros(n)
+    ndm = np.zeros(n)
+    for i in range(1, n):
+        up = high[i] - high[i - 1]
+        dn = low[i - 1] - low[i]
+        pdm[i] = up if (up > dn and up > 0) else 0.0
+        ndm[i] = dn if (dn > up and dn > 0) else 0.0
+        tr[i] = max(high[i] - low[i], abs(high[i] - close[i - 1]), abs(low[i] - close[i - 1]))
+    s_tr = tr[1:length + 1].sum()
+    s_pdm = pdm[1:length + 1].sum()
+    s_ndm = ndm[1:length + 1].sum()
+    dx = np.full(n, np.nan)
+    for i in range(length + 1, n):
+        s_tr = s_tr - s_tr / length + tr[i]
+        s_pdm = s_pdm - s_pdm / length + pdm[i]
+        s_ndm = s_ndm - s_ndm / length + ndm[i]
+        pdi = 100 * s_pdm / s_tr if s_tr else 0.0
+        ndi = 100 * s_ndm / s_tr if s_tr else 0.0
+        ds = pdi + ndi
+        dx[i] = 100 * abs(pdi - ndi) / ds if ds else 0.0
+    first = length + 1
+    if first + length > n:
+        return out
+    adx = float(np.nanmean(dx[first:first + length]))
+    out[first + length - 1] = adx
+    for i in range(first + length, n):
+        adx = (adx * (length - 1) + dx[i]) / length
+        out[i] = adx
+    return out
 
 
 def load_names() -> dict:
@@ -135,6 +173,23 @@ def main() -> int:
         av = float(volu[-20:].mean()) if n >= 1 else 0.0
         ch = (last / prev - 1) * 100 if prev > 0 else 0.0
 
+        # ── New long-term indicators (match the chart, 260 paradigm) ───────────
+        adx_arr = adx_wilder(high, low, close, 28)
+        adx_last = float(adx_arr[-1]) if adx_arr.size and np.isfinite(adx_arr[-1]) else None
+        wre2_arr = ema(pr, 120)  # %R EMA (120)
+        wre2 = float(wre2_arr[-1]) if np.isfinite(wre2_arr[-1]) else wr
+        roc = float((last / close[n - 261] - 1) * 100) if n > 260 and close[n - 261] > 0 else None
+        # Bollinger %b (260, 2σ): 0 = lower band, 100 = upper band
+        bbp = None
+        if n >= 260:
+            m260 = float(close[-260:].mean())
+            sd260 = float(close[-260:].std(ddof=0))
+            if sd260 > 0:
+                bbp = float((last - (m260 - 2 * sd260)) / (4 * sd260) * 100)
+        # Donchian(260) position: 0 = 52w low, 100 = 52w high (reuses hh/ll)
+        rng = hh[-1] - ll[-1]
+        dcp = float((last - ll[-1]) / rng * 100) if rng > 0 else None
+
         items.append({
             "s": sym,
             "n": names.get(sym, ""),
@@ -160,6 +215,11 @@ def main() -> int:
             "dd": round(dd),
             "av": round(av),
             "yr": round(years, 1),
+            "adx": (round(adx_last) if adx_last is not None else None),
+            "wre2": round(wre2),
+            "roc": (round(roc) if roc is not None else None),
+            "bbp": (round(bbp) if bbp is not None else None),
+            "dcp": (round(dcp) if dcp is not None else None),
         })
 
     OUT.mkdir(parents=True, exist_ok=True)
