@@ -64,6 +64,8 @@ type ScanMetrics = Omit<Combo, 'sym' | 'strat'>;
 const candlesMem = new Map<string, Candles>();
 const metricsMem = new Map<string, Map<string, ScanMetrics | null>>(); // sym → ruleHash → metrics|null(=no trades)
 let memHydrated = false;
+let memDataVer = 0; // screener "generated" stamp the cache was computed against
+const DATAVER_KEY = 'bt-scan-dataver';
 
 // Cache key for a strategy — includes the global MACD periods so the En İyi
 // cache invalidates when the user changes them (MACD uses the chart periods).
@@ -91,10 +93,24 @@ function hydrateScanCache(): void {
   if (memHydrated) return;
   memHydrated = true;
   try {
+    memDataVer = Number(localStorage.getItem(DATAVER_KEY)) || 0;
     const obj = JSON.parse(localStorage.getItem(METRICS_KEY) || '{}') as Record<string, Record<string, ScanMetrics | null>>;
     for (const [sym, cell] of Object.entries(obj)) metricsMem.set(sym, new Map(Object.entries(cell)));
   } catch {
     /* ignore corrupt cache */
+  }
+}
+// Drop all cached metrics when the underlying data advanced (new trading day):
+// otherwise a fully-cached re-scan would serve yesterday's numbers.
+function invalidateIfStale(gen: number): void {
+  if (!gen || gen === memDataVer) return;
+  metricsMem.clear();
+  memDataVer = gen;
+  try {
+    localStorage.setItem(DATAVER_KEY, String(gen));
+    localStorage.removeItem(METRICS_KEY);
+  } catch {
+    /* ignore */
   }
 }
 function persistScanCache(keepHashes: Set<string>, keepSyms: Set<string>): void {
@@ -273,7 +289,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
   const optimizeUniverse = async () => {
     const cands = candidateStrategies();
     setOpt({ mode: 'uni', running: true, done: 0, total: 0, rows: [] });
-    const syms = await getScanSymbols();
+    const { syms } = await getScanSymbols();
     setOpt({ mode: 'uni', running: true, done: 0, total: syms.length, rows: [] });
     const acc = cands.map((s) => ({ s, trA: 0, trH: 0, teA: 0, teH: 0, robust: 0, sumTr: 0, n: 0 }));
     let done = 0;
@@ -358,20 +374,24 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
   const edit = (s: CustomStrategy) =>
     setDraft({ id: s.id, name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
 
-  // The 300 oldest stocks (longest history) from the screener snapshot.
-  const getScanSymbols = async (): Promise<string[]> => {
+  // The 300 oldest stocks (longest history) from the screener snapshot, plus the
+  // snapshot's "generated" stamp (used to invalidate the cache on a new day).
+  const getScanSymbols = async (): Promise<{ syms: string[]; gen: number }> => {
     try {
       const sc = await fetchScreener();
       if (sc?.items?.length)
-        return sc.items
-          .slice()
-          .sort((a, b) => (b.yr ?? 0) - (a.yr ?? 0))
-          .slice(0, 300)
-          .map((i) => i.s);
+        return {
+          syms: sc.items
+            .slice()
+            .sort((a, b) => (b.yr ?? 0) - (a.yr ?? 0))
+            .slice(0, 300)
+            .map((i) => i.s),
+          gen: sc.generated ?? 0,
+        };
     } catch {
       /* fall back to the bounded universe */
     }
-    return universe;
+    return { syms: universe, gen: 0 };
   };
 
   // Pick the best CURRENT strategy per symbol from the cache, then rank top 20.
@@ -395,7 +415,8 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
     const cur = strats.map((s) => ({ s, h: stratHash(s, params) }));
     const curHashSet = new Set(cur.map((x) => x.h));
     setScan((p) => ({ rows: p?.rows ?? [], done: 0, total: 0, running: true }));
-    const syms = await getScanSymbols();
+    const { syms, gen } = await getScanSymbols();
+    invalidateIfStale(gen); // new trading day → recompute against fresh candles
     const symSet = new Set(syms);
     setScan((p) => ({ rows: p?.rows ?? [], done: 0, total: syms.length, running: true }));
     let done = 0;
@@ -925,8 +946,11 @@ function equitySpark(close: Float64Array, pos: Uint8Array, time: Float64Array, d
       hold.push(close[i] / base);
     }
   }
-  strat.push(e);
-  hold.push(close[n - 1] / base);
+  // Append the terminal point only if the loop didn't already include it.
+  if ((n - 1) % step !== 0) {
+    strat.push(e);
+    hold.push(close[n - 1] / base);
+  }
   return { strat, hold };
 }
 
