@@ -4,6 +4,15 @@ import { fetchScreener, fetchBistSpark, ScreenerFile, ScreenerItem } from '../da
 interface Props {
   onClose: () => void;
   onSelect: (s: string) => void;
+  onAddToWatch: (syms: string[], mode: 'add' | 'replace') => void;
+}
+
+function readScrState(): { view?: number; filters?: Filter[]; sort?: { key: Key; dir: 1 | -1 }; q?: string } {
+  try {
+    return JSON.parse(localStorage.getItem('borsaScrState') || '{}');
+  } catch {
+    return {};
+  }
 }
 
 type Key = keyof ScreenerItem;
@@ -69,19 +78,20 @@ const PRESETS: { label: string; fs: Filter[] }[] = [
 
 const PAL = ['#3b82f6', '#26a69a', '#f59e0b', '#a855f7', '#ef5350', '#14b8a6', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
 
-export function Screener({ onClose, onSelect }: Props) {
+export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
   const [data, setData] = useState<ScreenerFile | null>(null);
   const [spark, setSpark] = useState<Record<string, number[]>>({});
   const [loaded, setLoaded] = useState(false);
-  const [view, setView] = useState(0);
-  const [filters, setFilters] = useState<Filter[]>([]);
-  const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>({ key: 'r1y', dir: -1 });
+  const [view, setView] = useState<number>(() => readScrState().view ?? 0);
+  const [filters, setFilters] = useState<Filter[]>(() => readScrState().filters ?? []);
+  const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>(() => readScrState().sort ?? { key: 'r1y', dir: -1 });
+  const [msg, setMsg] = useState('');
   const [fk, setFk] = useState<Key>('wr');
   const [op, setOp] = useState('gt');
   const [val, setVal] = useState('50');
   const [cmp, setCmp] = useState<'val' | 'field'>('val');
   const [fk2, setFk2] = useState<Key>('r3m');
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState<string>(() => readScrState().q ?? '');
   const [saved, setSaved] = useState<{ name: string; view: number; filters: Filter[] }[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('borsaScreens') || '[]');
@@ -98,6 +108,18 @@ export function Screener({ onClose, onSelect }: Props) {
   useEffect(() => {
     localStorage.setItem('borsaScreens', JSON.stringify(saved));
   }, [saved]);
+  // Remember the last screen state so leaving to view a stock doesn't reset it.
+  useEffect(() => {
+    localStorage.setItem('borsaScrState', JSON.stringify({ view, filters, sort, q }));
+  }, [view, filters, sort, q]);
+
+  const addWatch = (mode: 'add' | 'replace') => {
+    const syms = rows.map((r) => r.s);
+    if (!syms.length) return;
+    onAddToWatch(syms, mode);
+    setMsg(`${syms.length} hisse ${mode === 'replace' ? 'yeni listeye alındı' : 'takibe eklendi'}`);
+    window.setTimeout(() => setMsg(''), 2500);
+  };
 
   const kind = COL(fk).kind;
 
@@ -313,13 +335,32 @@ export function Screener({ onClose, onSelect }: Props) {
               <div className="scr-count">
                 <span>
                   <b>{rows.length}</b> hisse eşleşti
+                  {msg && <span className="scr-msg">✓ {msg}</span>}
                 </span>
-                <input
-                  className="scr-search"
-                  placeholder="🔎 Sembol / şirket ara"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                />
+                <span className="scr-actions">
+                  <button
+                    className="scr-act"
+                    onClick={() => addWatch('add')}
+                    disabled={!rows.length}
+                    title="Eşleşen tüm hisseleri mevcut izleme listesine ekle"
+                  >
+                    ★ Takibe ekle
+                  </button>
+                  <button
+                    className="scr-act"
+                    onClick={() => addWatch('replace')}
+                    disabled={!rows.length}
+                    title="İzleme listesini eşleşenlerle değiştir"
+                  >
+                    🆕 Yeni liste
+                  </button>
+                  <input
+                    className="scr-search"
+                    placeholder="🔎 Sembol / şirket ara"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                  />
+                </span>
               </div>
 
               <div className="scr-tablewrap">

@@ -18,7 +18,12 @@ export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrat
   const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number; holdAnn: number } | null>(null);
   const [market, setMarket] = useState<StrategiesFile | null>(null);
   const [marketLoaded, setMarketLoaded] = useState(false);
-  const [tab, setTab] = useState<'market' | 'top' | 'symbol' | 'opt'>('market');
+  const [tab, setTab] = useState<'market' | 'top' | 'symbol' | 'opt'>(
+    () => (localStorage.getItem('borsaBtTab') as 'market' | 'top' | 'symbol' | 'opt') || 'market',
+  );
+  useEffect(() => {
+    localStorage.setItem('borsaBtTab', tab);
+  }, [tab]);
   const [optFamily, setOptFamily] = useState(optFamilies()[0]);
   const optResults = useMemo<OptResult[]>(
     () => (tab === 'opt' ? optimizeFamily(candles, optFamily) : []),

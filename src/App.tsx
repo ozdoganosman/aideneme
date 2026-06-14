@@ -160,6 +160,9 @@ export default function App() {
     setSymbol(s);
     void load({ provider: 'bist', symbol: s });
   };
+  const addToWatch = (syms: string[], mode: 'add' | 'replace') => {
+    setWatchlist((w) => Array.from(new Set(mode === 'replace' ? syms : [...syms, ...w])));
+  };
   const toggleWatch = (s: string) => {
     if (watchlist.includes(s)) {
       setWatchlist((w) => w.filter((x) => x !== s));
@@ -511,7 +514,9 @@ export default function App() {
         />
       )}
 
-      {showScreener && <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} />}
+      {showScreener && (
+        <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} />
+      )}
     </div>
   );
 }

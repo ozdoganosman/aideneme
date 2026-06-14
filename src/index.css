@@ -911,6 +911,35 @@ button.ctl:disabled {
   font-size: 12px;
   color: var(--muted);
 }
+.scr-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.scr-act {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scr-act:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: #fff;
+}
+.scr-act:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.scr-msg {
+  margin-left: 8px;
+  color: var(--up);
+  font-weight: 600;
+}
 .scr-search {
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -919,7 +948,7 @@ button.ctl:disabled {
   padding: 6px 10px;
   font-size: 12px;
   outline: none;
-  width: 220px;
+  width: 200px;
 }
 .scr-search:focus {
   border-color: var(--accent);
