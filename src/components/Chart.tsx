@@ -9,7 +9,6 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
-  AreaSeries,
   CrosshairMode,
   LineStyle,
   PriceScaleMode,
@@ -52,7 +51,7 @@ interface LegendVals {
   o: number; h: number; l: number; c: number; v: number;
   ema377: number; ema610: number;
   wilR: number; wilEma: number;
-  macd: number; signal: number; emacd: number; delta: number;
+  macd: number; signal: number; emacd: number;
 }
 
 type SeriesBag = {
@@ -62,11 +61,9 @@ type SeriesBag = {
   volume: ISeriesApi<'Histogram'>;
   wilR: ISeriesApi<'Line'>;
   wilEma: ISeriesApi<'Line'>;
-  mHist: ISeriesApi<'Histogram'>;
   mMacd: ISeriesApi<'Line'>;
   mSignal: ISeriesApi<'Line'>;
   mEma: ISeriesApi<'Line'>;
-  mDelta: ISeriesApi<'Area'>;
 };
 
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
@@ -135,12 +132,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     wilR.createPriceLine({ price: 50, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
     wilR.createPriceLine({ price: 5, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '5' });
 
-    const mHist = chart.addSeries(HistogramSeries, { priceLineVisible: false, lastValueVisible: false }, 2);
-    const mDelta = chart.addSeries(
-      AreaSeries,
-      { lineColor: 'rgba(83,76,175,0.7)', topColor: 'rgba(83,76,175,0.35)', bottomColor: 'rgba(83,76,175,0.02)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false },
-      2,
-    );
     const mMacd = chart.addSeries(LineSeries, lineOpts('#ff2fa6', 1, 'MACD'), 2);
     const mSignal = chart.addSeries(LineSeries, lineOpts('#FF6D00', 1, 'Signal'), 2);
     const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, 'eMACD'), 2);
@@ -159,16 +150,14 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: ema610, kind: 'line' },
       { series: wilR, kind: 'line' },
       { series: wilEma, kind: 'line' },
-      { series: mHist, kind: 'hist', momentumColor: true },
       { series: mMacd, kind: 'line' },
       { series: mSignal, kind: 'line' },
       { series: mEma, kind: 'line' },
-      { series: mDelta, kind: 'area' },
     ];
     const lod = new LodController(chart, candle, volume, extras);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mHist, mMacd, mSignal, mEma, mDelta };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma };
     markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
@@ -201,7 +190,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             ema377: lv(s.ema377), ema610: lv(s.ema610),
             wilR: lv(s.wilR), wilEma: lv(s.wilEma),
             macd: lv(s.mMacd), signal: lv(s.mSignal), emacd: lv(s.mEma),
-            delta: num((param.seriesData.get(s.mDelta) as LineData | undefined)?.value),
           });
           computeTops();
           return;
@@ -241,13 +229,13 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       c: candles.close[n - 1], v: candles.volume[n - 1],
       ema377: lastFin(ind.ema377p), ema610: lastFin(ind.ema610p),
       wilR: lastFin(ind.percentR), wilEma: lastFin(ind.emawil),
-      macd: lastFin(ind.macdN), signal: lastFin(ind.signalN), emacd: lastFin(ind.eMacDN), delta: lastFin(ind.deltaN),
+      macd: lastFin(ind.macdN), signal: lastFin(ind.signalN), emacd: lastFin(ind.eMacDN),
     };
     lastValsRef.current = lv;
 
     lodRef.current.setData(
       candles,
-      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.histN, ind.macdN, ind.signalN, ind.eMacDN, ind.deltaN],
+      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN],
       fitRef.current,
     );
     if (!hoveringRef.current) setLegend(lv);
@@ -262,7 +250,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     s.ema610.applyOptions({ visible: settings.ema });
     s.volume.applyOptions({ visible: settings.volume });
     [s.wilR, s.wilEma].forEach((x) => x.applyOptions({ visible: settings.williams }));
-    [s.mHist, s.mMacd, s.mSignal, s.mEma, s.mDelta].forEach((x) => x.applyOptions({ visible: settings.macd }));
+    [s.mMacd, s.mSignal, s.mEma].forEach((x) => x.applyOptions({ visible: settings.macd }));
     const panes = chart.panes();
     panes[1]?.setStretchFactor(settings.williams ? 2 : 0.0001);
     panes[2]?.setStretchFactor(settings.macd ? 2.2 : 0.0001);
@@ -369,8 +357,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
               <span className="lg-muted">NizamiCedid</span>{' '}
               <span style={{ color: '#ff2fa6' }}>MACD {fn(legend.macd, 4)}</span>{' '}
               <span style={{ color: '#FF6D00' }}>Signal {fn(legend.signal, 4)}</span>{' '}
-              <span style={{ color: '#e6e6e6' }}>eMACD {fn(legend.emacd, 4)}</span>{' '}
-              <span style={{ color: '#8a83d6' }}>Δ {fn(legend.delta, 4)}</span>
+              <span style={{ color: '#e6e6e6' }}>eMACD {fn(legend.emacd, 4)}</span>
             </div>
           )}
         </>
