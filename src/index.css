@@ -2447,3 +2447,25 @@ button.ctl:disabled {
   font-size: 10px;
   margin-top: 3px;
 }
+
+/* Suggested strategy templates */
+.sb-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.sb-sugbtn {
+  background: var(--accent-weak);
+  border: 1px solid var(--accent);
+  color: #cfe0ff;
+  border-radius: 7px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.sb-sugbtn:hover {
+  background: rgba(59, 130, 246, 0.26);
+}

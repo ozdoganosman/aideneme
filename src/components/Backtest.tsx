@@ -35,6 +35,31 @@ interface Combo {
 
 const blankDraft = (): CustomStrategy => ({ id: '', name: '', buy: [newCond()], sell: [] });
 
+// Researched best rules from the two indicators (Williams Paşa + NizamiCedid).
+const mkCond = (ind: string, op: Cond['op'], tgt: 'val' | 'ind', val: number, ind2 = 'emacd', p = 0, p2 = 0): Cond => ({
+  ind,
+  p,
+  op,
+  tgt,
+  val,
+  ind2,
+  p2,
+});
+const SUGGESTED: { name: string; buy: Cond[]; sell: Cond[] }[] = [
+  { name: 'Cedid Trend (MACD>0)', buy: [mkCond('macd', 'gt', 'val', 0)], sell: [mkCond('macd', 'lt', 'val', 0)] },
+  { name: 'Cedid eMACD', buy: [mkCond('macd', 'gt', 'ind', 0, 'emacd')], sell: [mkCond('macd', 'lt', 'ind', 0, 'emacd')] },
+  {
+    name: 'Paşa Dönüş (%R≷EMA)',
+    buy: [mkCond('wr', 'gt', 'ind', 0, 'wrema', 260, 260)],
+    sell: [mkCond('wr', 'lt', 'ind', 0, 'wrema', 260, 260)],
+  },
+  {
+    name: 'Paşa+Cedid (%R>50 & MACD>0)',
+    buy: [mkCond('wr', 'gt', 'val', 50, 'emacd', 260), mkCond('macd', 'gt', 'val', 0)],
+    sell: [mkCond('wr', 'lt', 'val', 50, 'emacd', 260)],
+  },
+];
+
 export function Backtest({ candles, symbol, universe, strats, onSave, onApply, onPickCombo, onClose }: Props) {
   const [tab, setTab] = useState<'mine' | 'top'>('mine');
   const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
@@ -67,6 +92,11 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
     setDraft(blankDraft());
   };
   const del = (id: string) => onSave(strats.filter((s) => s.id !== id));
+  const addSuggested = () => {
+    const have = new Set(strats.map((s) => s.name));
+    const add = SUGGESTED.filter((s) => !have.has(s.name)).map((s, i) => ({ id: String(Date.now() + i), ...s }));
+    if (add.length) onSave([...strats, ...add]);
+  };
   const edit = (s: CustomStrategy) =>
     setDraft({ id: s.id, name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
 
@@ -162,6 +192,11 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                     </button>
                   )}
                 </div>
+              </div>
+
+              <div className="sb-suggest">
+                <span className="lg-muted">Hazır şablonlar (Williams Paşa + NizamiCedid, en iyiler):</span>
+                <button className="sb-sugbtn" onClick={addSuggested}>📋 Önerilenleri ekle</button>
               </div>
 
               <p className="bt-intro">
