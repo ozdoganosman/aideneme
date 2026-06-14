@@ -60,6 +60,135 @@ function prBounce(c: Candles, len: number, lo: number, hi: number): Uint8Array {
   return p;
 }
 
+// ── Extra building blocks for the stronger strategies ──────────────────────
+
+// Wilder ATR (average true range).
+function atrArr(c: Candles, len: number): Float64Array {
+  const n = c.length;
+  const out = new Float64Array(n);
+  if (n === 0) return out;
+  let prev = c.high[0] - c.low[0];
+  out[0] = prev;
+  for (let i = 1; i < n; i++) {
+    const tr = Math.max(
+      c.high[i] - c.low[i],
+      Math.abs(c.high[i] - c.close[i - 1]),
+      Math.abs(c.low[i] - c.close[i - 1]),
+    );
+    prev = (prev * (len - 1) + tr) / len;
+    out[i] = prev;
+  }
+  return out;
+}
+
+// Supertrend: long while price holds above an ATR-based trailing line.
+function supertrend(c: Candles, len: number, mult: number): Uint8Array {
+  const n = c.length;
+  const atr = atrArr(c, len);
+  const p = new Uint8Array(n);
+  if (n === 0) return p;
+  let fu = (c.high[0] + c.low[0]) / 2 + mult * atr[0];
+  let fl = (c.high[0] + c.low[0]) / 2 - mult * atr[0];
+  let dir = 1;
+  p[0] = 1;
+  for (let i = 1; i < n; i++) {
+    const hl2 = (c.high[i] + c.low[i]) / 2;
+    const ub = hl2 + mult * atr[i];
+    const lb = hl2 - mult * atr[i];
+    fu = ub < fu || c.close[i - 1] > fu ? ub : fu;
+    fl = lb > fl || c.close[i - 1] < fl ? lb : fl;
+    if (c.close[i] > fu) dir = 1;
+    else if (c.close[i] < fl) dir = 0;
+    p[i] = dir;
+  }
+  return p;
+}
+
+// Donchian / Turtle breakout: enter on an N-bar high, exit on an M-bar low.
+function donchian(c: Candles, entryN: number, exitN: number): Uint8Array {
+  const n = c.length;
+  const hh = rollingHighest(c.high, entryN);
+  const ll = rollingLowest(c.low, exitN);
+  const p = new Uint8Array(n);
+  let cur = 0;
+  for (let i = 1; i < n; i++) {
+    if (cur === 0 && c.high[i] >= hh[i - 1]) cur = 1;
+    else if (cur === 1 && c.low[i] <= ll[i - 1]) cur = 0;
+    p[i] = cur;
+  }
+  return p;
+}
+
+// Time-series momentum: long when price is above where it was `len` bars ago.
+function roc(c: Candles, len: number): Uint8Array {
+  const n = c.length;
+  const p = new Uint8Array(n);
+  for (let i = len; i < n; i++) p[i] = c.close[i] > c.close[i - len] ? 1 : 0;
+  return p;
+}
+
+// Wilder RSI.
+function rsiArr(close: Float64Array, len: number): Float64Array {
+  const n = close.length;
+  const out = new Float64Array(n).fill(NaN);
+  if (n <= len) return out;
+  let ag = 0;
+  let al = 0;
+  for (let i = 1; i <= len; i++) {
+    const ch = close[i] - close[i - 1];
+    ag += Math.max(ch, 0);
+    al += Math.max(-ch, 0);
+  }
+  ag /= len;
+  al /= len;
+  out[len] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  for (let i = len + 1; i < n; i++) {
+    const ch = close[i] - close[i - 1];
+    ag = (ag * (len - 1) + Math.max(ch, 0)) / len;
+    al = (al * (len - 1) + Math.max(-ch, 0)) / len;
+    out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  }
+  return out;
+}
+
+// Bollinger breakout: buy a push above the upper band, exit back at the mean.
+function bollinger(c: Candles, len: number, k: number): Uint8Array {
+  const close = c.close;
+  const n = close.length;
+  const p = new Uint8Array(n);
+  let cur = 0;
+  for (let i = 0; i < n; i++) {
+    if (i < len - 1) {
+      p[i] = cur;
+      continue;
+    }
+    let sum = 0;
+    for (let j = i - len + 1; j <= i; j++) sum += close[j];
+    const mean = sum / len;
+    let v = 0;
+    for (let j = i - len + 1; j <= i; j++) {
+      const d = close[j] - mean;
+      v += d * d;
+    }
+    const sd = Math.sqrt(v / len);
+    const upper = mean + k * sd;
+    if (cur === 0 && close[i] > upper) cur = 1;
+    else if (cur === 1 && close[i] < mean) cur = 0;
+    p[i] = cur;
+  }
+  return p;
+}
+
+function emaCrossFiltered(c: Candles, a: number, b: number, filt: number): Uint8Array {
+  const n = c.length;
+  const ea = emaArr(c.close, a);
+  const eb = emaArr(c.close, b);
+  const ef = emaArr(c.close, filt);
+  const p = new Uint8Array(n);
+  for (let i = 0; i < n; i++) p[i] = ea[i] > eb[i] && c.close[i] > ef[i] ? 1 : 0;
+  return p;
+}
+
 // The full strategy registry — used both by the optimizer and to redraw a chosen
 // strategy's signals on the chart.
 export function strategyList(): StrategyDef[] {
@@ -113,12 +242,58 @@ export function strategyList(): StrategyDef[] {
     });
   }
 
+  // ── Stronger trend / breakout / volatility strategies ──────────────────────
+  defs.push({ name: 'Supertrend 10/3', build: (c) => supertrend(c, 10, 3) });
+  defs.push({ name: 'Supertrend 20/4', build: (c) => supertrend(c, 20, 4) });
+  defs.push({ name: 'Donchian 20/10 kırılımı', build: (c) => donchian(c, 20, 10) });
+  defs.push({ name: 'Donchian 55/20 kırılımı', build: (c) => donchian(c, 55, 20) });
+  defs.push({ name: 'Momentum 120 (ROC>0)', build: (c) => roc(c, 120) });
+  defs.push({ name: 'Momentum 252 (ROC>0)', build: (c) => roc(c, 252) });
+  defs.push({ name: 'EMA 9/21 + Trend 200', build: (c) => emaCrossFiltered(c, 9, 21, 200) });
+  defs.push({ name: 'EMA 20/50 + Trend 200', build: (c) => emaCrossFiltered(c, 20, 50, 200) });
+  defs.push({
+    name: '%R 260 > 50 + Trend 200',
+    build: (c) => {
+      const pr = prArr(c, 260);
+      const ef = emaArr(c.close, 200);
+      const n = c.length;
+      const p = new Uint8Array(n);
+      for (let i = 0; i < n; i++) p[i] = Number.isFinite(pr[i]) && pr[i] > 50 && c.close[i] > ef[i] ? 1 : 0;
+      return p;
+    },
+  });
+  for (const L of [14, 50]) {
+    defs.push({
+      name: `RSI ${L} > 50`,
+      build: (c) => {
+        const r = rsiArr(c.close, L);
+        const n = c.length;
+        const p = new Uint8Array(n);
+        for (let i = 0; i < n; i++) p[i] = Number.isFinite(r[i]) && r[i] > 50 ? 1 : 0;
+        return p;
+      },
+    });
+  }
+  defs.push({ name: 'Bollinger 20 kırılımı', build: (c) => bollinger(c, 20, 2) });
+
   return defs;
 }
 
 // Plain-language LOGIC of a strategy (no jargon) for beginners.
 export function explainStrategy(name: string): string {
   let m: RegExpMatchArray | null;
+  if (name.includes('+ Trend 200'))
+    return '🛡️ Trend filtreli: Yalnızca uzun vadeli trend yukarıyken (fiyat 200 günlük ortalamanın üstünde) AL sinyali verir; trend aşağıyken nakitte bekler. Yatay/düşen piyasadaki yanlış alımları eler, düşüşü (drawdown) azaltır.';
+  if (name.startsWith('Supertrend'))
+    return '📈 Trend takibi + otomatik stop: Fiyat, oynaklığa (ATR) göre ayarlanan bir takip çizgisinin üstündeyken AL; çizginin altına sarkınca SAT. Yükselen trende biner, sert dönüşte erken çıkıp düşüşü sınırlar.';
+  if (name.startsWith('Donchian'))
+    return '🚀 Kırılım (Turtle): Fiyat son haftaların en yükseğini aşıp yeni zirve yapınca AL; son günlerin en düşüğüne inince SAT. Güçlü trendleri en baştan yakalamaya çalışır.';
+  if (name.startsWith('Momentum'))
+    return '🚀 Momentum: Fiyat birkaç ay öncesine göre daha yüksekse (yukarı gidiyorsa) AL, daha düşükse SAT. "Kazanan kazanmaya devam eder" mantığı.';
+  if (name.startsWith('Bollinger'))
+    return '🚀 Oynaklık kırılımı: Fiyat üst banda taşacak kadar güçlü hareket edince AL, ortalamasına geri dönünce SAT.';
+  if (name.startsWith('RSI'))
+    return '💪 Güç takibi: Güç göstergesi (RSI) 50 eşiğinin üstüne çıkınca (alıcılar baskın) AL, altına inince SAT.';
   if ((m = name.match(/^EMA (\d+)\//)))
     return '📈 Trend takibi: Fiyat yükseliş eğilimine girince AL, eğilim bozulup düşüşe dönünce SAT. "Yükselen trende katıl, dönünce çık."' + speed(+m[1]);
   if ((m = name.match(/^MACD (\d+)\/.* > Sinyal/)))

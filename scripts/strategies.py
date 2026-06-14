@@ -28,6 +28,104 @@ def ema(a: np.ndarray, length: int) -> np.ndarray:
     return pd.Series(a).ewm(span=length, adjust=False).mean().to_numpy()
 
 
+def wilder_atr(high, low, close, length):
+    n = len(close)
+    tr = np.empty(n)
+    tr[0] = high[0] - low[0]
+    pc = close[:-1]
+    tr[1:] = np.maximum.reduce([high[1:] - low[1:], np.abs(high[1:] - pc), np.abs(low[1:] - pc)])
+    a = np.empty(n)
+    a[0] = tr[0]
+    k = (length - 1) / length
+    inv = 1.0 / length
+    for i in range(1, n):
+        a[i] = a[i - 1] * k + tr[i] * inv
+    return a
+
+
+def supertrend_pos(high, low, close, length, mult):
+    n = len(close)
+    atr = wilder_atr(high, low, close, length)
+    hl2 = (high + low) / 2.0
+    ub = hl2 + mult * atr
+    lb = hl2 - mult * atr
+    p = np.zeros(n, dtype=np.int8)
+    fu, fl, d = ub[0], lb[0], 1
+    p[0] = 1
+    for i in range(1, n):
+        fu = ub[i] if (ub[i] < fu or close[i - 1] > fu) else fu
+        fl = lb[i] if (lb[i] > fl or close[i - 1] < fl) else fl
+        if close[i] > fu:
+            d = 1
+        elif close[i] < fl:
+            d = 0
+        p[i] = d
+    return p
+
+
+def donchian_pos(high, low, entry_n, exit_n):
+    n = len(high)
+    hh = pd.Series(high).rolling(entry_n, min_periods=1).max().to_numpy()
+    ll = pd.Series(low).rolling(exit_n, min_periods=1).min().to_numpy()
+    p = np.zeros(n, dtype=np.int8)
+    cur = 0
+    for i in range(1, n):
+        if cur == 0 and high[i] >= hh[i - 1]:
+            cur = 1
+        elif cur == 1 and low[i] <= ll[i - 1]:
+            cur = 0
+        p[i] = cur
+    return p
+
+
+def roc_pos(close, length):
+    n = len(close)
+    p = np.zeros(n, dtype=np.int8)
+    if n > length:
+        p[length:] = (close[length:] > close[:-length]).astype(np.int8)
+    return p
+
+
+def rsi_arr(close, length):
+    n = len(close)
+    rsi = np.full(n, np.nan)
+    if n <= length:
+        return rsi
+    diff = np.diff(close)
+    gain = np.where(diff > 0, diff, 0.0)
+    loss = np.where(diff < 0, -diff, 0.0)
+    ag = gain[:length].mean()
+    al = loss[:length].mean()
+    rsi[length] = 100.0 if al == 0 else 100 - 100 / (1 + ag / al)
+    k = (length - 1) / length
+    inv = 1.0 / length
+    for i in range(length + 1, n):
+        ag = ag * k + gain[i - 1] * inv
+        al = al * k + loss[i - 1] * inv
+        rsi[i] = 100.0 if al == 0 else 100 - 100 / (1 + ag / al)
+    return rsi
+
+
+def bollinger_pos(close, length, k):
+    n = len(close)
+    s = pd.Series(close)
+    mean = s.rolling(length, min_periods=length).mean().to_numpy()
+    std = s.rolling(length, min_periods=length).std(ddof=0).to_numpy()
+    upper = mean + k * std
+    p = np.zeros(n, dtype=np.int8)
+    cur = 0
+    for i in range(n):
+        if not np.isfinite(upper[i]):
+            p[i] = cur
+            continue
+        if cur == 0 and close[i] > upper[i]:
+            cur = 1
+        elif cur == 1 and close[i] < mean[i]:
+            cur = 0
+        p[i] = cur
+    return p
+
+
 def backtest(close: np.ndarray, pos: np.ndarray):
     n = len(close)
     if n < 3:
@@ -88,18 +186,50 @@ def strategies_for(close, high, low):
             out[f"%R {L} ({lo}/{hi})"] = pos
         out[f"%R {L} > 50"] = np.where(np.isfinite(pr) & (pr > 50), 1, 0).astype(np.int8)
 
+    # ── Stronger trend / breakout / volatility strategies ──────────────────────
+    out["Supertrend 10/3"] = supertrend_pos(high, low, close, 10, 3.0)
+    out["Supertrend 20/4"] = supertrend_pos(high, low, close, 20, 4.0)
+    out["Donchian 20/10 kırılımı"] = donchian_pos(high, low, 20, 10)
+    out["Donchian 55/20 kırılımı"] = donchian_pos(high, low, 55, 20)
+    out["Momentum 120 (ROC>0)"] = roc_pos(close, 120)
+    out["Momentum 252 (ROC>0)"] = roc_pos(close, 252)
+
+    e200 = ema(close, 200)
+    out["EMA 9/21 + Trend 200"] = ((ema(close, 9) > ema(close, 21)) & (close > e200)).astype(np.int8)
+    out["EMA 20/50 + Trend 200"] = ((ema(close, 20) > ema(close, 50)) & (close > e200)).astype(np.int8)
+
+    hh260 = pd.Series(high).rolling(260, min_periods=1).max().to_numpy()
+    ll260 = pd.Series(low).rolling(260, min_periods=1).min().to_numpy()
+    d260 = hh260 - ll260
+    pr260 = np.where(d260 != 0, 100.0 * (close - hh260) / d260 + 100.0, np.nan)
+    out["%R 260 > 50 + Trend 200"] = (np.isfinite(pr260) & (pr260 > 50) & (close > e200)).astype(np.int8)
+
+    out["RSI 14 > 50"] = np.where(np.isfinite(r14 := rsi_arr(close, 14)) & (r14 > 50), 1, 0).astype(np.int8)
+    out["RSI 50 > 50"] = np.where(np.isfinite(r50 := rsi_arr(close, 50)) & (r50 > 50), 1, 0).astype(np.int8)
+
+    out["Bollinger 20 kırılımı"] = bollinger_pos(close, 20, 2.0)
+
     return out
 
 
+def current_names() -> set[str]:
+    n = 700
+    close = np.linspace(10.0, 50.0, n)
+    high = close * 1.01
+    low = close * 0.99
+    return set(strategies_for(close, high, low).keys())
+
+
 def main() -> int:
-    # Self-gate: skip if strategies.json is already up to date (has avgHold),
-    # unless FORCE_ALL=1 (scheduled full refresh). Lets the step run every deploy
-    # but stay fast when nothing changed.
+    # Self-gate: skip if strategies.json is already up to date (annualized metric
+    # present AND same strategy set), unless FORCE_ALL=1 (scheduled full refresh).
+    # Recomputes automatically when strategies are added/removed.
     sj = OUT / "strategies.json"
     if os.environ.get("FORCE_ALL") != "1" and sj.exists():
         try:
             cur = json.load(open(sj, encoding="utf-8"))
-            if cur.get("results") and "avgAnn" in cur["results"][0]:
+            names_file = {r["name"] for r in cur.get("results", [])}
+            if cur.get("results") and "avgAnn" in cur["results"][0] and names_file == current_names():
                 print("[strategies] güncel, atlanıyor")
                 return 0
         except Exception:  # noqa
