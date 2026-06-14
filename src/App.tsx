@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { Chart, IndicatorSettings } from './components/Chart';
 import { SymbolSearch } from './components/SymbolSearch';
 import { Watchlist } from './components/Watchlist';
@@ -36,6 +36,33 @@ function lsGet<T>(key: string, def: T): T {
   }
 }
 
+// Phone-sized viewport (narrow OR short, e.g. landscape) → use the mobile layout.
+function isNarrow(): boolean {
+  return typeof window !== 'undefined' && (window.innerWidth < 760 || window.innerHeight < 540);
+}
+
+// Drag the bottom sheet down by its grab handle; release past a threshold closes.
+function dragSheet(e: RPointerEvent<HTMLElement>, close: () => void): void {
+  const sheet = e.currentTarget.closest('.sidebar') as HTMLElement | null;
+  if (!sheet) return;
+  const startY = e.clientY;
+  let dy = 0;
+  const move = (ev: globalThis.PointerEvent) => {
+    dy = Math.max(0, ev.clientY - startY);
+    sheet.style.transition = 'none';
+    sheet.style.transform = `translateY(${dy}px)`;
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+    if (dy > 90) close();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
 export default function App() {
   const [provider, setProvider] = useState<Provider>('bist');
   const [symbol, setSymbol] = useState('THYAO');
@@ -49,11 +76,12 @@ export default function App() {
   const [showBt, setShowBt] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showScreener, setShowScreener] = useState(false);
+  const [tbMenu, setTbMenu] = useState(false);
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
   const [leftTab, setLeftTab] = useState<'portfolio' | 'trades'>(() => lsGet('borsaLeftTab', 'portfolio'));
-  const wide0 = typeof window !== 'undefined' && window.innerWidth >= 760;
+  const wide0 = !isNarrow();
   const [showLeft, setShowLeft] = useState<boolean>(() => lsGet('borsaShowLeft', wide0));
   const [showRight, setShowRight] = useState<boolean>(() => lsGet('borsaShowRight', wide0));
 
@@ -161,7 +189,7 @@ export default function App() {
     setSymbol(s);
     void load({ provider: 'bist', symbol: s });
     // On mobile the sidebars are slide-over drawers — close them after picking.
-    if (typeof window !== 'undefined' && window.innerWidth < 760) {
+    if (isNarrow()) {
       setShowLeft(false);
       setShowRight(false);
     }
@@ -170,12 +198,12 @@ export default function App() {
   const toggleLeft = () => {
     const nv = !showLeft;
     setShowLeft(nv);
-    if (nv && window.innerWidth < 760) setShowRight(false);
+    if (nv && isNarrow()) setShowRight(false);
   };
   const toggleRight = () => {
     const nv = !showRight;
     setShowRight(nv);
-    if (nv && window.innerWidth < 760) setShowLeft(false);
+    if (nv && isNarrow()) setShowLeft(false);
   };
   const addToWatch = (syms: string[], mode: 'add' | 'replace') => {
     setWatchlist((w) => Array.from(new Set(mode === 'replace' ? syms : [...syms, ...w])));
@@ -230,6 +258,10 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, provider]);
 
+  useEffect(() => {
+    if (showBt || showScreener || showAnalysis) setTbMenu(false);
+  }, [showBt, showScreener, showAnalysis]);
+
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
   const starred = watchlist.includes(symbol);
   const stats = useMemo(() => computeStats(candles), [candles]);
@@ -256,6 +288,9 @@ export default function App() {
   return (
     <div className="app">
       <header className="toolbar">
+        <button className="menu-btn ctl" onClick={() => setTbMenu((v) => !v)} title="Menü">
+          ☰
+        </button>
         <span className="brand">⚡ Borsa</span>
 
         <select
@@ -271,9 +306,7 @@ export default function App() {
           <option value="synthetic">Sentetik (stres)</option>
         </select>
 
-        <span className="tb-div" />
-
-        {provider === 'bist' ? (
+        {provider === 'bist' && (
           <>
             <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load({ symbol: s })} />
             <button
@@ -283,6 +316,11 @@ export default function App() {
             >
               {starred ? '★' : '☆'}
             </button>
+          </>
+        )}
+
+        <div className={'tb-menu' + (tbMenu ? ' open' : '')}>
+          {provider === 'bist' ? (
             <div className="seg">
               {(['D', 'W', 'M'] as TF[]).map((t) => (
                 <button key={t} className={t === tf ? 'active' : ''} onClick={() => changeTf(t)}>
@@ -290,41 +328,31 @@ export default function App() {
                 </button>
               ))}
             </div>
-          </>
-        ) : (
-          <span className="hint">4.000.000 mum (maks)</span>
-        )}
+          ) : (
+            <span className="hint">4.000.000 mum (maks)</span>
+          )}
 
-        <span className="tb-div" />
+          <IndicatorMenu settings={settings} onChange={setSettings} />
 
-        <IndicatorMenu settings={settings} onChange={setSettings} />
-
-        <button
-          className={'ctl' + (log ? ' on' : '')}
-          onClick={() => setLog((v) => !v)}
-          title="Logaritmik fiyat ölçeği"
-        >
-          Log
-        </button>
-
-        <button className="ctl primary" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
-          Strateji
-        </button>
-
-        <button className="ctl" onClick={() => setShowScreener(true)} title="Hisse tarama (filtreler)">
-          Tara
-        </button>
-
-        <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
-          <span className={loading ? 'spinning' : ''}>⟳</span>
-        </button>
-
-        {strategy && (
-          <span className="chip">
-            {strategy}
-            <button onClick={() => setStrategy(null)} title="İşaretleri kaldır">×</button>
-          </span>
-        )}
+          <button className={'ctl' + (log ? ' on' : '')} onClick={() => setLog((v) => !v)} title="Logaritmik fiyat ölçeği">
+            Log
+          </button>
+          <button className="ctl primary" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
+            Strateji
+          </button>
+          <button className="ctl" onClick={() => setShowScreener(true)} title="Hisse tarama (filtreler)">
+            Tara
+          </button>
+          <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
+            <span className={loading ? 'spinning' : ''}>⟳</span>
+          </button>
+          {strategy && (
+            <span className="chip">
+              {strategy}
+              <button onClick={() => setStrategy(null)} title="İşaretleri kaldır">×</button>
+            </span>
+          )}
+        </div>
 
         <span className="spacer" />
         <div className="tb-group">
@@ -346,9 +374,12 @@ export default function App() {
         <span className="hint">sürükle · tekerlek: zoom · çift tık: sığdır</span>
       </header>
 
+      {tbMenu && <div className="tb-menu-backdrop" onClick={() => setTbMenu(false)} />}
+
       <div className="body">
         {showLeft ? (
           <aside className="sidebar">
+            <div className="sheet-grab" onPointerDown={(e) => dragSheet(e, () => setShowLeft(false))} />
             <div className="panel">
               <div className="lefttabs">
                 <button
@@ -479,6 +510,7 @@ export default function App() {
 
         {showRight ? (
           <aside className="sidebar right">
+            <div className="sheet-grab" onPointerDown={(e) => dragSheet(e, () => setShowRight(false))} />
             <Watchlist
               items={watchlist}
               quotes={quotes}
