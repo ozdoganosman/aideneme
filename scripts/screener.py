@@ -24,6 +24,7 @@ from strategies import ema, rsi_arr, supertrend_pos  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "bist"
 SKIP = {"symbols.json", "quotes.json", "strategies.json", "names.json", "spark.json", "screener.json"}
+SCHEMA_VERSION = 2  # bump when item fields change to force a recompute
 
 
 def load_names() -> dict:
@@ -34,11 +35,16 @@ def load_names() -> dict:
 
 
 def main() -> int:
-    # Snapshot of "today"; refresh on the scheduled full run, reuse on pushes.
+    # Snapshot of "today"; refresh on the scheduled full run, reuse on pushes —
+    # but always recompute when the schema changes.
     sj = OUT / "screener.json"
     if os.environ.get("FORCE_ALL") != "1" and sj.exists():
-        print("[screener] güncel, atlanıyor")
-        return 0
+        try:
+            if json.load(open(sj, encoding="utf-8")).get("v") == SCHEMA_VERSION:
+                print("[screener] güncel, atlanıyor")
+                return 0
+        except Exception:  # noqa
+            pass
 
     names = load_names()
     items = []
@@ -85,14 +91,35 @@ def main() -> int:
         rsi = rsi_arr(close, 14)
         rsi_last = float(rsi[-1]) if np.isfinite(rsi[-1]) else 50.0
 
-        hh260 = float(pd.Series(high).rolling(260, min_periods=1).max().to_numpy()[-1])
-        ll260 = float(pd.Series(low).rolling(260, min_periods=1).min().to_numpy()[-1])
-        wr = (100.0 * (last - hh260) / (hh260 - ll260) + 100.0) if hh260 > ll260 else 50.0
+        # Williams Paşa: %R(260) (+100 convention) and its EMA(260).
+        hh = pd.Series(high).rolling(260, min_periods=1).max().to_numpy()
+        ll = pd.Series(low).rolling(260, min_periods=1).min().to_numpy()
+        dpr = hh - ll
+        pr = np.where(dpr != 0, 100.0 * (close - hh) / dpr + 100.0, np.nan)
+        wr = float(pr[-1]) if np.isfinite(pr[-1]) else 50.0
+        wre_arr = ema(pr, 260)
+        wre = float(wre_arr[-1]) if np.isfinite(wre_arr[-1]) else wr
 
-        macd = ema(close, 12) - ema(close, 26)
-        sig = ema(macd, 9)
-        mu = 1 if macd[-1] > sig[-1] else 0
+        # Standard MACD flag (for views/quick filters).
+        macd_s = ema(close, 12) - ema(close, 26)
+        sig_s = ema(macd_s, 9)
+        mu = 1 if macd_s[-1] > sig_s[-1] else 0
         st = int(supertrend_pos(high, low, close, 10, 3.0)[-1])
+
+        # NizamiCedid: MACD(120/260), Signal(50), VWMA-185 eMACD, Δ — normalized
+        # by the fast EMA exactly like the on-chart indicator.
+        fast = ema(close, 120)
+        slow = ema(close, 260)
+        macd = fast - slow
+        signal = ema(macd, 50)
+        vwn = pd.Series(macd * volu).rolling(185, min_periods=1).sum().to_numpy()
+        vwd = pd.Series(volu).rolling(185, min_periods=1).sum().to_numpy()
+        emacd = np.where(vwd != 0, vwn / vwd, np.nan)
+        fl = fast[-1] if fast[-1] != 0 else np.nan
+        mc = float(macd[-1] / fl) if np.isfinite(fl) else 0.0
+        sg = float(signal[-1] / fl) if np.isfinite(fl) else 0.0
+        em = float(emacd[-1] / fl) if (np.isfinite(fl) and np.isfinite(emacd[-1])) else 0.0
+        dl = mc - em
 
         i1y = idx_since(365)
         hi52 = float(high[i1y:].max())
@@ -118,6 +145,11 @@ def main() -> int:
             "e200": 1 if last > e200[-1] else 0,
             "gc": 1 if e50[-1] > e200[-1] else 0,
             "wr": round(wr),
+            "wre": round(wre),
+            "mc": round(mc, 4),
+            "sg": round(sg, 4),
+            "em": round(em, 4),
+            "dl": round(dl, 4),
             "mu": mu,
             "st": st,
             "fh": round(fh, 1),
@@ -132,7 +164,7 @@ def main() -> int:
 
     OUT.mkdir(parents=True, exist_ok=True)
     with open(sj, "w", encoding="utf-8") as fo:
-        json.dump({"generated": int(time.time()), "items": items}, fo, separators=(",", ":"))
+        json.dump({"generated": int(time.time()), "v": SCHEMA_VERSION, "items": items}, fo, separators=(",", ":"))
     print(f"[screener] {len(items)} hisse -> screener.json")
     return 0
 

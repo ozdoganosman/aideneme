@@ -7,7 +7,7 @@ interface Props {
 }
 
 type Key = keyof ScreenerItem;
-type Kind = 'price' | 'pct' | 'num' | 'bool';
+type Kind = 'price' | 'pct' | 'num' | 'bool' | 'dec';
 interface ColDef {
   key: Key;
   label: string;
@@ -19,6 +19,11 @@ const COLS: ColDef[] = [
   { key: 'ch', label: 'Günlük %', kind: 'pct' },
   { key: 'rsi', label: 'RSI', kind: 'num' },
   { key: 'wr', label: 'Williams %R', kind: 'num' },
+  { key: 'wre', label: '%R EMA', kind: 'num' },
+  { key: 'mc', label: 'MACD (NC)', kind: 'dec' },
+  { key: 'sg', label: 'Signal (NC)', kind: 'dec' },
+  { key: 'em', label: 'eMACD (NC)', kind: 'dec' },
+  { key: 'dl', label: 'Δ MACD (NC)', kind: 'dec' },
   { key: 'r1m', label: '1A %', kind: 'pct' },
   { key: 'r3m', label: '3A %', kind: 'pct' },
   { key: 'r1y', label: '1Y %', kind: 'pct' },
@@ -37,7 +42,8 @@ const COL = (k: Key): ColDef => COLS.find((c) => c.key === k) as ColDef;
 
 const VIEWS: { label: string; cols: Key[] }[] = [
   { label: 'Genel', cols: ['p', 'ch', 'rsi', 'r1y', 'vol', 'e200'] },
-  { label: 'Williams Paşa (%R)', cols: ['p', 'wr', 'rsi', 'e200', 'st'] },
+  { label: 'Williams Paşa (%R)', cols: ['p', 'wr', 'wre', 'rsi', 'e200', 'st'] },
+  { label: 'NizamiCedid (MACD)', cols: ['p', 'mc', 'sg', 'em', 'dl'] },
   { label: 'Trend / EMA', cols: ['p', 'e50', 'e200', 'gc', 'st'] },
   { label: 'MACD & momentum', cols: ['p', 'mu', 'ch', 'r3m', 'r1y'] },
   { label: 'Getiri', cols: ['p', 'r1m', 'r3m', 'r1y'] },
@@ -321,6 +327,7 @@ function cell(it: ScreenerItem, c: ColDef) {
   if (c.key === 'rsi') return gauge(v, 'rsi');
   if (c.key === 'wr') return gauge(v, 'wr');
   if (c.kind === 'bool') return v ? <span className="scr-pill up">✓</span> : <span className="scr-pill mut">–</span>;
+  if (c.kind === 'dec') return <span className={v >= 0 ? 'up' : 'down'}>{v.toFixed(3)}</span>;
   if (c.kind === 'price') return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (c.key === 'av') return fv(v);
   if (c.key === 'yr') return v.toFixed(1);
