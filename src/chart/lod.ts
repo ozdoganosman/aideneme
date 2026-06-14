@@ -36,12 +36,14 @@ export class LodController {
   private raf = 0;
   private hasView = false; // becomes true after the first render
   private decLen = 0; // length of the currently rendered (decimated) series
+  private bandSegs: { a: number; b: number }[] = []; // per-trade P&L band ranges
 
   constructor(
     private chart: IChartApi,
     private candle: ISeriesApi<'Candlestick'>,
     private volume: ISeriesApi<'Histogram'>,
     private extras: ExtraSpec[],
+    private bandPool: ISeriesApi<'Baseline'>[] = [],
   ) {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
   }
@@ -49,6 +51,9 @@ export class LodController {
   // fit=true frames the latest bars; fit=false preserves the current zoom (visible
   // bar count) and the gap from the right edge (used when only the symbol changes).
   setData(full: Candles, extraVals: Float64Array[], fit = true) {
+    // New dataset → drop any P&L bands from the previous symbol/strategy.
+    this.bandSegs = [];
+    for (const b of this.bandPool) b.setData([]);
     let preserve: { visReal: number; gapReal: number } | null = null;
     if (!fit && this.hasView && this.full) {
       const lr = this.chart.timeScale().getVisibleLogicalRange();
@@ -109,6 +114,7 @@ export class LodController {
     }
     this.win = { i0: w0, i1: w1, stride };
     this.decLen = candles.length;
+    this.renderBands();
     // Map the desired real-index viewport into decimated logical coordinates.
     this.chart.timeScale().setVisibleLogicalRange({
       from: (fromReal - w0) / stride,
@@ -150,6 +156,7 @@ export class LodController {
     }
     this.win = { i0: w0, i1: w1, stride };
     this.decLen = candles.length;
+    this.renderBands();
     this.chart.timeScale().setVisibleRange({
       from: this.full.time[visLo] as UTCTimestamp,
       to: this.full.time[visHi] as UTCTimestamp,
@@ -212,6 +219,7 @@ export class LodController {
     }
     this.win = { i0: w0, i1: w1, stride };
     this.decLen = candles.length;
+    this.renderBands();
     this.chart.timeScale().setVisibleLogicalRange({
       from: (visLo - w0) / stride,
       to: (visHi - w0) / stride,
@@ -239,6 +247,7 @@ export class LodController {
     }
     this.win = { i0, i1, stride: s };
     this.decLen = candles.length;
+    this.renderBands();
 
     if (fit) {
       const from = candles[Math.max(0, candles.length - 120)].time;
@@ -297,6 +306,31 @@ export class LodController {
     requestAnimationFrame(() => {
       this.applying = false;
     });
+  }
+
+  // P&L bands: one baseline series per trade (entry→exit). Each fills between the
+  // price and its entry price (set as the series' baseValue in Chart): green when
+  // price is above entry (profit), red below (loss). Decimated in lockstep with
+  // the candles — band points reuse candle bucket timestamps so the time scale
+  // (and the LOD's logical-range math) stays consistent.
+  setBands(segs: { a: number; b: number }[]) {
+    this.applying = true;
+    this.bandSegs = segs;
+    for (let k = segs.length; k < this.bandPool.length; k++) this.bandPool[k].setData([]);
+    this.renderBands();
+    requestAnimationFrame(() => {
+      this.applying = false;
+    });
+  }
+
+  private renderBands() {
+    if (!this.full || this.bandPool.length === 0) return;
+    const { i0, i1, stride } = this.win;
+    const lim = Math.min(this.bandSegs.length, this.bandPool.length);
+    for (let k = 0; k < lim; k++) {
+      const seg = this.bandSegs[k];
+      this.bandPool[k].setData(buildBand(this.full, seg.a, seg.b, i0, i1, stride) as never);
+    }
   }
 
   lastBar(): { time: number; open: number; high: number; low: number; close: number; volume: number } | null {
@@ -372,6 +406,21 @@ function buildExtra(
       out.push({ time: t, value: v });
     }
     prev = v;
+  }
+  return out;
+}
+
+// Decimated close points for one trade segment [a,b], aligned to the SAME bucket
+// timestamps as the candles (c.time[s]) so no new time points enter the scale.
+function buildBand(c: Candles, a: number, b: number, i0: number, i1: number, stride: number): LineData[] {
+  const out: LineData[] = [];
+  if (i1 > c.length) i1 = c.length;
+  if (i0 < 0) i0 = 0;
+  if (stride < 1) stride = 1;
+  for (let s = i0; s < i1; s += stride) {
+    if (s < a || s > b) continue;
+    const e = Math.min(s + stride, i1);
+    out.push({ time: c.time[s] as UTCTimestamp, value: c.close[e - 1] });
   }
   return out;
 }

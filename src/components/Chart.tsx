@@ -9,7 +9,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
-  AreaSeries,
+  BaselineSeries,
   CrosshairMode,
   LineStyle,
   PriceScaleMode,
@@ -65,8 +65,9 @@ type SeriesBag = {
   mMacd: ISeriesApi<'Line'>;
   mSignal: ISeriesApi<'Line'>;
   mEma: ISeriesApi<'Line'>;
-  posShade: ISeriesApi<'Area'>;
 };
+
+const BAND_POOL = 48; // max trades shown as P&L bands (typical strategies have far fewer)
 
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
   color,
@@ -84,6 +85,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const lodRef = useRef<LodController | null>(null);
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<SeriesBag | null>(null);
+  const bandsRef = useRef<ISeriesApi<'Baseline'>[]>([]);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const costLineRef = useRef<IPriceLine | null>(null);
   const lastValsRef = useRef<LegendVals | null>(null);
@@ -114,23 +116,38 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false, minBarSpacing: 0.06 },
     });
 
-    // Strategy "in-position" shade: a single faint area (value 1 = long, 0 =
-    // flat) on its own full-height scale, behind the candles. Using an area
-    // (not a histogram) avoids per-bar overlap darkening into a solid block.
-    const posShade = chart.addSeries(
-      AreaSeries,
-      {
-        priceScaleId: 'posshade',
-        lineColor: 'rgba(0,0,0,0)',
-        topColor: 'rgba(38,166,154,0.07)',
-        bottomColor: 'rgba(38,166,154,0.07)',
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-      },
-      0,
-    );
-    posShade.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 } });
+    // Strategy P&L bands pool: one BaselineSeries per trade, created BEFORE the
+    // candles so they render behind them. Each fills between the price and its
+    // entry price — green above entry (in profit), red below (at a loss) — and
+    // fades to transparent at the entry line. baseValue (entry) is set per trade
+    // when a strategy is applied; the LOD feeds decimated data per window.
+    const bands: ISeriesApi<'Baseline'>[] = [];
+    for (let i = 0; i < BAND_POOL; i++) {
+      bands.push(
+        chart.addSeries(
+          BaselineSeries,
+          {
+            baseValue: { type: 'price', price: 0 },
+            topLineColor: 'rgba(38,166,154,0.5)',
+            bottomLineColor: 'rgba(239,83,80,0.5)',
+            topFillColor1: 'rgba(38,166,154,0.32)', // near price (profit): tinted
+            topFillColor2: 'rgba(38,166,154,0.0)', // at entry line: transparent
+            bottomFillColor1: 'rgba(239,83,80,0.0)', // at entry line: transparent
+            bottomFillColor2: 'rgba(239,83,80,0.32)', // near price (loss): tinted
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+            crosshairMarkerVisible: false,
+            baseLineVisible: false,
+            // Bands are decorative (values are within candle range) — never let
+            // them drive the price scale (esp. the empty pool's baseValue 0).
+            autoscaleInfoProvider: () => null,
+          },
+          0,
+        ),
+      );
+    }
+    bandsRef.current = bands;
 
     const candle = chart.addSeries(
       CandlestickSeries,
@@ -175,12 +192,11 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: mMacd, kind: 'line' },
       { series: mSignal, kind: 'line' },
       { series: mEma, kind: 'line' },
-      { series: posShade, kind: 'area' },
     ];
-    const lod = new LodController(chart, candle, volume, extras);
+    const lod = new LodController(chart, candle, volume, extras, bands);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma, posShade };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma };
     markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
@@ -281,16 +297,17 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     s.candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: settings.volume ? 0.22 : 0.04 } });
   }, [settings]);
 
-  // Overlay a chosen strategy's buy/sell signals as markers + shade the periods
-  // the strategy is in a position (full-height green band behind the candles).
+  // Overlay a chosen strategy's buy/sell signals as markers + draw a per-trade
+  // P&L band: between each AL→SAT, fill between price and the entry price —
+  // green while in profit, red while at a loss, fading to transparent at entry.
   useEffect(() => {
     const m = markersRef.current;
-    const s = seriesRef.current;
     const lod = lodRef.current;
-    if (!m || !s) return;
+    const bands = bandsRef.current;
+    if (!m) return;
     if (!strategy || !candles) {
       m.setMarkers([]);
-      if (lod) lod.updateExtra(s.posShade, new Float64Array(0));
+      if (lod) lod.setBands([]);
       return;
     }
     const markers: SeriesMarker<Time>[] = signalsFor(strategy, candles).map((sig) =>
@@ -299,10 +316,27 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
         : { time: sig.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: 'SAT' },
     );
     m.setMarkers(markers);
+    // Split the position array into trade segments [a..b] (b includes the sell bar).
     const pos = buildPositionByName(strategy, candles);
-    const shade = new Float64Array(candles.length);
-    if (pos) for (let i = 0; i < pos.length; i++) if (pos[i]) shade[i] = 1;
-    if (lod) lod.updateExtra(s.posShade, shade);
+    const segs: { a: number; b: number }[] = [];
+    if (pos) {
+      const n = pos.length;
+      let i = 0;
+      while (i < n) {
+        if (pos[i]) {
+          const a = i;
+          let j = i;
+          while (j + 1 < n && pos[j + 1]) j++;
+          segs.push({ a, b: Math.min(j + 1, n - 1) });
+          i = j + 1;
+        } else i++;
+      }
+    }
+    // Each band's entry price (the AL close) is the green/red split level.
+    segs.slice(0, bands.length).forEach((seg, k) => {
+      bands[k].applyOptions({ baseValue: { type: 'price', price: candles.close[seg.a] } });
+    });
+    if (lod) lod.setBands(segs.slice(0, bands.length));
   }, [strategy, candles]);
 
   // Portfolio average-cost line on the price pane (Portföy sekmesi açıkken).
