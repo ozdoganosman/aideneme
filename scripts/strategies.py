@@ -172,18 +172,6 @@ def strategies_for(close, high, low):
         ll = pd.Series(low).rolling(L, min_periods=1).min().to_numpy()
         d = hh - ll
         pr = np.where(d != 0, 100.0 * (close - hh) / d + 100.0, np.nan)
-        for lo, hi in [(20, 80), (30, 70), (10, 90)]:
-            pos = np.zeros(n, dtype=np.int8)
-            cur = 0
-            for i in range(1, n):
-                a, bb = pr[i - 1], pr[i]
-                if np.isfinite(a) and np.isfinite(bb):
-                    if cur == 0 and a <= lo and bb > lo:
-                        cur = 1
-                    elif cur == 1 and a >= hi and bb < hi:
-                        cur = 0
-                pos[i] = cur
-            out[f"%R {L} ({lo}/{hi})"] = pos
         out[f"%R {L} > 50"] = np.where(np.isfinite(pr) & (pr > 50), 1, 0).astype(np.int8)
 
     # ── Stronger trend / breakout / volatility strategies ──────────────────────
@@ -229,7 +217,7 @@ def main() -> int:
         try:
             cur = json.load(open(sj, encoding="utf-8"))
             names_file = {r["name"] for r in cur.get("results", [])}
-            if cur.get("results") and "avgAnn" in cur["results"][0] and names_file == current_names():
+            if cur.get("results") and "avgAnn" in cur["results"][0] and cur.get("top") and names_file == current_names():
                 print("[strategies] güncel, atlanıyor")
                 return 0
         except Exception:  # noqa
@@ -239,10 +227,12 @@ def main() -> int:
     holds = []
     hold_anns = []
     nsym = 0
+    best_per_sym: dict[str, tuple] = {}  # symbol -> its single best (annualized) combo
 
     for fp in sorted(glob.glob(str(OUT / "*.json"))):
         if os.path.basename(fp) in SKIP:
             continue
+        sym = os.path.splitext(os.path.basename(fp))[0]
         try:
             recs = json.load(open(fp, encoding="utf-8"))["data"]
         except Exception:
@@ -276,6 +266,12 @@ def main() -> int:
                 continue
             ret, trades, win, dd, mult = bt
             ann = (mult ** (1.0 / years) - 1) * 100.0 if mult > 0 else -100.0
+            # Best (stock × strategy) combos for the Top-20 view — one per stock,
+            # with enough history and not ultra-short-term/churny.
+            if nbars >= 252 and trades >= 2 and mult > 1 and (nbars / trades) >= 25:
+                prev = best_per_sym.get(sym)
+                if prev is None or ann > prev[0]:
+                    best_per_sym[sym] = (ann, ret, trades, win, dd, nbars / trades, sym, sname)
             a = agg.setdefault(
                 sname,
                 {"rets": [], "anns": [], "wins": [], "dds": [], "holds": [], "trd": [], "beats": 0, "n": 0},
@@ -310,6 +306,22 @@ def main() -> int:
     # Rank by annualized (per-day-normalized) return, not raw total.
     results.sort(key=lambda x: x["avgAnn"], reverse=True)
 
+    # Top 20 (stock × strategy) combos overall — best annualized per stock.
+    top_sorted = sorted(best_per_sym.values(), key=lambda x: x[0], reverse=True)[:20]
+    top = [
+        {
+            "sym": s,
+            "name": nm,
+            "ann": round(an, 1),
+            "ret": round(rt, 1),
+            "trades": int(tr),
+            "win": round(wn, 1),
+            "dd": round(dd_, 1),
+            "hold": round(hd, 0),
+        }
+        for (an, rt, tr, wn, dd_, hd, s, nm) in top_sorted
+    ]
+
     OUT.mkdir(parents=True, exist_ok=True)
     with open(OUT / "strategies.json", "w", encoding="utf-8") as f:
         json.dump({
@@ -318,6 +330,7 @@ def main() -> int:
             "holdAvg": round(float(np.mean(holds)), 1) if holds else 0,
             "holdAnnAvg": round(float(np.mean(hold_anns)), 1) if hold_anns else 0,
             "results": results,
+            "top": top,
         }, f, separators=(",", ":"))
     print(f"[strategies] {nsym} hisse, {len(results)} strateji -> strategies.json")
     return 0

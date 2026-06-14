@@ -424,6 +424,12 @@ export default function App() {
             setLeftTab('trades');
             setLeftCollapsed(false);
           }}
+          onPickSymbolStrategy={(sym, name) => {
+            selectSymbol(sym);
+            setStrategy(name);
+            setLeftTab('trades');
+            setLeftCollapsed(false);
+          }}
         />
       )}
     </div>

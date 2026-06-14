@@ -8,16 +8,17 @@ interface Props {
   symbol: string;
   onClose: () => void;
   onSelect: (name: string) => void;
+  onPickSymbolStrategy: (sym: string, name: string) => void;
 }
 
 // Exclude short-term / high-turnover strategies (avg holding < ~5 weeks).
 const MIN_HOLD = 25;
 
-export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
+export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrategy }: Props) {
   const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number; holdAnn: number } | null>(null);
   const [market, setMarket] = useState<StrategiesFile | null>(null);
   const [marketLoaded, setMarketLoaded] = useState(false);
-  const [tab, setTab] = useState<'market' | 'symbol'>('market');
+  const [tab, setTab] = useState<'market' | 'top' | 'symbol'>('market');
 
   useEffect(() => {
     setData(null);
@@ -37,6 +38,11 @@ export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
     onClose();
   };
 
+  const pickCombo = (sym: string, name: string) => {
+    onPickSymbolStrategy(sym, name);
+    onClose();
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -48,6 +54,9 @@ export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
         <div className="bt-tabs">
           <button className={tab === 'market' ? 'active' : ''} onClick={() => setTab('market')}>
             📊 Piyasa Geneli{market ? ` · ${market.nSymbols} hisse` : ''}
+          </button>
+          <button className={tab === 'top' ? 'active' : ''} onClick={() => setTab('top')}>
+            🏅 En İyi 20
           </button>
           <button className={tab === 'symbol' ? 'active' : ''} onClick={() => setTab('symbol')}>
             📈 {symbol}
@@ -78,7 +87,11 @@ export function Backtest({ candles, symbol, onClose, onSelect }: Props) {
             </div>
           </details>
 
-          {tab === 'market' ? renderMarket(market, marketLoaded, pick) : renderSymbol(data, pick, candles.length)}
+          {tab === 'market'
+            ? renderMarket(market, marketLoaded, pick)
+            : tab === 'top'
+              ? renderTop(market, marketLoaded, pickCombo)
+              : renderSymbol(data, pick, candles.length)}
           <div className="bt-hint">
             Çubuk = <b>yıllık getiri</b> (gün başına kâra göre normalize — uzun sürede biriken büyük toplamlar artık
             haksız öne çıkmıyor). Bir stratejiye <b>tıkla</b> → grafikte AL/SAT noktaları işaretlenir.
@@ -154,6 +167,52 @@ function renderMarket(
             }
             onClick={() => pick(r.name)}
           />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function renderTop(
+  market: StrategiesFile | null,
+  loaded: boolean,
+  pickCombo: (sym: string, name: string) => void,
+) {
+  if (!loaded) return <div className="bt-note">Yükleniyor…</div>;
+  const top = market?.top ?? [];
+  if (top.length === 0)
+    return <div className="bt-note">En iyi 20 listesi henüz hazır değil (CI bir sonraki dağıtımda üretecek).</div>;
+
+  return (
+    <>
+      <p className="bt-intro">
+        ~{market?.nSymbols ?? 0} BIST hissesi × tüm stratejiler içinde geçmişte <b>yıllık</b> getirisi en yüksek 20{' '}
+        <b>hisse + strateji</b> eşleşmesi (her hisse için en iyi stratejisi). Bir satıra <b>tıkla</b> → o hisseyi açar ve
+        stratejiyi grafiğe işaretler.
+      </p>
+      <div className="bt-list">
+        {top.map((t, i) => (
+          <div
+            key={t.sym + t.name}
+            className="bt-srow clickable"
+            onClick={() => pickCombo(t.sym, t.name)}
+            title={`${t.sym} aç + ${t.name} göster`}
+          >
+            <div className="bt-srow-head">
+              <span className="bt-rank">{i + 1}</span>
+              <span className="bt-srow-name">
+                <b>{t.sym}</b> · {t.name}
+              </span>
+              <span className="bt-srow-val up">
+                {fmtPct(t.ann)}
+                <span className="bt-tag">yıl</span>
+              </span>
+            </div>
+            <div className="bt-srow-sub">
+              toplam {fmtX(t.ret)} · {t.trades} işlem · Kazanma %{t.win.toFixed(0)} · DD -{t.dd.toFixed(0)}%
+            </div>
+            <div className="bt-srow-explain">{explainStrategy(t.name)}</div>
+          </div>
         ))}
       </div>
     </>

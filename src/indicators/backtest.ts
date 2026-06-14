@@ -43,23 +43,6 @@ function prArr(c: Candles, len: number): Float64Array {
   return pr;
 }
 
-function prBounce(c: Candles, len: number, lo: number, hi: number): Uint8Array {
-  const pr = prArr(c, len);
-  const n = c.length;
-  const p = new Uint8Array(n);
-  let cur = 0;
-  for (let i = 1; i < n; i++) {
-    const a = pr[i - 1];
-    const b = pr[i];
-    if (Number.isFinite(a) && Number.isFinite(b)) {
-      if (cur === 0 && a <= lo && b > lo) cur = 1;
-      else if (cur === 1 && a >= hi && b < hi) cur = 0;
-    }
-    p[i] = cur;
-  }
-  return p;
-}
-
 // ── Extra building blocks for the stronger strategies ──────────────────────
 
 // Wilder ATR (average true range).
@@ -227,9 +210,6 @@ export function strategyList(): StrategyDef[] {
   }
 
   for (const len of [14, 50, 260]) {
-    for (const [lo, hi] of [[20, 80], [30, 70], [10, 90]]) {
-      defs.push({ name: `%R ${len} (${lo}/${hi})`, build: (c) => prBounce(c, len, lo, hi) });
-    }
     defs.push({
       name: `%R ${len} > 50`,
       build: (c) => {
@@ -300,8 +280,6 @@ export function explainStrategy(name: string): string {
     return '🚀 Momentum: Yükseliş ivmesi güç kazanınca AL, ivme zayıflamaya başlayınca SAT. Hızlanmayı yakalar.' + speed(+m[1]);
   if ((m = name.match(/^MACD (\d+)\/.* > 0/)))
     return '📈 Trend filtresi: Fiyat uzun vadeli ortalamasının üstüne (yükselişe) geçince AL, altına inince SAT.' + speed(+m[1]);
-  if ((m = name.match(/^%R (\d+) \(/)))
-    return '🔄 Dipten al, tepeden sat: Fiyat aşırı düşüp dipten dönünce AL, aşırı yükselip tepeden dönünce SAT (tepki/salınım stratejisi).' + speed(+m[1]);
   if ((m = name.match(/^%R (\d+) > 50/)))
     return '💪 Güç takibi: Fiyat son dönemin üst yarısında (güçlüyken) AL, alt yarısına düşünce (zayıflayınca) SAT.' + speed(+m[1]);
   return 'Gösterge tabanlı al/sat stratejisi.';

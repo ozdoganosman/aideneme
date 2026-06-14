@@ -74,12 +74,24 @@ export interface StrategyAgg {
   avgTrades?: number;
   n: number;
 }
+// One (stock × strategy) combo for the overall Top-20 view.
+export interface TopCombo {
+  sym: string;
+  name: string;
+  ann: number; // annualized %
+  ret: number; // total %
+  trades: number;
+  win: number;
+  dd: number;
+  hold: number;
+}
 export interface StrategiesFile {
   generated: number;
   nSymbols: number;
   holdAvg: number;
   holdAnnAvg?: number; // average annualized buy & hold %
   results: StrategyAgg[];
+  top?: TopCombo[];
 }
 
 export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesFile | null> {
