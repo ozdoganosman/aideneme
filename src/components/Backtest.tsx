@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Candles } from '../data/types';
 import { evalPosition } from '../indicators/backtest';
-import { fetchBistStatic } from '../data/bistStatic';
+import { fetchBistStatic, fetchScreener } from '../data/bistStatic';
 import {
   CustomStrategy,
   Cond,
@@ -65,10 +65,25 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
     setDraft({ id: s.id, name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
 
   const runScan = async () => {
-    if (!strats.length || !universe.length) return;
-    setScan({ rows: [], done: 0, total: universe.length, running: true });
+    if (!strats.length) return;
+    setScan({ rows: [], done: 0, total: 0, running: true });
+    // Scan the 300 oldest stocks (longest history) from the screener snapshot.
+    let syms = universe;
+    try {
+      const sc = await fetchScreener();
+      if (sc?.items?.length) {
+        syms = sc.items
+          .slice()
+          .sort((a, b) => (b.yr ?? 0) - (a.yr ?? 0))
+          .slice(0, 300)
+          .map((i) => i.s);
+      }
+    } catch {
+      /* fall back to the bounded universe */
+    }
+    setScan({ rows: [], done: 0, total: syms.length, running: true });
     const best = new Map<string, Combo>();
-    const queue = [...universe];
+    const queue = [...syms];
     let done = 0;
     const worker = async () => {
       while (queue.length) {
@@ -180,9 +195,9 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
           ) : (
             <>
               <p className="bt-intro">
-                Kayıtlı stratejilerini ~{universe.length} hissede (izleme listen + portföyün + likit BIST hisseleri)
-                tarar; <b>yıllık</b> getirisi en yüksek 20 <b>hisse + strateji</b> eşleşmesini listeler. Bir satıra tıkla
-                → o hisseyi açar ve stratejiyi işaretler.
+                Kayıtlı stratejilerini <b>en eski 300 BIST hissesinde</b> (en uzun geçmişe sahip) tarar; <b>yıllık</b>{' '}
+                getirisi en yüksek 20 <b>hisse + strateji</b> eşleşmesini listeler. Bir satıra tıkla → o hisseyi açar ve
+                stratejiyi işaretler. <span className="lg-muted">(300 hisse indirildiği için biraz sürebilir.)</span>
               </p>
               <div className="sb-actions">
                 <button className="scr-add" onClick={runScan} disabled={!strats.length || scan?.running}>

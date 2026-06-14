@@ -37,6 +37,7 @@ export const INDS: IndDef[] = [
   { key: 'ema', label: 'EMA', hasParam: true, defParam: 50 },
   { key: 'rsi', label: 'RSI', hasParam: true, defParam: 14 },
   { key: 'wr', label: 'Williams %R', hasParam: true, defParam: 260 },
+  { key: 'wrema', label: 'Williams %R EMA', hasParam: true, defParam: 260 },
   { key: 'macd', label: 'MACD (NizamiCedid)', hasParam: false, defParam: 0 },
   { key: 'signal', label: 'Signal', hasParam: false, defParam: 0 },
   { key: 'emacd', label: 'eMACD', hasParam: false, defParam: 0 },
@@ -72,6 +73,8 @@ function computeSeries(c: Candles, ind: string, p: number): Float64Array {
       return rsiArr(close, Math.max(2, p));
     case 'wr':
       return williamsR(c, Math.max(1, p));
+    case 'wrema':
+      return emaArr(williamsR(c, Math.max(1, p)), Math.max(1, p));
     case 'macd':
       return macdSeries(c).macd;
     case 'signal':
