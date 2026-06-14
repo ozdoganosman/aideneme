@@ -13,12 +13,14 @@ import {
   buildCustomPosition,
   candidateStrategies,
 } from '../indicators/customStrategy';
+import { IndicatorParams } from '../indicators/calc';
 
 interface Props {
   candles: Candles;
   symbol: string;
   universe: string[];
   strats: CustomStrategy[];
+  params: IndicatorParams;
   onSave: (s: CustomStrategy[]) => void;
   onApply: (s: CustomStrategy) => void;
   onPickCombo: (sym: string, s: CustomStrategy) => void;
@@ -63,7 +65,10 @@ const candlesMem = new Map<string, Candles>();
 const metricsMem = new Map<string, Map<string, ScanMetrics | null>>(); // sym → ruleHash → metrics|null(=no trades)
 let memHydrated = false;
 
-const stratHash = (s: CustomStrategy): string => JSON.stringify({ b: s.buy, s: s.sell });
+// Cache key for a strategy — includes the global MACD periods so the En İyi
+// cache invalidates when the user changes them (MACD uses the chart periods).
+const stratHash = (s: CustomStrategy, gp: IndicatorParams): string =>
+  JSON.stringify({ b: s.buy, s: s.sell, m: [gp.macdFast, gp.macdSlow, gp.macdSig, gp.macdVwma] });
 const toMetrics = (r: StrategyResult): ScanMetrics => ({
   ann: r.annRate ?? r.annPct,
   pure: r.annPct,
@@ -169,7 +174,7 @@ const SUGGESTED: { name: string; buy: Cond[]; sell: Cond[] }[] = [
   },
 ];
 
-export function Backtest({ candles, symbol, universe, strats, onSave, onApply, onPickCombo, onClose }: Props) {
+export function Backtest({ candles, symbol, universe, strats, params, onSave, onApply, onPickCombo, onClose }: Props) {
   const [tab, setTab] = useState<'mine' | 'top'>('mine');
   const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -200,7 +205,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
     () =>
       strats
         .map((s) => {
-          const pos = buildCustomPosition(candles, s);
+          const pos = buildCustomPosition(candles, s, undefined, params);
           return {
             s,
             r: evalPosition(candles, pos, inflRates),
@@ -212,12 +217,12 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
         })
         .sort((a, b) => (b.r.annRate ?? b.r.annPct) - (a.r.annRate ?? a.r.annPct)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [strats, candles, inflRates, idx5, idx10],
+    [strats, candles, inflRates, idx5, idx10, params],
   );
   const maxAnn = Math.max(...results.map((x) => Math.abs(x.r.annRate ?? x.r.annPct)), 1);
   const topMax = scan ? Math.max(...scan.rows.map((t) => Math.abs(t.ann)), 1) : 1;
   // Is the saved scan stale vs the current strategy set (changed/added/removed)?
-  const curHashes = useMemo(() => strats.map(stratHash), [strats]);
+  const curHashes = useMemo(() => strats.map((s) => stratHash(s, params)), [strats, params]);
   const stale =
     !!scanMeta &&
     (curHashes.length !== scanMeta.hashes.length || curHashes.some((h) => !scanMeta.hashes.includes(h)));
@@ -226,7 +231,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
   const preview = useMemo(() => {
     if (!draft.buy.length) return null;
     try {
-      const pos = buildCustomPosition(candles, draft);
+      const pos = buildCustomPosition(candles, draft, undefined, params);
       return {
         r: evalPosition(candles, pos, inflRates),
         eq: equitySpark(candles.close, pos, candles.time, inflRates),
@@ -237,7 +242,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, candles, inflRates, idx5, idx10]);
+  }, [draft, candles, inflRates, idx5, idx10, params]);
 
   // ── Optimizer: try a broad grid of candidate strategies ────────────────────
   const [opt, setOpt] = useState<{ mode: 'cur' | 'uni'; running: boolean; done: number; total: number; rows: OptRow[] } | null>(null);
@@ -249,7 +254,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
     const split = Math.floor(n * 0.7); // older 70% = train, newest 30% = test (unseen)
     const rows: OptRow[] = [];
     for (const s of cands) {
-      const pos = buildCustomPosition(candles, s, cache);
+      const pos = buildCustomPosition(candles, s, cache, params);
       const tr = evalPosition(candles, pos, inflRates, 0, split);
       const te = evalPosition(candles, pos, inflRates, split, n - 1);
       if (tr.trades > 0 && te.trades > 0) {
@@ -288,7 +293,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
           const cache = new Map<string, Float64Array>();
           const split = Math.floor(c.length * 0.7);
           for (let k = 0; k < cands.length; k++) {
-            const pos = buildCustomPosition(c, cands[k], cache);
+            const pos = buildCustomPosition(c, cands[k], cache, params);
             const tr = evalPosition(c, pos, rates, 0, split);
             const te = evalPosition(c, pos, rates, split, c.length - 1);
             if (tr.trades > 0 && te.trades > 0) {
@@ -385,7 +390,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
 
   const runScan = async () => {
     if (!strats.length) return;
-    const cur = strats.map((s) => ({ s, h: stratHash(s) }));
+    const cur = strats.map((s) => ({ s, h: stratHash(s, params) }));
     const curHashSet = new Set(cur.map((x) => x.h));
     setScan((p) => ({ rows: p?.rows ?? [], done: 0, total: 0, running: true }));
     const syms = await getScanSymbols();
@@ -415,7 +420,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
           }
           if (c && c.length >= 80) {
             for (const { s, h } of missing) {
-              const r = evalPosition(c, buildCustomPosition(c, s));
+              const r = evalPosition(c, buildCustomPosition(c, s, undefined, params));
               cell.set(h, r.trades > 0 ? toMetrics(r) : null);
             }
           } else {
@@ -468,6 +473,10 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                   conds={draft.sell}
                   onChange={setSell}
                 />
+                <div className="bt-note">
+                  Her koşulun yanındaki kutudan periyodu ayarla. MACD/Signal/eMACD periyotları üstteki <b>İndikatörler ▾</b>{' '}
+                  menüsünden gelir ({params.macdFast}/{params.macdSlow}/{params.macdSig}/{params.macdVwma}).
+                </div>
                 {preview &&
                   (() => {
                     const r = preview.r;

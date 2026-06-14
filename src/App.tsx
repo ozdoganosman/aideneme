@@ -163,10 +163,11 @@ export default function App() {
   }, [quotes, watchlist]);
   useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
   useEffect(() => localStorage.setItem('borsaStrats', JSON.stringify(customStrats)), [customStrats]);
-  // Register custom strategies so the chart/trades can draw them by name.
+  // Register custom strategies so the chart/trades can draw them by name (using
+  // the user's indicator periods for MACD etc.).
   useEffect(() => {
-    customStrats.forEach((s) => registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s) }));
-  }, [customStrats]);
+    customStrats.forEach((s) => registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) }));
+  }, [customStrats, indParams]);
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
   useEffect(() => localStorage.setItem('borsaIndParams', JSON.stringify(indParams)), [indParams]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
@@ -683,16 +684,17 @@ export default function App() {
           symbol={provider === 'bist' ? symbol : 'SENTETİK'}
           universe={universe}
           strats={customStrats}
+          params={indParams}
           onSave={setCustomStrats}
           onApply={(s) => {
-            registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s) });
+            registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) });
             setStrategy(s.name);
             setLeftTab('trades');
             setShowLeft(true);
             setShowBt(false);
           }}
           onPickCombo={(sym, s) => {
-            registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s) });
+            registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) });
             selectSymbol(sym);
             setStrategy(s.name);
             setLeftTab('trades');

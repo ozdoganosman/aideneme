@@ -1,5 +1,5 @@
 import { Candles } from '../data/types';
-import { emaArr, rollingVWMA, rollingHighest, rollingLowest, rocArr, donchianBound, bollingerBand, adxArr } from './calc';
+import { emaArr, rollingVWMA, rollingHighest, rollingLowest, rocArr, donchianBound, bollingerBand, adxArr, IndicatorParams, DEFAULT_PARAMS } from './calc';
 
 // ── User-built, rule-based strategies ───────────────────────────────────────
 // A strategy = BUY conditions (all must hold to enter) + SELL conditions (all
@@ -142,7 +142,7 @@ export function candidateStrategies(): CustomStrategy[] {
   return list.map((s, i) => ({ id: 'opt-' + i, name: s.name, buy: s.buy, sell: s.sell }));
 }
 
-function computeSeries(c: Candles, ind: string, p: number): Float64Array {
+function computeSeries(c: Candles, ind: string, p: number, gp: IndicatorParams): Float64Array {
   const close = c.close;
   switch (ind) {
     case 'price':
@@ -156,11 +156,11 @@ function computeSeries(c: Candles, ind: string, p: number): Float64Array {
     case 'wrema':
       return emaArr(williamsR(c, Math.max(1, p)), Math.max(1, p));
     case 'macd':
-      return macdSeries(c).macd;
+      return macdSeries(c, gp).macd;
     case 'signal':
-      return macdSeries(c).signal;
+      return macdSeries(c, gp).signal;
     case 'emacd':
-      return macdSeries(c).emacd;
+      return macdSeries(c, gp).emacd;
     case 'stdir':
       return supertrendDir(c, 10, 3);
     case 'adx':
@@ -170,7 +170,7 @@ function computeSeries(c: Candles, ind: string, p: number): Float64Array {
     case 'roc':
       return rocArr(close, Math.max(1, p));
     case 'rocema':
-      return emaArr(rocArr(close, 260), Math.max(1, p));
+      return emaArr(rocArr(close, gp.roc), Math.max(1, p));
     case 'donhi':
       return donchianBound(c, Math.max(1, p), true);
     case 'donlo':
@@ -193,6 +193,7 @@ export function buildCustomPosition(
   c: Candles,
   s: CustomStrategy,
   sharedCache?: Map<string, Float64Array>,
+  gp: IndicatorParams = DEFAULT_PARAMS,
 ): Uint8Array {
   const n = c.length;
   const cache = sharedCache ?? new Map<string, Float64Array>();
@@ -200,7 +201,7 @@ export function buildCustomPosition(
     const k = ind + ':' + p;
     let v = cache.get(k);
     if (!v) {
-      v = computeSeries(c, ind, p);
+      v = computeSeries(c, ind, p, gp);
       cache.set(k, v);
     }
     return v;
@@ -281,14 +282,14 @@ function williamsR(c: Candles, len: number): Float64Array {
   return out;
 }
 
-function macdSeries(c: Candles): { macd: Float64Array; signal: Float64Array; emacd: Float64Array } {
+function macdSeries(c: Candles, gp: IndicatorParams): { macd: Float64Array; signal: Float64Array; emacd: Float64Array } {
   const n = c.length;
-  const fast = emaArr(c.close, 120);
-  const slow = emaArr(c.close, 260);
+  const fast = emaArr(c.close, gp.macdFast);
+  const slow = emaArr(c.close, gp.macdSlow);
   const macd = new Float64Array(n);
   for (let i = 0; i < n; i++) macd[i] = fast[i] - slow[i];
-  const signal = emaArr(macd, 50);
-  const emacd = rollingVWMA(macd, c.volume, 185);
+  const signal = emaArr(macd, gp.macdSig);
+  const emacd = rollingVWMA(macd, c.volume, gp.macdVwma);
   // Normalize by the fast EMA — exactly like the on-chart NizamiCedid plot — so a
   // threshold like "MACD > 0.01" means the same value shown in the chart legend.
   const macdN = new Float64Array(n);
