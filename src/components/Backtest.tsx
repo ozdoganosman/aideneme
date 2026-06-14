@@ -11,6 +11,7 @@ import {
   hasParam,
   newCond,
   buildCustomPosition,
+  candidateStrategies,
 } from '../indicators/customStrategy';
 
 interface Props {
@@ -37,6 +38,17 @@ interface Combo {
   daysIn: number;
   daysOut: number;
   avg: number;
+}
+
+// One optimizer result: a candidate strategy's average performance.
+interface OptRow {
+  strat: CustomStrategy;
+  ann: number; // avg annualized incl. inflation on cash
+  pure: number; // avg annualized, price only
+  hold: number; // avg Buy & Hold annualized
+  beat: number; // % of stocks where it beat Al-Tut
+  n: number; // stocks counted (trades > 0)
+  trades: number; // avg trades (current-symbol mode: that symbol's trades)
 }
 
 // ── En İyi 20 scan cache (persisted + incremental) ───────────────────────────
@@ -191,6 +203,89 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
     !!scanMeta &&
     (curHashes.length !== scanMeta.hashes.length || curHashes.some((h) => !scanMeta.hashes.includes(h)));
 
+  // Live preview of the strategy being built, on the current symbol.
+  const preview = useMemo(() => {
+    if (!draft.buy.length) return null;
+    try {
+      const pos = buildCustomPosition(candles, draft);
+      return { r: evalPosition(candles, pos, inflRates), eq: equitySpark(candles.close, pos, candles.time, inflRates) };
+    } catch {
+      return null;
+    }
+  }, [draft, candles, inflRates]);
+
+  // ── Optimizer: try a broad grid of candidate strategies ────────────────────
+  const [opt, setOpt] = useState<{ mode: 'cur' | 'uni'; running: boolean; done: number; total: number; rows: OptRow[] } | null>(null);
+
+  const optimizeCurrent = () => {
+    const cands = candidateStrategies();
+    const cache = new Map<string, Float64Array>(); // share indicator series across candidates
+    const rows: OptRow[] = [];
+    for (const s of cands) {
+      const r = evalPosition(candles, buildCustomPosition(candles, s, cache), inflRates);
+      if (r.trades > 0) {
+        const ann = r.annRate ?? r.annPct;
+        rows.push({ strat: s, ann, pure: r.annPct, hold: r.holdAnn, beat: ann >= r.holdAnn ? 100 : 0, n: 1, trades: r.trades });
+      }
+    }
+    rows.sort((a, b) => b.ann - a.ann);
+    setOpt({ mode: 'cur', running: false, done: 0, total: 0, rows });
+  };
+
+  const optimizeUniverse = async () => {
+    const cands = candidateStrategies();
+    setOpt({ mode: 'uni', running: true, done: 0, total: 0, rows: [] });
+    const syms = await getScanSymbols();
+    setOpt({ mode: 'uni', running: true, done: 0, total: syms.length, rows: [] });
+    const acc = cands.map((s) => ({ s, sumAnn: 0, sumPure: 0, sumHold: 0, sumTr: 0, beat: 0, n: 0 }));
+    let done = 0;
+    const queue = [...syms];
+    const worker = async () => {
+      while (queue.length) {
+        const sym = queue.shift()!;
+        let c = candlesMem.get(sym);
+        if (!c) {
+          try {
+            c = await fetchBistStatic(sym);
+            candlesMem.set(sym, c);
+          } catch {
+            c = undefined;
+          }
+        }
+        if (c && c.length >= 80) {
+          const rates = inflationDailyRates(c.time, c.length);
+          const cache = new Map<string, Float64Array>();
+          for (let k = 0; k < cands.length; k++) {
+            const r = evalPosition(c, buildCustomPosition(c, cands[k], cache), rates);
+            if (r.trades > 0) {
+              const a = acc[k];
+              const ann = r.annRate ?? r.annPct;
+              a.sumAnn += ann;
+              a.sumPure += r.annPct;
+              a.sumHold += r.holdAnn;
+              a.sumTr += r.trades;
+              if (ann >= r.holdAnn) a.beat++;
+              a.n++;
+            }
+          }
+        }
+        done++;
+        setOpt((p) => (p ? { ...p, done } : p));
+        if (done % 4 === 0) await new Promise((r) => setTimeout(r)); // yield to keep UI responsive
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, worker));
+    const rows: OptRow[] = acc
+      .filter((a) => a.n > 0)
+      .map((a) => ({ strat: a.s, ann: a.sumAnn / a.n, pure: a.sumPure / a.n, hold: a.sumHold / a.n, beat: (a.beat / a.n) * 100, n: a.n, trades: a.sumTr / a.n }))
+      .sort((x, y) => y.ann - x.ann);
+    setOpt({ mode: 'uni', running: false, done, total: syms.length, rows });
+  };
+
+  // Load an optimizer result into the builder so it can be tuned + saved.
+  const useCandidate = (s: CustomStrategy) =>
+    setDraft({ id: '', name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
+
   const setBuy = (buy: Cond[]) => setDraft((d) => ({ ...d, buy }));
   const setSell = (sell: Cond[]) => setDraft((d) => ({ ...d, sell }));
 
@@ -328,6 +423,36 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                   conds={draft.sell}
                   onChange={setSell}
                 />
+                {preview &&
+                  (() => {
+                    const r = preview.r;
+                    const ann = r.annRate ?? r.annPct;
+                    const beatR = ann >= r.holdAnn;
+                    const beatP = r.annPct >= r.holdAnn;
+                    return (
+                      <div className="sb-preview">
+                        <div className="sb-pv-head">
+                          <span className="sb-pv-title">📊 {symbol} ön-izleme (yıllık)</span>
+                          <span className="sb-pv-vals">
+                            <b className={beatR ? 'rv-win' : 'rv-lose'}>
+                              enf. {fmtPct(ann)}
+                              {beatR ? ' ✓' : ''}
+                            </b>
+                            <b className={beatP ? 'rv-win' : 'rv-lose'}>
+                              saf {fmtPct(r.annPct)}
+                              {beatP ? ' ✓' : ''}
+                            </b>
+                            <b className="rv-base">Al-Tut {fmtPct(r.holdAnn)}</b>
+                          </span>
+                        </div>
+                        <div className="sb-pv-sub lg-muted">
+                          toplam {fmtX(r.retRate ?? r.retPct)} · {r.trades} işlem · Kazanma %{r.winRate.toFixed(0)} · Düşüş -
+                          {r.maxDD.toFixed(0)}% · işlemde {r.daysIn ?? 0}g / boşta {r.daysOut ?? 0}g
+                        </div>
+                        <EquitySpark data={preview.eq} />
+                      </div>
+                    );
+                  })()}
                 <div className="sb-actions">
                   <button className="scr-add" onClick={save}>
                     {draft.id ? 'Güncelle' : 'Kaydet'}
@@ -344,6 +469,54 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                 <span className="lg-muted">Hazır şablonlar (Williams Paşa + NizamiCedid, en iyiler):</span>
                 <button className="sb-sugbtn" onClick={addSuggested}>📋 Önerilenleri ekle</button>
               </div>
+
+              <div className="sb-suggest">
+                <span className="lg-muted">🎯 Otomatik: onlarca kombinasyonu dener, en iyiyi bulur:</span>
+                <button className="sb-sugbtn" onClick={optimizeCurrent}>⚡ Bu hisse ({symbol})</button>
+                <button className="sb-sugbtn" onClick={optimizeUniverse} disabled={opt?.running}>
+                  {opt?.running ? `Taranıyor… ${opt.done}/${opt.total}` : '🌍 Tüm hisseler (ortalama)'}
+                </button>
+              </div>
+
+              {opt && (
+                <div className="opt-panel">
+                  <div className="opt-head">
+                    <b>🎯 En iyi kombinasyonlar</b>
+                    <span className="lg-muted">
+                      {opt.mode === 'uni'
+                        ? `${opt.total} hissenin ortalaması · enf. dahil yıllık`
+                        : `${symbol} · enf. dahil yıllık`}
+                    </span>
+                    <button className="row-x" onClick={() => setOpt(null)} title="Kapat">×</button>
+                  </div>
+                  {opt.running && opt.rows.length === 0 ? (
+                    <div className="bt-note">Hesaplanıyor… {opt.done}/{opt.total}</div>
+                  ) : opt.rows.length === 0 ? (
+                    <div className="bt-note">Sonuç yok.</div>
+                  ) : (
+                    <div className="opt-list">
+                      {opt.rows.slice(0, 15).map((o, i) => {
+                        const beatR = o.ann >= o.hold;
+                        return (
+                          <div className="opt-row" key={o.strat.id}>
+                            <span className="bt-rank">{i + 1}</span>
+                            <span className="opt-name">{o.strat.name}</span>
+                            <span className="opt-vals">
+                              <b className={beatR ? 'rv-win' : 'rv-lose'}>{fmtPct(o.ann)}</b>
+                              <span className="lg-muted">
+                                saf {fmtPct(o.pure)} · Al-Tut {fmtPct(o.hold)}
+                                {opt.mode === 'uni' ? ` · geçme %${o.beat.toFixed(0)} · ${o.n} hisse` : ` · ${o.trades} işlem`}
+                              </span>
+                            </span>
+                            <button className="opt-use" onClick={() => useCandidate(o.strat)}>Kullan</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="bt-note">"Kullan" → kuralı yukarıdaki düzenleyiciye yükler; isim verip kaydedebilirsin.</div>
+                </div>
+              )}
 
               <p className="bt-intro">
                 <b>{symbol}</b> üzerinde kayıtlı stratejilerin sonuçları (<b>enflasyon dahil yıllık</b> getiriye göre).

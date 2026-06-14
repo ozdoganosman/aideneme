@@ -1,5 +1,5 @@
 import { Candles } from '../data/types';
-import { emaArr, rollingVWMA } from './calc';
+import { emaArr, rollingVWMA, rollingHighest, rollingLowest } from './calc';
 
 // ── User-built, rule-based strategies ───────────────────────────────────────
 // A strategy = BUY conditions (all must hold to enter) + SELL conditions (all
@@ -62,6 +62,45 @@ export function newCond(): Cond {
   return { ind: 'wr', p: 260, op: 'gt', tgt: 'val', val: 50, ind2: 'ema', p2: 50 };
 }
 
+// A broad grid of candidate strategies (every "reasonable" possibility from the
+// supported indicators) that the optimizer tries to find the best average across
+// stocks. Each has a BUY rule and the matching opposite SELL rule.
+export function candidateStrategies(): CustomStrategy[] {
+  const C = (ind: string, op: Op, tgt: 'val' | 'ind', val = 0, ind2 = 'emacd', p = 0, p2 = 0): Cond => ({ ind, p, op, tgt, val, ind2, p2 });
+  const list: { name: string; buy: Cond[]; sell: Cond[] }[] = [];
+
+  // MACD (NizamiCedid)
+  list.push({ name: 'MACD > 0', buy: [C('macd', 'gt', 'val', 0)], sell: [C('macd', 'lt', 'val', 0)] });
+  list.push({ name: 'MACD ↗ Signal', buy: [C('macd', 'cu', 'ind', 0, 'signal')], sell: [C('macd', 'cd', 'ind', 0, 'signal')] });
+  list.push({ name: 'MACD ↗ eMACD', buy: [C('macd', 'cu', 'ind', 0, 'emacd')], sell: [C('macd', 'cd', 'ind', 0, 'emacd')] });
+  list.push({ name: 'MACD > Signal', buy: [C('macd', 'gt', 'ind', 0, 'signal')], sell: [C('macd', 'lt', 'ind', 0, 'signal')] });
+
+  // Williams %R
+  for (const p of [50, 260]) {
+    list.push({ name: `%R(${p}) ↗ EMA`, buy: [C('wr', 'cu', 'ind', 0, 'wrema', p, p)], sell: [C('wr', 'cd', 'ind', 0, 'wrema', p, p)] });
+    for (const th of [40, 50, 60]) list.push({ name: `%R(${p}) > ${th}`, buy: [C('wr', 'gt', 'val', th, 'emacd', p)], sell: [C('wr', 'lt', 'val', th, 'emacd', p)] });
+  }
+
+  // RSI
+  for (const p of [14, 50]) for (const th of [50, 55]) list.push({ name: `RSI(${p}) > ${th}`, buy: [C('rsi', 'gt', 'val', th, 'emacd', p)], sell: [C('rsi', 'lt', 'val', th, 'emacd', p)] });
+
+  // Price vs EMA (trend)
+  for (const p of [50, 100, 200, 377]) list.push({ name: `Fiyat > EMA(${p})`, buy: [C('price', 'gt', 'ind', 0, 'ema', 0, p)], sell: [C('price', 'lt', 'ind', 0, 'ema', 0, p)] });
+
+  // EMA crossovers
+  for (const [a, b] of [[20, 50], [50, 200], [89, 377]]) list.push({ name: `EMA(${a}) ↗ EMA(${b})`, buy: [C('ema', 'cu', 'ind', 0, 'ema', a, b)], sell: [C('ema', 'cd', 'ind', 0, 'ema', a, b)] });
+
+  // Supertrend direction
+  list.push({ name: 'Supertrend yukarı', buy: [C('stdir', 'gt', 'val', 0.5)], sell: [C('stdir', 'lt', 'val', 0.5)] });
+
+  // Trend-filtered momentum (2 conditions: momentum AND price > EMA 200)
+  list.push({ name: 'MACD>0 + Trend(200)', buy: [C('macd', 'gt', 'val', 0), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('macd', 'lt', 'val', 0)] });
+  list.push({ name: '%R(260)>50 + Trend(200)', buy: [C('wr', 'gt', 'val', 50, 'emacd', 260), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('wr', 'lt', 'val', 50, 'emacd', 260)] });
+  list.push({ name: 'RSI(14)>50 + Trend(200)', buy: [C('rsi', 'gt', 'val', 50, 'emacd', 14), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('rsi', 'lt', 'val', 50, 'emacd', 14)] });
+
+  return list.map((s, i) => ({ id: 'opt-' + i, name: s.name, buy: s.buy, sell: s.sell }));
+}
+
 function computeSeries(c: Candles, ind: string, p: number): Float64Array {
   const close = c.close;
   switch (ind) {
@@ -88,9 +127,16 @@ function computeSeries(c: Candles, ind: string, p: number): Float64Array {
   }
 }
 
-export function buildCustomPosition(c: Candles, s: CustomStrategy): Uint8Array {
+// `sharedCache` lets the optimizer reuse indicator series across many candidate
+// strategies on the same symbol (keyed by indicator:period) instead of
+// recomputing EMAs/%R/MACD for every candidate.
+export function buildCustomPosition(
+  c: Candles,
+  s: CustomStrategy,
+  sharedCache?: Map<string, Float64Array>,
+): Uint8Array {
   const n = c.length;
-  const cache = new Map<string, Float64Array>();
+  const cache = sharedCache ?? new Map<string, Float64Array>();
   const ser = (ind: string, p: number) => {
     const k = ind + ':' + p;
     let v = cache.get(k);
@@ -166,16 +212,12 @@ function rsiArr(close: Float64Array, len: number): Float64Array {
 
 function williamsR(c: Candles, len: number): Float64Array {
   const n = c.length;
+  const hh = rollingHighest(c.high, len); // O(n) sliding window (same trailing window as before)
+  const ll = rollingLowest(c.low, len);
   const out = new Float64Array(n).fill(NaN);
   for (let i = 0; i < n; i++) {
-    let hh = -Infinity;
-    let ll = Infinity;
-    for (let j = Math.max(0, i - len + 1); j <= i; j++) {
-      if (c.high[j] > hh) hh = c.high[j];
-      if (c.low[j] < ll) ll = c.low[j];
-    }
-    const d = hh - ll;
-    out[i] = d !== 0 ? (100 * (c.close[i] - hh)) / d + 100 : NaN;
+    const d = hh[i] - ll[i];
+    out[i] = d !== 0 ? (100 * (c.close[i] - hh[i])) / d + 100 : NaN;
   }
   return out;
 }
