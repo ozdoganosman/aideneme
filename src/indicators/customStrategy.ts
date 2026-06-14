@@ -127,9 +127,12 @@ export function buildCustomPosition(c: Candles, s: CustomStrategy): Uint8Array {
     const buyOk = s.buy.length > 0 && evalConds(s.buy, i);
     // No sell rules → exit when the buy condition stops holding.
     const sellOk = s.sell.length ? evalConds(s.sell, i) : !buyOk;
+    // Enter only on a clean buy, exit only on a clean sell. If both fire on the
+    // same bar (contradictory), HOLD the current position — no whipsaw: buy once,
+    // then sit until a real sell.
     if (cur === 0) {
-      if (buyOk) cur = 1;
-    } else if (sellOk) {
+      if (buyOk && !sellOk) cur = 1;
+    } else if (sellOk && !buyOk) {
       cur = 0;
     }
     p[i] = cur;
