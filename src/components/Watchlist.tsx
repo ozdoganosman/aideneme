@@ -36,14 +36,18 @@ export function Watchlist({ items, quotes, spark, added, active, onSelect, onRem
           >
             <span className="row-sym">
               {sym}
-              {since !== null && (
+              {since !== null ? (
                 <small
                   className={'wl-since ' + (since >= 0 ? 'up' : 'down')}
                   title={`Takibe alındığından beri (${days} gün) · giriş ${fmt(a!.p)}`}
                 >
                   {(since >= 0 ? '+' : '') + since.toFixed(1)}% · {days}g
                 </small>
-              )}
+              ) : !q ? (
+                <small className="lg-muted" title="Bu sembol için veri yok — kod yanlış olabilir">
+                  veri yok
+                </small>
+              ) : null}
             </span>
             <Spark data={spark[sym]} />
             <span className="row-num">
