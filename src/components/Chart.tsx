@@ -9,6 +9,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  AreaSeries,
   CrosshairMode,
   LineStyle,
   PriceScaleMode,
@@ -64,7 +65,7 @@ type SeriesBag = {
   mMacd: ISeriesApi<'Line'>;
   mSignal: ISeriesApi<'Line'>;
   mEma: ISeriesApi<'Line'>;
-  posShade: ISeriesApi<'Histogram'>;
+  posShade: ISeriesApi<'Area'>;
 };
 
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
@@ -111,11 +112,20 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false },
     });
 
-    // Strategy "in-position" shade: full-height histogram on its own scale,
-    // created first so it sits behind the candles; fills bars where long.
+    // Strategy "in-position" shade: a single faint area (value 1 = long, 0 =
+    // flat) on its own full-height scale, behind the candles. Using an area
+    // (not a histogram) avoids per-bar overlap darkening into a solid block.
     const posShade = chart.addSeries(
-      HistogramSeries,
-      { priceScaleId: 'posshade', base: 0, color: 'rgba(38,166,154,0.12)', priceLineVisible: false, lastValueVisible: false },
+      AreaSeries,
+      {
+        priceScaleId: 'posshade',
+        lineColor: 'rgba(0,0,0,0)',
+        topColor: 'rgba(38,166,154,0.07)',
+        bottomColor: 'rgba(38,166,154,0.07)',
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      },
       0,
     );
     posShade.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 } });
@@ -163,7 +173,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: mMacd, kind: 'line' },
       { series: mSignal, kind: 'line' },
       { series: mEma, kind: 'line' },
-      { series: posShade, kind: 'hist' },
+      { series: posShade, kind: 'area' },
     ];
     const lod = new LodController(chart, candle, volume, extras);
     lodRef.current = lod;
@@ -246,7 +256,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
     lodRef.current.setData(
       candles,
-      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN, new Float64Array(n).fill(NaN)],
+      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN, new Float64Array(n)],
       fitRef.current,
     );
     if (!hoveringRef.current) setLegend(lv);
@@ -288,7 +298,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     );
     m.setMarkers(markers);
     const pos = buildPositionByName(strategy, candles);
-    const shade = new Float64Array(candles.length).fill(NaN);
+    const shade = new Float64Array(candles.length);
     if (pos) for (let i = 0; i < pos.length; i++) if (pos[i]) shade[i] = 1;
     if (lod) lod.updateExtra(s.posShade, shade);
   }, [strategy, candles]);
