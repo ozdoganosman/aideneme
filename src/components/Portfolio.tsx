@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { usePanelCollapse } from './usePanelCollapse';
 import { Quotes } from '../data/bistStatic';
 
 export interface Holding {
@@ -11,35 +10,43 @@ export interface Holding {
 interface Props {
   holdings: Holding[];
   quotes: Quotes;
+  spark: Record<string, number[]>;
   symbols: string[];
   onAdd: (h: Holding) => void;
   onRemove: (index: number) => void;
   onSelect: (s: string) => void;
 }
 
-export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect }: Props) {
+// Stable per-holding colors — same color ties a card to its donut slice.
+const PALETTE = [
+  '#3b82f6', '#26a69a', '#f59e0b', '#a855f7', '#ef5350', '#14b8a6',
+  '#ec4899', '#f97316', '#84cc16', '#06b6d4', '#eab308', '#8b5cf6',
+];
+
+export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, onSelect }: Props) {
   const [sym, setSym] = useState('');
   const [qty, setQty] = useState('');
   const [cost, setCost] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [collapsed, toggle] = usePanelCollapse('pf_collapsed');
 
   const matches = open && sym ? rank(symbols, sym.toUpperCase()) : [];
 
-  const rows = holdings.map((h) => {
+  const rows = holdings.map((h, i) => {
     const q = quotes[h.symbol];
     const price = q ? q.c : 0;
     const pc = q ? q.pc : price;
     const val = price * h.qty;
-    const cost = h.cost * h.qty;
-    const pnl = val - cost;
+    const cst = h.cost * h.qty;
+    const pnl = val - cst;
     return {
       h,
+      i,
+      color: PALETTE[i % PALETTE.length],
       price,
       val,
       pnl,
-      pnlPct: cost ? (pnl / cost) * 100 : 0,
+      pnlPct: cst ? (pnl / cst) * 100 : 0,
       dayPL: (price - pc) * h.qty,
       dayPct: pc ? ((price - pc) / pc) * 100 : 0,
     };
@@ -49,7 +56,8 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
   const totPnl = totVal - totCost;
   const totPct = totCost ? (totPnl / totCost) * 100 : 0;
   const totDay = rows.reduce((s, r) => s + r.dayPL, 0);
-  const totDayPct = totVal - totDay ? (totDay / (totVal - totDay)) * 100 : 0;
+  const totDayBase = totVal - totDay;
+  const totDayPct = totDayBase ? (totDay / totDayBase) * 100 : 0;
 
   const add = () => {
     const s = sym.toUpperCase().trim();
@@ -64,15 +72,7 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
   };
 
   return (
-    <div className={'panel' + (collapsed ? ' collapsed' : '')}>
-      <div className="panel-title clickable" onClick={toggle} title={collapsed ? 'Aç' : 'Kapat'}>
-        <span className="panel-caret">▾</span>
-        <span>Portföy</span>
-        {holdings.length > 0 && <span className="panel-count">{holdings.length}</span>}
-      </div>
-
-      {collapsed ? null : (
-        <>
+    <>
       <div className="pf-form">
         <div className="ac">
           <input
@@ -130,11 +130,16 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
 
       {holdings.length === 0 && <div className="panel-empty">Pozisyon ekle (sembol · adet · maliyet)</div>}
 
-      {rows.map((r, i) => {
+      {holdings.length > 0 && totVal > 0 && (
+        <Donut rows={rows} total={totVal} totDay={totDay} totDayPct={totDayPct} />
+      )}
+
+      {rows.map((r) => {
         const weight = totVal ? (r.val / totVal) * 100 : 0;
         return (
-          <div key={i} className="pf-card" onClick={() => onSelect(r.h.symbol)} title="Grafikte aç">
+          <div key={r.i} className="pf-card" onClick={() => onSelect(r.h.symbol)} title="Grafikte aç">
             <div className="pf-card-top">
+              <span className="pf-dot" style={{ background: r.color }} />
               <b>{r.h.symbol}</b>
               <span className="pf-weight">%{weight.toFixed(0)}</span>
               <span className="pf-val">{money(r.val)}</span>
@@ -143,18 +148,21 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
                 title="Kaldır"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onRemove(i);
+                  onRemove(r.i);
                 }}
               >
                 ×
               </button>
             </div>
             <div className="pf-card-mid">
-              {r.h.qty} × {money(r.h.cost)} · son {money(r.price)}{' '}
-              <span className={r.dayPct >= 0 ? 'up' : 'down'}>
-                ({r.dayPct >= 0 ? '+' : ''}
-                {r.dayPct.toFixed(2)}%)
+              <span>
+                {r.h.qty} × {money(r.h.cost)} · son {money(r.price)}{' '}
+                <span className={r.dayPct >= 0 ? 'up' : 'down'}>
+                  ({r.dayPct >= 0 ? '+' : ''}
+                  {r.dayPct.toFixed(2)}%)
+                </span>
               </span>
+              <Spark data={spark[r.h.symbol]} />
             </div>
             <div className="pf-card-pnl">
               <span className={r.pnl >= 0 ? 'up' : 'down'}>
@@ -171,7 +179,7 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
               </span>
             </div>
             <div className="pf-weightbar">
-              <div className="pf-weightfill" style={{ width: weight + '%' }} />
+              <div className="pf-weightfill" style={{ width: weight + '%', background: r.color }} />
             </div>
           </div>
         );
@@ -191,6 +199,7 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
               {totPct.toFixed(1)}%)
             </b>
           </div>
+          <PnlBar pct={totPct} />
           <div className="pf-summary-row">
             <span className="lg-muted">Bugün</span>
             <b className={totDay >= 0 ? 'up' : 'down'}>
@@ -201,9 +210,95 @@ export function Portfolio({ holdings, quotes, symbols, onAdd, onRemove, onSelect
           </div>
         </div>
       )}
-        </>
-      )}
+    </>
+  );
+}
+
+// Allocation donut (composition by current value) with total + today in the hole.
+function Donut({
+  rows,
+  total,
+  totDay,
+  totDayPct,
+}: {
+  rows: { color: string; val: number; h: Holding }[];
+  total: number;
+  totDay: number;
+  totDayPct: number;
+}) {
+  const size = 138;
+  const sw = 18;
+  const r = (size - sw) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const C = 2 * Math.PI * r;
+  let acc = 0;
+  return (
+    <div className="pf-donutwrap">
+      <svg width={size} height={size} className="pf-donut">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1a1d27" strokeWidth={sw} />
+        {rows.map((s, i) => {
+          const frac = total > 0 ? s.val / total : 0;
+          const dash = frac * C;
+          const el = (
+            <circle
+              key={i}
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={sw}
+              strokeDasharray={`${dash} ${C - dash}`}
+              strokeDashoffset={-acc * C}
+              transform={`rotate(-90 ${cx} ${cy})`}
+            >
+              <title>{`${s.h.symbol} · %${(frac * 100).toFixed(1)}`}</title>
+            </circle>
+          );
+          acc += frac;
+          return el;
+        })}
+        <text className="pf-donut-val" x={cx} y={cy - 2} textAnchor="middle">{money(total)}</text>
+        <text
+          className="pf-donut-day"
+          x={cx}
+          y={cy + 13}
+          textAnchor="middle"
+          fill={totDay >= 0 ? '#26a69a' : '#ef5350'}
+        >
+          bugün {totDayPct >= 0 ? '+' : ''}{totDayPct.toFixed(2)}%
+        </text>
+      </svg>
     </div>
+  );
+}
+
+// Diverging total-P&L bar: green right of center for profit, red left for loss.
+function PnlBar({ pct }: { pct: number }) {
+  const half = Math.min(50, Math.abs(pct) / 2);
+  const pos = pct >= 0;
+  return (
+    <div className="pf-pnlbar" title={`Toplam K/Z %${pct.toFixed(1)}`}>
+      <div className={'pf-pnlbar-fill ' + (pos ? 'pos' : 'neg')} style={{ left: pos ? '50%' : 50 - half + '%', width: half + '%' }} />
+      <div className="pf-pnlbar-center" />
+    </div>
+  );
+}
+
+function Spark({ data }: { data?: number[] }) {
+  if (!data || data.length < 2) return <svg className="spark" width="46" height="16" />;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const rng = max - min || 1;
+  const pts = data
+    .map((v, i) => `${((i / (data.length - 1)) * 44 + 1).toFixed(1)},${(15 - ((v - min) / rng) * 14).toFixed(1)}`)
+    .join(' ');
+  const up = data[data.length - 1] >= data[0];
+  return (
+    <svg className="spark" width="46" height="16">
+      <polyline points={pts} fill="none" stroke={up ? '#26a69a' : '#ef5350'} strokeWidth="1.2" />
+    </svg>
   );
 }
 

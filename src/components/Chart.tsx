@@ -15,6 +15,7 @@ import {
   PriceScaleMode,
   IChartApi,
   ISeriesApi,
+  IPriceLine,
   CandlestickData,
   HistogramData,
   LineData,
@@ -42,6 +43,7 @@ interface Props {
   symbol: string;
   tfLabel: string;
   strategy?: string | null; // overlay this strategy's buy/sell signals
+  costLine?: { price: number; label: string } | null; // portfolio avg-cost line
   log?: boolean; // logarithmic price scale
   focus?: { entryTime: number; exitTime: number | null } | null; // zoom to one trade
 }
@@ -76,7 +78,7 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
 });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(
-  { candles, fitOnLoad, settings, symbol, tfLabel, strategy, log, focus },
+  { candles, fitOnLoad, settings, symbol, tfLabel, strategy, costLine, log, focus },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -84,6 +86,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const chartApiRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<SeriesBag | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const costLineRef = useRef<IPriceLine | null>(null);
   const lastValsRef = useRef<LegendVals | null>(null);
   const hoveringRef = useRef(false);
   const fitRef = useRef(true);
@@ -274,6 +277,26 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     );
     m.setMarkers(markers);
   }, [strategy, candles]);
+
+  // Portfolio average-cost line on the price pane (Portföy sekmesi açıkken).
+  useEffect(() => {
+    const s = seriesRef.current;
+    if (!s) return;
+    if (costLineRef.current) {
+      s.candle.removePriceLine(costLineRef.current);
+      costLineRef.current = null;
+    }
+    if (costLine && isFinite(costLine.price)) {
+      costLineRef.current = s.candle.createPriceLine({
+        price: costLine.price,
+        color: '#f0b90b',
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: costLine.label,
+      });
+    }
+  }, [costLine]);
 
   // Logarithmic / normal price scale.
   useEffect(() => {

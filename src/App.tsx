@@ -48,6 +48,8 @@ export default function App() {
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
+  const [leftTab, setLeftTab] = useState<'portfolio' | 'trades'>(() => lsGet('borsaLeftTab', 'portfolio'));
+  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => lsGet('borsaLeftCollapsed', false));
 
   const [quotes, setQuotes] = useState<Quotes>({});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -67,6 +69,8 @@ export default function App() {
   useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
+  useEffect(() => localStorage.setItem('borsaLeftTab', JSON.stringify(leftTab)), [leftTab]);
+  useEffect(() => localStorage.setItem('borsaLeftCollapsed', JSON.stringify(leftCollapsed)), [leftCollapsed]);
 
   const load = useCallback(
     async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
@@ -167,6 +171,21 @@ export default function App() {
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
   const starred = watchlist.includes(symbol);
   const stats = useMemo(() => computeStats(candles), [candles]);
+
+  // Active left tab reflects onto the chart: Portföy → avg-cost line for the held
+  // symbol; İşlemler → strategy markers. Collapsed → neither.
+  const reflectTrades = !leftCollapsed && leftTab === 'trades';
+  const costLine = useMemo(() => {
+    if (leftCollapsed || leftTab !== 'portfolio' || provider !== 'bist') return null;
+    const h = portfolio.find((x) => x.symbol === symbol);
+    if (!h || !(h.cost > 0)) return null;
+    const q = quotes[symbol];
+    const last = q ? q.c : NaN;
+    const pnlPct = isFinite(last) && h.cost ? ((last - h.cost) / h.cost) * 100 : NaN;
+    const c = h.cost.toLocaleString('en-US', { maximumFractionDigits: h.cost >= 1000 ? 0 : 2 });
+    const label = isFinite(pnlPct) ? `Maliyet ${c} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : `Maliyet ${c}`;
+    return { price: h.cost, label };
+  }, [leftCollapsed, leftTab, provider, portfolio, symbol, quotes]);
   const lastC = candles && candles.length ? candles.close[candles.length - 1] : NaN;
   const prevC = candles && candles.length > 1 ? candles.close[candles.length - 2] : NaN;
   const dChg = isFinite(lastC) && isFinite(prevC) && prevC ? ((lastC - prevC) / prevC) * 100 : 0;
@@ -243,24 +262,56 @@ export default function App() {
 
       <div className="body">
         <aside className="sidebar">
-          <Portfolio
-            holdings={portfolio}
-            quotes={quotes}
-            symbols={symbols}
-            onAdd={(h) => setPortfolio((p) => [...p, h])}
-            onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
-            onSelect={selectSymbol}
-          />
-          {strategy && candles && (
-            <Trades
-              strategy={strategy}
-              candles={candles}
-              onSelectTrade={(t) => {
-                setFocusTrade(t);
-                setLog(true);
-              }}
-            />
-          )}
+          <div className={'panel' + (leftCollapsed ? ' collapsed' : '')}>
+            <div className="lefttabs">
+              <button
+                className="lt-caret"
+                onClick={() => setLeftCollapsed((c) => !c)}
+                title={leftCollapsed ? 'Aç' : 'Kapat'}
+              >
+                <span className="panel-caret">▾</span>
+              </button>
+              <button
+                className={!leftCollapsed && leftTab === 'portfolio' ? 'active' : ''}
+                onClick={() => {
+                  setLeftTab('portfolio');
+                  setLeftCollapsed(false);
+                }}
+              >
+                Portföy{portfolio.length ? ` · ${portfolio.length}` : ''}
+              </button>
+              <button
+                className={reflectTrades ? 'active' : ''}
+                onClick={() => {
+                  setLeftTab('trades');
+                  setLeftCollapsed(false);
+                }}
+              >
+                İşlemler
+              </button>
+            </div>
+            {!leftCollapsed &&
+              (leftTab === 'portfolio' ? (
+                <Portfolio
+                  holdings={portfolio}
+                  quotes={quotes}
+                  spark={spark}
+                  symbols={symbols}
+                  onAdd={(h) => setPortfolio((p) => [...p, h])}
+                  onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
+                  onSelect={selectSymbol}
+                />
+              ) : (
+                <Trades
+                  strategy={strategy}
+                  candles={candles}
+                  onSelectTrade={(t) => {
+                    setFocusTrade(t);
+                    setLog(true);
+                  }}
+                />
+              ))}
+          </div>
         </aside>
 
         <main className="main">
@@ -298,7 +349,7 @@ export default function App() {
               </div>
             )}
 
-            {focusTrade && (
+            {reflectTrades && focusTrade && (
               <div className="tradecard">
                 <button className="tradecard-x" onClick={() => setFocusTrade(null)} title="Kapat">×</button>
                 <div className="tradecard-row">
@@ -337,9 +388,10 @@ export default function App() {
               settings={settings}
               symbol={provider === 'bist' ? symbol : 'SENTETİK'}
               tfLabel={tfLabel}
-              strategy={strategy}
+              strategy={reflectTrades ? strategy : null}
+              costLine={costLine}
               log={log}
-              focus={focusTrade ? { entryTime: focusTrade.entryTime, exitTime: focusTrade.exitTime } : null}
+              focus={reflectTrades && focusTrade ? { entryTime: focusTrade.entryTime, exitTime: focusTrade.exitTime } : null}
             />
           </div>
         </main>
@@ -367,7 +419,11 @@ export default function App() {
           candles={candles}
           symbol={provider === 'bist' ? symbol : 'SENTETİK'}
           onClose={() => setShowBt(false)}
-          onSelect={(name) => setStrategy(name)}
+          onSelect={(name) => {
+            setStrategy(name);
+            setLeftTab('trades');
+            setLeftCollapsed(false);
+          }}
         />
       )}
     </div>

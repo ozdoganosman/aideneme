@@ -2,18 +2,26 @@ import { Candles } from '../data/types';
 import { tradesFor, Trade } from '../indicators/backtest';
 
 interface Props {
-  strategy: string;
-  candles: Candles;
+  strategy: string | null;
+  candles: Candles | null;
   onSelectTrade: (t: Trade) => void;
 }
 
 export function Trades({ strategy, candles, onSelectTrade }: Props) {
+  if (!strategy || !candles)
+    return (
+      <div className="panel-empty">
+        Önce bir strateji seç: <b>Strateji Taraması</b>'ndan bir stratejiye tıkla. İşlemleri burada listelenir ve grafiğe
+        AL/SAT olarak işaretlenir.
+      </div>
+    );
+
   const trades = tradesFor(strategy, candles);
   const wins = trades.filter((t) => t.retPct >= 0).length;
 
   return (
-    <div className="panel">
-      <div className="panel-title">İşlemler · {strategy}</div>
+    <>
+      <div className="pf-substrat" title={strategy}>{strategy}</div>
       {trades.length === 0 ? (
         <div className="panel-empty">İşlem yok</div>
       ) : (
@@ -43,7 +51,7 @@ export function Trades({ strategy, candles, onSelectTrade }: Props) {
           ))}
         </>
       )}
-    </div>
+    </>
   );
 }
 
