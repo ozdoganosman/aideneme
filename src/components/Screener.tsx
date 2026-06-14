@@ -1,5 +1,85 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchScreener, fetchBistSpark, ScreenerFile, ScreenerItem } from '../data/bistStatic';
+import { fetchScreener, fetchBistSpark, fetchBistStatic, ScreenerFile, ScreenerItem } from '../data/bistStatic';
+import { Candles } from '../data/types';
+import { emaArr, adxArr, bollingerBand, rollingHighest, rollingLowest } from '../indicators/calc';
+
+// ── Live (period-aware) indicator filter ─────────────────────────────────────
+// The fast Screener filters a fixed-period snapshot; this computes an indicator
+// at ANY period on demand (downloads candles for the snapshot-filtered subset).
+interface LiveF {
+  ind: string;
+  period: number;
+  op: 'gt' | 'lt';
+  val: number;
+}
+const LIVE_INDS: { key: string; label: string }[] = [
+  { key: 'wr', label: 'Williams %R' },
+  { key: 'wrema', label: '%R EMA' },
+  { key: 'rsi', label: 'RSI' },
+  { key: 'adx', label: 'ADX' },
+  { key: 'roc', label: 'Momentum / ROC %' },
+  { key: 'emadist', label: 'Fiyat/EMA farkı %' },
+  { key: 'bbp', label: 'Bollinger %b' },
+  { key: 'dcp', label: 'Donchian konum %' },
+];
+const liveLabel = (k: string) => LIVE_INDS.find((i) => i.key === k)?.label ?? k;
+const liveCandles = new Map<string, Candles>(); // session cache (avoid re-downloading)
+
+function rsiLast(close: Float64Array, len: number): number {
+  const n = close.length;
+  if (n <= len) return NaN;
+  let ag = 0;
+  let al = 0;
+  for (let i = 1; i <= len; i++) {
+    const ch = close[i] - close[i - 1];
+    ag += Math.max(ch, 0);
+    al += Math.max(-ch, 0);
+  }
+  ag /= len;
+  al /= len;
+  for (let i = len + 1; i < n; i++) {
+    const ch = close[i] - close[i - 1];
+    ag = (ag * (len - 1) + Math.max(ch, 0)) / len;
+    al = (al * (len - 1) + Math.max(-ch, 0)) / len;
+  }
+  return al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+}
+// Current value of an indicator at a given period.
+function liveValue(c: Candles, ind: string, p: number): number {
+  const n = c.length;
+  const last = n - 1;
+  const pp = Math.max(1, Math.round(p));
+  if (ind === 'rsi') return rsiLast(c.close, Math.max(2, pp));
+  if (ind === 'adx') {
+    const a = adxArr(c, Math.max(2, pp));
+    return a[last];
+  }
+  if (ind === 'roc') return n > pp && c.close[n - 1 - pp] > 0 ? (c.close[last] / c.close[n - 1 - pp] - 1) * 100 : NaN;
+  if (ind === 'emadist') {
+    const e = emaArr(c.close, pp);
+    return e[last] ? (c.close[last] / e[last] - 1) * 100 : NaN;
+  }
+  if (ind === 'bbp') {
+    const up = bollingerBand(c, Math.max(2, pp), 'up');
+    const dn = bollingerBand(c, Math.max(2, pp), 'dn');
+    return up[last] > dn[last] ? ((c.close[last] - dn[last]) / (up[last] - dn[last])) * 100 : NaN;
+  }
+  if (ind === 'dcp') {
+    const hh = rollingHighest(c.high, pp);
+    const ll = rollingLowest(c.low, pp);
+    return hh[last] > ll[last] ? ((c.close[last] - ll[last]) / (hh[last] - ll[last])) * 100 : NaN;
+  }
+  // wr / wrema
+  const hh = rollingHighest(c.high, pp);
+  const ll = rollingLowest(c.low, pp);
+  const pr = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = hh[i] - ll[i];
+    pr[i] = d ? (100 * (c.close[i] - hh[i])) / d + 100 : NaN;
+  }
+  if (ind === 'wrema') return emaArr(pr, pp)[last];
+  return pr[last];
+}
 
 interface Props {
   onClose: () => void;
@@ -108,6 +188,14 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
     }
   });
   const [saveName, setSaveName] = useState('');
+  // Live (period-aware) filters
+  const [liveFs, setLiveFs] = useState<LiveF[]>([]);
+  const [lind, setLind] = useState('wr');
+  const [lp, setLp] = useState('260');
+  const [lop, setLop] = useState<'gt' | 'lt'>('gt');
+  const [lval, setLval] = useState('50');
+  const [liveSet, setLiveSet] = useState<Set<string> | null>(null);
+  const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
     fetchScreener().then(setData).catch(() => setData(null)).finally(() => setLoaded(true));
@@ -154,7 +242,8 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
     return [...base, ...extra];
   }, [view, filterKeys]);
 
-  const rows = useMemo(() => {
+  // Snapshot-filtered + searched + sorted (before any live filter).
+  const base = useMemo(() => {
     const items = data?.items ?? [];
     const needle = q.trim().toUpperCase();
     const out = items.filter(
@@ -165,6 +254,57 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
     out.sort((a, b) => ((a[sort.key] as number) - (b[sort.key] as number)) * sort.dir);
     return out;
   }, [data, filters, sort, q]);
+  const rows = useMemo(() => (liveSet ? base.filter((r) => liveSet.has(r.s)) : base), [base, liveSet]);
+
+  const addLive = () => {
+    const period = Math.max(1, Math.round(Number(lp)));
+    const v = parseFloat(lval.replace(',', '.'));
+    if (!Number.isFinite(period) || !Number.isFinite(v)) return;
+    setLiveFs((fs) => [...fs, { ind: lind, period, op: lop, val: v }]);
+    setLiveSet(null); // needs re-apply
+  };
+  const runLive = async () => {
+    if (!liveFs.length) {
+      setLiveSet(null);
+      return;
+    }
+    const syms = base.map((r) => r.s);
+    setLiveRun({ done: 0, total: syms.length });
+    const pass = new Set<string>();
+    const queue = [...syms];
+    let done = 0;
+    const worker = async () => {
+      while (queue.length) {
+        const sym = queue.shift()!;
+        let c = liveCandles.get(sym);
+        if (!c) {
+          try {
+            c = await fetchBistStatic(sym);
+            liveCandles.set(sym, c);
+          } catch {
+            c = undefined;
+          }
+        }
+        if (c && c.length >= 30) {
+          let ok = true;
+          for (const f of liveFs) {
+            const v = liveValue(c, f.ind, f.period);
+            if (!Number.isFinite(v) || (f.op === 'gt' ? !(v > f.val) : !(v < f.val))) {
+              ok = false;
+              break;
+            }
+          }
+          if (ok) pass.add(sym);
+        }
+        done++;
+        setLiveRun((p) => (p ? { ...p, done } : p));
+        if (done % 6 === 0) await new Promise((r) => setTimeout(r));
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, worker));
+    setLiveSet(pass);
+    setLiveRun(null);
+  };
 
   const addFilter = () => {
     let f: Filter;
@@ -276,6 +416,40 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
                   + Ekle
                 </button>
               </div>
+
+              <div className="scr-build scr-live">
+                <span className="lg-muted" title="İstediğin periyotla anlık hesaplar (snapshot ile sınırlanan hisseleri indirir)">🔬 Canlı (periyotlu):</span>
+                <select value={lind} onChange={(e) => setLind(e.target.value)}>
+                  {LIVE_INDS.map((i) => (
+                    <option key={i.key} value={i.key}>{i.label}</option>
+                  ))}
+                </select>
+                <input className="scr-lp" value={lp} inputMode="numeric" placeholder="periyot" onChange={(e) => setLp(e.target.value)} title="Periyot (gün)" />
+                <select value={lop} onChange={(e) => setLop(e.target.value as 'gt' | 'lt')}>
+                  <option value="gt">&gt; büyük</option>
+                  <option value="lt">&lt; küçük</option>
+                </select>
+                <input value={lval} inputMode="decimal" placeholder="değer" onChange={(e) => setLval(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addLive()} />
+                <button className="scr-add" onClick={addLive}>+ Ekle</button>
+                {liveFs.length > 0 && (
+                  <button className="scr-add" onClick={runLive} disabled={!!liveRun} title="Snapshot ile süzülen hisseleri indirip canlı hesaplar">
+                    {liveRun ? `Taranıyor… ${liveRun.done}/${liveRun.total}` : liveSet ? '↻ Canlı uygula' : '🔬 Canlı uygula'}
+                  </button>
+                )}
+              </div>
+              {liveFs.length > 0 && (
+                <div className="scr-chips">
+                  {liveFs.map((f, i) => (
+                    <span key={i} className="scr-fchip scr-fchip-live">
+                      {liveLabel(f.ind)}({f.period}) {f.op === 'gt' ? '>' : '<'} {f.val}
+                      <button onClick={() => { setLiveFs((fs) => fs.filter((_, idx) => idx !== i)); setLiveSet(null); }}>×</button>
+                    </span>
+                  ))}
+                  <button className="scr-preset scr-clear" onClick={() => { setLiveFs([]); setLiveSet(null); }}>✕ canlı temizle</button>
+                  {liveSet && <span className="lg-muted">canlı: {liveSet.size} eşleşti</span>}
+                  {!liveSet && <span className="scan-stale">↻ "Canlı uygula"ya bas</span>}
+                </div>
+              )}
 
               <div className="scr-presets">
                 {PRESETS.map((p) => (

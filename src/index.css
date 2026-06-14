@@ -905,6 +905,19 @@ button.ctl:disabled {
 .scr-build input {
   width: 92px;
 }
+.scr-build .scr-lp {
+  width: 64px;
+}
+.scr-live {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.scr-fchip-live {
+  background: rgba(123, 87, 194, 0.18);
+  border-color: #7e57c2;
+  color: #d6c7ef;
+}
 .scr-build select:focus,
 .scr-build input:focus {
   border-color: var(--accent);
