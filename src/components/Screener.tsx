@@ -6,76 +6,104 @@ interface Props {
   onSelect: (s: string) => void;
 }
 
-interface Filters {
-  rsiMin: string;
-  rsiMax: string;
-  chMin: string;
-  r1yMin: string;
-  volMax: string;
-  fhMin: string;
-  yrMin: string;
-  above200: boolean;
-  golden: boolean;
-  wrStrong: boolean;
-  macdUp: boolean;
-  superUp: boolean;
+type Key = keyof ScreenerItem;
+type Kind = 'price' | 'pct' | 'num' | 'bool';
+interface ColDef {
+  key: Key;
+  label: string;
+  kind: Kind;
 }
 
-const EMPTY: Filters = {
-  rsiMin: '', rsiMax: '', chMin: '', r1yMin: '', volMax: '', fhMin: '', yrMin: '',
-  above200: false, golden: false, wrStrong: false, macdUp: false, superUp: false,
-};
+const COLS: ColDef[] = [
+  { key: 'p', label: 'Fiyat', kind: 'price' },
+  { key: 'ch', label: 'Günlük %', kind: 'pct' },
+  { key: 'rsi', label: 'RSI', kind: 'num' },
+  { key: 'wr', label: 'Williams %R', kind: 'num' },
+  { key: 'r1m', label: '1A %', kind: 'pct' },
+  { key: 'r3m', label: '3A %', kind: 'pct' },
+  { key: 'r1y', label: '1Y %', kind: 'pct' },
+  { key: 'vol', label: 'Oynaklık %', kind: 'num' },
+  { key: 'dd', label: 'Max düşüş %', kind: 'num' },
+  { key: 'fh', label: 'Zirveye %', kind: 'pct' },
+  { key: 'yr', label: 'Geçmiş (yıl)', kind: 'num' },
+  { key: 'av', label: 'Ort. hacim', kind: 'num' },
+  { key: 'e50', label: 'EMA50 üstü', kind: 'bool' },
+  { key: 'e200', label: 'EMA200 üstü', kind: 'bool' },
+  { key: 'gc', label: 'Golden cross', kind: 'bool' },
+  { key: 'mu', label: 'MACD yukarı', kind: 'bool' },
+  { key: 'st', label: 'Supertrend ↑', kind: 'bool' },
+];
+const COL = (k: Key): ColDef => COLS.find((c) => c.key === k) as ColDef;
 
-const PRESETS: { label: string; f: Partial<Filters> }[] = [
-  { label: '📈 Yükseliş trendi', f: { above200: true, golden: true } },
-  { label: '🎯 52H zirveye yakın', f: { above200: true, fhMin: '-5' } },
-  { label: '🚀 Güçlü momentum', f: { above200: true, macdUp: true, r1yMin: '0' } },
-  { label: '🛡️ Supertrend AL', f: { superUp: true, above200: true } },
-  { label: '💪 Williams %R güçlü', f: { wrStrong: true, above200: true } },
-  { label: '🟢 Aşırı satım (RSI<35)', f: { rsiMax: '35' } },
-  { label: '🔴 Aşırı alım (RSI>70)', f: { rsiMin: '70' } },
-  { label: '😌 Düşük oynaklık', f: { above200: true, volMax: '35' } },
+const VIEWS: { label: string; cols: Key[] }[] = [
+  { label: 'Genel', cols: ['p', 'ch', 'rsi', 'r1y', 'vol', 'e200'] },
+  { label: 'Williams Paşa (%R)', cols: ['p', 'wr', 'rsi', 'e200', 'st'] },
+  { label: 'Trend / EMA', cols: ['p', 'e50', 'e200', 'gc', 'st'] },
+  { label: 'MACD & momentum', cols: ['p', 'mu', 'ch', 'r3m', 'r1y'] },
+  { label: 'Getiri', cols: ['p', 'r1m', 'r3m', 'r1y'] },
+  { label: 'Risk', cols: ['p', 'vol', 'dd', 'fh', 'yr'] },
 ];
 
-type SortKey = 'r1y' | 'ch' | 'rsiUp' | 'rsiDn' | 'volUp' | 'fh';
+interface Filter {
+  key: Key;
+  op: string;
+  val: number;
+}
+
+const PRESETS: { label: string; fs: Filter[] }[] = [
+  { label: '📈 Yükseliş trendi', fs: [{ key: 'e200', op: 'is', val: 1 }, { key: 'gc', op: 'is', val: 1 }] },
+  { label: '🎯 52H zirveye yakın', fs: [{ key: 'e200', op: 'is', val: 1 }, { key: 'fh', op: 'gte', val: -5 }] },
+  { label: '🛡️ Supertrend AL', fs: [{ key: 'st', op: 'is', val: 1 }, { key: 'e200', op: 'is', val: 1 }] },
+  { label: '💪 %R > 50', fs: [{ key: 'wr', op: 'gt', val: 50 }, { key: 'e200', op: 'is', val: 1 }] },
+  { label: '🟢 RSI < 35', fs: [{ key: 'rsi', op: 'lt', val: 35 }] },
+  { label: '🔴 RSI > 70', fs: [{ key: 'rsi', op: 'gt', val: 70 }] },
+];
 
 export function Screener({ onClose, onSelect }: Props) {
   const [data, setData] = useState<ScreenerFile | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [f, setF] = useState<Filters>(EMPTY);
-  const [sort, setSort] = useState<SortKey>('r1y');
+  const [view, setView] = useState(0);
+  const [filters, setFilters] = useState<Filter[]>([]);
+  const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>({ key: 'r1y', dir: -1 });
+  const [fk, setFk] = useState<Key>('wr');
+  const [op, setOp] = useState('gt');
+  const [val, setVal] = useState('50');
 
   useEffect(() => {
-    fetchScreener()
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoaded(true));
+    fetchScreener().then(setData).catch(() => setData(null)).finally(() => setLoaded(true));
   }, []);
 
-  const results = useMemo(() => {
-    const items = data?.items ?? [];
-    const out = items.filter((it) => pass(it, f));
-    const cmp: Record<SortKey, (a: ScreenerItem, b: ScreenerItem) => number> = {
-      r1y: (a, b) => b.r1y - a.r1y,
-      ch: (a, b) => b.ch - a.ch,
-      rsiUp: (a, b) => a.rsi - b.rsi,
-      rsiDn: (a, b) => b.rsi - a.rsi,
-      volUp: (a, b) => a.vol - b.vol,
-      fh: (a, b) => b.fh - a.fh,
-    };
-    return out.sort(cmp[sort]);
-  }, [data, f, sort]);
+  const cols = VIEWS[view].cols;
+  const kind = COL(fk).kind;
 
-  const set = (k: keyof Filters, v: string | boolean) => setF((p) => ({ ...p, [k]: v }));
+  const rows = useMemo(() => {
+    const items = data?.items ?? [];
+    const out = items.filter((it) => filters.every((f) => passF(it, f)));
+    out.sort((a, b) => ((a[sort.key] as number) - (b[sort.key] as number)) * sort.dir);
+    return out;
+  }, [data, filters, sort]);
+
+  const addFilter = () => {
+    let f: Filter;
+    if (kind === 'bool') {
+      f = { key: fk, op: 'is', val: Number(val) || 0 };
+    } else {
+      const v = parseFloat(val.replace(',', '.'));
+      if (!isFinite(v)) return;
+      f = { key: fk, op, val: v };
+    }
+    setFilters((fs) => [...fs.filter((x) => !(x.key === f.key && x.op === f.op)), f]);
+  };
+  const toggleSort = (k: Key) =>
+    setSort((s) => (s.key === k ? { key: k, dir: (s.dir * -1) as 1 | -1 } : { key: k, dir: -1 }));
   const pick = (s: string) => {
     onSelect(s);
     onClose();
   };
-  const active = JSON.stringify(f) !== JSON.stringify(EMPTY);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <b>Hisse Tarama{data ? ` · ${data.items.length} hisse` : ''}</b>
           <button className="row-x" onClick={onClose} title="Kapat">×</button>
@@ -83,89 +111,126 @@ export function Screener({ onClose, onSelect }: Props) {
         <div className="modal-body">
           {!loaded ? (
             <div className="bt-note">Yükleniyor…</div>
-          ) : !data || data.items.length === 0 ? (
+          ) : !data || !data.items.length ? (
             <div className="bt-note">Tarama verisi henüz hazır değil (CI bir sonraki dağıtımda üretecek).</div>
           ) : (
             <>
-              <div className="scr-section">🧠 Akıllı filtreler</div>
+              <div className="scr-build">
+                <label className="scr-pick">
+                  📊 Gösterge / kolonlar
+                  <select value={view} onChange={(e) => setView(Number(e.target.value))}>
+                    {VIEWS.map((v, i) => (
+                      <option key={v.label} value={i}>
+                        {v.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="scr-sep" />
+                <span className="lg-muted">Filtre:</span>
+                <select
+                  value={fk}
+                  onChange={(e) => {
+                    const k = e.target.value as Key;
+                    setFk(k);
+                    setOp(COL(k).kind === 'bool' ? 'is' : 'gt');
+                    setVal(COL(k).kind === 'bool' ? '1' : '');
+                  }}
+                >
+                  {COLS.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                {kind === 'bool' ? (
+                  <select value={val} onChange={(e) => setVal(e.target.value)}>
+                    <option value="1">Evet</option>
+                    <option value="0">Hayır</option>
+                  </select>
+                ) : (
+                  <>
+                    <select value={op} onChange={(e) => setOp(e.target.value)}>
+                      <option value="gt">&gt; büyük</option>
+                      <option value="gte">≥</option>
+                      <option value="lt">&lt; küçük</option>
+                      <option value="lte">≤</option>
+                      <option value="eq">= eşit</option>
+                    </select>
+                    <input
+                      value={val}
+                      inputMode="decimal"
+                      placeholder="değer"
+                      onChange={(e) => setVal(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addFilter()}
+                    />
+                  </>
+                )}
+                <button className="scr-add" onClick={addFilter}>
+                  + Ekle
+                </button>
+              </div>
+
               <div className="scr-presets">
                 {PRESETS.map((p) => (
-                  <button key={p.label} className="scr-preset" onClick={() => setF({ ...EMPTY, ...p.f })}>
+                  <button key={p.label} className="scr-preset" onClick={() => setFilters(p.fs)}>
                     {p.label}
                   </button>
                 ))}
-                {active && (
-                  <button className="scr-preset scr-clear" onClick={() => setF(EMPTY)}>
-                    ✕ Temizle
+                {filters.length > 0 && (
+                  <button className="scr-preset scr-clear" onClick={() => setFilters([])}>
+                    ✕ Tümünü temizle
                   </button>
                 )}
               </div>
 
-              <div className="scr-section">⚙️ Kendi filtrelerin</div>
-              <div className="scr-filters">
-                <Num label="RSI ≥" v={f.rsiMin} on={(v) => set('rsiMin', v)} />
-                <Num label="RSI ≤" v={f.rsiMax} on={(v) => set('rsiMax', v)} />
-                <Num label="Günlük % ≥" v={f.chMin} on={(v) => set('chMin', v)} />
-                <Num label="1Y getiri % ≥" v={f.r1yMin} on={(v) => set('r1yMin', v)} />
-                <Num label="Oynaklık % ≤" v={f.volMax} on={(v) => set('volMax', v)} />
-                <Num label="Zirveye uzaklık % ≥" v={f.fhMin} on={(v) => set('fhMin', v)} title="−5 = zirvenin %5 yakını" />
-                <Num label="Min geçmiş (yıl)" v={f.yrMin} on={(v) => set('yrMin', v)} />
-              </div>
-              <div className="scr-checks">
-                <Chk label="200 günlük üstünde" v={f.above200} on={(v) => set('above200', v)} />
-                <Chk label="Golden cross (50>200)" v={f.golden} on={(v) => set('golden', v)} />
-                <Chk label="Williams %R > 50" v={f.wrStrong} on={(v) => set('wrStrong', v)} />
-                <Chk label="MACD yukarı" v={f.macdUp} on={(v) => set('macdUp', v)} />
-                <Chk label="Supertrend yukarı" v={f.superUp} on={(v) => set('superUp', v)} />
+              {filters.length > 0 && (
+                <div className="scr-chips">
+                  {filters.map((f, i) => (
+                    <span key={i} className="scr-fchip">
+                      {COL(f.key).label} {opLabel(f)}
+                      <button onClick={() => setFilters((fs) => fs.filter((_, idx) => idx !== i))}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="scr-count">
+                <b>{rows.length}</b> hisse eşleşti
               </div>
 
-              <div className="scr-resbar">
-                <b>{results.length}</b> hisse eşleşti
-                <span className="scr-sort">
-                  Sırala:
-                  <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-                    <option value="r1y">1Y getiri ↓</option>
-                    <option value="ch">Günlük % ↓</option>
-                    <option value="fh">Zirveye yakınlık ↓</option>
-                    <option value="rsiDn">RSI ↓</option>
-                    <option value="rsiUp">RSI ↑</option>
-                    <option value="volUp">Oynaklık ↑</option>
-                  </select>
-                </span>
+              <div className="scr-tablewrap">
+                <table className="scr-table">
+                  <thead>
+                    <tr>
+                      <th className="scr-th-sym">Sembol</th>
+                      {cols.map((k) => (
+                        <th key={k} onClick={() => toggleSort(k)} title="Sırala">
+                          {COL(k).label}
+                          {sort.key === k ? (sort.dir < 0 ? ' ↓' : ' ↑') : ''}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 250).map((it) => (
+                      <tr key={it.s} onClick={() => pick(it.s)} title="Grafikte aç">
+                        <td className="scr-td-sym">
+                          <b>{it.s}</b> <span className="lg-muted">{it.n}</span>
+                        </td>
+                        {cols.map((k) => (
+                          <td key={k}>{cell(it, COL(k))}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {rows.length === 0 && <div className="bt-note">Eşleşen hisse yok — filtreleri gevşet.</div>}
+                {rows.length > 250 && <div className="bt-note">… ilk 250 gösteriliyor. Filtreyi daralt.</div>}
               </div>
-
-              <div className="scr-list">
-                {results.slice(0, 150).map((it) => (
-                  <div key={it.s} className="scr-row" onClick={() => pick(it.s)} title="Grafikte aç">
-                    <div className="scr-row-l">
-                      <div className="scr-row-sym">
-                        <b>{it.s}</b> {it.n && <span className="lg-muted">{it.n}</span>}
-                      </div>
-                      <div className="scr-badges">
-                        {it.e200 ? <span className="scr-b up">200↑</span> : <span className="scr-b down">200↓</span>}
-                        {it.gc ? <span className="scr-b up">GC</span> : null}
-                        {it.st ? <span className="scr-b up">ST↑</span> : null}
-                        {it.mu ? <span className="scr-b up">MACD↑</span> : null}
-                        <span className={'scr-b ' + (it.rsi >= 70 ? 'down' : it.rsi <= 35 ? 'up' : 'mut')}>RSI {it.rsi}</span>
-                      </div>
-                    </div>
-                    <div className="scr-row-r">
-                      <div className="scr-price">{fmt(it.p)}</div>
-                      <div className={it.ch >= 0 ? 'up' : 'down'}>
-                        {it.ch >= 0 ? '+' : ''}
-                        {it.ch.toFixed(2)}%
-                      </div>
-                      <div className={'scr-r1y ' + (it.r1y >= 0 ? 'up' : 'down')}>
-                        1Y {it.r1y >= 0 ? '+' : ''}
-                        {it.r1y}%
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {results.length > 150 && <div className="bt-note">… ilk 150 gösteriliyor. Filtreyi daralt.</div>}
-                {results.length === 0 && <div className="bt-note">Eşleşen hisse yok — filtreleri gevşet.</div>}
+              <div className="bt-hint">
+                ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç.
               </div>
-              <div className="bt-hint">⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir.</div>
             </>
           )}
         </div>
@@ -174,43 +239,50 @@ export function Screener({ onClose, onSelect }: Props) {
   );
 }
 
-function pass(it: ScreenerItem, f: Filters): boolean {
-  const num = (s: string) => (s.trim() === '' ? null : parseFloat(s.replace(',', '.')));
-  const rmin = num(f.rsiMin), rmax = num(f.rsiMax), ch = num(f.chMin), r1y = num(f.r1yMin);
-  const vmax = num(f.volMax), fh = num(f.fhMin), yr = num(f.yrMin);
-  if (rmin != null && it.rsi < rmin) return false;
-  if (rmax != null && it.rsi > rmax) return false;
-  if (ch != null && it.ch < ch) return false;
-  if (r1y != null && it.r1y < r1y) return false;
-  if (vmax != null && it.vol > vmax) return false;
-  if (fh != null && it.fh < fh) return false;
-  if (yr != null && it.yr < yr) return false;
-  if (f.above200 && !it.e200) return false;
-  if (f.golden && !it.gc) return false;
-  if (f.wrStrong && !(it.wr > 50)) return false;
-  if (f.macdUp && !it.mu) return false;
-  if (f.superUp && !it.st) return false;
-  return true;
+function passF(it: ScreenerItem, f: Filter): boolean {
+  const v = it[f.key] as number;
+  switch (f.op) {
+    case 'gt':
+      return v > f.val;
+    case 'gte':
+      return v >= f.val;
+    case 'lt':
+      return v < f.val;
+    case 'lte':
+      return v <= f.val;
+    case 'eq':
+      return Math.round(v) === f.val;
+    case 'is':
+      return (v ? 1 : 0) === f.val;
+    default:
+      return true;
+  }
 }
 
-function Num({ label, v, on, title }: { label: string; v: string; on: (v: string) => void; title?: string }) {
-  return (
-    <label className="scr-num" title={title}>
-      <span>{label}</span>
-      <input value={v} inputMode="decimal" placeholder="—" onChange={(e) => on(e.target.value)} />
-    </label>
-  );
+function opLabel(f: Filter): string {
+  if (f.op === 'is') return f.val ? 'Evet' : 'Hayır';
+  const m: Record<string, string> = { gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' };
+  return `${m[f.op]} ${f.val}`;
 }
 
-function Chk({ label, v, on }: { label: string; v: boolean; on: (v: boolean) => void }) {
-  return (
-    <label className={'scr-chk' + (v ? ' on' : '')}>
-      <input type="checkbox" checked={v} onChange={(e) => on(e.target.checked)} />
-      {label}
-    </label>
-  );
+function cell(it: ScreenerItem, c: ColDef) {
+  const v = it[c.key] as number;
+  if (c.kind === 'bool') return v ? <span className="up">✓</span> : <span className="lg-muted">–</span>;
+  if (c.kind === 'price') return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (c.key === 'av') return fv(v);
+  if (c.key === 'yr') return v.toFixed(1);
+  if (c.kind === 'pct')
+    return (
+      <span className={v >= 0 ? 'up' : 'down'}>
+        {(v >= 0 ? '+' : '') + (c.key === 'ch' ? v.toFixed(2) : v)}%
+      </span>
+    );
+  return String(Math.round(v));
 }
 
-function fmt(v: number): string {
-  return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fv(v: number): string {
+  if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K';
+  return String(Math.round(v));
 }

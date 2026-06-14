@@ -766,6 +766,134 @@ button.ctl:disabled {
   font-size: 11px;
 }
 
+/* Screener — table layout (TradingView-style) */
+.modal.wide {
+  width: min(1120px, 96vw);
+}
+.scr-build {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.scr-build select,
+.scr-build input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: none;
+}
+.scr-build input {
+  width: 92px;
+}
+.scr-build select:focus,
+.scr-build input:focus {
+  border-color: var(--accent);
+}
+.scr-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+.scr-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+}
+.scr-add {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scr-add:hover {
+  background: #2f6fd0;
+}
+.scr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.scr-fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-weak);
+  border: 1px solid var(--accent);
+  color: #cfe0ff;
+  border-radius: 20px;
+  padding: 3px 4px 3px 10px;
+  font-size: 12px;
+}
+.scr-fchip button {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.scr-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+.scr-tablewrap {
+  overflow-x: auto;
+}
+.scr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.scr-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  text-align: right;
+  padding: 7px 8px;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scr-table th.scr-th-sym {
+  text-align: left;
+}
+.scr-table th:hover {
+  color: var(--text);
+}
+.scr-table td {
+  text-align: right;
+  padding: 6px 8px;
+  border-bottom: 1px solid #161922;
+  white-space: nowrap;
+}
+.scr-table td.scr-td-sym {
+  text-align: left;
+}
+.scr-table td.scr-td-sym .lg-muted {
+  font-size: 11px;
+}
+.scr-table tbody tr {
+  cursor: pointer;
+}
+.scr-table tbody tr:hover {
+  background: var(--panel-2);
+}
+
 .bt-winner {
   display: flex;
   align-items: center;
