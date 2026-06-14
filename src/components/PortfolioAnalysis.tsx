@@ -434,9 +434,9 @@ function StrategyBacktestCard({
 }) {
   const [mode, setMode] = useState<'saved' | 'best'>(strats.length ? 'saved' : 'best');
   const [sid, setSid] = useState<string>(strats[0]?.id ?? '');
-  const sel = strats.find((s) => s.id === sid) ?? strats[0];
 
   const res = useMemo(() => {
+    const sel = strats.find((s) => s.id === sid) ?? strats[0]; // inside memo → stable deps
     const out: BtRow[] = [];
     const picks: Pick[] = [];
     for (const r of rows) {
@@ -467,7 +467,7 @@ function StrategyBacktestCard({
     const cAnn = out.reduce((s, o) => s + (o.weight / wsum) * o.ann, 0);
     const cHold = out.reduce((s, o) => s + (o.weight / wsum) * o.hold, 0);
     return { out: out.sort((a, b) => b.weight - a.weight), cAnn, cHold, n: out.length, curve: buildCombined(picks, xu) };
-  }, [rows, hist, mode, sel, params, xu]);
+  }, [rows, hist, mode, sid, strats, params, xu]);
 
   const beat = res.cAnn >= res.cHold;
   return (

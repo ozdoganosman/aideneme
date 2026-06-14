@@ -89,8 +89,12 @@ export class LodController {
   private renderForView(visReal: number, gapReal: number) {
     if (!this.full) return;
     const len = this.full.length;
+    // Clamp to the NEW dataset: switching from a scrolled-back large symbol to a
+    // shorter one could otherwise make toReal/fromReal negative → blank viewport.
+    gapReal = Math.max(0, Math.min(gapReal, len - 1));
+    visReal = Math.max(1, Math.min(visReal, len));
     const toReal = len - gapReal;
-    const fromReal = toReal - visReal;
+    const fromReal = Math.max(0, toReal - visReal);
     const stride = strideFor(visReal, this.targetBuckets);
     const margin = Math.max(visReal, this.targetBuckets);
     let w0 = Math.floor(fromReal - margin);
@@ -283,8 +287,9 @@ export class LodController {
     if (this.win.stride === 1) {
       this.applying = true;
       const t = b.time as UTCTimestamp;
-      this.candle.update({ time: t, open: b.open, high: b.high, low: b.low, close: b.close });
-      this.volume.update({ time: t, value: b.volume, color: b.close >= b.open ? UP_VOL : DOWN_VOL });
+      const j = this.full.length - 1; // draw the MERGED bar extremes, not the raw tick
+      this.candle.update({ time: t, open: this.full.open[j], high: this.full.high[j], low: this.full.low[j], close: this.full.close[j] });
+      this.volume.update({ time: t, value: this.full.volume[j], color: this.full.close[j] >= this.full.open[j] ? UP_VOL : DOWN_VOL });
       this.win.i1 = this.full.length;
       requestAnimationFrame(() => {
         this.applying = false;

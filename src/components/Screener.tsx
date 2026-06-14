@@ -251,7 +251,16 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
         filters.every((f) => passF(it, f)) &&
         (!needle || it.s.includes(needle) || (it.n || '').toUpperCase().includes(needle)),
     );
-    out.sort((a, b) => ((a[sort.key] as number) - (b[sort.key] as number)) * sort.dir);
+    // Finite values sort by direction; missing/NaN (optional columns on older
+    // snapshots, or young stocks) always sink to the bottom instead of scrambling.
+    out.sort((a, b) => {
+      const av = a[sort.key] as number;
+      const bv = b[sort.key] as number;
+      const af = Number.isFinite(av);
+      const bf = Number.isFinite(bv);
+      if (af && bf) return (av - bv) * sort.dir;
+      return af ? -1 : bf ? 1 : 0;
+    });
     return out;
   }, [data, filters, sort, q]);
   const rows = useMemo(() => (liveSet ? base.filter((r) => liveSet.has(r.s)) : base), [base, liveSet]);

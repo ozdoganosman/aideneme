@@ -81,7 +81,9 @@ export function donchianBound(c: Candles, len: number, upper: boolean): Float64A
   const roll = upper ? rollingHighest(c.high, len) : rollingLowest(c.low, len);
   const n = c.length;
   const out = new Float64Array(n).fill(NaN);
-  for (let i = 1; i < n; i++) out[i] = roll[i - 1];
+  // Need a FULL prior window (i-1 covers len bars) before the channel is valid,
+  // otherwise a partial-window high/low fires false breakouts during warmup.
+  for (let i = len; i < n; i++) out[i] = roll[i - 1];
   return out;
 }
 

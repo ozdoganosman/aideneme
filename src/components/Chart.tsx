@@ -668,7 +668,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       bands[k].applyOptions({ baseValue: { type: 'price', price: candles.close[seg.a] } });
     });
     if (lod) lod.setBands(segs.slice(0, bands.length));
-  }, [strategy, candles]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategy, candles, params]); // params → re-draw signals/bands when periods change
 
   // Portfolio average-cost line on the price pane (Portföy sekmesi açıkken).
   useEffect(() => {

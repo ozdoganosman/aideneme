@@ -68,7 +68,9 @@ let memHydrated = false;
 // Cache key for a strategy — includes the global MACD periods so the En İyi
 // cache invalidates when the user changes them (MACD uses the chart periods).
 const stratHash = (s: CustomStrategy, gp: IndicatorParams): string =>
-  JSON.stringify({ b: s.buy, s: s.sell, m: [gp.macdFast, gp.macdSlow, gp.macdSig, gp.macdVwma] });
+  // Include every global param a build can depend on (MACD set + ROC base used
+  // by the rocema indicator) so the cache invalidates when the user changes them.
+  JSON.stringify({ b: s.buy, s: s.sell, m: [gp.macdFast, gp.macdSlow, gp.macdSig, gp.macdVwma, gp.roc] });
 const toMetrics = (r: StrategyResult): ScanMetrics => ({
   ann: r.annRate ?? r.annPct,
   pure: r.annPct,

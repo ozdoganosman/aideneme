@@ -122,9 +122,11 @@ export default function App() {
   const [activeListId, setActiveListId] = useState<string>(initLists.activeId);
   const activeList = lists.find((l) => l.id === activeListId) ?? lists[0];
   const watchlist = activeList ? activeList.items : [];
-  // Update the ACTIVE list's items (keeps every existing setWatchlist call site working).
+  // Update the ACTIVE list's items (keeps every existing setWatchlist call site
+  // working). Writes target the SAME list the UI reads (activeList), so a stale
+  // activeListId can't make updates silently no-op.
   const setWatchlist = (updater: string[] | ((w: string[]) => string[])) =>
-    setLists((ls) => ls.map((l) => (l.id === activeListId ? { ...l, items: typeof updater === 'function' ? updater(l.items) : updater } : l)));
+    setLists((ls) => ls.map((l) => (l.id === activeList?.id ? { ...l, items: typeof updater === 'function' ? updater(l.items) : updater } : l)));
   const [watchAdded, setWatchAdded] = useState<Record<string, { t: number; p: number }>>(() =>
     lsGet('borsaWatchAdded', {}),
   );
@@ -165,8 +167,10 @@ export default function App() {
   useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
   useEffect(() => localStorage.setItem('borsaStrats', JSON.stringify(customStrats)), [customStrats]);
   // Register custom strategies so the chart/trades can draw them by name (using
-  // the user's indicator periods for MACD etc.).
-  useEffect(() => {
+  // the user's indicator periods for MACD etc.). Done during render (not in an
+  // effect) so the registry is current BEFORE the child Chart's effects read it
+  // — child effects fire before the parent's, so an effect here would be too late.
+  useMemo(() => {
     customStrats.forEach((s) => registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) }));
   }, [customStrats, indParams]);
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
