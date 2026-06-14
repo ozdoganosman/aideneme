@@ -878,12 +878,81 @@ button.ctl:disabled {
   background: rgba(239, 83, 80, 0.15);
 }
 
-/* Watchlist row with sparkline */
+/* Watchlist row with sparkline: symbol | spark | price+% (stacked) | × */
 .wl-row {
-  grid-template-columns: 1fr 46px auto auto 16px;
+  grid-template-columns: 1fr 42px auto 16px;
 }
 .spark {
   display: block;
+}
+
+.wl-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wl-head-sp {
+  flex: 1;
+}
+.wl-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  background: #1a1d27;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 1px 7px;
+  letter-spacing: 0;
+}
+
+/* Hide-to-edge controls + reopen handles */
+.lt-hide {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 6px;
+}
+.lt-hide:hover {
+  color: var(--text);
+}
+.lefttabs .lt-hide {
+  margin-left: auto;
+}
+.edge-handle {
+  flex: none;
+  width: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  padding: 10px 0;
+}
+.edge-handle.right {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+.edge-handle:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+.edge-ic {
+  font-size: 13px;
+}
+.edge-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
 /* ---- Sidebar panels (watchlist / portfolio) ---- */

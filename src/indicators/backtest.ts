@@ -172,6 +172,29 @@ function emaCrossFiltered(c: Candles, a: number, b: number, filt: number): Uint8
   return p;
 }
 
+// User's own confluence ("Williams Paşa" long EMAs + "NizamiCedid" MACD): buy the
+// accumulation / reclaim while the long-term trend is up, ride it, and exit only
+// when the long trend (EMA 610) breaks — matching "where I'd buy" on the chart.
+function pasaCedid(c: Candles): Uint8Array {
+  const n = c.length;
+  const e377 = emaArr(c.close, 377);
+  const e610 = emaArr(c.close, 610);
+  const fast = emaArr(c.close, 120);
+  const slow = emaArr(c.close, 260);
+  const macd = new Float64Array(n);
+  for (let i = 0; i < n; i++) macd[i] = fast[i] - slow[i];
+  const sig = emaArr(macd, 50);
+  const p = new Uint8Array(n);
+  let cur = 0;
+  for (let i = 0; i < n; i++) {
+    if (cur === 0) {
+      if (c.close[i] > e610[i] && c.close[i] > e377[i] && macd[i] > sig[i]) cur = 1;
+    } else if (c.close[i] < e610[i]) cur = 0;
+    p[i] = cur;
+  }
+  return p;
+}
+
 // The full strategy registry — used both by the optimizer and to redraw a chosen
 // strategy's signals on the chart.
 export function strategyList(): StrategyDef[] {
@@ -255,6 +278,7 @@ export function strategyList(): StrategyDef[] {
     });
   }
   defs.push({ name: 'Bollinger 20 kırılımı', build: (c) => bollinger(c, 20, 2) });
+  defs.push({ name: 'Paşa+Cedid (Trend 610 + MACD)', build: pasaCedid });
 
   return defs;
 }
@@ -262,6 +286,8 @@ export function strategyList(): StrategyDef[] {
 // Plain-language LOGIC of a strategy (no jargon) for beginners.
 export function explainStrategy(name: string): string {
   let m: RegExpMatchArray | null;
+  if (name.startsWith('Paşa+Cedid'))
+    return '🧭 Birleşik kurulum (senin göstergelerin): Uzun vadeli trend yukarıyken (fiyat 610 günlük ortalamanın üstünde) ve momentum dönünce (fiyat 377 ortalamayı geçip NizamiCedid MACD sinyalini yukarı kestiğinde) AL; fiyat 610 ortalamanın altına düşüp trend bozulunca SAT. Toparlanan trende, dip-toplama bölgesinde girer ve trendi sonuna kadar taşır.';
   if (name.includes('+ Trend 200'))
     return '🛡️ Trend filtreli: Yalnızca uzun vadeli trend yukarıyken (fiyat 200 günlük ortalamanın üstünde) AL sinyali verir; trend aşağıyken nakitte bekler. Yatay/düşen piyasadaki yanlış alımları eler, düşüşü (drawdown) azaltır.';
   if (name.startsWith('Supertrend'))

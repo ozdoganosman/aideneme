@@ -49,7 +49,8 @@ export default function App() {
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
   const [leftTab, setLeftTab] = useState<'portfolio' | 'trades'>(() => lsGet('borsaLeftTab', 'portfolio'));
-  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => lsGet('borsaLeftCollapsed', false));
+  const [showLeft, setShowLeft] = useState<boolean>(() => lsGet('borsaShowLeft', true));
+  const [showRight, setShowRight] = useState<boolean>(() => lsGet('borsaShowRight', true));
 
   const [quotes, setQuotes] = useState<Quotes>({});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -70,7 +71,8 @@ export default function App() {
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
   useEffect(() => localStorage.setItem('borsaLeftTab', JSON.stringify(leftTab)), [leftTab]);
-  useEffect(() => localStorage.setItem('borsaLeftCollapsed', JSON.stringify(leftCollapsed)), [leftCollapsed]);
+  useEffect(() => localStorage.setItem('borsaShowLeft', JSON.stringify(showLeft)), [showLeft]);
+  useEffect(() => localStorage.setItem('borsaShowRight', JSON.stringify(showRight)), [showRight]);
 
   const load = useCallback(
     async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
@@ -147,7 +149,7 @@ export default function App() {
     fetchBistSpark().then(setSpark).catch(() => setSpark({}));
   }, []);
 
-  // Keyboard shortcuts: / search, L log, 1/2/3 timeframe, F backtest.
+  // Keyboard shortcuts: / search, L log, 1/2/3 timeframe, [ ] panels, F backtest.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
@@ -159,6 +161,8 @@ export default function App() {
       else if (e.key === '1') changeTf('D');
       else if (e.key === '2') changeTf('W');
       else if (e.key === '3') changeTf('M');
+      else if (e.key === '[') setShowLeft((v) => !v);
+      else if (e.key === ']') setShowRight((v) => !v);
       else if (e.key === 'f' || e.key === 'F') {
         if (candles) setShowBt(true);
       }
@@ -174,9 +178,9 @@ export default function App() {
 
   // Active left tab reflects onto the chart: Portföy → avg-cost line for the held
   // symbol; İşlemler → strategy markers. Collapsed → neither.
-  const reflectTrades = !leftCollapsed && leftTab === 'trades';
+  const reflectTrades = showLeft && leftTab === 'trades';
   const costLine = useMemo(() => {
-    if (leftCollapsed || leftTab !== 'portfolio' || provider !== 'bist') return null;
+    if (!showLeft || leftTab !== 'portfolio' || provider !== 'bist') return null;
     const h = portfolio.find((x) => x.symbol === symbol);
     if (!h || !(h.cost > 0)) return null;
     const q = quotes[symbol];
@@ -185,7 +189,7 @@ export default function App() {
     const c = h.cost.toLocaleString('en-US', { maximumFractionDigits: h.cost >= 1000 ? 0 : 2 });
     const label = isFinite(pnlPct) ? `Maliyet ${c} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : `Maliyet ${c}`;
     return { price: h.cost, label };
-  }, [leftCollapsed, leftTab, provider, portfolio, symbol, quotes]);
+  }, [showLeft, leftTab, provider, portfolio, symbol, quotes]);
   const lastC = candles && candles.length ? candles.close[candles.length - 1] : NaN;
   const prevC = candles && candles.length > 1 ? candles.close[candles.length - 2] : NaN;
   const dChg = isFinite(lastC) && isFinite(prevC) && prevC ? ((lastC - prevC) / prevC) * 100 : 0;
@@ -261,37 +265,24 @@ export default function App() {
       </header>
 
       <div className="body">
-        <aside className="sidebar">
-          <div className={'panel' + (leftCollapsed ? ' collapsed' : '')}>
-            <div className="lefttabs">
-              <button
-                className="lt-caret"
-                onClick={() => setLeftCollapsed((c) => !c)}
-                title={leftCollapsed ? 'Aç' : 'Kapat'}
-              >
-                <span className="panel-caret">▾</span>
-              </button>
-              <button
-                className={!leftCollapsed && leftTab === 'portfolio' ? 'active' : ''}
-                onClick={() => {
-                  setLeftTab('portfolio');
-                  setLeftCollapsed(false);
-                }}
-              >
-                Portföy{portfolio.length ? ` · ${portfolio.length}` : ''}
-              </button>
-              <button
-                className={reflectTrades ? 'active' : ''}
-                onClick={() => {
-                  setLeftTab('trades');
-                  setLeftCollapsed(false);
-                }}
-              >
-                İşlemler
-              </button>
-            </div>
-            {!leftCollapsed &&
-              (leftTab === 'portfolio' ? (
+        {showLeft ? (
+          <aside className="sidebar">
+            <div className="panel">
+              <div className="lefttabs">
+                <button
+                  className={leftTab === 'portfolio' ? 'active' : ''}
+                  onClick={() => setLeftTab('portfolio')}
+                >
+                  Portföy{portfolio.length ? ` · ${portfolio.length}` : ''}
+                </button>
+                <button className={leftTab === 'trades' ? 'active' : ''} onClick={() => setLeftTab('trades')}>
+                  İşlemler
+                </button>
+                <button className="lt-hide" onClick={() => setShowLeft(false)} title="Paneli gizle (geniş grafik)">
+                  ⟨
+                </button>
+              </div>
+              {leftTab === 'portfolio' ? (
                 <Portfolio
                   holdings={portfolio}
                   quotes={quotes}
@@ -310,9 +301,15 @@ export default function App() {
                     setLog(true);
                   }}
                 />
-              ))}
-          </div>
-        </aside>
+              )}
+            </div>
+          </aside>
+        ) : (
+          <button className="edge-handle left" onClick={() => setShowLeft(true)} title="Portföy / İşlemler göster">
+            <span className="edge-ic">›</span>
+            <span className="edge-label">Portföy · İşlemler</span>
+          </button>
+        )}
 
         <main className="main">
           <div className="symhead">
@@ -396,16 +393,24 @@ export default function App() {
           </div>
         </main>
 
-        <aside className="sidebar right">
-          <Watchlist
-            items={watchlist}
-            quotes={quotes}
-            spark={spark}
-            active={symbol}
-            onSelect={selectSymbol}
-            onRemove={toggleWatch}
-          />
-        </aside>
+        {showRight ? (
+          <aside className="sidebar right">
+            <Watchlist
+              items={watchlist}
+              quotes={quotes}
+              spark={spark}
+              active={symbol}
+              onSelect={selectSymbol}
+              onRemove={toggleWatch}
+              onHide={() => setShowRight(false)}
+            />
+          </aside>
+        ) : (
+          <button className="edge-handle right" onClick={() => setShowRight(true)} title="İzleme Listesi göster">
+            <span className="edge-ic">‹</span>
+            <span className="edge-label">İzleme Listesi</span>
+          </button>
+        )}
       </div>
 
       <footer className="status">
@@ -422,13 +427,13 @@ export default function App() {
           onSelect={(name) => {
             setStrategy(name);
             setLeftTab('trades');
-            setLeftCollapsed(false);
+            setShowLeft(true);
           }}
           onPickSymbolStrategy={(sym, name) => {
             selectSymbol(sym);
             setStrategy(name);
             setLeftTab('trades');
-            setLeftCollapsed(false);
+            setShowLeft(true);
           }}
         />
       )}

@@ -106,6 +106,26 @@ def rsi_arr(close, length):
     return rsi
 
 
+def pasa_cedid_pos(close):
+    n = len(close)
+    e377 = ema(close, 377)
+    e610 = ema(close, 610)
+    fast = ema(close, 120)
+    slow = ema(close, 260)
+    macd = fast - slow
+    sig = ema(macd, 50)
+    p = np.zeros(n, dtype=np.int8)
+    cur = 0
+    for i in range(n):
+        if cur == 0:
+            if close[i] > e610[i] and close[i] > e377[i] and macd[i] > sig[i]:
+                cur = 1
+        elif close[i] < e610[i]:
+            cur = 0
+        p[i] = cur
+    return p
+
+
 def bollinger_pos(close, length, k):
     n = len(close)
     s = pd.Series(close)
@@ -196,6 +216,7 @@ def strategies_for(close, high, low):
     out["RSI 50 > 50"] = np.where(np.isfinite(r50 := rsi_arr(close, 50)) & (r50 > 50), 1, 0).astype(np.int8)
 
     out["Bollinger 20 kırılımı"] = bollinger_pos(close, 20, 2.0)
+    out["Paşa+Cedid (Trend 610 + MACD)"] = pasa_cedid_pos(close)
 
     return out
 

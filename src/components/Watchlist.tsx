@@ -1,4 +1,3 @@
-import { usePanelCollapse } from './usePanelCollapse';
 import { Quotes } from '../data/bistStatic';
 
 interface Props {
@@ -8,21 +7,20 @@ interface Props {
   active: string;
   onSelect: (s: string) => void;
   onRemove: (s: string) => void;
+  onHide: () => void;
 }
 
-export function Watchlist({ items, quotes, spark, active, onSelect, onRemove }: Props) {
-  const [collapsed, toggle] = usePanelCollapse('wl_collapsed');
+export function Watchlist({ items, quotes, spark, active, onSelect, onRemove, onHide }: Props) {
   return (
-    <div className={'panel' + (collapsed ? ' collapsed' : '')}>
-      <div className="panel-title clickable" onClick={toggle} title={collapsed ? 'Aç' : 'Kapat'}>
-        <span className="panel-caret">▾</span>
+    <div className="panel">
+      <div className="panel-title wl-head">
         <span>İzleme Listesi</span>
-        {items.length > 0 && <span className="panel-count">{items.length}</span>}
+        <span className="wl-head-sp" />
+        {items.length > 0 && <span className="wl-count">{items.length}</span>}
+        <button className="lt-hide" onClick={onHide} title="Paneli gizle (geniş grafik)">⟩</button>
       </div>
-      {collapsed ? null : (
-        <>
-          {items.length === 0 && <div className="panel-empty">Üstteki ★ ile hisse ekle</div>}
-          {items.map((sym) => {
+      {items.length === 0 && <div className="panel-empty">Üstteki ★ ile hisse ekle</div>}
+      {items.map((sym) => {
         const q = quotes[sym];
         const pct = q && q.pc ? ((q.c - q.pc) / q.pc) * 100 : 0;
         const up = pct >= 0;
@@ -34,9 +32,13 @@ export function Watchlist({ items, quotes, spark, active, onSelect, onRemove }: 
           >
             <span className="row-sym">{sym}</span>
             <Spark data={spark[sym]} />
-            <span className="row-num">{q ? fmt(q.c) : '—'}</span>
-            <span className={'row-num ' + (up ? 'up' : 'down')}>
-              {q ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : ''}
+            <span className="row-num">
+              {q ? fmt(q.c) : '—'}
+              {q && (
+                <small className={up ? 'up' : 'down'}>
+                  {(pct >= 0 ? '+' : '') + pct.toFixed(2)}%
+                </small>
+              )}
             </span>
             <button
               className="row-x"
@@ -50,24 +52,22 @@ export function Watchlist({ items, quotes, spark, active, onSelect, onRemove }: 
             </button>
           </div>
         );
-          })}
-        </>
-      )}
+      })}
     </div>
   );
 }
 
 function Spark({ data }: { data?: number[] }) {
-  if (!data || data.length < 2) return <svg className="spark" width="46" height="18" />;
+  if (!data || data.length < 2) return <svg className="spark" width="42" height="20" />;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const rng = max - min || 1;
   const pts = data
-    .map((v, i) => `${((i / (data.length - 1)) * 44 + 1).toFixed(1)},${(17 - ((v - min) / rng) * 16).toFixed(1)}`)
+    .map((v, i) => `${((i / (data.length - 1)) * 40 + 1).toFixed(1)},${(19 - ((v - min) / rng) * 18).toFixed(1)}`)
     .join(' ');
   const up = data[data.length - 1] >= data[0];
   return (
-    <svg className="spark" width="46" height="18">
+    <svg className="spark" width="42" height="20">
       <polyline points={pts} fill="none" stroke={up ? '#26a69a' : '#ef5350'} strokeWidth="1.2" />
     </svg>
   );
