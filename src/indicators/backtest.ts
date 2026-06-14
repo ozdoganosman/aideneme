@@ -195,6 +195,26 @@ function pasaCedid(c: Candles): Uint8Array {
   return p;
 }
 
+// User's combined rule: BUY when Williams %R is strong (>50) AND price is above
+// EMA 377 (trend up) AND Supertrend 10/3 is up; SELL when %R drops below 50.
+function pasaBirlesik(c: Candles): Uint8Array {
+  const n = c.length;
+  const pr = prArr(c, 260);
+  const e377 = emaArr(c.close, 377);
+  const st = supertrend(c, 10, 3);
+  const p = new Uint8Array(n);
+  let cur = 0;
+  for (let i = 0; i < n; i++) {
+    if (cur === 0) {
+      if (Number.isFinite(pr[i]) && pr[i] > 50 && c.close[i] > e377[i] && st[i] === 1) cur = 1;
+    } else if (Number.isFinite(pr[i]) && pr[i] < 50) {
+      cur = 0;
+    }
+    p[i] = cur;
+  }
+  return p;
+}
+
 // The full strategy registry — used both by the optimizer and to redraw a chosen
 // strategy's signals on the chart.
 export function strategyList(): StrategyDef[] {
@@ -279,6 +299,7 @@ export function strategyList(): StrategyDef[] {
   }
   defs.push({ name: 'Bollinger 20 kırılımı', build: (c) => bollinger(c, 20, 2) });
   defs.push({ name: 'Paşa+Cedid (Trend 610 + MACD)', build: pasaCedid });
+  defs.push({ name: 'Paşa Birleşik (%R+EMA+Supertrend)', build: pasaBirlesik });
 
   return defs;
 }
@@ -286,6 +307,8 @@ export function strategyList(): StrategyDef[] {
 // Plain-language LOGIC of a strategy (no jargon) for beginners.
 export function explainStrategy(name: string): string {
   let m: RegExpMatchArray | null;
+  if (name.startsWith('Paşa Birleşik'))
+    return "🧭 Birleşik AL kuralı (senin göstergelerin): Williams %R güçlüyken (>50) + fiyat EMA 377'nin üstündeyken (trend yukarı) + Supertrend 10/3 yukarı yöndeyken AL. SAT: Williams %R 50'nin altına düşünce (güç kaybı).";
   if (name.startsWith('Paşa+Cedid'))
     return '🧭 Birleşik kurulum (senin göstergelerin): Uzun vadeli trend yukarıyken (fiyat 610 günlük ortalamanın üstünde) ve momentum dönünce (fiyat 377 ortalamayı geçip NizamiCedid MACD sinyalini yukarı kestiğinde) AL; fiyat 610 ortalamanın altına düşüp trend bozulunca SAT. Toparlanan trende, dip-toplama bölgesinde girer ve trendi sonuna kadar taşır.';
   if (name.includes('+ Trend 200'))

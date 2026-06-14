@@ -127,6 +127,26 @@ def pasa_cedid_pos(close):
     return p
 
 
+def pasa_birlesik_pos(close, high, low):
+    n = len(close)
+    hh = pd.Series(high).rolling(260, min_periods=1).max().to_numpy()
+    ll = pd.Series(low).rolling(260, min_periods=1).min().to_numpy()
+    d = hh - ll
+    pr = np.where(d != 0, 100.0 * (close - hh) / d + 100.0, np.nan)
+    e377 = ema(close, 377)
+    st = supertrend_pos(high, low, close, 10, 3.0)
+    p = np.zeros(n, dtype=np.int8)
+    cur = 0
+    for i in range(n):
+        if cur == 0:
+            if np.isfinite(pr[i]) and pr[i] > 50 and close[i] > e377[i] and st[i] == 1:
+                cur = 1
+        elif np.isfinite(pr[i]) and pr[i] < 50:
+            cur = 0
+        p[i] = cur
+    return p
+
+
 def bollinger_pos(close, length, k):
     n = len(close)
     s = pd.Series(close)
@@ -218,6 +238,7 @@ def strategies_for(close, high, low):
 
     out["Bollinger 20 kırılımı"] = bollinger_pos(close, 20, 2.0)
     out["Paşa+Cedid (Trend 610 + MACD)"] = pasa_cedid_pos(close)
+    out["Paşa Birleşik (%R+EMA+Supertrend)"] = pasa_birlesik_pos(close, high, low)
 
     return out
 
