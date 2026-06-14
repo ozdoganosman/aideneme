@@ -4,7 +4,7 @@ import { fetchBistStatic, Quotes } from '../data/bistStatic';
 import { analyzeHolding, HoldingAnalysis } from '../indicators/analysis';
 import { evalPosition, StrategyResult } from '../indicators/backtest';
 import { CustomStrategy, buildCustomPosition, candidateStrategies } from '../indicators/customStrategy';
-import { inflationDailyRates, inflationAvgAnnual } from '../data/inflation';
+import { inflationDailyRates, inflationAvgAnnual, inflationAnnualPct } from '../data/inflation';
 import { IndicatorParams } from '../indicators/calc';
 import { Holding } from './Portfolio';
 
@@ -68,6 +68,14 @@ export function PortfolioAnalysis({ holdings, quotes, strats, params, onClose, o
 
   const series = useMemo(() => buildValueSeries(holdings, hist, xu), [holdings, hist, xu]);
   const risk = useMemo(() => (rows ? portfolioRisk(rows, hist, xu) : null), [rows, hist, xu]);
+  const totVal = useMemo(() => holdings.reduce((s, h) => s + (quotes[h.symbol]?.c ?? 0) * h.qty, 0), [holdings, quotes]);
+  const pr1y = useMemo(() => (rows || []).filter((r) => r.a).reduce((s, r) => s + (r.weight / 100) * r.a!.r1y, 0), [rows]);
+  const concWord = useMemo(() => {
+    const ws = (rows || []).map((r) => r.weight);
+    const largest = ws.length ? Math.max(...ws) : 0;
+    return largest >= 50 ? 'tek hisseye aşırı yoğun' : largest >= 35 ? 'yoğun' : (rows?.length ?? 0) >= 6 && largest < 20 ? 'iyi dağılmış' : 'orta dağılım';
+  }, [rows]);
+  const fInfl = inflationAnnualPct(new Date().getFullYear()); // forward inflation assumption
 
   const pick = (s: string) => {
     onSelect(s);
@@ -90,12 +98,14 @@ export function PortfolioAnalysis({ holdings, quotes, strats, params, onClose, o
             <div className="bt-note">Portföyde pozisyon yok. Önce sembol · adet · maliyet ekle.</div>
           ) : (
             <>
-              {renderConcentration(rows)}
+              {risk && <SummaryCard totVal={totVal} risk={risk} bench={bench} pr1y={pr1y} concentration={concWord} />}
+              {risk && totVal > 0 && <FutureSim value={totVal} risk={risk} infl={fInfl} />}
               {series && <ValueChartCard pv={series.pv} xv={series.xv} chg={series.chg} xchg={series.xchg} t0={series.t0} t1={series.t1} />}
-              {risk && <AdvancedRiskCard risk={risk} />}
               <StrategyBacktestCard rows={rows} hist={hist} strats={strats} params={params} xu={xu} onSelect={pick} />
+              {renderConcentration(rows)}
+              {risk && <AdvancedRiskCard risk={risk} />}
               {renderRisk(rows, bench, risk)}
-              {renderTech(rows, pick)}
+              <TechCard rows={rows} pick={pick} />
               <div className="bt-hint">
                 ⚠️ Bu analiz geçmiş fiyatlara dayalı, otomatik ve eğitim amaçlıdır — yatırım tavsiyesi değildir.
               </div>
@@ -220,7 +230,42 @@ function renderRisk(rows: Row[], bench: number | null, risk: RiskStats | null) {
   );
 }
 
-function renderTech(rows: Row[], pick: (s: string) => void) {
+// Concise top-of-modal summary: the few numbers + one plain verdict.
+function SummaryCard({ totVal, risk, bench, pr1y, concentration }: { totVal: number; risk: RiskStats; bench: number | null; pr1y: number; concentration: string }) {
+  const rel = bench != null ? pr1y - bench : null;
+  const beat = (rel ?? 0) >= 0;
+  const rr = risk.retOverRisk;
+  const riskWord = risk.realVol >= 50 ? 'yüksek' : risk.realVol >= 30 ? 'orta' : 'düşük';
+  const verdict = `${rel != null ? (beat ? 'Endeksi geçiyor' : 'Endeksin altında') : 'Endeks verisi yok'} · risk ${riskWord} · ${rr >= 1 ? 'getiri riski karşılıyor 👍' : 'getiri/risk zayıf'} · ${concentration}`;
+  return (
+    <div className="pa-card">
+      <div className="pa-card-title">📌 Özet</div>
+      <div className="pa-grid">
+        <div>
+          <span className="lg-muted">Değer</span>
+          <b>{money(totVal)}</b>
+        </div>
+        <div>
+          <span className="lg-muted">XU100'e görece 1Y</span>
+          <b className={beat ? 'up' : 'down'}>{rel != null ? fmtP(rel) : '—'}</b>
+        </div>
+        <div>
+          <span className="lg-muted">Risk /yıl</span>
+          <b>~%{risk.realVol.toFixed(0)}</b>
+        </div>
+        <div>
+          <span className="lg-muted">Getiri / Risk</span>
+          <b className={rr >= 1 ? 'up' : rr >= 0.5 ? 'warn' : 'down'}>{rr.toFixed(2)}</b>
+        </div>
+      </div>
+      <div className={'pa-verdict ' + (beat ? 'up' : '')}>{verdict}</div>
+    </div>
+  );
+}
+
+// Technical read — compact one row per holding; tap "detay" for the bullets.
+function TechCard({ rows, pick }: { rows: Row[]; pick: (s: string) => void }) {
+  const [exp, setExp] = useState<string | null>(null);
   const withA = rows.filter((r) => r.a);
   const up = withA.filter((r) => r.a!.trend.toLowerCase().includes('yukar')).length;
   const ob = withA.filter((r) => r.a!.rsi >= 70).length;
@@ -228,7 +273,7 @@ function renderTech(rows: Row[], pick: (s: string) => void) {
   const pos = withA.filter((r) => r.a!.lean === 'Olumlu').length;
   return (
     <div className="pa-card">
-      <div className="pa-card-title">🧭 Teknik Analiz (sade)</div>
+      <div className="pa-card-title">🧭 Teknik Analiz</div>
       {withA.length > 0 && (
         <div className="pa-techroll">
           <span className="up">{up}/{withA.length} yukarı trend</span>
@@ -238,24 +283,28 @@ function renderTech(rows: Row[], pick: (s: string) => void) {
         </div>
       )}
       {rows.map((r) => (
-        <div key={r.sym} className="pa-tech" onClick={() => pick(r.sym)} title="Grafikte aç">
-          <div className="pa-tech-head">
-            <b>{r.sym}</b>
-            {r.a && (
-              <span className={'pa-lean ' + (r.a.lean === 'Olumlu' ? 'up' : r.a.lean === 'Zayıf' ? 'down' : 'warn')}>
-                {r.a.lean}
-              </span>
+        <div key={r.sym} className="pa-tech2">
+          <div className="pa-tech2-row">
+            <b className="pa-tech2-sym" onClick={() => pick(r.sym)} title="Grafikte aç">{r.sym}</b>
+            {r.a ? (
+              <>
+                <span className={'pa-lean ' + (r.a.lean === 'Olumlu' ? 'up' : r.a.lean === 'Zayıf' ? 'down' : 'warn')}>{r.a.lean}</span>
+                <span className="lg-muted">{r.a.trend}</span>
+                <span className="lg-muted">RSI {r.a.rsi.toFixed(0)}</span>
+                <button className="pa-tech-more" onClick={() => setExp(exp === r.sym ? null : r.sym)}>
+                  {exp === r.sym ? 'gizle' : 'detay'}
+                </button>
+              </>
+            ) : (
+              <span className="lg-muted">veri yok</span>
             )}
-            {r.a && <span className="lg-muted">{r.a.trend}</span>}
           </div>
-          {r.a ? (
+          {exp === r.sym && r.a && (
             <ul className="pa-bullets">
               {r.a.bullets.map((b, i) => (
                 <li key={i}>{b}</li>
               ))}
             </ul>
-          ) : (
-            <div className="bt-note">Yeterli geçmiş veri yok.</div>
           )}
         </div>
       ))}
@@ -516,6 +565,10 @@ function StrategyBacktestCard({
 function fmtP(v: number): string {
   return (v >= 0 ? '+' : '') + Math.round(v) + '%';
 }
+function money(v: number): string {
+  if (!isFinite(v)) return '—';
+  return '₺' + v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : 2 });
+}
 
 function CombinedCurve({ cv }: { cv: NonNullable<ReturnType<typeof buildCombined>> }) {
   const all = [...cv.strat, ...cv.hold, ...(cv.xu ?? [])].filter((v) => isFinite(v));
@@ -585,6 +638,8 @@ interface RiskStats {
   betas: Map<string, number>;
   n: number;
   years: number;
+  muDaily: number; // mean daily portfolio return (for forward simulation)
+  sdDaily: number; // daily portfolio return std
 }
 
 function ffill(c: Candles, axis: number[]): number[] {
@@ -696,7 +751,116 @@ function portfolioRisk(rows: Row[], hist: Map<string, Candles>, xu: Candles | nu
       }
     avgCorr = cnt ? s / cnt : null;
   }
-  return { realVol, naiveVol, divBenefit: Math.max(0, naiveVol - realVol), beta, maxDD: dd * 100, annRet, retOverRisk: realVol > 0 ? annRet / realVol : 0, avgCorr, topPair, betas, n: items.length, years };
+  return { realVol, naiveVol, divBenefit: Math.max(0, naiveVol - realVol), beta, maxDD: dd * 100, annRet, retOverRisk: realVol > 0 ? annRet / realVol : 0, avgCorr, topPair, betas, n: items.length, years, muDaily: mean(rp), sdDaily: std(rp) };
+}
+
+// ── Forward simulation (Monte Carlo, GBM from the portfolio's own daily stats) ─
+function gauss(): number {
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+function pctile(sorted: number[], p: number): number {
+  if (!sorted.length) return 0;
+  const i = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(i);
+  const hi = Math.ceil(i);
+  return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo);
+}
+interface SimResult {
+  band: { p10: number; p50: number; p90: number }[];
+  p10: number;
+  p50: number;
+  p90: number;
+}
+function monteCarlo(v0: number, mD: number, sD: number, years: number): SimResult {
+  const H = Math.max(20, Math.round(252 * years));
+  const N = 500;
+  const drift = mD - (sD * sD) / 2; // log-drift so E[step] ≈ 1+mD
+  const every = Math.max(1, Math.floor(H / 60));
+  const rows: number[][] = [];
+  const finals: number[] = [];
+  for (let n = 0; n < N; n++) {
+    let v = v0;
+    const row: number[] = [v0];
+    for (let d = 1; d <= H; d++) {
+      v *= Math.exp(drift + sD * gauss());
+      if (d % every === 0) row.push(v);
+    }
+    rows.push(row);
+    finals.push(v);
+  }
+  const cols = Math.min(...rows.map((r) => r.length));
+  const band: { p10: number; p50: number; p90: number }[] = [];
+  for (let c = 0; c < cols; c++) {
+    const col = rows.map((r) => r[c]).sort((a, b) => a - b);
+    band.push({ p10: pctile(col, 10), p50: pctile(col, 50), p90: pctile(col, 90) });
+  }
+  finals.sort((a, b) => a - b);
+  return { band, p10: pctile(finals, 10), p50: pctile(finals, 50), p90: pctile(finals, 90) };
+}
+
+function FutureSim({ value, risk, infl }: { value: number; risk: RiskStats; infl: number }) {
+  const [years, setYears] = useState(1);
+  const sim = useMemo(() => monteCarlo(value, risk.muDaily, risk.sdDaily, years), [value, risk, years]);
+  const chg = (x: number) => (value > 0 ? (x / value - 1) * 100 : 0);
+  const realF = Math.pow(1 + infl / 100, years); // deflate to today's purchasing power
+  const W = 560;
+  const H = 96;
+  const all = sim.band.flatMap((b) => [b.p10, b.p90]).filter((v) => isFinite(v));
+  const min = Math.min(value, ...all);
+  const max = Math.max(value, ...all);
+  const rng = max - min || 1;
+  const y = (v: number) => (H - 2 - ((v - min) / rng) * (H - 8)).toFixed(1);
+  const xx = (i: number, len: number) => ((i / (len - 1)) * (W - 2) + 1).toFixed(1);
+  const len = sim.band.length;
+  const up = sim.band.map((b, i) => `${xx(i, len)},${y(b.p90)}`);
+  const dn = sim.band.map((b, i) => `${xx(i, len)},${y(b.p10)}`).reverse();
+  const mid = sim.band.map((b, i) => `${xx(i, len)},${y(b.p50)}`).join(' ');
+  return (
+    <div className="pa-card">
+      <div className="pa-card-title">🔮 Geleceğe dönük simülasyon</div>
+      <div className="pv-desc lg-muted">
+        Portföyün <b>kendi geçmiş getiri ve oynaklığından</b> {500} olası yol (Monte Carlo) üretildi. Bu bir tahmin değil —
+        "geçmiş böyle sürerse" olasılık aralığıdır.
+      </div>
+      <div className="fs-yrs">
+        {[1, 2, 3].map((yv) => (
+          <button key={yv} className={years === yv ? 'active' : ''} onClick={() => setYears(yv)}>
+            {yv} yıl
+          </button>
+        ))}
+      </div>
+      <svg className="pv-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <polygon points={[...up, ...dn].join(' ')} fill="rgba(59,130,246,0.16)" />
+        <polyline points={mid} fill="none" stroke="#5b7cfa" strokeWidth="1.8" />
+      </svg>
+      <div className="fs-outcomes">
+        <div className="fs-out up">
+          <span className="lg-muted">🟢 İyi (%90 dilim)</span>
+          <b>{money(sim.p90)}</b>
+          <span className="up">{fmtP(chg(sim.p90))}</span>
+        </div>
+        <div className="fs-out">
+          <span className="lg-muted">⚪ Orta (%50)</span>
+          <b>{money(sim.p50)}</b>
+          <span className={chg(sim.p50) >= 0 ? 'up' : 'down'}>{fmtP(chg(sim.p50))}</span>
+        </div>
+        <div className="fs-out down">
+          <span className="lg-muted">🔴 Kötü (%10 dilim)</span>
+          <b>{money(sim.p10)}</b>
+          <span className="down">{fmtP(chg(sim.p10))}</span>
+        </div>
+      </div>
+      <div className="bt-note">
+        {years} yıl sonra bugünkü <b>{money(value)}</b> portföyün olası değeri. Enflasyon (~%{infl.toFixed(0)}/yıl) sonrası
+        reel orta senaryo: <b>{money(sim.p50 / realF)}</b> ({fmtP((sim.p50 / realF / value - 1) * 100)}). Geçmiş garanti
+        değildir.
+      </div>
+    </div>
+  );
 }
 
 function AdvancedRiskCard({ risk }: { risk: RiskStats }) {

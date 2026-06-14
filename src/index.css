@@ -1868,6 +1868,89 @@ button.ctl:disabled {
   color: var(--down);
   background: rgba(239, 83, 80, 0.16);
 }
+/* Forward simulation */
+.fs-yrs {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+.fs-yrs button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.fs-yrs button.active {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: #cfe0ff;
+}
+.fs-outcomes {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.fs-out {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.fs-out b {
+  font-size: 14px;
+}
+.fs-out.up {
+  border-color: #2c6b5f;
+}
+.fs-out.down {
+  border-color: #6e3331;
+}
+
+/* Compact technical rows */
+.pa-tech2 {
+  border-top: 1px solid var(--border);
+  padding: 5px 0;
+}
+.pa-tech2:first-of-type {
+  border-top: none;
+}
+.pa-tech2-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.pa-tech2-sym {
+  cursor: pointer;
+  min-width: 52px;
+}
+.pa-tech2-sym:hover {
+  color: var(--accent);
+}
+.pa-tech-more {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 5px;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pa-tech-more:hover {
+  color: var(--text);
+  background: #222633;
+}
+
 .pa-tech {
   padding: 8px 0;
   border-top: 1px solid var(--border);
