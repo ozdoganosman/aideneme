@@ -43,6 +43,7 @@ export const INDS: IndDef[] = [
   { key: 'emacd', label: 'eMACD', hasParam: false, defParam: 0 },
   { key: 'stdir', label: 'Supertrend yön (1=yukarı)', hasParam: false, defParam: 0 },
   { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 260 },
+  { key: 'adxema', label: 'ADX EMA', hasParam: true, defParam: 260 },
   { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 260 },
   { key: 'donhi', label: 'Donchian üst (N gün)', hasParam: true, defParam: 260 },
   { key: 'donlo', label: 'Donchian alt (N gün)', hasParam: true, defParam: 260 },
@@ -163,6 +164,8 @@ function computeSeries(c: Candles, ind: string, p: number): Float64Array {
       return supertrendDir(c, 10, 3);
     case 'adx':
       return adxArr(c, Math.max(2, p));
+    case 'adxema':
+      return emaArr(adxArr(c, Math.max(2, p)), Math.max(1, p));
     case 'roc':
       return rocArr(close, Math.max(1, p));
     case 'donhi':
