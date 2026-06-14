@@ -1,5 +1,6 @@
 import { Candles } from '../data/types';
 import { emaArr, rollingHighest, rollingLowest } from './calc';
+import { inflationDailyRates } from '../data/inflation';
 
 export interface StrategyResult {
   name: string;
@@ -15,27 +16,8 @@ export interface StrategyResult {
   daysIn?: number; // total calendar days holding a position
   daysOut?: number; // total calendar days in cash
   avgHoldDays?: number; // average calendar days per trade
-  retRate?: number; // total return % incl. interest earned on cash days
-  annRate?: number; // annualized return % incl. interest on cash (the Al-Tut rival)
-}
-
-// ── Cash interest (TCMB) ─────────────────────────────────────────────────────
-// A strategy sitting in cash isn't idle — it parks the money at the Turkish
-// Central Bank's (TCMB) policy rate, so it can fairly rival Buy & Hold. TCMB
-// announces an ANNUAL policy rate; the everyday "aylık" (monthly) figure is
-// annual ÷ 12, and we convert that MONTHLY rate to a per-calendar-day rate
-// (compounded) for a realistic value — exactly "aylığından günlüğe".
-// NOTE: this applies one flat current rate across all history (a historical
-// per-day TCMB series isn't bundled here); it's overridable in the UI.
-export const TCMB_ANNUAL_PCT = 40; // current TCMB policy rate, %/yr
-
-// Per-calendar-day compounded rate from a MONTHLY percentage (annual = monthly×12).
-export function dailyFromMonthly(monthlyPct: number): number {
-  return Math.pow(1 + monthlyPct / 100, 12 / 365.25) - 1;
-}
-// Default daily cash rate: TCMB annual → monthly → daily.
-export function tcmbDailyRate(): number {
-  return dailyFromMonthly(TCMB_ANNUAL_PCT / 12);
+  retRate?: number; // total return % incl. inflation (TÜFE) credited on cash days
+  annRate?: number; // annualized return % incl. inflation on cash (the Al-Tut rival)
 }
 
 export interface StrategyDef {
@@ -375,11 +357,11 @@ function simulate(
   holdAnn: number,
   name: string,
   years: number,
-  dailyRate = 0,
   time?: ArrayLike<number>,
+  dailyRates?: ArrayLike<number>, // per-bar per-calendar-day rate earned while flat
 ): StrategyResult {
   const n = close.length;
-  let equity = 1; // realistic: invested days track price, cash days earn interest
+  let equity = 1; // realistic: invested days track price, cash days earn inflation
   let priceEq = 1; // pure: cash idle (price-only)
   let peak = 1;
   let maxDD = 0;
@@ -399,7 +381,7 @@ function simulate(
       priceEq *= g;
       daysIn += cal;
     } else {
-      if (dailyRate) equity *= Math.pow(1 + dailyRate, cal);
+      if (dailyRates) equity *= Math.pow(1 + dailyRates[i], cal);
       daysOut += cal;
     }
     if (equity > peak) peak = equity;
@@ -446,7 +428,7 @@ export function optimize(c: Candles): { results: StrategyResult[]; holdPct: numb
   // Real calendar span (time is unix seconds) — works for daily/weekly/monthly.
   const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
   const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
-  const out = strategyList().map((d) => simulate(close, d.build(c), holdPct, holdAnn, d.name, years, 0, c.time));
+  const out = strategyList().map((d) => simulate(close, d.build(c), holdPct, holdAnn, d.name, years, c.time));
   // Rank by annualized (per-day-normalized) return, not raw total.
   out.sort((x, y) => y.annPct - x.annPct);
   return { results: out, holdPct, holdAnn };
@@ -462,15 +444,20 @@ export function registerCustomStrategy(def: StrategyDef): void {
 }
 
 // Backtest an arbitrary precomputed position array on a symbol's candles.
-// `dailyRate` is the per-calendar-day interest earned while in cash (defaults to
-// the TCMB rate) so the result competes fairly with Buy & Hold.
-export function evalPosition(c: Candles, pos: Uint8Array, dailyRate = tcmbDailyRate()): StrategyResult {
+// `dailyRates` is the per-bar per-calendar-day rate earned while in cash; it
+// defaults to year-specific inflation (TÜFE), so a strategy sitting in cash
+// keeps pace with inflation and competes fairly with Buy & Hold.
+export function evalPosition(
+  c: Candles,
+  pos: Uint8Array,
+  dailyRates: ArrayLike<number> = inflationDailyRates(c.time, c.length),
+): StrategyResult {
   const close = c.close;
   const n = c.length;
   const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
   const holdPct = n > 1 ? (close[n - 1] / close[0] - 1) * 100 : 0;
   const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
-  return simulate(close, pos, holdPct, holdAnn, '', years, dailyRate, c.time);
+  return simulate(close, pos, holdPct, holdAnn, '', years, c.time, dailyRates);
 }
 
 export function buildPositionByName(name: string, c: Candles): Uint8Array | null {
@@ -535,7 +522,7 @@ export function optimizeFamily(c: Candles, family: string): OptResult[] {
   const holdPct = n > 1 ? (close[n - 1] / close[0] - 1) * 100 : 0;
   const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
   const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
-  const out = paramVariants(family).map((d) => ({ name: d.name, def: d, res: simulate(close, d.build(c), holdPct, holdAnn, d.name, years, 0, c.time) }));
+  const out = paramVariants(family).map((d) => ({ name: d.name, def: d, res: simulate(close, d.build(c), holdPct, holdAnn, d.name, years, c.time) }));
   out.sort((a, b) => b.res.annPct - a.res.annPct);
   return out;
 }

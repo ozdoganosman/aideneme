@@ -1282,6 +1282,18 @@ button.ctl:disabled {
   color: var(--muted);
   font-weight: 600;
 }
+.rv-base {
+  color: var(--text);
+  font-weight: 700;
+}
+.scan-stale {
+  color: #e0a52e;
+  font-weight: 600;
+}
+.bt-list-updating {
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
 /* Cash-interest (TCMB) control */
 .bt-rate {
   display: flex;

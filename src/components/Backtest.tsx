@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Candles } from '../data/types';
-import { evalPosition, dailyFromMonthly, TCMB_ANNUAL_PCT } from '../indicators/backtest';
+import { evalPosition, StrategyResult } from '../indicators/backtest';
+import { inflationDailyRates, inflationAvgAnnual } from '../data/inflation';
 import { fetchBistStatic, fetchScreener } from '../data/bistStatic';
 import {
   CustomStrategy,
@@ -26,7 +27,8 @@ interface Props {
 interface Combo {
   sym: string;
   strat: CustomStrategy;
-  ann: number; // annualized incl. cash interest (the Al-Tut rival)
+  ann: number; // annualized incl. inflation on cash (the Al-Tut rival)
+  pure: number; // annualized, price only
   ret: number;
   trades: number;
   win: number;
@@ -35,6 +37,93 @@ interface Combo {
   daysIn: number;
   daysOut: number;
   avg: number;
+}
+
+// ── En İyi 20 scan cache (persisted + incremental) ───────────────────────────
+// Keep the last scan and only recompute what changed: metrics are cached per
+// (symbol × strategy-rules) so unchanged strategies are reused, and downloaded
+// candles stay in memory for the session so a re-scan needs no re-download.
+type ScanMetrics = Omit<Combo, 'sym' | 'strat'>;
+const candlesMem = new Map<string, Candles>();
+const metricsMem = new Map<string, Map<string, ScanMetrics | null>>(); // sym → ruleHash → metrics|null(=no trades)
+let memHydrated = false;
+
+const stratHash = (s: CustomStrategy): string => JSON.stringify({ b: s.buy, s: s.sell });
+const toMetrics = (r: StrategyResult): ScanMetrics => ({
+  ann: r.annRate ?? r.annPct,
+  pure: r.annPct,
+  ret: r.retRate ?? r.retPct,
+  trades: r.trades,
+  win: r.winRate,
+  dd: r.maxDD,
+  hold: r.holdAnn,
+  daysIn: r.daysIn ?? 0,
+  daysOut: r.daysOut ?? 0,
+  avg: r.avgHoldDays ?? 0,
+});
+
+const METRICS_KEY = 'bt-scan-metrics-v2';
+const ROWS_KEY = 'bt-scan-rows-v2';
+
+function hydrateScanCache(): void {
+  if (memHydrated) return;
+  memHydrated = true;
+  try {
+    const obj = JSON.parse(localStorage.getItem(METRICS_KEY) || '{}') as Record<string, Record<string, ScanMetrics | null>>;
+    for (const [sym, cell] of Object.entries(obj)) metricsMem.set(sym, new Map(Object.entries(cell)));
+  } catch {
+    /* ignore corrupt cache */
+  }
+}
+function persistScanCache(keepHashes: Set<string>, keepSyms: Set<string>): void {
+  const obj: Record<string, Record<string, ScanMetrics | null>> = {};
+  for (const [sym, cell] of metricsMem) {
+    if (!keepSyms.has(sym)) {
+      metricsMem.delete(sym); // prune stale symbols from memory too
+      continue;
+    }
+    const o: Record<string, ScanMetrics | null> = {};
+    for (const [h, v] of cell) {
+      if (keepHashes.has(h)) o[h] = v;
+      else cell.delete(h); // prune stale strategies
+    }
+    if (Object.keys(o).length) obj[sym] = o;
+  }
+  try {
+    localStorage.setItem(METRICS_KEY, JSON.stringify(obj));
+  } catch {
+    /* quota — keep the in-memory cache, skip persisting */
+  }
+}
+
+interface SavedScan {
+  rows: Combo[];
+  total: number;
+  at: number;
+  hashes: string[];
+}
+function loadSavedScan(): SavedScan | null {
+  try {
+    const raw = localStorage.getItem(ROWS_KEY);
+    return raw ? (JSON.parse(raw) as SavedScan) : null;
+  } catch {
+    return null;
+  }
+}
+function saveScan(s: SavedScan): void {
+  try {
+    localStorage.setItem(ROWS_KEY, JSON.stringify(s));
+  } catch {
+    /* skip */
+  }
+}
+function fmtAgo(ts: number): string {
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return 'az önce';
+  if (m < 60) return `${m} dk önce`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} sa önce`;
+  return `${Math.floor(h / 24)} gün önce`;
 }
 
 const blankDraft = (): CustomStrategy => ({ id: '', name: '', buy: [newCond()], sell: [] });
@@ -68,16 +157,20 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
   const [tab, setTab] = useState<'mine' | 'top'>('mine');
   const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [scan, setScan] = useState<{ rows: Combo[]; done: number; total: number; running: boolean } | null>(null);
-  // Annual cash interest (TCMB) earned while flat — overridable, persisted.
-  const [rate, setRate] = useState<number>(() => {
-    const v = parseFloat(localStorage.getItem('bt-cash-rate') || '');
-    return Number.isFinite(v) ? v : TCMB_ANNUAL_PCT;
+  // Restore the last saved scan so reopening the modal shows it instantly.
+  const [scan, setScan] = useState<{ rows: Combo[]; done: number; total: number; running: boolean } | null>(() => {
+    hydrateScanCache();
+    const sv = loadSavedScan();
+    return sv ? { rows: sv.rows, done: 0, total: sv.total, running: false } : null;
   });
-  useEffect(() => {
-    localStorage.setItem('bt-cash-rate', String(rate));
-  }, [rate]);
-  const dRate = dailyFromMonthly(rate / 12); // annual → aylık → günlük
+  const [scanMeta, setScanMeta] = useState<{ at: number; hashes: string[] } | null>(() => {
+    const sv = loadSavedScan();
+    return sv ? { at: sv.at, hashes: sv.hashes } : null;
+  });
+
+  // Cash leg earns year-specific inflation (TÜFE) while the strategy is flat.
+  const inflRates = useMemo(() => inflationDailyRates(candles.time, candles.length), [candles]);
+  const avgInfl = useMemo(() => inflationAvgAnnual(candles.time, candles.length), [candles]);
 
   // Backtest each saved strategy on the current symbol (+ equity curve).
   const results = useMemo(
@@ -85,13 +178,18 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
       strats
         .map((s) => {
           const pos = buildCustomPosition(candles, s);
-          return { s, r: evalPosition(candles, pos, dRate), eq: equitySpark(candles.close, pos, candles.time, dRate), pos };
+          return { s, r: evalPosition(candles, pos, inflRates), eq: equitySpark(candles.close, pos, candles.time, inflRates), pos };
         })
         .sort((a, b) => (b.r.annRate ?? b.r.annPct) - (a.r.annRate ?? a.r.annPct)),
-    [strats, candles, dRate],
+    [strats, candles, inflRates],
   );
   const maxAnn = Math.max(...results.map((x) => Math.abs(x.r.annRate ?? x.r.annPct)), 1);
   const topMax = scan ? Math.max(...scan.rows.map((t) => Math.abs(t.ann)), 1) : 1;
+  // Is the saved scan stale vs the current strategy set (changed/added/removed)?
+  const curHashes = useMemo(() => strats.map(stratHash), [strats]);
+  const stale =
+    !!scanMeta &&
+    (curHashes.length !== scanMeta.hashes.length || curHashes.some((h) => !scanMeta.hashes.includes(h)));
 
   const setBuy = (buy: Cond[]) => setDraft((d) => ({ ...d, buy }));
   const setSell = (sell: Cond[]) => setDraft((d) => ({ ...d, sell }));
@@ -113,65 +211,87 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
   const edit = (s: CustomStrategy) =>
     setDraft({ id: s.id, name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
 
-  const runScan = async () => {
-    if (!strats.length) return;
-    setScan({ rows: [], done: 0, total: 0, running: true });
-    // Scan the 300 oldest stocks (longest history) from the screener snapshot.
-    let syms = universe;
+  // The 300 oldest stocks (longest history) from the screener snapshot.
+  const getScanSymbols = async (): Promise<string[]> => {
     try {
       const sc = await fetchScreener();
-      if (sc?.items?.length) {
-        syms = sc.items
+      if (sc?.items?.length)
+        return sc.items
           .slice()
           .sort((a, b) => (b.yr ?? 0) - (a.yr ?? 0))
           .slice(0, 300)
           .map((i) => i.s);
-      }
     } catch {
       /* fall back to the bounded universe */
     }
-    setScan({ rows: [], done: 0, total: syms.length, running: true });
+    return universe;
+  };
+
+  // Pick the best CURRENT strategy per symbol from the cache, then rank top 20.
+  const buildScanRows = (syms: string[], cur: { s: CustomStrategy; h: string }[]): Combo[] => {
     const best = new Map<string, Combo>();
-    const queue = [...syms];
+    for (const sym of syms) {
+      const cell = metricsMem.get(sym);
+      if (!cell) continue;
+      for (const { s, h } of cur) {
+        const m = cell.get(h);
+        if (!m) continue; // null = computed, no trades · undefined = not computed
+        const prev = best.get(sym);
+        if (!prev || m.ann > prev.ann) best.set(sym, { sym, strat: s, ...m });
+      }
+    }
+    return [...best.values()].sort((a, b) => b.ann - a.ann).slice(0, 20);
+  };
+
+  const runScan = async () => {
+    if (!strats.length) return;
+    const cur = strats.map((s) => ({ s, h: stratHash(s) }));
+    const curHashSet = new Set(cur.map((x) => x.h));
+    setScan((p) => ({ rows: p?.rows ?? [], done: 0, total: 0, running: true }));
+    const syms = await getScanSymbols();
+    const symSet = new Set(syms);
+    setScan((p) => ({ rows: p?.rows ?? [], done: 0, total: syms.length, running: true }));
     let done = 0;
+    const queue = [...syms];
     const worker = async () => {
       while (queue.length) {
         const sym = queue.shift()!;
-        try {
-          const c = await fetchBistStatic(sym);
-          if (c.length >= 80) {
-            for (const s of strats) {
-              const r = evalPosition(c, buildCustomPosition(c, s), dRate);
-              const ann = r.annRate ?? r.annPct;
-              if (r.trades > 0) {
-                const prev = best.get(sym);
-                if (!prev || ann > prev.ann)
-                  best.set(sym, {
-                    sym,
-                    strat: s,
-                    ann,
-                    ret: r.retRate ?? r.retPct,
-                    trades: r.trades,
-                    win: r.winRate,
-                    dd: r.maxDD,
-                    hold: r.holdAnn,
-                    daysIn: r.daysIn ?? 0,
-                    daysOut: r.daysOut ?? 0,
-                    avg: r.avgHoldDays ?? 0,
-                  });
-              }
+        let cell = metricsMem.get(sym);
+        if (!cell) {
+          cell = new Map();
+          metricsMem.set(sym, cell);
+        }
+        // Only compute strategies not already cached for this symbol.
+        const missing = cur.filter(({ h }) => !cell!.has(h));
+        if (missing.length) {
+          let c = candlesMem.get(sym);
+          if (!c) {
+            try {
+              c = await fetchBistStatic(sym);
+              candlesMem.set(sym, c);
+            } catch {
+              c = undefined;
             }
           }
-        } catch {
-          /* skip */
+          if (c && c.length >= 80) {
+            for (const { s, h } of missing) {
+              const r = evalPosition(c, buildCustomPosition(c, s));
+              cell.set(h, r.trades > 0 ? toMetrics(r) : null);
+            }
+          } else {
+            for (const { h } of missing) cell.set(h, null); // no usable data → don't retry this run
+          }
         }
         done++;
         setScan((p) => (p ? { ...p, done } : p));
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
-    const rows = [...best.values()].sort((a, b) => b.ann - a.ann).slice(0, 20);
-    setScan({ rows, done, total: universe.length, running: false });
+    const rows = buildScanRows(syms, cur);
+    persistScanCache(curHashSet, symSet);
+    saveScan({ rows, total: syms.length, at: Date.now(), hashes: [...curHashSet] });
+    setScanMeta({ at: Date.now(), hashes: [...curHashSet] });
+    setScan({ rows, done, total: syms.length, running: false });
   };
 
   return (
@@ -226,17 +346,14 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
               </div>
 
               <p className="bt-intro">
-                <b>{symbol}</b> üzerinde kayıtlı stratejilerin sonuçları (<b>nakit faizi dahil yıllık</b> getiriye göre).
-                Strateji nakitteyken para boşta durmaz, faiz kazanır → <b>Al-Tut</b>'a rakip. Bir satıra tıkla → grafikte
-                AL/SAT işaretlenir.
+                <b>{symbol}</b> üzerinde kayıtlı stratejilerin sonuçları (<b>enflasyon dahil yıllık</b> getiriye göre).
+                Strateji nakitteyken para boşta durmaz, <b>enflasyon (TÜFE) kadar</b> değer korur → <b>Al-Tut</b>'a rakip.
+                Bir satıra tıkla → grafikte AL/SAT işaretlenir.
               </p>
 
               <div className="bt-rate">
-                <label>💰 Nakit faizi (TCMB, yıllık %)</label>
-                <ValInput value={rate} onChange={setRate} />
-                <span className="lg-muted">
-                  ≈ aylık %{(rate / 12).toFixed(2)} · günlük %{(dRate * 100).toFixed(3)} — boştaki günlerde işler
-                </span>
+                <span>📈 Nakit boştayken <b>enflasyona (TÜFE) endeksli</b></span>
+                <span className="lg-muted">Yıla göre gerçek TÜFE uygulanır · bu dönemde ort. ≈ yıllık %{avgInfl.toFixed(0)}</span>
               </div>
 
               {results.length === 0 ? (
@@ -245,13 +362,14 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                 <div className="bt-list">
                   {results.map(({ s, r, eq, pos }, i) => {
                     const ann = r.annRate ?? r.annPct;
-                    const beat = ann >= r.holdAnn;
+                    const beatR = ann >= r.holdAnn; // enflasyon dahil, Al-Tut'u geçti mi
+                    const beatP = r.annPct >= r.holdAnn; // saf strateji Al-Tut'u geçti mi
                     return (
                     <div key={s.id} className="bt-srow">
                       <div className="bt-srow-head">
                         <span className="bt-rank">{i + 1}</span>
                         <span className="bt-srow-name">{s.name}</span>
-                        <span className={'bt-srow-val ' + (ann >= 0 ? 'up' : 'down')} title="Yıllık getiri — nakitteyken TCMB faizi dahil (Al-Tut'a rakip)">
+                        <span className={'bt-srow-val ' + (ann >= 0 ? 'up' : 'down')} title="Yıllık getiri — nakitteyken enflasyon (TÜFE) dahil (Al-Tut'a rakip)">
                           {fmtPct(ann)}
                           <span className="bt-tag">yıl ✦</span>
                         </span>
@@ -267,13 +385,21 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                         ⏱️ ort {Math.round(r.avgHoldDays ?? 0)} gün/işlem · işlemde {r.daysIn ?? 0} gün · boşta {r.daysOut ?? 0} gün
                       </div>
                       <div className="bt-srow-sub bt-rival">
-                        💰 faiz dahil <b className={ann >= 0 ? 'up' : 'down'}>{fmtPct(ann)}</b> · saf strateji{' '}
-                        {fmtPct(r.annPct)} · Al-Tut <b className={r.holdAnn >= 0 ? 'up' : 'down'}>{fmtPct(r.holdAnn)}</b>{' '}
-                        <span className={beat ? 'rv-win' : 'rv-lose'}>{beat ? '✓ geçti' : 'geçemedi'}</span>
+                        💰 enf. dahil{' '}
+                        <b className={beatR ? 'rv-win' : 'rv-lose'}>
+                          {fmtPct(ann)}
+                          {beatR ? ' ✓' : ''}
+                        </b>{' '}
+                        · saf strateji{' '}
+                        <b className={beatP ? 'rv-win' : 'rv-lose'}>
+                          {fmtPct(r.annPct)}
+                          {beatP ? ' ✓' : ''}
+                        </b>{' '}
+                        · Al-Tut <b className="rv-base">{fmtPct(r.holdAnn)}</b>
                       </div>
-                      <div className="eq-wrap" title="Sermaye eğrisi: 1₺ nasıl büyürdü (renkli: strateji + nakit faizi, gri: Al-Tut, kesik: başabaş)">
+                      <div className="eq-wrap" title="Sermaye eğrisi: 1₺ nasıl büyürdü (renkli: strateji + nakit enflasyon, gri: Al-Tut, kesik: başabaş)">
                         <EquitySpark data={eq} />
-                        <div className="eq-leg lg-muted">renkli: Strateji (faiz dahil) · gri: Al-Tut · kesik çizgi: başabaş</div>
+                        <div className="eq-leg lg-muted">renkli: Strateji (enflasyon dahil) · gri: Al-Tut · kesik çizgi: başabaş</div>
                       </div>
                       <div className="bt-srow-explain">{describe(s)}</div>
                       <div className="sb-rowbtns">
@@ -292,19 +418,28 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
           ) : (
             <>
               <p className="bt-intro">
-                Kayıtlı stratejilerini <b>en eski 300 BIST hissesinde</b> (en uzun geçmişe sahip) tarar; <b>nakit faizi
+                Kayıtlı stratejilerini <b>en eski 300 BIST hissesinde</b> (en uzun geçmişe sahip) tarar; <b>enflasyon
                 dahil yıllık</b> getirisi en yüksek 20 <b>hisse + strateji</b> eşleşmesini listeler. Bir satıra tıkla → o
                 hisseyi açar ve stratejiyi işaretler.{' '}
-                <span className="lg-muted">(Nakit faizi yıllık %{rate.toFixed(0)}. 300 hisse indirildiği için biraz sürebilir.)</span>
+                <span className="lg-muted">
+                  (Nakit, yıla göre enflasyona/TÜFE endeksli. Sonuçlar saklanır; tekrar tarayınca yalnızca yeni/değişen
+                  stratejiler hesaplanır.)
+                </span>
               </p>
               <div className="sb-actions">
                 <button className="scr-add" onClick={runScan} disabled={!strats.length || scan?.running}>
-                  {scan?.running ? `Taranıyor… ${scan.done}/${scan.total}` : '🔍 Tara'}
+                  {scan?.running ? `Taranıyor… ${scan.done}/${scan.total}` : scanMeta ? '↻ Güncelle' : '🔍 Tara'}
                 </button>
+                {scanMeta && !scan?.running && (
+                  <span className="bt-note">
+                    Son tarama: {fmtAgo(scanMeta.at)}
+                    {stale && <span className="scan-stale"> · ⚠️ stratejiler değişti, güncelle</span>}
+                  </span>
+                )}
                 {!strats.length && <span className="bt-note">Önce "Stratejilerim"den strateji ekle.</span>}
               </div>
-              {scan && !scan.running && (
-                <div className="bt-list">
+              {scan && (scan.rows.length > 0 || !scan.running) && (
+                <div className={'bt-list' + (scan.running ? ' bt-list-updating' : '')}>
                   {scan.rows.length === 0 ? (
                     <div className="bt-note">Eşleşen sonuç yok.</div>
                   ) : (
@@ -320,7 +455,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                           <span className="bt-srow-name">
                             <b>{t.sym}</b> · {t.strat.name}
                           </span>
-                          <span className={'bt-srow-val ' + (t.ann >= 0 ? 'up' : 'down')} title="Yıllık getiri — nakit faizi dahil (Al-Tut'a rakip)">
+                          <span className={'bt-srow-val ' + (t.ann >= 0 ? 'up' : 'down')} title="Yıllık getiri — nakitteyken enflasyon (TÜFE) dahil (Al-Tut'a rakip)">
                             {fmtPct(t.ann)}
                             <span className="bt-tag">yıl ✦</span>
                           </span>
@@ -335,9 +470,17 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                           ⏱️ ort {Math.round(t.avg)} gün/işlem · işlemde {t.daysIn} gün · boşta {t.daysOut} gün
                         </div>
                         <div className="bt-srow-sub bt-rival">
-                          💰 faiz dahil <b className={t.ann >= 0 ? 'up' : 'down'}>{fmtPct(t.ann)}</b> · Al-Tut{' '}
-                          <b className={t.hold >= 0 ? 'up' : 'down'}>{fmtPct(t.hold)}</b>{' '}
-                          <span className={t.ann >= t.hold ? 'rv-win' : 'rv-lose'}>{t.ann >= t.hold ? '✓ geçti' : 'geçemedi'}</span>
+                          💰 enf. dahil{' '}
+                          <b className={t.ann >= t.hold ? 'rv-win' : 'rv-lose'}>
+                            {fmtPct(t.ann)}
+                            {t.ann >= t.hold ? ' ✓' : ''}
+                          </b>{' '}
+                          · saf strateji{' '}
+                          <b className={t.pure >= t.hold ? 'rv-win' : 'rv-lose'}>
+                            {fmtPct(t.pure)}
+                            {t.pure >= t.hold ? ' ✓' : ''}
+                          </b>{' '}
+                          · Al-Tut <b className="rv-base">{fmtPct(t.hold)}</b>
                         </div>
                       </div>
                     ))
@@ -475,7 +618,7 @@ interface Eq {
   strat: number[];
   hold: number[];
 }
-function equitySpark(close: Float64Array, pos: Uint8Array, time: Float64Array, dailyRate = 0, points = 90): Eq {
+function equitySpark(close: Float64Array, pos: Uint8Array, time: Float64Array, dailyRates?: ArrayLike<number>, points = 90): Eq {
   const n = close.length;
   if (n < 2) return { strat: [], hold: [] };
   const step = Math.max(1, Math.floor(n / points));
@@ -485,9 +628,9 @@ function equitySpark(close: Float64Array, pos: Uint8Array, time: Float64Array, d
   const base = close[0];
   for (let i = 1; i < n; i++) {
     if (pos[i - 1]) e *= close[i] / close[i - 1];
-    else if (dailyRate) {
+    else if (dailyRates) {
       const cal = Math.min(Math.max((time[i] - time[i - 1]) / 86400, 0), 31);
-      e *= Math.pow(1 + dailyRate, cal); // cash earns interest while flat
+      e *= Math.pow(1 + dailyRates[i], cal); // cash keeps pace with inflation while flat
     }
     if (i % step === 0) {
       strat.push(e);
