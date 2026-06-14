@@ -213,6 +213,8 @@ export default function App() {
           <option value="synthetic">Sentetik (stres)</option>
         </select>
 
+        <span className="tb-div" />
+
         {provider === 'bist' ? (
           <>
             <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load({ symbol: s })} />
@@ -235,6 +237,8 @@ export default function App() {
           <span className="hint">4.000.000 mum (maks)</span>
         )}
 
+        <span className="tb-div" />
+
         <IndicatorMenu settings={settings} onChange={setSettings} />
 
         <button
@@ -245,7 +249,7 @@ export default function App() {
           Log
         </button>
 
-        <button className="ctl" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
+        <button className="ctl primary" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
           Strateji
         </button>
 
@@ -261,6 +265,22 @@ export default function App() {
         )}
 
         <span className="spacer" />
+        <div className="tb-group">
+          <button
+            className={'ctl tgl' + (showLeft ? ' on' : '')}
+            onClick={() => setShowLeft((v) => !v)}
+            title="Sol panel (Portföy / İşlemler) — kısayol ["
+          >
+            ◧
+          </button>
+          <button
+            className={'ctl tgl' + (showRight ? ' on' : '')}
+            onClick={() => setShowRight((v) => !v)}
+            title="Sağ panel (İzleme Listesi) — kısayol ]"
+          >
+            ◨
+          </button>
+        </div>
         <span className="hint">sürükle · tekerlek: zoom · çift tık: sığdır</span>
       </header>
 

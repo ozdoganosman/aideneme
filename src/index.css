@@ -20,11 +20,14 @@
   --panel: #14171f;
   --panel-2: #1a1d27;
   --border: #232733;
-  --text: #cfd2dc;
-  --muted: #7b8194;
+  --border-2: #313747;
+  --hover: #20242f;
+  --text: #d6d9e3;
+  --muted: #828aa0;
   --up: #26a69a;
   --down: #ef5350;
   --accent: #3b82f6;
+  --accent-weak: rgba(59, 130, 246, 0.16);
 }
 
 * {
@@ -83,7 +86,8 @@ body {
 }
 
 .ctl:hover {
-  border-color: #313747;
+  border-color: var(--border-2);
+  background: var(--hover);
 }
 
 /* Active/pressed toggle buttons (Log, etc.) */
@@ -91,6 +95,48 @@ body {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+/* Primary call-to-action button (Strateji) */
+.ctl.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.ctl.primary:hover {
+  background: #2f6fd0;
+  border-color: #2f6fd0;
+}
+.ctl.primary:disabled {
+  background: var(--panel-2);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+/* Icon toggle buttons (panel show/hide) */
+.ctl.tgl {
+  min-width: 34px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.ctl.tgl.on {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: #cfe0ff;
+}
+
+/* Toolbar group divider + groups */
+.tb-div {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 1px;
+}
+.tb-group {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .spinning {
@@ -393,13 +439,13 @@ button.ctl:disabled {
 }
 
 .modal {
-  width: min(720px, 92vw);
-  max-height: 86vh;
+  width: min(880px, 94vw);
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
@@ -407,8 +453,10 @@ button.ctl:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #181b24, #14171f);
+  border-radius: 12px 12px 0 0;
   font-size: 15px;
 }
 

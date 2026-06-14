@@ -169,20 +169,17 @@ export class LodController {
     if (!this.full) return;
     const len = this.full.length;
     const { i0: w0, i1: w1, stride } = this.win;
-    const count = Math.ceil((w1 - w0) / stride);
 
-    const fromIdx = Math.max(0, Math.floor(range.from));
-    const toIdx = Math.min(count, Math.ceil(range.to));
-    const visLo = w0 + fromIdx * stride;
-    const visHi = w0 + toIdx * stride;
+    // Current viewport expressed in REAL data indices (range is in decimated
+    // logical coords). Preserved exactly so a reflow never snaps the view.
+    const visLo = w0 + range.from * stride;
+    const visHi = w0 + range.to * stride;
     const visBars = Math.max(1, visHi - visLo);
     const desiredStride = strideFor(visBars, this.targetBuckets);
 
-    const rawLo = w0 + range.from * stride;
-    const rawHi = w0 + range.to * stride;
     const pad = (w1 - w0) * 0.15;
-    const nearLeft = rawLo < w0 + pad;
-    const nearRight = rawHi > w1 - pad;
+    const nearLeft = visLo < w0 + pad;
+    const nearRight = visHi > w1 - pad;
 
     // At the data boundary we do nothing, so the chart scrolls into whitespace
     // instead of snapping/zooming.
@@ -195,7 +192,33 @@ export class LodController {
     let i1 = Math.ceil(visHi + margin);
     if (i0 < 0) i0 = 0;
     if (i1 > len) i1 = len;
-    this.renderWindow(i0, i1, false, desiredStride);
+    this.renderRealView(i0, i1, desiredStride, visLo, visHi);
+  }
+
+  // Re-decimate the window and restore the *exact* real-index viewport in the new
+  // decimated coordinates. Deterministic — never reads getVisibleRange (which can
+  // momentarily return null mid-gesture and snap the chart to the right edge).
+  private renderRealView(w0: number, w1: number, stride: number, visLo: number, visHi: number) {
+    if (!this.full) return;
+    const { candles, volumes } = decimate(this.full, w0, w1, stride);
+    if (candles.length === 0) return;
+    this.applying = true;
+    this.candle.setData(candles);
+    this.volume.setData(volumes);
+    for (let k = 0; k < this.extras.length; k++) {
+      const vals = this.extraVals[k];
+      if (!vals) continue;
+      this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
+    }
+    this.win = { i0: w0, i1: w1, stride };
+    this.decLen = candles.length;
+    this.chart.timeScale().setVisibleLogicalRange({
+      from: (visLo - w0) / stride,
+      to: (visHi - w0) / stride,
+    });
+    requestAnimationFrame(() => {
+      this.applying = false;
+    });
   }
 
   private renderWindow(i0: number, i1: number, fit: boolean, stride?: number) {
