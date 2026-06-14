@@ -190,8 +190,9 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                         toplam {fmtX(r.retPct)} · {r.trades} işlem · Kazanma %{r.winRate.toFixed(0)} · Düşüş -
                         {r.maxDD.toFixed(0)}%
                       </div>
-                      <div className="eq-wrap" title="Sermaye eğrisi (1₺ stratejiyle nasıl büyürdü)">
+                      <div className="eq-wrap" title="Sermaye eğrisi: 1₺ nasıl büyürdü (renkli: strateji, gri: Al-Tut, kesik: başabaş)">
                         <EquitySpark data={eq} />
+                        <div className="eq-leg lg-muted">renkli: Strateji · gri: Al-Tut · kesik çizgi: başabaş</div>
                       </div>
                       <div className="bt-srow-explain">{describe(s)}</div>
                       <div className="sb-rowbtns">

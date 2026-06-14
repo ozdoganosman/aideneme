@@ -2442,3 +2442,8 @@ button.ctl:disabled {
   border-radius: 2px;
   margin-right: 4px;
 }
+
+.eq-leg {
+  font-size: 10px;
+  margin-top: 3px;
+}
