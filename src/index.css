@@ -934,6 +934,17 @@ button.ctl:disabled {
   display: block;
 }
 
+.wl-since {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.wl-since.up {
+  color: var(--up);
+}
+.wl-since.down {
+  color: var(--down);
+}
+
 .wl-head {
   display: flex;
   align-items: center;

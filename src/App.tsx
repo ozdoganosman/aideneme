@@ -56,6 +56,9 @@ export default function App() {
   const [names, setNames] = useState<Record<string, string>>({});
   const [spark, setSpark] = useState<Record<string, number[]>>({});
   const [watchlist, setWatchlist] = useState<string[]>(() => lsGet('borsaWatch', ['THYAO', 'GARAN', 'ASELS']));
+  const [watchAdded, setWatchAdded] = useState<Record<string, { t: number; p: number }>>(() =>
+    lsGet('borsaWatchAdded', {}),
+  );
   const [portfolio, setPortfolio] = useState<Holding[]>(() => lsGet('borsaPortfolio', []));
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
     lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true }),
@@ -67,6 +70,26 @@ export default function App() {
   const lastKeyRef = useRef<string | null>(null);
 
   useEffect(() => localStorage.setItem('borsaWatch', JSON.stringify(watchlist)), [watchlist]);
+  useEffect(() => localStorage.setItem('borsaWatchAdded', JSON.stringify(watchAdded)), [watchAdded]);
+  // Backfill the "tracked since" baseline (date + price) for any watched symbol
+  // that has none yet (e.g. added before this feature) once its quote is known.
+  useEffect(() => {
+    if (!watchlist.length) return;
+    setWatchAdded((m) => {
+      let changed = false;
+      const n = { ...m };
+      const now = Math.floor(Date.now() / 1000);
+      for (const s of watchlist) {
+        const q = quotes[s];
+        if (!q || !(q.c > 0)) continue;
+        if (!n[s] || !(n[s].p > 0)) {
+          n[s] = { t: n[s]?.t || now, p: q.c };
+          changed = true;
+        }
+      }
+      return changed ? n : m;
+    });
+  }, [quotes, watchlist]);
   useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
@@ -133,8 +156,19 @@ export default function App() {
     setSymbol(s);
     void load({ provider: 'bist', symbol: s });
   };
-  const toggleWatch = (s: string) =>
-    setWatchlist((w) => (w.includes(s) ? w.filter((x) => x !== s) : [s, ...w]));
+  const toggleWatch = (s: string) => {
+    if (watchlist.includes(s)) {
+      setWatchlist((w) => w.filter((x) => x !== s));
+      setWatchAdded((m) => {
+        const n = { ...m };
+        delete n[s];
+        return n;
+      });
+    } else {
+      setWatchlist((w) => [s, ...w]);
+      setWatchAdded((m) => ({ ...m, [s]: { t: Math.floor(Date.now() / 1000), p: quotes[s]?.c ?? 0 } }));
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -419,6 +453,7 @@ export default function App() {
               items={watchlist}
               quotes={quotes}
               spark={spark}
+              added={watchAdded}
               active={symbol}
               onSelect={selectSymbol}
               onRemove={toggleWatch}

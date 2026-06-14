@@ -4,13 +4,14 @@ interface Props {
   items: string[];
   quotes: Quotes;
   spark: Record<string, number[]>;
+  added: Record<string, { t: number; p: number }>;
   active: string;
   onSelect: (s: string) => void;
   onRemove: (s: string) => void;
   onHide: () => void;
 }
 
-export function Watchlist({ items, quotes, spark, active, onSelect, onRemove, onHide }: Props) {
+export function Watchlist({ items, quotes, spark, added, active, onSelect, onRemove, onHide }: Props) {
   return (
     <div className="panel">
       <div className="panel-title wl-head">
@@ -24,13 +25,26 @@ export function Watchlist({ items, quotes, spark, active, onSelect, onRemove, on
         const q = quotes[sym];
         const pct = q && q.pc ? ((q.c - q.pc) / q.pc) * 100 : 0;
         const up = pct >= 0;
+        const a = added[sym];
+        const since = a && a.p > 0 && q ? ((q.c - a.p) / a.p) * 100 : null;
+        const days = a ? Math.max(0, Math.round((Date.now() / 1000 - a.t) / 86400)) : 0;
         return (
           <div
             key={sym}
             className={'row wl-row' + (sym === active ? ' active' : '')}
             onClick={() => onSelect(sym)}
           >
-            <span className="row-sym">{sym}</span>
+            <span className="row-sym">
+              {sym}
+              {since !== null && (
+                <small
+                  className={'wl-since ' + (since >= 0 ? 'up' : 'down')}
+                  title={`Takibe alındığından beri (${days} gün) · giriş ${fmt(a!.p)}`}
+                >
+                  {(since >= 0 ? '+' : '') + since.toFixed(1)}% · {days}g
+                </small>
+              )}
+            </span>
             <Spark data={spark[sym]} />
             <span className="row-num">
               {q ? fmt(q.c) : '—'}
