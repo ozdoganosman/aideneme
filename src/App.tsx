@@ -246,8 +246,20 @@ export default function App() {
     setShowRight(nv);
     if (nv && isNarrow()) setShowLeft(false);
   };
-  const addToWatch = (syms: string[], mode: 'add' | 'replace') => {
-    setWatchlist((w) => Array.from(new Set(mode === 'replace' ? syms : [...syms, ...w])));
+  const addToWatch = (syms: string[], mode: 'add' | 'new') => {
+    const uniq = Array.from(new Set(syms));
+    if (!uniq.length) return;
+    if (mode === 'new') {
+      // Genuinely create a new named list from the scan results and switch to it.
+      const name = (window.prompt('Yeni liste adı:', `Tarama ${lists.length}`) || '').trim();
+      if (!name) return;
+      const id = String(Date.now());
+      setLists((ls) => [...ls, { id, name, items: uniq }]);
+      setActiveListId(id);
+      setShowRight(true); // reveal the watchlist so the new list is visible
+    } else {
+      setWatchlist((w) => Array.from(new Set([...uniq, ...w])));
+    }
   };
   const toggleWatch = (s: string) => {
     if (watchlist.includes(s)) {

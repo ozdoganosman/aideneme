@@ -4,7 +4,7 @@ import { fetchScreener, fetchBistSpark, ScreenerFile, ScreenerItem } from '../da
 interface Props {
   onClose: () => void;
   onSelect: (s: string) => void;
-  onAddToWatch: (syms: string[], mode: 'add' | 'replace') => void;
+  onAddToWatch: (syms: string[], mode: 'add' | 'new') => void;
 }
 
 function readScrState(): { view?: number; filters?: Filter[]; sort?: { key: Key; dir: 1 | -1 }; q?: string } {
@@ -113,11 +113,11 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
     localStorage.setItem('borsaScrState', JSON.stringify({ view, filters, sort, q }));
   }, [view, filters, sort, q]);
 
-  const addWatch = (mode: 'add' | 'replace') => {
+  const addWatch = (mode: 'add' | 'new') => {
     const syms = rows.map((r) => r.s);
     if (!syms.length) return;
     onAddToWatch(syms, mode);
-    setMsg(`${syms.length} hisse ${mode === 'replace' ? 'yeni listeye alındı' : 'takibe eklendi'}`);
+    setMsg(`${syms.length} hisse ${mode === 'new' ? 'yeni listeye eklendi' : 'aktif listeye eklendi'}`);
     window.setTimeout(() => setMsg(''), 2500);
   };
 
@@ -342,17 +342,17 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
                     className="scr-act"
                     onClick={() => addWatch('add')}
                     disabled={!rows.length}
-                    title="Eşleşen tüm hisseleri mevcut izleme listesine ekle"
+                    title="Eşleşen tüm hisseleri aktif izleme listesine ekle"
                   >
-                    ★ Takibe ekle
+                    ★ Aktif listeye ekle
                   </button>
                   <button
                     className="scr-act"
-                    onClick={() => addWatch('replace')}
+                    onClick={() => addWatch('new')}
                     disabled={!rows.length}
-                    title="İzleme listesini eşleşenlerle değiştir"
+                    title="Eşleşenlerden yeni bir izleme listesi oluştur"
                   >
-                    🆕 Yeni liste
+                    🆕 Yeni liste oluştur
                   </button>
                   <input
                     className="scr-search"
