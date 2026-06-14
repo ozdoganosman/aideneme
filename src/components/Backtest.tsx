@@ -149,7 +149,7 @@ export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrat
               </div>
             </>
           ) : (
-            renderSymbol(data, pick, candles.length)
+            renderSymbol(data, pick, candles)
           )}
           <div className="bt-hint">
             Çubuk = <b>yıllık getiri</b> (gün başına kâra göre normalize — uzun sürede biriken büyük toplamlar artık
@@ -317,10 +317,26 @@ function renderTop(
   );
 }
 
+// Annualized buy & hold (CAGR) from `years` ago to now; null if history shorter.
+function holdAnnSince(c: Candles, years: number | null): number | null {
+  const n = c.length;
+  if (n < 2) return null;
+  const tlast = c.time[n - 1];
+  let idx = 0;
+  if (years != null) {
+    const cut = tlast - years * 365.25 * 86400;
+    if (c.time[0] > cut) return null;
+    while (idx < n - 1 && c.time[idx] < cut) idx++;
+  }
+  const span = (tlast - c.time[idx]) / (365.25 * 86400);
+  if (span <= 0 || c.close[idx] <= 0) return null;
+  return (Math.pow(c.close[n - 1] / c.close[idx], 1 / span) - 1) * 100;
+}
+
 function renderSymbol(
   data: { results: StrategyResult[]; holdPct: number; holdAnn: number } | null,
   pick: (n: string) => void,
-  nBars: number,
+  c: Candles,
 ) {
   if (!data)
     return (
@@ -329,6 +345,7 @@ function renderSymbol(
       </div>
     );
 
+  const nBars = c.length;
   const filtered = data.results.filter((r) => r.trades > 0 && nBars / r.trades >= MIN_HOLD);
   const list = filtered.length ? filtered : data.results;
   const rows = list.slice(0, 12);
@@ -339,8 +356,19 @@ function renderSymbol(
     <>
       <p className="bt-intro">
         Bu hissede her strateji geçmişte otomatik uygulanırsa ne kazandırırdı — <b>yıllık (gün başına)</b> getiriye göre
-        sıralı (kısa vadeli / çok işlem yapanlar hariç). Karşılaştırma — <b>Al-Tut</b> yıllık:{' '}
-        <b className={data.holdAnn >= 0 ? 'up' : 'down'}>{fmtPct(data.holdAnn)}</b>
+        sıralı (kısa vadeli / çok işlem yapanlar hariç).
+        <br />
+        <b>Al-Tut yıllık (CAGR) — o tarihten beri alıp tutsaydın:</b>{' '}
+        {([['1Y', 1], ['5Y', 5], ['10Y', 10], ['Tüm', null]] as [string, number | null][]).map(([lbl, y], i) => {
+          const v = holdAnnSince(c, y);
+          return (
+            <span key={lbl}>
+              {i > 0 ? ' · ' : ' '}
+              {lbl}:{' '}
+              {v == null ? <span className="lg-muted">—</span> : <b className={v >= 0 ? 'up' : 'down'}>{fmtPct(v)}</b>}
+            </span>
+          );
+        })}
       </p>
 
       <Winner
