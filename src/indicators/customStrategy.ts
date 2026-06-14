@@ -62,41 +62,53 @@ export function newCond(): Cond {
   return { ind: 'wr', p: 260, op: 'gt', tgt: 'val', val: 50, ind2: 'ema', p2: 50 };
 }
 
-// A broad grid of candidate strategies (every "reasonable" possibility from the
-// supported indicators) that the optimizer tries to find the best average across
-// stocks. Each has a BUY rule and the matching opposite SELL rule.
+// A broad grid of candidate strategies — sweeps thresholds/periods for every
+// supported indicator (+ crossovers, asymmetric hysteresis and 2-condition trend
+// combos) so the optimizer can try "every reasonable possibility" and rank by
+// the best average across stocks. Each has a BUY rule and a matching SELL rule.
 export function candidateStrategies(): CustomStrategy[] {
   const C = (ind: string, op: Op, tgt: 'val' | 'ind', val = 0, ind2 = 'emacd', p = 0, p2 = 0): Cond => ({ ind, p, op, tgt, val, ind2, p2 });
   const list: { name: string; buy: Cond[]; sell: Cond[] }[] = [];
 
-  // MACD (NizamiCedid)
-  list.push({ name: 'MACD > 0', buy: [C('macd', 'gt', 'val', 0)], sell: [C('macd', 'lt', 'val', 0)] });
+  // ── MACD (NizamiCedid) ──
+  for (const th of [0, 0.02, 0.05]) list.push({ name: `MACD > ${th}`, buy: [C('macd', 'gt', 'val', th)], sell: [C('macd', 'lt', 'val', th)] });
   list.push({ name: 'MACD ↗ Signal', buy: [C('macd', 'cu', 'ind', 0, 'signal')], sell: [C('macd', 'cd', 'ind', 0, 'signal')] });
   list.push({ name: 'MACD ↗ eMACD', buy: [C('macd', 'cu', 'ind', 0, 'emacd')], sell: [C('macd', 'cd', 'ind', 0, 'emacd')] });
   list.push({ name: 'MACD > Signal', buy: [C('macd', 'gt', 'ind', 0, 'signal')], sell: [C('macd', 'lt', 'ind', 0, 'signal')] });
+  list.push({ name: 'MACD > eMACD', buy: [C('macd', 'gt', 'ind', 0, 'emacd')], sell: [C('macd', 'lt', 'ind', 0, 'emacd')] });
 
-  // Williams %R
-  for (const p of [50, 260]) {
+  // ── Williams %R: cross-EMA + threshold sweep (symmetric) ──
+  for (const p of [50, 100, 200, 260]) {
     list.push({ name: `%R(${p}) ↗ EMA`, buy: [C('wr', 'cu', 'ind', 0, 'wrema', p, p)], sell: [C('wr', 'cd', 'ind', 0, 'wrema', p, p)] });
-    for (const th of [40, 50, 60]) list.push({ name: `%R(${p}) > ${th}`, buy: [C('wr', 'gt', 'val', th, 'emacd', p)], sell: [C('wr', 'lt', 'val', th, 'emacd', p)] });
+    for (const th of [30, 40, 50, 60, 70]) list.push({ name: `%R(${p}) > ${th}`, buy: [C('wr', 'gt', 'val', th, 'emacd', p)], sell: [C('wr', 'lt', 'val', th, 'emacd', p)] });
+  }
+  // %R asymmetric hysteresis (buy high, sell lower → fewer whipsaws)
+  for (const [hi, lo] of [[55, 45], [60, 40], [70, 30]]) list.push({ name: `%R(260) >${hi}/<${lo}`, buy: [C('wr', 'gt', 'val', hi, 'emacd', 260)], sell: [C('wr', 'lt', 'val', lo, 'emacd', 260)] });
+
+  // ── RSI: threshold sweep + cross 50 ──
+  for (const p of [14, 28, 50]) {
+    for (const th of [45, 50, 55, 60]) list.push({ name: `RSI(${p}) > ${th}`, buy: [C('rsi', 'gt', 'val', th, 'emacd', p)], sell: [C('rsi', 'lt', 'val', th, 'emacd', p)] });
+    list.push({ name: `RSI(${p}) ↗ 50`, buy: [C('rsi', 'cu', 'val', 50, 'emacd', p)], sell: [C('rsi', 'cd', 'val', 50, 'emacd', p)] });
   }
 
-  // RSI
-  for (const p of [14, 50]) for (const th of [50, 55]) list.push({ name: `RSI(${p}) > ${th}`, buy: [C('rsi', 'gt', 'val', th, 'emacd', p)], sell: [C('rsi', 'lt', 'val', th, 'emacd', p)] });
+  // ── Price vs EMA (trend) ──
+  for (const p of [20, 50, 100, 150, 200, 377, 610]) list.push({ name: `Fiyat > EMA(${p})`, buy: [C('price', 'gt', 'ind', 0, 'ema', 0, p)], sell: [C('price', 'lt', 'ind', 0, 'ema', 0, p)] });
 
-  // Price vs EMA (trend)
-  for (const p of [50, 100, 200, 377]) list.push({ name: `Fiyat > EMA(${p})`, buy: [C('price', 'gt', 'ind', 0, 'ema', 0, p)], sell: [C('price', 'lt', 'ind', 0, 'ema', 0, p)] });
+  // ── EMA crossovers ──
+  for (const [a, b] of [[9, 21], [20, 50], [50, 100], [50, 200], [89, 377], [100, 200], [20, 100]]) list.push({ name: `EMA(${a}) ↗ EMA(${b})`, buy: [C('ema', 'cu', 'ind', 0, 'ema', a, b)], sell: [C('ema', 'cd', 'ind', 0, 'ema', a, b)] });
 
-  // EMA crossovers
-  for (const [a, b] of [[20, 50], [50, 200], [89, 377]]) list.push({ name: `EMA(${a}) ↗ EMA(${b})`, buy: [C('ema', 'cu', 'ind', 0, 'ema', a, b)], sell: [C('ema', 'cd', 'ind', 0, 'ema', a, b)] });
-
-  // Supertrend direction
+  // ── Supertrend direction ──
   list.push({ name: 'Supertrend yukarı', buy: [C('stdir', 'gt', 'val', 0.5)], sell: [C('stdir', 'lt', 'val', 0.5)] });
 
-  // Trend-filtered momentum (2 conditions: momentum AND price > EMA 200)
-  list.push({ name: 'MACD>0 + Trend(200)', buy: [C('macd', 'gt', 'val', 0), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('macd', 'lt', 'val', 0)] });
-  list.push({ name: '%R(260)>50 + Trend(200)', buy: [C('wr', 'gt', 'val', 50, 'emacd', 260), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('wr', 'lt', 'val', 50, 'emacd', 260)] });
-  list.push({ name: 'RSI(14)>50 + Trend(200)', buy: [C('rsi', 'gt', 'val', 50, 'emacd', 14), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('rsi', 'lt', 'val', 50, 'emacd', 14)] });
+  // ── Trend-filtered momentum (2 conditions: momentum AND price > long EMA) ──
+  const filters: [string, number][] = [['EMA200', 200], ['EMA377', 377]];
+  for (const [fname, fp] of filters) {
+    const trend = C('price', 'gt', 'ind', 0, 'ema', 0, fp);
+    list.push({ name: `MACD>0 + ${fname}`, buy: [C('macd', 'gt', 'val', 0), trend], sell: [C('macd', 'lt', 'val', 0)] });
+    list.push({ name: `%R(260)>50 + ${fname}`, buy: [C('wr', 'gt', 'val', 50, 'emacd', 260), trend], sell: [C('wr', 'lt', 'val', 50, 'emacd', 260)] });
+    list.push({ name: `RSI(14)>50 + ${fname}`, buy: [C('rsi', 'gt', 'val', 50, 'emacd', 14), trend], sell: [C('rsi', 'lt', 'val', 50, 'emacd', 14)] });
+    list.push({ name: `MACD↗Sig + ${fname}`, buy: [C('macd', 'cu', 'ind', 0, 'signal'), trend], sell: [C('macd', 'cd', 'ind', 0, 'signal')] });
+  }
 
   return list.map((s, i) => ({ id: 'opt-' + i, name: s.name, buy: s.buy, sell: s.sell }));
 }

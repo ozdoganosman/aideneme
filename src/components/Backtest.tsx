@@ -139,6 +139,7 @@ function fmtAgo(ts: number): string {
 }
 
 const blankDraft = (): CustomStrategy => ({ id: '', name: '', buy: [newCond()], sell: [] });
+const N_CANDIDATES = candidateStrategies().length; // how many combos the optimizer tries
 
 // Researched best rules from the two indicators (Williams Paşa + NizamiCedid).
 const mkCond = (ind: string, op: Cond['op'], tgt: 'val' | 'ind', val: number, ind2 = 'emacd', p = 0, p2 = 0): Cond => ({
@@ -292,14 +293,17 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
         }
         done++;
         setOpt((p) => (p ? { ...p, done } : p));
-        if (done % 4 === 0) await new Promise((r) => setTimeout(r)); // yield to keep UI responsive
+        if (done % 2 === 0) await new Promise((r) => setTimeout(r)); // yield to keep UI responsive
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
-    const rows: OptRow[] = acc
+    // A combo must trade on enough stocks to be trusted (not 2 lucky names).
+    const minN = Math.max(10, Math.floor(syms.length * 0.15));
+    const mapped = acc
       .filter((a) => a.n > 0)
-      .map((a) => ({ strat: a.s, ann: a.sumAnn / a.n, pure: a.sumPure / a.n, hold: a.sumHold / a.n, beat: (a.beat / a.n) * 100, n: a.n, trades: a.sumTr / a.n }))
-      .sort((x, y) => y.ann - x.ann);
+      .map((a) => ({ strat: a.s, ann: a.sumAnn / a.n, pure: a.sumPure / a.n, hold: a.sumHold / a.n, beat: (a.beat / a.n) * 100, n: a.n, trades: a.sumTr / a.n }));
+    const robust = mapped.filter((r) => r.n >= minN);
+    const rows: OptRow[] = (robust.length ? robust : mapped).sort((x, y) => y.ann - x.ann);
     setOpt({ mode: 'uni', running: false, done, total: syms.length, rows });
   };
 
@@ -493,7 +497,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
               </div>
 
               <div className="sb-suggest">
-                <span className="lg-muted">🎯 Otomatik: onlarca kombinasyonu dener, en iyiyi bulur:</span>
+                <span className="lg-muted">🎯 Otomatik: {N_CANDIDATES} kombinasyonu dener, en iyiyi bulur:</span>
                 <button className="sb-sugbtn" onClick={optimizeCurrent}>⚡ Bu hisse ({symbol})</button>
                 <button className="sb-sugbtn" onClick={optimizeUniverse} disabled={opt?.running}>
                   {opt?.running ? `Taranıyor… ${opt.done}/${opt.total}` : '🌍 Tüm hisseler (ortalama)'}
@@ -505,6 +509,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                   <div className="opt-head">
                     <b>🎯 En iyi kombinasyonlar</b>
                     <span className="lg-muted">
+                      {N_CANDIDATES} kombinasyon ·{' '}
                       {opt.mode === 'uni'
                         ? `${opt.total} hissenin ortalaması · enf. dahil yıllık`
                         : `${symbol} · enf. dahil yıllık`}
