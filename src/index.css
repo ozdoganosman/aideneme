@@ -1982,3 +1982,107 @@ button.ctl:disabled {
   color: #f0b90b;
   border-color: #5a4a12;
 }
+
+/* ───────────────────────── Mobile (≤760px) ───────────────────────── */
+@media (max-width: 760px) {
+  .app {
+    height: 100dvh;
+  }
+
+  /* Compact toolbar */
+  .toolbar {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .brand,
+  .hint,
+  .tb-div {
+    display: none;
+  }
+  .ctl,
+  .search input,
+  .seg {
+    height: 32px;
+  }
+  .ctl {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .search input {
+    width: 108px;
+  }
+  button.ctl {
+    min-width: 32px;
+    font-size: 14px;
+  }
+
+  /* Sidebars become slide-over drawers; the chart keeps the full width */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 86vw;
+    max-width: 360px;
+    z-index: 70;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.7);
+  }
+  .sidebar:not(.right) {
+    left: 0;
+  }
+  .sidebar.right {
+    right: 0;
+    left: auto;
+  }
+  .edge-handle {
+    display: none;
+  }
+  .main {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Full-screen modals */
+  .modal,
+  .modal.wide {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .bt-tabs {
+    overflow-x: auto;
+  }
+  .bt-tabs button {
+    white-space: nowrap;
+  }
+
+  /* Smaller chart overlays */
+  .symhead {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .sh-ticker,
+  .sh-price {
+    font-size: 15px;
+  }
+  .sh-name {
+    display: none;
+  }
+  .statsbox {
+    top: 6px;
+    right: 56px;
+    font-size: 10px;
+    line-height: 1.45;
+    padding: 4px 7px;
+  }
+  .pane-legend {
+    font-size: 10px;
+    left: 6px;
+  }
+  .status {
+    gap: 10px;
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+}

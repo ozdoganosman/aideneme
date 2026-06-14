@@ -53,8 +53,9 @@ export default function App() {
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
   const [leftTab, setLeftTab] = useState<'portfolio' | 'trades'>(() => lsGet('borsaLeftTab', 'portfolio'));
-  const [showLeft, setShowLeft] = useState<boolean>(() => lsGet('borsaShowLeft', true));
-  const [showRight, setShowRight] = useState<boolean>(() => lsGet('borsaShowRight', true));
+  const wide0 = typeof window !== 'undefined' && window.innerWidth >= 760;
+  const [showLeft, setShowLeft] = useState<boolean>(() => lsGet('borsaShowLeft', wide0));
+  const [showRight, setShowRight] = useState<boolean>(() => lsGet('borsaShowRight', wide0));
 
   const [quotes, setQuotes] = useState<Quotes>({});
   const [names, setNames] = useState<Record<string, string>>({});
@@ -159,6 +160,11 @@ export default function App() {
     setProvider('bist');
     setSymbol(s);
     void load({ provider: 'bist', symbol: s });
+    // On mobile the sidebars are slide-over drawers — close them after picking.
+    if (typeof window !== 'undefined' && window.innerWidth < 760) {
+      setShowLeft(false);
+      setShowRight(false);
+    }
   };
   const addToWatch = (syms: string[], mode: 'add' | 'replace') => {
     setWatchlist((w) => Array.from(new Set(mode === 'replace' ? syms : [...syms, ...w])));
