@@ -54,6 +54,12 @@ jobs:
           FORCE_ALL: ${{ github.event_name == 'schedule' && '1' || '' }}
         run: python scripts/strategies.py
 
+      - name: Screener snapshot (per-symbol current indicators; refreshes on schedule)
+        continue-on-error: true
+        env:
+          FORCE_ALL: ${{ github.event_name == 'schedule' && '1' || '' }}
+        run: python scripts/screener.py
+
       - run: npm ci
       - run: npm run build
 

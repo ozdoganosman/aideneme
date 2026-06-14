@@ -7,6 +7,7 @@ import { IndicatorMenu } from './components/IndicatorMenu';
 import { Trades } from './components/Trades';
 import { Backtest } from './components/Backtest';
 import { PortfolioAnalysis } from './components/PortfolioAnalysis';
+import { Screener } from './components/Screener';
 import { computeStats } from './indicators/stats';
 import type { Trade } from './indicators/backtest';
 import { Candles, BIST_SYMBOLS } from './data/types';
@@ -47,6 +48,7 @@ export default function App() {
   const [fitOnLoad, setFitOnLoad] = useState(true);
   const [showBt, setShowBt] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [showScreener, setShowScreener] = useState(false);
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
@@ -289,6 +291,10 @@ export default function App() {
           Strateji
         </button>
 
+        <button className="ctl" onClick={() => setShowScreener(true)} title="Hisse tarama (filtreler)">
+          Tara
+        </button>
+
         <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
           <span className={loading ? 'spinning' : ''}>⟳</span>
         </button>
@@ -504,6 +510,8 @@ export default function App() {
           onSelect={selectSymbol}
         />
       )}
+
+      {showScreener && <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} />}
     </div>
   );
 }

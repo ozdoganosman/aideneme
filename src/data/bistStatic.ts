@@ -115,6 +115,44 @@ export async function fetchBistNames(signal?: AbortSignal): Promise<Record<strin
   }
 }
 
+// Per-symbol current indicator snapshot for the screener (built in CI by
+// scripts/screener.py). Compact keys keep the file small for ~650 symbols.
+export interface ScreenerItem {
+  s: string; // symbol
+  n?: string; // display name
+  p: number; // last price
+  ch: number; // daily change %
+  rsi: number;
+  e50: number; // above EMA50 (1/0)
+  e200: number; // above EMA200 (1/0)
+  gc: number; // golden cross EMA50>EMA200 (1/0)
+  wr: number; // Williams %R (+100 convention, >50 strong)
+  mu: number; // MACD above signal (1/0)
+  st: number; // Supertrend up (1/0)
+  fh: number; // % vs 52w high (negative = below)
+  r1m: number;
+  r3m: number;
+  r1y: number;
+  vol: number; // annualized volatility %
+  dd: number; // max drawdown %
+  av: number; // avg volume (20d)
+  yr: number; // years of history
+}
+export interface ScreenerFile {
+  generated: number;
+  items: ScreenerItem[];
+}
+
+export async function fetchScreener(signal?: AbortSignal): Promise<ScreenerFile | null> {
+  try {
+    const res = await fetch(`${base}data/bist/screener.json`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as ScreenerFile;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchBistSpark(signal?: AbortSignal): Promise<Record<string, number[]>> {
   try {
     const res = await fetch(`${base}data/bist/spark.json`, { signal });
