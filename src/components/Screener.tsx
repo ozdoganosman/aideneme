@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
 import { emaArr, adxArr, bollingerBand, rollingHighest, rollingLowest } from '../indicators/calc';
+import { useEscClose } from '../useEscClose';
 
 // ── Live (period-aware) indicator filter ─────────────────────────────────────
 // The fast Screener filters a fixed-period snapshot; this computes an indicator
@@ -167,6 +168,7 @@ const PRESETS: { label: string; fs: Filter[] }[] = [
 const PAL = ['#3b82f6', '#26a69a', '#f59e0b', '#a855f7', '#ef5350', '#14b8a6', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
 
 export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
+  useEscClose(onClose);
   const [data, setData] = useState<ScreenerFile | null>(null);
   const [spark, setSpark] = useState<Record<string, number[]>>({});
   const [loaded, setLoaded] = useState(false);
@@ -451,7 +453,7 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
                   {liveFs.map((f, i) => (
                     <span key={i} className="scr-fchip scr-fchip-live">
                       {liveLabel(f.ind)}({f.period}) {f.op === 'gt' ? '>' : '<'} {f.val}
-                      <button onClick={() => { setLiveFs((fs) => fs.filter((_, idx) => idx !== i)); setLiveSet(null); }}>×</button>
+                      <button aria-label="Filtreyi kaldır" title="Filtreyi kaldır" onClick={() => { setLiveFs((fs) => fs.filter((_, idx) => idx !== i)); setLiveSet(null); }}>×</button>
                     </span>
                   ))}
                   <button className="scr-preset scr-clear" onClick={() => { setLiveFs([]); setLiveSet(null); }}>✕ canlı temizle</button>
@@ -478,7 +480,7 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
                   {filters.map((f, i) => (
                     <span key={i} className="scr-fchip">
                       {COL(f.key).label} {opLabel(f)}
-                      <button onClick={() => setFilters((fs) => fs.filter((_, idx) => idx !== i))}>×</button>
+                      <button aria-label="Filtreyi kaldır" title="Filtreyi kaldır" onClick={() => setFilters((fs) => fs.filter((_, idx) => idx !== i))}>×</button>
                     </span>
                   ))}
                 </div>

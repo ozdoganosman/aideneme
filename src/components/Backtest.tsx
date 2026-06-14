@@ -14,6 +14,7 @@ import {
   candidateStrategies,
 } from '../indicators/customStrategy';
 import { IndicatorParams } from '../indicators/calc';
+import { useEscClose } from '../useEscClose';
 
 interface Props {
   candles: Candles;
@@ -193,6 +194,7 @@ const SUGGESTED: { name: string; buy: Cond[]; sell: Cond[] }[] = [
 ];
 
 export function Backtest({ candles, symbol, universe, strats, params, onSave, onApply, onPickCombo, onClose }: Props) {
+  useEscClose(onClose);
   const [tab, setTab] = useState<'mine' | 'top'>('mine');
   const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
   const [expanded, setExpanded] = useState<string | null>(null);

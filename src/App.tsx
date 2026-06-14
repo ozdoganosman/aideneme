@@ -645,6 +645,15 @@ export default function App() {
               </div>
             )}
 
+            {error && !loading && (
+              <div className="chart-error" role="alert">
+                <div className="chart-error-box">
+                  <span>⚠️ {error}</span>
+                  <button className="ctl primary" onClick={() => load()}>Tekrar dene</button>
+                </div>
+              </div>
+            )}
+
             <Chart
               candles={candles}
               fitOnLoad={fitOnLoad}

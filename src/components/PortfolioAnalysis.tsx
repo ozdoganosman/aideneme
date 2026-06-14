@@ -7,6 +7,7 @@ import { CustomStrategy, buildCustomPosition, candidateStrategies } from '../ind
 import { inflationDailyRates, inflationAvgAnnual, inflationAnnualPct } from '../data/inflation';
 import { IndicatorParams } from '../indicators/calc';
 import { Holding } from './Portfolio';
+import { useEscClose } from '../useEscClose';
 
 interface Row {
   sym: string;
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function PortfolioAnalysis({ holdings, quotes, strats, params, onClose, onSelect }: Props) {
+  useEscClose(onClose);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [bench, setBench] = useState<number | null>(null); // XU100 1Y return %
   const [hist, setHist] = useState<Map<string, Candles>>(new Map());

@@ -521,7 +521,7 @@ function parseNum(s: string): number {
 
 function money(v: number): string {
   if (!isFinite(v)) return '—';
-  return v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : 2 });
+  return '₺' + v.toLocaleString('en-US', { maximumFractionDigits: Math.abs(v) >= 1000 ? 0 : 2 });
 }
 function fmtQty(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toLocaleString('en-US', { maximumFractionDigits: 4 });
