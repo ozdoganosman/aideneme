@@ -845,8 +845,25 @@ button.ctl:disabled {
   padding: 0 4px;
 }
 .scr-count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   font-size: 12px;
   color: var(--muted);
+}
+.scr-search {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  outline: none;
+  width: 220px;
+}
+.scr-search:focus {
+  border-color: var(--accent);
 }
 .scr-tablewrap {
   overflow-x: auto;
@@ -890,8 +907,106 @@ button.ctl:disabled {
 .scr-table tbody tr {
   cursor: pointer;
 }
-.scr-table tbody tr:hover {
+.scr-table th {
+  z-index: 1;
+}
+/* zebra + sticky symbol column */
+.scr-table tbody tr:nth-child(even) td {
+  background: #12151c;
+}
+.scr-table tbody tr:hover td {
   background: var(--panel-2);
+}
+.scr-th-sym,
+.scr-td-sym {
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+.scr-th-sym {
+  z-index: 2;
+}
+.scr-td-sym {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
+}
+.scr-ava {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: #0b0d12;
+}
+.scr-sym-txt {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+.scr-sym-txt b {
+  font-size: 12px;
+}
+.scr-sym-txt .lg-muted {
+  font-size: 10px;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scr-th-spark,
+.scr-td-spark {
+  text-align: center;
+}
+.scr-spark {
+  display: block;
+  margin: 0 auto;
+}
+.scr-gauge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 54px;
+  height: 16px;
+  background: #161922;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.scr-gauge-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  opacity: 0.38;
+}
+.scr-gauge span {
+  position: relative;
+  padding: 0 6px;
+  font-weight: 700;
+  font-size: 11px;
+}
+.scr-pill {
+  display: inline-block;
+  min-width: 18px;
+  text-align: center;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.scr-pill.up {
+  color: var(--up);
+  background: rgba(38, 166, 154, 0.14);
+}
+.scr-pill.mut {
+  color: var(--muted);
 }
 
 .bt-winner {

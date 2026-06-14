@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchScreener, ScreenerFile, ScreenerItem } from '../data/bistStatic';
+import { fetchScreener, fetchBistSpark, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 
 interface Props {
   onClose: () => void;
@@ -48,7 +48,7 @@ interface Filter {
   key: Key;
   op: string;
   val: number;
-  mode?: 'val' | 'field'; // compare against a fixed value (default) or another column
+  mode?: 'val' | 'field';
   key2?: Key;
 }
 
@@ -61,8 +61,11 @@ const PRESETS: { label: string; fs: Filter[] }[] = [
   { label: '🔴 RSI > 70', fs: [{ key: 'rsi', op: 'gt', val: 70 }] },
 ];
 
+const PAL = ['#3b82f6', '#26a69a', '#f59e0b', '#a855f7', '#ef5350', '#14b8a6', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
+
 export function Screener({ onClose, onSelect }: Props) {
   const [data, setData] = useState<ScreenerFile | null>(null);
+  const [spark, setSpark] = useState<Record<string, number[]>>({});
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState(0);
   const [filters, setFilters] = useState<Filter[]>([]);
@@ -72,9 +75,11 @@ export function Screener({ onClose, onSelect }: Props) {
   const [val, setVal] = useState('50');
   const [cmp, setCmp] = useState<'val' | 'field'>('val');
   const [fk2, setFk2] = useState<Key>('r3m');
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     fetchScreener().then(setData).catch(() => setData(null)).finally(() => setLoaded(true));
+    fetchBistSpark().then(setSpark).catch(() => {});
   }, []);
 
   const cols = VIEWS[view].cols;
@@ -82,10 +87,15 @@ export function Screener({ onClose, onSelect }: Props) {
 
   const rows = useMemo(() => {
     const items = data?.items ?? [];
-    const out = items.filter((it) => filters.every((f) => passF(it, f)));
+    const needle = q.trim().toUpperCase();
+    const out = items.filter(
+      (it) =>
+        filters.every((f) => passF(it, f)) &&
+        (!needle || it.s.includes(needle) || (it.n || '').toUpperCase().includes(needle)),
+    );
     out.sort((a, b) => ((a[sort.key] as number) - (b[sort.key] as number)) * sort.dir);
     return out;
-  }, [data, filters, sort]);
+  }, [data, filters, sort, q]);
 
   const addFilter = () => {
     let f: Filter;
@@ -112,7 +122,7 @@ export function Screener({ onClose, onSelect }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <b>Hisse Tarama{data ? ` · ${data.items.length} hisse` : ''}</b>
+          <b>🔍 Hisse Tarama{data ? ` · ${data.items.length} hisse` : ''}</b>
           <button className="row-x" onClick={onClose} title="Kapat">×</button>
         </div>
         <div className="modal-body">
@@ -124,7 +134,7 @@ export function Screener({ onClose, onSelect }: Props) {
             <>
               <div className="scr-build">
                 <label className="scr-pick">
-                  📊 Gösterge / kolonlar
+                  📊 Kolonlar
                   <select value={view} onChange={(e) => setView(Number(e.target.value))}>
                     {VIEWS.map((v, i) => (
                       <option key={v.label} value={i}>
@@ -164,7 +174,7 @@ export function Screener({ onClose, onSelect }: Props) {
                       <option value="lte">≤</option>
                       <option value="eq">= eşit</option>
                     </select>
-                    <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir veri mi?">
+                    <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir kolon mu?">
                       <option value="val">Değer</option>
                       <option value="field">Veri (kolon)</option>
                     </select>
@@ -217,7 +227,15 @@ export function Screener({ onClose, onSelect }: Props) {
               )}
 
               <div className="scr-count">
-                <b>{rows.length}</b> hisse eşleşti
+                <span>
+                  <b>{rows.length}</b> hisse eşleşti
+                </span>
+                <input
+                  className="scr-search"
+                  placeholder="🔎 Sembol / şirket ara"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                />
               </div>
 
               <div className="scr-tablewrap">
@@ -225,6 +243,7 @@ export function Screener({ onClose, onSelect }: Props) {
                   <thead>
                     <tr>
                       <th className="scr-th-sym">Sembol</th>
+                      <th className="scr-th-spark">Trend</th>
                       {cols.map((k) => (
                         <th key={k} onClick={() => toggleSort(k)} title="Sırala">
                           {COL(k).label}
@@ -237,7 +256,16 @@ export function Screener({ onClose, onSelect }: Props) {
                     {rows.slice(0, 250).map((it) => (
                       <tr key={it.s} onClick={() => pick(it.s)} title="Grafikte aç">
                         <td className="scr-td-sym">
-                          <b>{it.s}</b> <span className="lg-muted">{it.n}</span>
+                          <span className="scr-ava" style={{ background: avatarColor(it.s) }}>
+                            {it.s.slice(0, 2)}
+                          </span>
+                          <span className="scr-sym-txt">
+                            <b>{it.s}</b>
+                            <span className="lg-muted">{it.n}</span>
+                          </span>
+                        </td>
+                        <td className="scr-td-spark">
+                          <Spark data={spark[it.s]} />
                         </td>
                         {cols.map((k) => (
                           <td key={k}>{cell(it, COL(k))}</td>
@@ -290,7 +318,9 @@ function opLabel(f: Filter): string {
 
 function cell(it: ScreenerItem, c: ColDef) {
   const v = it[c.key] as number;
-  if (c.kind === 'bool') return v ? <span className="up">✓</span> : <span className="lg-muted">–</span>;
+  if (c.key === 'rsi') return gauge(v, 'rsi');
+  if (c.key === 'wr') return gauge(v, 'wr');
+  if (c.kind === 'bool') return v ? <span className="scr-pill up">✓</span> : <span className="scr-pill mut">–</span>;
   if (c.kind === 'price') return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (c.key === 'av') return fv(v);
   if (c.key === 'yr') return v.toFixed(1);
@@ -301,6 +331,48 @@ function cell(it: ScreenerItem, c: ColDef) {
       </span>
     );
   return String(Math.round(v));
+}
+
+function gauge(v: number, k: 'rsi' | 'wr') {
+  const w = Math.max(0, Math.min(100, v));
+  const color =
+    k === 'rsi'
+      ? v >= 70
+        ? 'var(--down)'
+        : v <= 35
+          ? 'var(--up)'
+          : '#5b7cfa'
+      : v >= 50
+        ? 'var(--up)'
+        : 'var(--down)';
+  return (
+    <div className="scr-gauge">
+      <div className="scr-gauge-fill" style={{ width: w + '%', background: color }} />
+      <span>{Math.round(v)}</span>
+    </div>
+  );
+}
+
+function Spark({ data }: { data?: number[] }) {
+  if (!data || data.length < 2) return <svg className="scr-spark" width="64" height="22" />;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const rng = max - min || 1;
+  const pts = data
+    .map((vv, i) => `${((i / (data.length - 1)) * 62 + 1).toFixed(1)},${(21 - ((vv - min) / rng) * 20).toFixed(1)}`)
+    .join(' ');
+  const up = data[data.length - 1] >= data[0];
+  return (
+    <svg className="scr-spark" width="64" height="22">
+      <polyline points={pts} fill="none" stroke={up ? '#26a69a' : '#ef5350'} strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+function avatarColor(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return PAL[h % PAL.length];
 }
 
 function fv(v: number): string {
