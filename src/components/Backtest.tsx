@@ -187,8 +187,9 @@ function renderTop(
     <>
       <p className="bt-intro">
         ~{market?.nSymbols ?? 0} BIST hissesi × tüm stratejiler içinde geçmişte <b>yıllık</b> getirisi en yüksek 20{' '}
-        <b>hisse + strateji</b> eşleşmesi (her hisse için en iyi stratejisi). Bir satıra <b>tıkla</b> → o hisseyi açar ve
-        stratejiyi grafiğe işaretler.
+        <b>hisse + strateji</b> eşleşmesi (her hisse için en iyi stratejisi; yalnızca{' '}
+        <b>en az {market?.topMinYears ?? 10} yıllık</b> geçmişi olan firmalar). Bir satıra <b>tıkla</b> → o hisseyi açar
+        ve stratejiyi grafiğe işaretler.
       </p>
       <div className="bt-list">
         {top.map((t, i) => (

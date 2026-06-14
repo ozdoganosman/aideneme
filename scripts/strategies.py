@@ -22,6 +22,7 @@ import pandas as pd
 
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "bist"
 SKIP = {"symbols.json", "quotes.json", "strategies.json"}
+TOP_MIN_YEARS = 10  # only firms with at least this many years of history enter Top-20
 
 
 def ema(a: np.ndarray, length: int) -> np.ndarray:
@@ -238,7 +239,13 @@ def main() -> int:
         try:
             cur = json.load(open(sj, encoding="utf-8"))
             names_file = {r["name"] for r in cur.get("results", [])}
-            if cur.get("results") and "avgAnn" in cur["results"][0] and cur.get("top") and names_file == current_names():
+            if (
+                cur.get("results")
+                and "avgAnn" in cur["results"][0]
+                and cur.get("top")
+                and cur.get("topMinYears") == TOP_MIN_YEARS
+                and names_file == current_names()
+            ):
                 print("[strategies] güncel, atlanıyor")
                 return 0
         except Exception:  # noqa
@@ -289,7 +296,7 @@ def main() -> int:
             ann = (mult ** (1.0 / years) - 1) * 100.0 if mult > 0 else -100.0
             # Best (stock × strategy) combos for the Top-20 view — one per stock,
             # with enough history and not ultra-short-term/churny.
-            if nbars >= 252 and trades >= 2 and mult > 1 and (nbars / trades) >= 25:
+            if years >= TOP_MIN_YEARS and trades >= 2 and mult > 1 and (nbars / trades) >= 25:
                 prev = best_per_sym.get(sym)
                 if prev is None or ann > prev[0]:
                     best_per_sym[sym] = (ann, ret, trades, win, dd, nbars / trades, sym, sname)
@@ -352,6 +359,7 @@ def main() -> int:
             "holdAnnAvg": round(float(np.mean(hold_anns)), 1) if hold_anns else 0,
             "results": results,
             "top": top,
+            "topMinYears": TOP_MIN_YEARS,
         }, f, separators=(",", ":"))
     print(f"[strategies] {nsym} hisse, {len(results)} strateji -> strategies.json")
     return 0

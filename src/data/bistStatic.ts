@@ -92,6 +92,7 @@ export interface StrategiesFile {
   holdAnnAvg?: number; // average annualized buy & hold %
   results: StrategyAgg[];
   top?: TopCombo[];
+  topMinYears?: number; // Top-20 only includes firms with >= this many years of history
 }
 
 export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesFile | null> {
