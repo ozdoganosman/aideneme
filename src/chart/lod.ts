@@ -48,17 +48,24 @@ export class LodController {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
   }
 
-  // fit=true frames the latest bars; fit=false keeps the same DATE window when
-  // only the symbol changes (robust to differing history lengths — bar-count
-  // preserve made shorter/longer symbols "spread" across the screen).
+  // fit=true frames the latest bars; fit=false keeps the SAME zoom when only the
+  // symbol changes — same visible bar count AND the same gap from the right edge,
+  // including any whitespace the user left on either side.
   setData(full: Candles, extraVals: Float64Array[], fit = true) {
     // New dataset → drop any P&L bands from the previous symbol/strategy.
     this.bandSegs = [];
     for (const b of this.bandPool) b.setData([]);
-    let keep: { from: number; to: number } | null = null;
+    let keep: { visReal: number; gapReal: number } | null = null;
     if (!fit && this.hasView && this.full) {
-      const vr = this.chart.timeScale().getVisibleRange();
-      if (vr) keep = { from: vr.from as number, to: vr.to as number };
+      const lr = this.chart.timeScale().getVisibleLogicalRange();
+      if (lr) {
+        // Convert the visible logical range → REAL bar coords of the OLD symbol.
+        const { i0, stride } = this.win;
+        const viewR = i0 + lr.to * stride;
+        const viewL = i0 + lr.from * stride;
+        // gapReal < 0 ⇒ whitespace to the right of the last bar (kept on purpose).
+        keep = { visReal: Math.max(1, viewR - viewL), gapReal: this.full.length - viewR };
+      }
     }
 
     this.full = full;
@@ -71,13 +78,59 @@ export class LodController {
       return;
     }
 
-    if (keep) {
-      this.focusRange(keep.from, keep.to, 0); // same date window, no padding
-    } else {
+    if (keep) this.renderForView(keep.visReal, keep.gapReal);
+    else {
       const show = Math.min(400, full.length);
       this.renderWindow(full.length - show, full.length, true);
     }
     this.hasView = true;
+  }
+
+  // Re-frame the new dataset to show `visReal` bars with `gapReal` bars between the
+  // view's right edge and the last bar (negative gapReal = right-side whitespace).
+  // Left/right whitespace is preserved by letting the visible logical range extend
+  // beyond [0, decLen]; only the decimation window is clamped to real data.
+  private renderForView(visReal: number, gapReal: number) {
+    if (!this.full) return;
+    const len = this.full.length;
+    const toReal = len - gapReal; // right edge in real coords (may exceed len → whitespace)
+    const fromReal = toReal - visReal; // left edge (may be < 0 → whitespace)
+    // If the preserved window no longer overlaps real data (e.g. scrolled far back
+    // then switched to a much shorter symbol), just frame the latest bars.
+    if (toReal <= 1 || fromReal >= len - 1) {
+      const show = Math.min(400, len);
+      this.renderWindow(len - show, len, true);
+      return;
+    }
+    const stride = strideFor(visReal, this.targetBuckets);
+    const margin = Math.max(visReal, this.targetBuckets);
+    let w0 = Math.floor(Math.max(0, fromReal) - margin);
+    let w1 = Math.ceil(Math.min(len, toReal) + margin);
+    if (w0 < 0) w0 = 0;
+    if (w1 > len) w1 = len;
+
+    const { candles, volumes } = decimate(this.full, w0, w1, stride);
+    if (candles.length === 0) {
+      const show = Math.min(400, len);
+      this.renderWindow(len - show, len, true);
+      return;
+    }
+    this.applying = true;
+    this.candle.setData(candles);
+    this.volume.setData(volumes);
+    for (let k = 0; k < this.extras.length; k++) {
+      const vals = this.extraVals[k];
+      if (!vals) continue;
+      this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
+    }
+    this.win = { i0: w0, i1: w1, stride };
+    this.renderBands();
+    // Map the desired real-index viewport into decimated logical coords; values
+    // outside [0, decLen] render as the preserved whitespace.
+    this.chart.timeScale().setVisibleLogicalRange({ from: (fromReal - w0) / stride, to: (toReal - w0) / stride });
+    requestAnimationFrame(() => {
+      this.applying = false;
+    });
   }
 
   // Zoom to a specific date range (used to inspect one trade, and to keep the
