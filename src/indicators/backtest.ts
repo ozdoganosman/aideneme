@@ -3,13 +3,39 @@ import { emaArr, rollingHighest, rollingLowest } from './calc';
 
 export interface StrategyResult {
   name: string;
-  retPct: number; // total return %
-  annPct: number; // annualized return % (period-normalized, ~per-day compounded)
+  retPct: number; // total return % (price only, cash idle)
+  annPct: number; // annualized return % (price only, period-normalized)
   trades: number;
   winRate: number;
   maxDD: number;
   holdPct: number;
   holdAnn: number; // buy & hold annualized %
+  // ── day stats + interest-on-cash (so a strategy that sits in cash still
+  // competes with Buy & Hold: the idle money earns the TCMB rate) ──────────────
+  daysIn?: number; // total calendar days holding a position
+  daysOut?: number; // total calendar days in cash
+  avgHoldDays?: number; // average calendar days per trade
+  retRate?: number; // total return % incl. interest earned on cash days
+  annRate?: number; // annualized return % incl. interest on cash (the Al-Tut rival)
+}
+
+// ── Cash interest (TCMB) ─────────────────────────────────────────────────────
+// A strategy sitting in cash isn't idle — it parks the money at the Turkish
+// Central Bank's (TCMB) policy rate, so it can fairly rival Buy & Hold. TCMB
+// announces an ANNUAL policy rate; the everyday "aylık" (monthly) figure is
+// annual ÷ 12, and we convert that MONTHLY rate to a per-calendar-day rate
+// (compounded) for a realistic value — exactly "aylığından günlüğe".
+// NOTE: this applies one flat current rate across all history (a historical
+// per-day TCMB series isn't bundled here); it's overridable in the UI.
+export const TCMB_ANNUAL_PCT = 40; // current TCMB policy rate, %/yr
+
+// Per-calendar-day compounded rate from a MONTHLY percentage (annual = monthly×12).
+export function dailyFromMonthly(monthlyPct: number): number {
+  return Math.pow(1 + monthlyPct / 100, 12 / 365.25) - 1;
+}
+// Default daily cash rate: TCMB annual → monthly → daily.
+export function tcmbDailyRate(): number {
+  return dailyFromMonthly(TCMB_ANNUAL_PCT / 12);
 }
 
 export interface StrategyDef {
@@ -349,17 +375,33 @@ function simulate(
   holdAnn: number,
   name: string,
   years: number,
+  dailyRate = 0,
+  time?: ArrayLike<number>,
 ): StrategyResult {
   const n = close.length;
-  let equity = 1;
+  let equity = 1; // realistic: invested days track price, cash days earn interest
+  let priceEq = 1; // pure: cash idle (price-only)
   let peak = 1;
   let maxDD = 0;
   let trades = 0;
   let wins = 0;
   let entry = 0;
   let inPos = false;
+  let daysIn = 0;
+  let daysOut = 0;
   for (let i = 1; i < n; i++) {
-    if (long[i - 1]) equity *= close[i] / close[i - 1];
+    // Calendar days between bars (cash earns interest every real day, weekends
+    // included). Cap a single gap so a trading halt can't fabricate interest.
+    const cal = time ? Math.min(Math.max((time[i] - time[i - 1]) / 86400, 0), 31) : 1;
+    if (long[i - 1]) {
+      const g = close[i] / close[i - 1];
+      equity *= g;
+      priceEq *= g;
+      daysIn += cal;
+    } else {
+      if (dailyRate) equity *= Math.pow(1 + dailyRate, cal);
+      daysOut += cal;
+    }
     if (equity > peak) peak = equity;
     const dd = (peak - equity) / peak;
     if (dd > maxDD) maxDD = dd;
@@ -376,18 +418,24 @@ function simulate(
     trades++;
     if (close[n - 1] > entry) wins++;
   }
-  // Annualized (compound) return — normalizes by how long the trade was held so a
-  // huge total that took 20 years can be compared fairly to a quick winner.
-  const annPct = years > 0 && equity > 0 ? (Math.pow(equity, 1 / years) - 1) * 100 : 0;
+  // Annualized (compound) return — normalizes by how long it ran so a huge total
+  // that took 20 years can be compared fairly to a quick winner.
+  const annPct = years > 0 && priceEq > 0 ? (Math.pow(priceEq, 1 / years) - 1) * 100 : 0;
+  const annRate = years > 0 && equity > 0 ? (Math.pow(equity, 1 / years) - 1) * 100 : 0;
   return {
     name,
-    retPct: (equity - 1) * 100,
+    retPct: (priceEq - 1) * 100,
     annPct,
     trades,
     winRate: trades ? (wins / trades) * 100 : 0,
     maxDD: maxDD * 100,
     holdPct,
     holdAnn,
+    daysIn: Math.round(daysIn),
+    daysOut: Math.round(daysOut),
+    avgHoldDays: trades ? daysIn / trades : 0,
+    retRate: (equity - 1) * 100,
+    annRate,
   };
 }
 
@@ -398,7 +446,7 @@ export function optimize(c: Candles): { results: StrategyResult[]; holdPct: numb
   // Real calendar span (time is unix seconds) — works for daily/weekly/monthly.
   const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
   const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
-  const out = strategyList().map((d) => simulate(close, d.build(c), holdPct, holdAnn, d.name, years));
+  const out = strategyList().map((d) => simulate(close, d.build(c), holdPct, holdAnn, d.name, years, 0, c.time));
   // Rank by annualized (per-day-normalized) return, not raw total.
   out.sort((x, y) => y.annPct - x.annPct);
   return { results: out, holdPct, holdAnn };
@@ -414,11 +462,15 @@ export function registerCustomStrategy(def: StrategyDef): void {
 }
 
 // Backtest an arbitrary precomputed position array on a symbol's candles.
-export function evalPosition(c: Candles, pos: Uint8Array): StrategyResult {
+// `dailyRate` is the per-calendar-day interest earned while in cash (defaults to
+// the TCMB rate) so the result competes fairly with Buy & Hold.
+export function evalPosition(c: Candles, pos: Uint8Array, dailyRate = tcmbDailyRate()): StrategyResult {
   const close = c.close;
   const n = c.length;
   const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
-  return simulate(close, pos, 0, 0, '', years);
+  const holdPct = n > 1 ? (close[n - 1] / close[0] - 1) * 100 : 0;
+  const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
+  return simulate(close, pos, holdPct, holdAnn, '', years, dailyRate, c.time);
 }
 
 export function buildPositionByName(name: string, c: Candles): Uint8Array | null {
@@ -483,7 +535,7 @@ export function optimizeFamily(c: Candles, family: string): OptResult[] {
   const holdPct = n > 1 ? (close[n - 1] / close[0] - 1) * 100 : 0;
   const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
   const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
-  const out = paramVariants(family).map((d) => ({ name: d.name, def: d, res: simulate(close, d.build(c), holdPct, holdAnn, d.name, years) }));
+  const out = paramVariants(family).map((d) => ({ name: d.name, def: d, res: simulate(close, d.build(c), holdPct, holdAnn, d.name, years, 0, c.time) }));
   out.sort((a, b) => b.res.annPct - a.res.annPct);
   return out;
 }

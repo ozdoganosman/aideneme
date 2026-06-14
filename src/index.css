@@ -1262,6 +1262,46 @@ button.ctl:disabled {
   font-size: 11px;
   line-height: 1.4;
 }
+.bt-days {
+  font-variant-numeric: tabular-nums;
+}
+.bt-rival {
+  font-variant-numeric: tabular-nums;
+}
+.bt-rival .up {
+  color: var(--up);
+}
+.bt-rival .down {
+  color: var(--down);
+}
+.rv-win {
+  color: var(--up);
+  font-weight: 700;
+}
+.rv-lose {
+  color: var(--muted);
+  font-weight: 600;
+}
+/* Cash-interest (TCMB) control */
+.bt-rate {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  background: #14181f;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.bt-rate label {
+  font-weight: 600;
+  color: var(--text);
+}
+.bt-rate .cond-v {
+  width: 64px;
+}
 
 /* Active strategy chip in the toolbar */
 .chip {

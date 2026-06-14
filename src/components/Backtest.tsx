@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Candles } from '../data/types';
-import { evalPosition } from '../indicators/backtest';
+import { evalPosition, dailyFromMonthly, TCMB_ANNUAL_PCT } from '../indicators/backtest';
 import { fetchBistStatic, fetchScreener } from '../data/bistStatic';
 import {
   CustomStrategy,
@@ -26,11 +26,15 @@ interface Props {
 interface Combo {
   sym: string;
   strat: CustomStrategy;
-  ann: number;
+  ann: number; // annualized incl. cash interest (the Al-Tut rival)
   ret: number;
   trades: number;
   win: number;
   dd: number;
+  hold: number; // buy & hold annualized
+  daysIn: number;
+  daysOut: number;
+  avg: number;
 }
 
 const blankDraft = (): CustomStrategy => ({ id: '', name: '', buy: [newCond()], sell: [] });
@@ -65,6 +69,15 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
   const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [scan, setScan] = useState<{ rows: Combo[]; done: number; total: number; running: boolean } | null>(null);
+  // Annual cash interest (TCMB) earned while flat — overridable, persisted.
+  const [rate, setRate] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem('bt-cash-rate') || '');
+    return Number.isFinite(v) ? v : TCMB_ANNUAL_PCT;
+  });
+  useEffect(() => {
+    localStorage.setItem('bt-cash-rate', String(rate));
+  }, [rate]);
+  const dRate = dailyFromMonthly(rate / 12); // annual → aylık → günlük
 
   // Backtest each saved strategy on the current symbol (+ equity curve).
   const results = useMemo(
@@ -72,12 +85,12 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
       strats
         .map((s) => {
           const pos = buildCustomPosition(candles, s);
-          return { s, r: evalPosition(candles, pos), eq: equitySpark(candles.close, pos), pos };
+          return { s, r: evalPosition(candles, pos, dRate), eq: equitySpark(candles.close, pos, candles.time, dRate), pos };
         })
-        .sort((a, b) => b.r.annPct - a.r.annPct),
-    [strats, candles],
+        .sort((a, b) => (b.r.annRate ?? b.r.annPct) - (a.r.annRate ?? a.r.annPct)),
+    [strats, candles, dRate],
   );
-  const maxAnn = Math.max(...results.map((x) => Math.abs(x.r.annPct)), 1);
+  const maxAnn = Math.max(...results.map((x) => Math.abs(x.r.annRate ?? x.r.annPct)), 1);
   const topMax = scan ? Math.max(...scan.rows.map((t) => Math.abs(t.ann)), 1) : 1;
 
   const setBuy = (buy: Cond[]) => setDraft((d) => ({ ...d, buy }));
@@ -128,11 +141,24 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
           const c = await fetchBistStatic(sym);
           if (c.length >= 80) {
             for (const s of strats) {
-              const r = evalPosition(c, buildCustomPosition(c, s));
+              const r = evalPosition(c, buildCustomPosition(c, s), dRate);
+              const ann = r.annRate ?? r.annPct;
               if (r.trades > 0) {
                 const prev = best.get(sym);
-                if (!prev || r.annPct > prev.ann)
-                  best.set(sym, { sym, strat: s, ann: r.annPct, ret: r.retPct, trades: r.trades, win: r.winRate, dd: r.maxDD });
+                if (!prev || ann > prev.ann)
+                  best.set(sym, {
+                    sym,
+                    strat: s,
+                    ann,
+                    ret: r.retRate ?? r.retPct,
+                    trades: r.trades,
+                    win: r.winRate,
+                    dd: r.maxDD,
+                    hold: r.holdAnn,
+                    daysIn: r.daysIn ?? 0,
+                    daysOut: r.daysOut ?? 0,
+                    avg: r.avgHoldDays ?? 0,
+                  });
               }
             }
           }
@@ -200,34 +226,54 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
               </div>
 
               <p className="bt-intro">
-                <b>{symbol}</b> üzerinde kayıtlı stratejilerin sonuçları (<b>yıllık</b> getiriye göre). Bir satıra tıkla →
-                grafikte AL/SAT işaretlenir.
+                <b>{symbol}</b> üzerinde kayıtlı stratejilerin sonuçları (<b>nakit faizi dahil yıllık</b> getiriye göre).
+                Strateji nakitteyken para boşta durmaz, faiz kazanır → <b>Al-Tut</b>'a rakip. Bir satıra tıkla → grafikte
+                AL/SAT işaretlenir.
               </p>
+
+              <div className="bt-rate">
+                <label>💰 Nakit faizi (TCMB, yıllık %)</label>
+                <ValInput value={rate} onChange={setRate} />
+                <span className="lg-muted">
+                  ≈ aylık %{(rate / 12).toFixed(2)} · günlük %{(dRate * 100).toFixed(3)} — boştaki günlerde işler
+                </span>
+              </div>
 
               {results.length === 0 ? (
                 <div className="bt-note">Henüz strateji yok. Yukarıdan koşulları seçip kaydet.</div>
               ) : (
                 <div className="bt-list">
-                  {results.map(({ s, r, eq, pos }, i) => (
+                  {results.map(({ s, r, eq, pos }, i) => {
+                    const ann = r.annRate ?? r.annPct;
+                    const beat = ann >= r.holdAnn;
+                    return (
                     <div key={s.id} className="bt-srow">
                       <div className="bt-srow-head">
                         <span className="bt-rank">{i + 1}</span>
                         <span className="bt-srow-name">{s.name}</span>
-                        <span className={'bt-srow-val ' + (r.annPct >= 0 ? 'up' : 'down')}>
-                          {fmtPct(r.annPct)}
-                          <span className="bt-tag">yıl</span>
+                        <span className={'bt-srow-val ' + (ann >= 0 ? 'up' : 'down')} title="Yıllık getiri — nakitteyken TCMB faizi dahil (Al-Tut'a rakip)">
+                          {fmtPct(ann)}
+                          <span className="bt-tag">yıl ✦</span>
                         </span>
                       </div>
                       <div className="bt-barwrap">
-                        <div className={'bt-bar ' + (r.annPct >= 0 ? 'pos' : 'neg')} style={{ width: barW(r.annPct, maxAnn) }} />
+                        <div className={'bt-bar ' + (ann >= 0 ? 'pos' : 'neg')} style={{ width: barW(ann, maxAnn) }} />
                       </div>
                       <div className="bt-srow-sub">
-                        toplam {fmtX(r.retPct)} · {r.trades} işlem · Kazanma %{r.winRate.toFixed(0)} · Düşüş -
+                        toplam {fmtX(r.retRate ?? r.retPct)} · {r.trades} işlem · Kazanma %{r.winRate.toFixed(0)} · Düşüş -
                         {r.maxDD.toFixed(0)}%
                       </div>
-                      <div className="eq-wrap" title="Sermaye eğrisi: 1₺ nasıl büyürdü (renkli: strateji, gri: Al-Tut, kesik: başabaş)">
+                      <div className="bt-srow-sub bt-days">
+                        ⏱️ ort {Math.round(r.avgHoldDays ?? 0)} gün/işlem · işlemde {r.daysIn ?? 0} gün · boşta {r.daysOut ?? 0} gün
+                      </div>
+                      <div className="bt-srow-sub bt-rival">
+                        💰 faiz dahil <b className={ann >= 0 ? 'up' : 'down'}>{fmtPct(ann)}</b> · saf strateji{' '}
+                        {fmtPct(r.annPct)} · Al-Tut <b className={r.holdAnn >= 0 ? 'up' : 'down'}>{fmtPct(r.holdAnn)}</b>{' '}
+                        <span className={beat ? 'rv-win' : 'rv-lose'}>{beat ? '✓ geçti' : 'geçemedi'}</span>
+                      </div>
+                      <div className="eq-wrap" title="Sermaye eğrisi: 1₺ nasıl büyürdü (renkli: strateji + nakit faizi, gri: Al-Tut, kesik: başabaş)">
                         <EquitySpark data={eq} />
-                        <div className="eq-leg lg-muted">renkli: Strateji · gri: Al-Tut · kesik çizgi: başabaş</div>
+                        <div className="eq-leg lg-muted">renkli: Strateji (faiz dahil) · gri: Al-Tut · kesik çizgi: başabaş</div>
                       </div>
                       <div className="bt-srow-explain">{describe(s)}</div>
                       <div className="sb-rowbtns">
@@ -238,16 +284,18 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                       </div>
                       {expanded === s.id && <Heatmap data={monthlyReturns(candles.close, candles.time, pos)} />}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
           ) : (
             <>
               <p className="bt-intro">
-                Kayıtlı stratejilerini <b>en eski 300 BIST hissesinde</b> (en uzun geçmişe sahip) tarar; <b>yıllık</b>{' '}
-                getirisi en yüksek 20 <b>hisse + strateji</b> eşleşmesini listeler. Bir satıra tıkla → o hisseyi açar ve
-                stratejiyi işaretler. <span className="lg-muted">(300 hisse indirildiği için biraz sürebilir.)</span>
+                Kayıtlı stratejilerini <b>en eski 300 BIST hissesinde</b> (en uzun geçmişe sahip) tarar; <b>nakit faizi
+                dahil yıllık</b> getirisi en yüksek 20 <b>hisse + strateji</b> eşleşmesini listeler. Bir satıra tıkla → o
+                hisseyi açar ve stratejiyi işaretler.{' '}
+                <span className="lg-muted">(Nakit faizi yıllık %{rate.toFixed(0)}. 300 hisse indirildiği için biraz sürebilir.)</span>
               </p>
               <div className="sb-actions">
                 <button className="scr-add" onClick={runScan} disabled={!strats.length || scan?.running}>
@@ -272,9 +320,9 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                           <span className="bt-srow-name">
                             <b>{t.sym}</b> · {t.strat.name}
                           </span>
-                          <span className={'bt-srow-val ' + (t.ann >= 0 ? 'up' : 'down')}>
+                          <span className={'bt-srow-val ' + (t.ann >= 0 ? 'up' : 'down')} title="Yıllık getiri — nakit faizi dahil (Al-Tut'a rakip)">
                             {fmtPct(t.ann)}
-                            <span className="bt-tag">yıl</span>
+                            <span className="bt-tag">yıl ✦</span>
                           </span>
                         </div>
                         <div className="bt-barwrap">
@@ -282,6 +330,14 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                         </div>
                         <div className="bt-srow-sub">
                           toplam {fmtX(t.ret)} · {t.trades} işlem · Kazanma %{t.win.toFixed(0)} · Düşüş -{t.dd.toFixed(0)}%
+                        </div>
+                        <div className="bt-srow-sub bt-days">
+                          ⏱️ ort {Math.round(t.avg)} gün/işlem · işlemde {t.daysIn} gün · boşta {t.daysOut} gün
+                        </div>
+                        <div className="bt-srow-sub bt-rival">
+                          💰 faiz dahil <b className={t.ann >= 0 ? 'up' : 'down'}>{fmtPct(t.ann)}</b> · Al-Tut{' '}
+                          <b className={t.hold >= 0 ? 'up' : 'down'}>{fmtPct(t.hold)}</b>{' '}
+                          <span className={t.ann >= t.hold ? 'rv-win' : 'rv-lose'}>{t.ann >= t.hold ? '✓ geçti' : 'geçemedi'}</span>
                         </div>
                       </div>
                     ))
@@ -419,7 +475,7 @@ interface Eq {
   strat: number[];
   hold: number[];
 }
-function equitySpark(close: Float64Array, pos: Uint8Array, points = 90): Eq {
+function equitySpark(close: Float64Array, pos: Uint8Array, time: Float64Array, dailyRate = 0, points = 90): Eq {
   const n = close.length;
   if (n < 2) return { strat: [], hold: [] };
   const step = Math.max(1, Math.floor(n / points));
@@ -429,6 +485,10 @@ function equitySpark(close: Float64Array, pos: Uint8Array, points = 90): Eq {
   const base = close[0];
   for (let i = 1; i < n; i++) {
     if (pos[i - 1]) e *= close[i] / close[i - 1];
+    else if (dailyRate) {
+      const cal = Math.min(Math.max((time[i] - time[i - 1]) / 86400, 0), 31);
+      e *= Math.pow(1 + dailyRate, cal); // cash earns interest while flat
+    }
     if (i % step === 0) {
       strat.push(e);
       hold.push(close[i] / base);
