@@ -2171,6 +2171,75 @@ button.ctl:disabled {
   background: #222633;
 }
 
+/* Indicator menu with editable periods */
+.ind-pop {
+  white-space: normal;
+  min-width: 280px;
+  max-width: 340px;
+}
+.ind-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.ind-row:hover {
+  background: #222633;
+}
+.ind-tog {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 0 44%;
+  cursor: pointer;
+}
+.ind-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  justify-content: flex-end;
+  flex: 1 1 auto;
+}
+.ind-fields.dim {
+  opacity: 0.45;
+}
+.ind-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.ind-flbl {
+  font-size: 10px;
+  color: var(--muted);
+}
+.ind-num {
+  width: 46px;
+  background: #14181f;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 3px 5px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ind-reset {
+  margin-top: 6px;
+  width: 100%;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ind-reset:hover {
+  background: #222633;
+  color: var(--text);
+}
+
 .star.on {
   color: #f0b90b;
   border-color: #5a4a12;

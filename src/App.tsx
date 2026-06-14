@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { Chart, IndicatorSettings } from './components/Chart';
+import { IndicatorParams, DEFAULT_PARAMS } from './indicators/calc';
 import { SymbolSearch } from './components/SymbolSearch';
 import { Watchlist } from './components/Watchlist';
 import { Portfolio, Holding } from './components/Portfolio';
@@ -131,6 +132,7 @@ export default function App() {
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
     lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true, bollinger: false, donchian: false, adx: false, roc: false }),
   );
+  const [indParams, setIndParams] = useState<IndicatorParams>(() => ({ ...DEFAULT_PARAMS, ...lsGet('borsaIndParams', {}) }));
 
   const abortRef = useRef<AbortController | null>(null);
   const dailyRef = useRef<Candles | null>(null);
@@ -166,6 +168,7 @@ export default function App() {
     customStrats.forEach((s) => registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s) }));
   }, [customStrats]);
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
+  useEffect(() => localStorage.setItem('borsaIndParams', JSON.stringify(indParams)), [indParams]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
   useEffect(() => localStorage.setItem('borsaLeftTab', JSON.stringify(leftTab)), [leftTab]);
   useEffect(() => localStorage.setItem('borsaShowLeft', JSON.stringify(showLeft)), [showLeft]);
@@ -429,7 +432,7 @@ export default function App() {
             <span className="hint">4.000.000 mum (maks)</span>
           )}
 
-          <IndicatorMenu settings={settings} onChange={setSettings} />
+          <IndicatorMenu settings={settings} onChange={setSettings} params={indParams} onParams={setIndParams} />
 
           <button className={'ctl' + (log ? ' on' : '')} onClick={() => setLog((v) => !v)} title="Logaritmik fiyat ölçeği">
             Log
@@ -586,6 +589,7 @@ export default function App() {
               candles={candles}
               fitOnLoad={fitOnLoad}
               settings={settings}
+              params={indParams}
               symbol={provider === 'bist' ? symbol : 'SENTETİK'}
               tfLabel={tfLabel}
               strategy={reflectTrades ? strategy : null}

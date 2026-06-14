@@ -22,7 +22,7 @@ import {
 } from 'lightweight-charts';
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
-import { computeIndicators, computeExtras } from '../indicators/calc';
+import { computeIndicators, computeExtras, IndicatorParams, DEFAULT_PARAMS } from '../indicators/calc';
 import { signalsFor, buildPositionByName } from '../indicators/backtest';
 
 export interface IndicatorSettings {
@@ -44,6 +44,7 @@ interface Props {
   candles: Candles | null;
   fitOnLoad?: boolean;
   settings: IndicatorSettings;
+  params?: IndicatorParams; // editable indicator periods
   symbol: string;
   tfLabel: string;
   strategy?: string | null; // overlay this strategy's buy/sell signals
@@ -110,7 +111,7 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
 });
 
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(
-  { candles, fitOnLoad, settings, symbol, tfLabel, strategy, costLine, log, focus },
+  { candles, fitOnLoad, settings, params = DEFAULT_PARAMS, symbol, tfLabel, strategy, costLine, log, focus },
   ref,
 ) {
   const elRef = useRef<HTMLDivElement>(null);
@@ -128,6 +129,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   // freeze. Tracks two {time, price} points → Δ price, Δ % and days between.
   const shiftRef = useRef(false);
   const measureRef = useRef<{ a: MPt; b: MPt | null; frozen: boolean } | null>(null);
+  const prevCandlesRef = useRef<Candles | null>(null);
 
   const [legend, setLegend] = useState<LegendVals | null>(null);
   const [tops, setTops] = useState<number[]>([]);
@@ -386,8 +388,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   // Load data + compute indicators; cache last values for the (non-hover) legend.
   useEffect(() => {
     if (!lodRef.current || !candles) return;
-    const ind = computeIndicators(candles);
-    const ex = computeExtras(candles);
+    const ind = computeIndicators(candles, params);
+    const ex = computeExtras(candles, params);
     const n = candles.length;
     const lastFin = (a: Float64Array) => {
       for (let i = a.length - 1; i >= 0; i--) if (isFinite(a[i])) return a[i];
@@ -405,16 +407,19 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     };
     lastValsRef.current = lv;
 
+    // New symbol → frame per fitOnLoad; a mere param tweak → preserve the view.
+    const fit = prevCandlesRef.current !== candles ? fitRef.current : false;
+    prevCandlesRef.current = candles;
     lodRef.current.setData(
       candles,
       [
         ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.emawil120, ind.macdN, ind.signalN, ind.eMacDN,
         ex.bbUp, ex.bbMid, ex.bbDn, ex.donHi, ex.donLo, ex.adx, ex.adxEma, ex.roc, ex.rocEma,
       ],
-      fitRef.current,
+      fit,
     );
     if (!hoveringRef.current) setLegend(lv);
-  }, [candles]);
+  }, [candles, params]);
 
   // Indicator visibility toggles.
   useEffect(() => {
@@ -573,8 +578,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             {settings.ema && (
               <>
                 {'  '}
-                <span style={{ color: '#f0b90b' }}>EMA (377) {fp(legend.ema377)}</span>{' '}
-                <span style={{ color: '#9aa0b0' }}>EMA (610) {fp(legend.ema610)}</span>
+                <span style={{ color: '#f0b90b' }}>EMA ({params.emaFast}) {fp(legend.ema377)}</span>{' '}
+                <span style={{ color: '#9aa0b0' }}>EMA ({params.emaSlow}) {fp(legend.ema610)}</span>
               </>
             )}
             {settings.volume && (
@@ -586,46 +591,46 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             {settings.bollinger && (
               <>
                 {'  '}
-                <span style={{ color: '#5c9ded' }}>BB (260) {fp(legend.bbUp)}/{fp(legend.bbMid)}/{fp(legend.bbDn)}</span>
+                <span style={{ color: '#5c9ded' }}>BB ({params.bb}) {fp(legend.bbUp)}/{fp(legend.bbMid)}/{fp(legend.bbDn)}</span>
               </>
             )}
             {settings.donchian && (
               <>
                 {'  '}
-                <span style={{ color: '#d9a441' }}>Donchian (260) {fp(legend.donHi)}/{fp(legend.donLo)}</span>
+                <span style={{ color: '#d9a441' }}>Donchian ({params.don}) {fp(legend.donHi)}/{fp(legend.donLo)}</span>
               </>
             )}
           </div>
 
           {settings.adx && tops[3] != null && (
             <div className="pane-legend" style={{ top: tops[3] + 6 }}>
-              <span style={{ color: '#ab47bc' }}>ADX (28)</span> {fn(legend.adx, 1)}{' '}
-              <span style={{ color: '#26a69a' }}>EMA (14) {fn(legend.adxEma, 1)}</span>{' '}
+              <span style={{ color: '#ab47bc' }}>ADX ({params.adx})</span> {fn(legend.adx, 1)}{' '}
+              <span style={{ color: '#26a69a' }}>EMA ({params.adxEma}) {fn(legend.adxEma, 1)}</span>{' '}
               <span className="lg-muted">{legend.adx >= 25 ? '· güçlü trend' : '· zayıf/yatay'}</span>
             </div>
           )}
 
           {settings.roc && tops[4] != null && (
             <div className="pane-legend" style={{ top: tops[4] + 6 }}>
-              <span style={{ color: '#26c6da' }}>Momentum / ROC (260)</span> {fn(legend.roc, 1)}%{' '}
-              <span style={{ color: '#42a5f5' }}>EMA (120) {fn(legend.rocEma, 1)}</span>
+              <span style={{ color: '#26c6da' }}>Momentum / ROC ({params.roc})</span> {fn(legend.roc, 1)}%{' '}
+              <span style={{ color: '#42a5f5' }}>EMA ({params.rocEma}) {fn(legend.rocEma, 1)}</span>
             </div>
           )}
 
           {settings.williams && tops[1] != null && (
             <div className="pane-legend" style={{ top: tops[1] + 6 }}>
-              <span style={{ color: '#7E57C2' }}>Williams %R (260)</span> {fn(legend.wilR, 1)}{' '}
-              <span style={{ color: '#26a69a' }}>EMA (260) {fn(legend.wilEma, 1)}</span>{' '}
-              <span style={{ color: '#42a5f5' }}>EMA (120) {fn(legend.wilEma120, 1)}</span>
+              <span style={{ color: '#7E57C2' }}>Williams %R ({params.wr})</span> {fn(legend.wilR, 1)}{' '}
+              <span style={{ color: '#26a69a' }}>EMA ({params.wrEmaA}) {fn(legend.wilEma, 1)}</span>{' '}
+              <span style={{ color: '#42a5f5' }}>EMA ({params.wrEmaB}) {fn(legend.wilEma120, 1)}</span>
             </div>
           )}
 
           {settings.macd && tops[2] != null && (
             <div className="pane-legend" style={{ top: tops[2] + 6 }}>
               <span className="lg-muted">NizamiCedid</span>{' '}
-              <span style={{ color: '#ff2fa6' }}>MACD (120/260) {fn(legend.macd, 4)}</span>{' '}
-              <span style={{ color: '#FF6D00' }}>Signal (50) {fn(legend.signal, 4)}</span>{' '}
-              <span style={{ color: '#e6e6e6' }}>eMACD (185) {fn(legend.emacd, 4)}</span>
+              <span style={{ color: '#ff2fa6' }}>MACD ({params.macdFast}/{params.macdSlow}) {fn(legend.macd, 4)}</span>{' '}
+              <span style={{ color: '#FF6D00' }}>Signal ({params.macdSig}) {fn(legend.signal, 4)}</span>{' '}
+              <span style={{ color: '#e6e6e6' }}>eMACD ({params.macdVwma}) {fn(legend.emacd, 4)}</span>
             </div>
           )}
         </>

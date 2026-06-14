@@ -166,23 +166,21 @@ export interface ExtraBundle {
   roc: Float64Array;
   rocEma: Float64Array;
 }
-export function computeExtras(c: Candles): ExtraBundle {
-  // Lookback indicators on the app's 260-day (≈1 yıl) paradigm (Williams %R 260 /
-  // EMA 377-610). EXCEPTION: ADX is a *smoothing* parameter — at 260 it flattens
-  // to ~5 and never crosses 25, so it stays at a longer-than-default but still
-  // functional 28 (with a 14 EMA signal).
-  const adx = adxArr(c, 28);
-  const roc = rocArr(c.close, 260);
+export function computeExtras(c: Candles, p: IndicatorParams = DEFAULT_PARAMS): ExtraBundle {
+  // Lookback indicators default to the 260-day paradigm; ADX is a *smoothing*
+  // parameter so it defaults to 28 (it flattens to ~5 and never crosses 25 at 260).
+  const adx = adxArr(c, p.adx);
+  const roc = rocArr(c.close, p.roc);
   return {
-    bbUp: bollingerBand(c, 260, 'up'),
-    bbMid: bollingerBand(c, 260, 'mid'),
-    bbDn: bollingerBand(c, 260, 'dn'),
-    donHi: donchianBound(c, 260, true),
-    donLo: donchianBound(c, 260, false),
+    bbUp: bollingerBand(c, p.bb, 'up'),
+    bbMid: bollingerBand(c, p.bb, 'mid'),
+    bbDn: bollingerBand(c, p.bb, 'dn'),
+    donHi: donchianBound(c, p.don, true),
+    donLo: donchianBound(c, p.don, false),
     adx,
-    adxEma: emaArr(adx, 14),
+    adxEma: emaArr(adx, p.adxEma),
     roc,
-    rocEma: emaArr(roc, 120),
+    rocEma: emaArr(roc, p.rocEma),
   };
 }
 
@@ -199,26 +197,50 @@ export interface IndBundle {
   deltaN: Float64Array; // (macd - eMacD) / fast
 }
 
+// User-editable indicator periods (defaults = the app's 260-day paradigm).
+export interface IndicatorParams {
+  emaFast: number; // price EMA #1 (377)
+  emaSlow: number; // price EMA #2 (610)
+  wr: number; // Williams %R lookback (260)
+  wrEmaA: number; // %R EMA slow (260)
+  wrEmaB: number; // %R EMA fast (120)
+  macdFast: number; // NizamiCedid fast (120)
+  macdSlow: number; // slow (260)
+  macdSig: number; // signal (50)
+  macdVwma: number; // eMACD vwma (185)
+  bb: number; // Bollinger (260)
+  don: number; // Donchian (260)
+  adx: number; // ADX (28)
+  adxEma: number; // ADX EMA (14)
+  roc: number; // Momentum/ROC (260)
+  rocEma: number; // ROC EMA (120)
+}
+export const DEFAULT_PARAMS: IndicatorParams = {
+  emaFast: 377, emaSlow: 610, wr: 260, wrEmaA: 260, wrEmaB: 120,
+  macdFast: 120, macdSlow: 260, macdSig: 50, macdVwma: 185,
+  bb: 260, don: 260, adx: 28, adxEma: 14, roc: 260, rocEma: 120,
+};
+
 // Translates the user's "Williams Paşa" (%R) and "NizamiCedid" (MACD) Pine
 // indicators. MACD plots are normalized by the fast EMA, exactly as in the
 // original script.
-export function computeIndicators(c: Candles): IndBundle {
+export function computeIndicators(c: Candles, p: IndicatorParams = DEFAULT_PARAMS): IndBundle {
   const n = c.length;
 
-  const fast = emaArr(c.close, 120);
-  const slow = emaArr(c.close, 260);
+  const fast = emaArr(c.close, p.macdFast);
+  const slow = emaArr(c.close, p.macdSlow);
   const macd = new Float64Array(n);
   for (let i = 0; i < n; i++) macd[i] = fast[i] - slow[i];
-  const signal = emaArr(macd, 50);
+  const signal = emaArr(macd, p.macdSig);
   const hist = new Float64Array(n);
   for (let i = 0; i < n; i++) hist[i] = macd[i] - signal[i];
-  const eMacD = rollingVWMA(macd, c.volume, 185);
+  const eMacD = rollingVWMA(macd, c.volume, p.macdVwma);
 
-  const ema377p = emaArr(c.close, 377);
-  const ema610p = emaArr(c.close, 610);
+  const ema377p = emaArr(c.close, p.emaFast);
+  const ema610p = emaArr(c.close, p.emaSlow);
 
-  const hh = rollingHighest(c.high, 260);
-  const ll = rollingLowest(c.low, 260);
+  const hh = rollingHighest(c.high, p.wr);
+  const ll = rollingLowest(c.low, p.wr);
 
   const percentR = new Float64Array(n);
   const macdN = new Float64Array(n);
@@ -239,8 +261,8 @@ export function computeIndicators(c: Candles): IndBundle {
     deltaN[i] = (macd[i] - eMacD[i]) * inv;
   }
 
-  const emawil = emaArr(percentR, 260);
-  const emawil120 = emaArr(percentR, 120);
+  const emawil = emaArr(percentR, p.wrEmaA);
+  const emawil120 = emaArr(percentR, p.wrEmaB);
 
   return { ema377p, ema610p, percentR, emawil, emawil120, macdN, signalN, histN, eMacDN, deltaN };
 }
