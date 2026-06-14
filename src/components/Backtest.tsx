@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Candles } from '../data/types';
-import { evalPosition, StrategyResult } from '../indicators/backtest';
+import { evalPosition, StrategyResult, idxYearsAgo } from '../indicators/backtest';
 import { inflationDailyRates, inflationAvgAnnual } from '../data/inflation';
 import { fetchBistStatic, fetchScreener } from '../data/bistStatic';
 import {
@@ -184,16 +184,31 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
   const inflRates = useMemo(() => inflationDailyRates(candles.time, candles.length), [candles]);
   const avgInfl = useMemo(() => inflationAvgAnnual(candles.time, candles.length), [candles]);
 
-  // Backtest each saved strategy on the current symbol (+ equity curve).
+  // Years of history + window start indices (for the 5y / 10y comparisons).
+  const spanYears = candles.length > 1 ? (candles.time[candles.length - 1] - candles.time[0]) / (365.25 * 86400) : 0;
+  const idx5 = useMemo(() => idxYearsAgo(candles.time, candles.length, 5), [candles]);
+  const idx10 = useMemo(() => idxYearsAgo(candles.time, candles.length, 10), [candles]);
+  const win = (pos: Uint8Array, yrs: number, fromIdx: number): StrategyResult | null =>
+    spanYears >= yrs * 0.9 ? evalPosition(candles, pos, inflRates, fromIdx) : null;
+
+  // Backtest each saved strategy on the current symbol (+ equity curve + windows).
   const results = useMemo(
     () =>
       strats
         .map((s) => {
           const pos = buildCustomPosition(candles, s);
-          return { s, r: evalPosition(candles, pos, inflRates), eq: equitySpark(candles.close, pos, candles.time, inflRates), pos };
+          return {
+            s,
+            r: evalPosition(candles, pos, inflRates),
+            eq: equitySpark(candles.close, pos, candles.time, inflRates),
+            pos,
+            w5: win(pos, 5, idx5),
+            w10: win(pos, 10, idx10),
+          };
         })
         .sort((a, b) => (b.r.annRate ?? b.r.annPct) - (a.r.annRate ?? a.r.annPct)),
-    [strats, candles, inflRates],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [strats, candles, inflRates, idx5, idx10],
   );
   const maxAnn = Math.max(...results.map((x) => Math.abs(x.r.annRate ?? x.r.annPct)), 1);
   const topMax = scan ? Math.max(...scan.rows.map((t) => Math.abs(t.ann)), 1) : 1;
@@ -208,11 +223,17 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
     if (!draft.buy.length) return null;
     try {
       const pos = buildCustomPosition(candles, draft);
-      return { r: evalPosition(candles, pos, inflRates), eq: equitySpark(candles.close, pos, candles.time, inflRates) };
+      return {
+        r: evalPosition(candles, pos, inflRates),
+        eq: equitySpark(candles.close, pos, candles.time, inflRates),
+        w5: win(pos, 5, idx5),
+        w10: win(pos, 10, idx10),
+      };
     } catch {
       return null;
     }
-  }, [draft, candles, inflRates]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, candles, inflRates, idx5, idx10]);
 
   // ── Optimizer: try a broad grid of candidate strategies ────────────────────
   const [opt, setOpt] = useState<{ mode: 'cur' | 'uni'; running: boolean; done: number; total: number; rows: OptRow[] } | null>(null);
@@ -449,6 +470,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                           toplam {fmtX(r.retRate ?? r.retPct)} · {r.trades} işlem · Kazanma %{r.winRate.toFixed(0)} · Düşüş -
                           {r.maxDD.toFixed(0)}% · işlemde {r.daysIn ?? 0}g / boşta {r.daysOut ?? 0}g
                         </div>
+                        <WinLine w5={preview.w5} w10={preview.w10} />
                         <EquitySpark data={preview.eq} />
                       </div>
                     );
@@ -533,7 +555,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                 <div className="bt-note">Henüz strateji yok. Yukarıdan koşulları seçip kaydet.</div>
               ) : (
                 <div className="bt-list">
-                  {results.map(({ s, r, eq, pos }, i) => {
+                  {results.map(({ s, r, eq, pos, w5, w10 }, i) => {
                     const ann = r.annRate ?? r.annPct;
                     const beatR = ann >= r.holdAnn; // enflasyon dahil, Al-Tut'u geçti mi
                     const beatP = r.annPct >= r.holdAnn; // saf strateji Al-Tut'u geçti mi
@@ -570,6 +592,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                         </b>{' '}
                         · Al-Tut <b className="rv-base">{fmtPct(r.holdAnn)}</b>
                       </div>
+                      <WinLine w5={w5} w10={w10} />
                       <div className="eq-wrap" title="Sermaye eğrisi: 1₺ nasıl büyürdü (renkli: strateji + nakit enflasyon, gri: Al-Tut, kesik: başabaş)">
                         <EquitySpark data={eq} />
                         <div className="eq-leg lg-muted">renkli: Strateji (enflasyon dahil) · gri: Al-Tut · kesik çizgi: başabaş</div>
@@ -784,6 +807,33 @@ function fmtPct(r: number): string {
 }
 function barW(v: number, max: number): string {
   return Math.max(3, Math.min(100, (Math.abs(v) / max) * 100)) + '%';
+}
+
+// One window segment: strategy (incl. inflation) vs Al-Tut, annualized.
+function winSeg(label: string, w: StrategyResult) {
+  const ann = w.annRate ?? w.annPct;
+  const beat = ann >= w.holdAnn;
+  return (
+    <span>
+      {label}: strat{' '}
+      <b className={beat ? 'rv-win' : 'rv-lose'}>
+        {fmtPct(ann)}
+        {beat ? ' ✓' : ''}
+      </b>{' '}
+      / Al-Tut <b className="rv-base">{fmtPct(w.holdAnn)}</b>
+    </span>
+  );
+}
+// 5-year / 10-year comparison line (skips a window when history is too short).
+function WinLine({ w5, w10 }: { w5: StrategyResult | null; w10: StrategyResult | null }) {
+  if (!w5 && !w10) return null;
+  return (
+    <div className="bt-srow-sub bt-win">
+      ⏳ {w5 && winSeg('5y', w5)}
+      {w5 && w10 && <span className="lg-muted"> · </span>}
+      {w10 && winSeg('10y', w10)}
+    </div>
+  );
 }
 
 // Downsampled equity curves: strategy vs Buy & Hold (both start at 1).

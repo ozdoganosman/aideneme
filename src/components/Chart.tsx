@@ -109,7 +109,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
         horzLine: { color: '#3a4150', labelBackgroundColor: '#2a3142' },
       },
       rightPriceScale: { borderColor: '#222632' },
-      timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false },
+      // minBarSpacing default is 0.5 px/bar — the wall you hit when zooming out.
+      // Lower it so bars can compress much further (more zoom-out / whitespace).
+      timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false, minBarSpacing: 0.06 },
     });
 
     // Strategy "in-position" shade: a single faint area (value 1 = long, 0 =

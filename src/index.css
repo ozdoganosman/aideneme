@@ -1265,6 +1265,14 @@ button.ctl:disabled {
 .bt-days {
   font-variant-numeric: tabular-nums;
 }
+.bt-win {
+  font-variant-numeric: tabular-nums;
+}
+.bt-win .rv-win,
+.bt-win .rv-lose,
+.bt-win .rv-base {
+  font-weight: 700;
+}
 .bt-rival {
   font-variant-numeric: tabular-nums;
 }
