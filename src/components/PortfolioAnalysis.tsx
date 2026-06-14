@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Candles } from '../data/types';
 import { fetchBistStatic, Quotes } from '../data/bistStatic';
 import { analyzeHolding, HoldingAnalysis } from '../indicators/analysis';
 import { Holding } from './Portfolio';
@@ -20,6 +21,8 @@ interface Props {
 export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [bench, setBench] = useState<number | null>(null); // XU100 1Y return %
+  const [hist, setHist] = useState<Map<string, Candles>>(new Map());
+  const [xu, setXu] = useState<Candles | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -28,25 +31,36 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
       holdings.map(async (h) => {
         const value = (quotes[h.symbol]?.c ?? 0) * h.qty;
         let a: HoldingAnalysis | null = null;
+        let c: Candles | null = null;
         try {
-          a = analyzeHolding(await fetchBistStatic(h.symbol));
+          c = await fetchBistStatic(h.symbol);
+          a = analyzeHolding(c);
         } catch {
           a = null;
         }
-        return { sym: h.symbol, value, weight: totVal ? (value / totVal) * 100 : 0, a };
+        return { sym: h.symbol, value, weight: totVal ? (value / totVal) * 100 : 0, a, c };
       }),
     ).then((out) => {
-      if (!cancel) setRows(out.sort((x, y) => y.weight - x.weight));
+      if (cancel) return;
+      const m = new Map<string, Candles>();
+      out.forEach((o) => o.c && m.set(o.sym, o.c));
+      setHist(m);
+      setRows(out.map((o) => ({ sym: o.sym, value: o.value, weight: o.weight, a: o.a })).sort((x, y) => y.weight - x.weight));
     });
     fetchBistStatic('XU100')
       .then((c) => {
-        if (!cancel) setBench(analyzeHolding(c)?.r1y ?? null);
+        if (!cancel) {
+          setXu(c);
+          setBench(analyzeHolding(c)?.r1y ?? null);
+        }
       })
       .catch(() => {});
     return () => {
       cancel = true;
     };
   }, [holdings, quotes]);
+
+  const series = useMemo(() => buildValueSeries(holdings, hist, xu), [holdings, hist, xu]);
 
   const pick = (s: string) => {
     onSelect(s);
@@ -70,6 +84,7 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
           ) : (
             <>
               {renderConcentration(rows)}
+              {series && <ValueChartCard pv={series.pv} xv={series.xv} chg={series.chg} xchg={series.xchg} />}
               {renderRisk(rows, bench)}
               {renderTech(rows, pick)}
               <div className="bt-hint">
@@ -217,6 +232,99 @@ function renderTech(rows: Row[], pick: (s: string) => void) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// Portfolio total value over time (current quantities held over the common
+// period of all holdings), normalized to 100, vs XU100.
+function buildValueSeries(holdings: Holding[], hist: Map<string, Candles>, xu: Candles | null) {
+  const cs = holdings
+    .map((h) => ({ qty: h.qty, c: hist.get(h.symbol) }))
+    .filter((x): x is { qty: number; c: Candles } => !!x.c);
+  if (cs.length === 0) return null;
+  const startT = Math.max(...cs.map((x) => x.c.time[0]));
+  const set = new Set<number>();
+  for (const { c } of cs) for (let i = 0; i < c.length; i++) if (c.time[i] >= startT) set.add(c.time[i]);
+  const axis = [...set].sort((a, b) => a - b);
+  if (axis.length < 3) return null;
+  const step = Math.max(1, Math.floor(axis.length / 140));
+  const sampled: number[] = [];
+  for (let i = 0; i < axis.length; i += step) sampled.push(axis[i]);
+  sampled.push(axis[axis.length - 1]);
+
+  const ptr = cs.map(() => 0);
+  const last = cs.map(() => NaN);
+  const pvRaw: number[] = [];
+  for (const t of sampled) {
+    let val = 0;
+    for (let k = 0; k < cs.length; k++) {
+      const c = cs[k].c;
+      while (ptr[k] < c.length && c.time[ptr[k]] <= t) {
+        last[k] = c.close[ptr[k]];
+        ptr[k]++;
+      }
+      if (isFinite(last[k])) val += cs[k].qty * last[k];
+    }
+    pvRaw.push(val);
+  }
+  const xvRaw: number[] = [];
+  if (xu) {
+    let p = 0;
+    let l = NaN;
+    for (const t of sampled) {
+      while (p < xu.length && xu.time[p] <= t) {
+        l = xu.close[p];
+        p++;
+      }
+      xvRaw.push(l);
+    }
+  }
+  const norm = (arr: number[]) => {
+    const base = arr.find((v) => isFinite(v) && v > 0) ?? 1;
+    return arr.map((v) => (isFinite(v) && v > 0 ? (v / base) * 100 : NaN));
+  };
+  const pv = norm(pvRaw);
+  const xv = xu ? norm(xvRaw) : [];
+  return { pv, xv, chg: pv.length ? pv[pv.length - 1] - 100 : 0, xchg: xv.length ? xv[xv.length - 1] - 100 : 0 };
+}
+
+function ValueChartCard({ pv, xv, chg, xchg }: { pv: number[]; xv: number[]; chg: number; xchg: number }) {
+  const all = [...pv, ...xv].filter((v) => isFinite(v));
+  if (all.length < 2) return null;
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  const rng = max - min || 1;
+  const W = 560;
+  const H = 96;
+  const y = (v: number) => (H - 2 - ((v - min) / rng) * (H - 8)).toFixed(1);
+  const xx = (i: number, len: number) => ((i / (len - 1)) * (W - 2) + 1).toFixed(1);
+  const pvLine = pv.map((v, i) => `${xx(i, pv.length)},${y(v)}`).join(' ');
+  const area = `1,${H} ${pvLine} ${W - 1},${H}`;
+  const xvLine = xv.length ? xv.map((v, i) => `${xx(i, xv.length)},${y(v)}`).join(' ') : '';
+  const up = chg >= 0;
+  const col = up ? '#26a69a' : '#ef5350';
+  return (
+    <div className="pa-card">
+      <div className="pa-card-title">📈 Portföy Değeri (zaman)</div>
+      <svg className="pv-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <polygon points={area} fill={up ? 'rgba(38,166,154,0.16)' : 'rgba(239,83,80,0.16)'} />
+        {xvLine && <polyline points={xvLine} fill="none" stroke="#6b7280" strokeWidth="1.2" strokeDasharray="4 3" />}
+        <polyline points={pvLine} fill="none" stroke={col} strokeWidth="1.8" />
+      </svg>
+      <div className="pv-legend">
+        <span>
+          <i className="pv-dot" style={{ background: col }} /> Portföy{' '}
+          <b className={up ? 'up' : 'down'}>{(chg >= 0 ? '+' : '') + chg.toFixed(0)}%</b>
+        </span>
+        {xv.length > 0 && (
+          <span>
+            <i className="pv-dot" style={{ background: '#6b7280' }} /> XU100{' '}
+            <b className={xchg >= 0 ? 'up' : 'down'}>{(xchg >= 0 ? '+' : '') + xchg.toFixed(0)}%</b>
+          </span>
+        )}
+        <span className="lg-muted">(mevcut adetlerle, ortak dönem)</span>
+      </div>
     </div>
   );
 }
