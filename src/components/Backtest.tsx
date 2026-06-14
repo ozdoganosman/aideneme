@@ -38,6 +38,7 @@ const blankDraft = (): CustomStrategy => ({ id: '', name: '', buy: [newCond()], 
 export function Backtest({ candles, symbol, universe, strats, onSave, onApply, onPickCombo, onClose }: Props) {
   const [tab, setTab] = useState<'mine' | 'top'>('mine');
   const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [scan, setScan] = useState<{ rows: Combo[]; done: number; total: number; running: boolean } | null>(null);
 
   // Backtest each saved strategy on the current symbol (+ equity curve).
@@ -46,7 +47,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
       strats
         .map((s) => {
           const pos = buildCustomPosition(candles, s);
-          return { s, r: evalPosition(candles, pos), eq: equitySpark(candles.close, pos) };
+          return { s, r: evalPosition(candles, pos), eq: equitySpark(candles.close, pos), pos };
         })
         .sort((a, b) => b.r.annPct - a.r.annPct),
     [strats, candles],
@@ -172,7 +173,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                 <div className="bt-note">Henüz strateji yok. Yukarıdan koşulları seçip kaydet.</div>
               ) : (
                 <div className="bt-list">
-                  {results.map(({ s, r, eq }, i) => (
+                  {results.map(({ s, r, eq, pos }, i) => (
                     <div key={s.id} className="bt-srow">
                       <div className="bt-srow-head">
                         <span className="bt-rank">{i + 1}</span>
@@ -195,9 +196,11 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                       <div className="bt-srow-explain">{describe(s)}</div>
                       <div className="sb-rowbtns">
                         <button onClick={() => onApply(s)}>📈 Grafikte göster</button>
+                        <button onClick={() => setExpanded(expanded === s.id ? null : s.id)}>📅 Aylık</button>
                         <button onClick={() => edit(s)}>Düzenle</button>
                         <button className="sb-del" onClick={() => del(s.id)}>Sil</button>
                       </div>
+                      {expanded === s.id && <Heatmap data={monthlyReturns(candles.close, candles.time, pos)} />}
                     </div>
                   ))}
                 </div>
@@ -351,35 +354,122 @@ function barW(v: number, max: number): string {
   return Math.max(3, Math.min(100, (Math.abs(v) / max) * 100)) + '%';
 }
 
-// Downsampled equity curve (1 unit compounded only while the strategy holds).
-function equitySpark(close: Float64Array, pos: Uint8Array, points = 90): number[] {
+// Downsampled equity curves: strategy vs Buy & Hold (both start at 1).
+interface Eq {
+  strat: number[];
+  hold: number[];
+}
+function equitySpark(close: Float64Array, pos: Uint8Array, points = 90): Eq {
   const n = close.length;
-  if (n < 2) return [];
+  if (n < 2) return { strat: [], hold: [] };
   const step = Math.max(1, Math.floor(n / points));
-  const out: number[] = [];
+  const strat: number[] = [];
+  const hold: number[] = [];
   let e = 1;
+  const base = close[0];
   for (let i = 1; i < n; i++) {
     if (pos[i - 1]) e *= close[i] / close[i - 1];
-    if (i % step === 0) out.push(e);
+    if (i % step === 0) {
+      strat.push(e);
+      hold.push(close[i] / base);
+    }
   }
-  out.push(e);
-  return out;
+  strat.push(e);
+  hold.push(close[n - 1] / base);
+  return { strat, hold };
 }
 
-function EquitySpark({ data }: { data: number[] }) {
-  if (data.length < 2) return null;
-  const min = Math.min(...data, 1);
-  const max = Math.max(...data, 1);
+function EquitySpark({ data }: { data: Eq }) {
+  const { strat, hold } = data;
+  if (strat.length < 2) return null;
+  const all = [...strat, ...hold, 1];
+  const min = Math.min(...all);
+  const max = Math.max(...all);
   const rng = max - min || 1;
   const W = 300;
-  const H = 34;
+  const H = 40;
   const y = (v: number) => (H - 1 - ((v - min) / rng) * (H - 2)).toFixed(1);
-  const pts = data.map((v, i) => `${((i / (data.length - 1)) * (W - 2) + 1).toFixed(1)},${y(v)}`).join(' ');
-  const up = data[data.length - 1] >= 1;
+  const line = (arr: number[]) => arr.map((v, i) => `${((i / (arr.length - 1)) * (W - 2) + 1).toFixed(1)},${y(v)}`).join(' ');
+  const up = strat[strat.length - 1] >= 1;
   return (
     <svg className="eq-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
       <line x1="0" y1={y(1)} x2={W} y2={y(1)} stroke="#3a4150" strokeWidth="1" strokeDasharray="3 3" />
-      <polyline points={pts} fill="none" stroke={up ? '#26a69a' : '#ef5350'} strokeWidth="1.6" />
+      <polyline points={line(hold)} fill="none" stroke="#6b7280" strokeWidth="1.2" />
+      <polyline points={line(strat)} fill="none" stroke={up ? '#26a69a' : '#ef5350'} strokeWidth="1.7" />
     </svg>
+  );
+}
+
+// Monthly returns of the strategy equity → year × month grid for a heatmap.
+interface MonthRow {
+  y: number;
+  m: (number | null)[];
+}
+function monthlyReturns(close: Float64Array, time: Float64Array, pos: Uint8Array): MonthRow[] {
+  const n = close.length;
+  if (n < 2) return [];
+  const eq = new Float64Array(n);
+  let e = 1;
+  eq[0] = 1;
+  for (let i = 1; i < n; i++) {
+    if (pos[i - 1]) e *= close[i] / close[i - 1];
+    eq[i] = e;
+  }
+  const map = new Map<string, { first: number; last: number }>();
+  for (let i = 0; i < n; i++) {
+    const d = new Date(time[i] * 1000);
+    const k = d.getFullYear() + '-' + d.getMonth();
+    let g = map.get(k);
+    if (!g) {
+      g = { first: eq[i], last: eq[i] };
+      map.set(k, g);
+    }
+    g.last = eq[i];
+  }
+  const years = [...new Set([...map.keys()].map((k) => +k.split('-')[0]))].sort((a, b) => a - b);
+  return years.map((yr) => {
+    const m: (number | null)[] = Array(12).fill(null);
+    for (let mo = 0; mo < 12; mo++) {
+      const g = map.get(yr + '-' + mo);
+      if (g && g.first > 0) m[mo] = (g.last / g.first - 1) * 100;
+    }
+    return { y: yr, m };
+  });
+}
+
+const MONTHS = ['O', 'Ş', 'M', 'N', 'M', 'H', 'T', 'A', 'E', 'E', 'K', 'A'];
+function Heatmap({ data }: { data: MonthRow[] }) {
+  if (!data.length) return null;
+  const color = (v: number | null) => {
+    if (v == null) return 'transparent';
+    const a = Math.min(1, Math.abs(v) / 20) * 0.85 + 0.1;
+    return v >= 0 ? `rgba(38,166,154,${a})` : `rgba(239,83,80,${a})`;
+  };
+  return (
+    <div className="hm-wrap">
+      <table className="hm">
+        <thead>
+          <tr>
+            <th />
+            {MONTHS.map((m, i) => (
+              <th key={i}>{m}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => (
+            <tr key={row.y}>
+              <td className="hm-y">{row.y}</td>
+              {row.m.map((v, i) => (
+                <td key={i} style={{ background: color(v) }} title={v == null ? '' : `${row.y} · ${(v >= 0 ? '+' : '') + v.toFixed(1)}%`}>
+                  {v == null ? '' : Math.round(v)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="bt-note">Aylık getiri (yeşil + / kırmızı −). Strateji o ay pozisyondaysa kâr/zarar.</div>
+    </div>
   );
 }
