@@ -273,7 +273,7 @@ interface BtRow {
   name: string; // which strategy (for "best per holding" mode)
   ok: boolean;
 }
-function bestForHolding(c: Candles, params: IndicatorParams): { strat: CustomStrategy; r: StrategyResult } | null {
+function bestForHolding(c: Candles, params: IndicatorParams): { strat: CustomStrategy; r: StrategyResult; pos: Uint8Array } | null {
   const rates = inflationDailyRates(c.time, c.length);
   const split = Math.floor(c.length * 0.7);
   const cache = new Map<string, Float64Array>();
@@ -294,7 +294,79 @@ function bestForHolding(c: Candles, params: IndicatorParams): { strat: CustomStr
     }
   }
   if (!bestStrat || !bestPos) return null;
-  return { strat: bestStrat, r: evalPosition(c, bestPos, rates) };
+  return { strat: bestStrat, r: evalPosition(c, bestPos, rates), pos: bestPos };
+}
+
+// Realistic equity series (price while in position, inflation while in cash).
+function equitySeries(c: Candles, pos: Uint8Array, rates: Float64Array): Float64Array {
+  const n = c.length;
+  const e = new Float64Array(n);
+  let v = 1;
+  e[0] = 1;
+  for (let i = 1; i < n; i++) {
+    if (pos[i - 1]) v *= c.close[i] / c.close[i - 1];
+    else {
+      const cal = Math.min(Math.max((c.time[i] - c.time[i - 1]) / 86400, 0), 31);
+      v *= Math.pow(1 + rates[i], cal);
+    }
+    e[i] = v;
+  }
+  return e;
+}
+
+// Day-by-day combined portfolio value over the common period, rebased to 100:
+// strategy (each holding's realistic equity) vs Al-Tut (buy & hold), current weights.
+interface Pick {
+  weight: number;
+  c: Candles;
+  pos: Uint8Array;
+  rates: Float64Array;
+}
+function buildCombined(picks: Pick[]) {
+  if (picks.length === 0) return null;
+  const startT = Math.max(...picks.map((p) => p.c.time[0]));
+  const set = new Set<number>();
+  for (const p of picks) for (let i = 0; i < p.c.length; i++) if (p.c.time[i] >= startT) set.add(p.c.time[i]);
+  const axis = [...set].sort((a, b) => a - b);
+  if (axis.length < 3) return null;
+  const step = Math.max(1, Math.floor(axis.length / 120));
+  const sampled: number[] = [];
+  for (let i = 0; i < axis.length; i += step) sampled.push(axis[i]);
+  sampled.push(axis[axis.length - 1]);
+  const wsum = picks.reduce((s, p) => s + p.weight, 0) || 1;
+  const eq = picks.map((p) => equitySeries(p.c, p.pos, p.rates));
+  const baseIdx = picks.map((p) => {
+    let i = 0;
+    while (i < p.c.length && p.c.time[i] < startT) i++;
+    return Math.min(i, p.c.length - 1);
+  });
+  const ptr = picks.map(() => 0);
+  const strat: number[] = [];
+  const hold: number[] = [];
+  for (const t of sampled) {
+    let sV = 0;
+    let hV = 0;
+    for (let k = 0; k < picks.length; k++) {
+      const c = picks[k].c;
+      while (ptr[k] < c.length && c.time[ptr[k]] <= t) ptr[k]++;
+      const idx = Math.max(baseIdx[k], ptr[k] - 1);
+      const w = picks[k].weight / wsum;
+      const eb = eq[k][baseIdx[k]] || 1;
+      const cb = c.close[baseIdx[k]] || 1;
+      sV += w * (eq[k][idx] / eb);
+      hV += w * (c.close[idx] / cb);
+    }
+    strat.push(sV * 100);
+    hold.push(hV * 100);
+  }
+  let peak = -Infinity;
+  let dd = 0;
+  for (const v of strat) {
+    if (v > peak) peak = v;
+    const d = (peak - v) / peak;
+    if (d > dd) dd = d;
+  }
+  return { strat, hold, chg: strat[strat.length - 1] - 100, holdChg: hold[hold.length - 1] - 100, maxDD: dd * 100, t0: sampled[0], t1: sampled[sampled.length - 1] };
 }
 
 function StrategyBacktestCard({
@@ -316,21 +388,35 @@ function StrategyBacktestCard({
 
   const res = useMemo(() => {
     const out: BtRow[] = [];
+    const picks: Pick[] = [];
     for (const r of rows) {
       const c = hist.get(r.sym);
       if (!c || c.length < 60) continue;
+      const rates = inflationDailyRates(c.time, c.length);
+      let pos: Uint8Array | null = null;
+      let rr: StrategyResult | null = null;
+      let name = '';
       if (mode === 'best') {
         const b = bestForHolding(c, params);
-        if (b) out.push({ sym: r.sym, weight: r.weight, ann: b.r.annRate ?? b.r.annPct, hold: b.r.holdAnn, trades: b.r.trades, name: b.strat.name, ok: true });
+        if (b) {
+          pos = b.pos;
+          rr = b.r;
+          name = b.strat.name;
+        }
       } else if (sel) {
-        const rr = evalPosition(c, buildCustomPosition(c, sel, undefined, params), inflationDailyRates(c.time, c.length));
-        out.push({ sym: r.sym, weight: r.weight, ann: rr.annRate ?? rr.annPct, hold: rr.holdAnn, trades: rr.trades, name: sel.name, ok: rr.trades > 0 });
+        pos = buildCustomPosition(c, sel, undefined, params);
+        rr = evalPosition(c, pos, rates);
+        name = sel.name;
+      }
+      if (pos && rr) {
+        out.push({ sym: r.sym, weight: r.weight, ann: rr.annRate ?? rr.annPct, hold: rr.holdAnn, trades: rr.trades, name, ok: rr.trades > 0 });
+        picks.push({ weight: r.weight, c, pos, rates });
       }
     }
     const wsum = out.reduce((s, o) => s + o.weight, 0) || 1;
     const cAnn = out.reduce((s, o) => s + (o.weight / wsum) * o.ann, 0);
     const cHold = out.reduce((s, o) => s + (o.weight / wsum) * o.hold, 0);
-    return { out: out.sort((a, b) => b.weight - a.weight), cAnn, cHold, n: out.length };
+    return { out: out.sort((a, b) => b.weight - a.weight), cAnn, cHold, n: out.length, curve: buildCombined(picks) };
   }, [rows, hist, mode, sel, params]);
 
   const beat = res.cAnn >= res.cHold;
@@ -355,6 +441,7 @@ function StrategyBacktestCard({
             <b className={res.cHold >= 0 ? 'up' : 'down'}>{fmtP(res.cHold)}</b>{' '}
             <span className={beat ? 'rv-win' : 'rv-lose'}>{beat ? '✓ geçti' : 'geçemedi'}</span>
           </div>
+          {res.curve && <CombinedCurve cv={res.curve} />}
           <div className="pa-risk-list">
             {res.out.map((o) => (
               <div key={o.sym} className="pa-risk-row pa-bt-row" onClick={() => onSelect(o.sym)} title="Grafikte aç">
@@ -378,6 +465,48 @@ function StrategyBacktestCard({
 }
 function fmtP(v: number): string {
   return (v >= 0 ? '+' : '') + Math.round(v) + '%';
+}
+
+function CombinedCurve({ cv }: { cv: NonNullable<ReturnType<typeof buildCombined>> }) {
+  const all = [...cv.strat, ...cv.hold].filter((v) => isFinite(v));
+  if (all.length < 2) return null;
+  const min = Math.min(...all);
+  const max = Math.max(...all);
+  const rng = max - min || 1;
+  const W = 560;
+  const H = 90;
+  const y = (v: number) => (H - 2 - ((v - min) / rng) * (H - 8)).toFixed(1);
+  const xx = (i: number, len: number) => ((i / (len - 1)) * (W - 2) + 1).toFixed(1);
+  const line = (arr: number[]) => arr.map((v, i) => `${xx(i, arr.length)},${y(v)}`).join(' ');
+  const up = cv.chg >= 0;
+  const col = up ? '#26a69a' : '#ef5350';
+  const fmtD = (t: number) => {
+    const d = new Date(t * 1000);
+    return `${d.getMonth() + 1}.${d.getFullYear()}`;
+  };
+  const area = `1,${H} ${line(cv.strat)} ${W - 1},${H}`;
+  return (
+    <div>
+      <div className="pv-desc lg-muted">
+        Ortak dönemde gün-gün portföy değeri (mevcut adetler) — strateji vs Al-Tut, başlangıç 100. Dönem:{' '}
+        <b>{fmtD(cv.t0)} → {fmtD(cv.t1)}</b>
+      </div>
+      <svg className="pv-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <polygon points={area} fill={up ? 'rgba(38,166,154,0.16)' : 'rgba(239,83,80,0.16)'} />
+        <polyline points={line(cv.hold)} fill="none" stroke="#6b7280" strokeWidth="1.2" strokeDasharray="4 3" />
+        <polyline points={line(cv.strat)} fill="none" stroke={col} strokeWidth="1.8" />
+      </svg>
+      <div className="pv-legend">
+        <span>
+          <i className="pv-dot" style={{ background: col }} /> Strateji <b className={up ? 'up' : 'down'}>{fmtP(cv.chg)}</b>
+        </span>
+        <span>
+          <i className="pv-dot pv-dash" /> Al-Tut <b className={cv.holdChg >= 0 ? 'up' : 'down'}>{fmtP(cv.holdChg)}</b>
+        </span>
+        <span className="lg-muted">en sert düşüş -{cv.maxDD.toFixed(0)}%</span>
+      </div>
+    </div>
+  );
 }
 
 // ── Advanced portfolio risk (correlation-aware) ──────────────────────────────
