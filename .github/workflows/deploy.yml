@@ -21,6 +21,7 @@ concurrency:
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30 # safety cap so a hung step can never burn the 6h max
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
