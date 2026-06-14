@@ -333,8 +333,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             {settings.ema && (
               <>
                 {'  '}
-                <span style={{ color: '#f0b90b' }}>EMA377 {fp(legend.ema377)}</span>{' '}
-                <span style={{ color: '#9aa0b0' }}>EMA610 {fp(legend.ema610)}</span>
+                <span style={{ color: '#f0b90b' }}>EMA (377) {fp(legend.ema377)}</span>{' '}
+                <span style={{ color: '#9aa0b0' }}>EMA (610) {fp(legend.ema610)}</span>
               </>
             )}
             {settings.volume && (
@@ -347,17 +347,17 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
           {settings.williams && tops[1] != null && (
             <div className="pane-legend" style={{ top: tops[1] + 6 }}>
-              <span style={{ color: '#7E57C2' }}>Williams %R 260</span> {fn(legend.wilR, 1)}{' '}
-              <span style={{ color: '#26a69a' }}>EMA {fn(legend.wilEma, 1)}</span>
+              <span style={{ color: '#7E57C2' }}>Williams %R (260)</span> {fn(legend.wilR, 1)}{' '}
+              <span style={{ color: '#26a69a' }}>EMA (260) {fn(legend.wilEma, 1)}</span>
             </div>
           )}
 
           {settings.macd && tops[2] != null && (
             <div className="pane-legend" style={{ top: tops[2] + 6 }}>
               <span className="lg-muted">NizamiCedid</span>{' '}
-              <span style={{ color: '#ff2fa6' }}>MACD {fn(legend.macd, 4)}</span>{' '}
-              <span style={{ color: '#FF6D00' }}>Signal {fn(legend.signal, 4)}</span>{' '}
-              <span style={{ color: '#e6e6e6' }}>eMACD {fn(legend.emacd, 4)}</span>
+              <span style={{ color: '#ff2fa6' }}>MACD (120/260) {fn(legend.macd, 4)}</span>{' '}
+              <span style={{ color: '#FF6D00' }}>Signal (50) {fn(legend.signal, 4)}</span>{' '}
+              <span style={{ color: '#e6e6e6' }}>eMACD (185) {fn(legend.emacd, 4)}</span>
             </div>
           )}
         </>

@@ -284,6 +284,21 @@ export class LodController {
     }
   }
 
+  // Swap one extra series' full-resolution values and redraw just that series
+  // for the current window (no view reset). Used for the strategy position shade.
+  updateExtra(series: ExtraSpec['series'], vals: Float64Array) {
+    const i = this.extras.findIndex((e) => e.series === series);
+    if (i < 0) return;
+    this.extraVals[i] = vals;
+    if (!this.full) return;
+    const { i0, i1, stride } = this.win;
+    this.applying = true;
+    this.extras[i].series.setData(buildExtra(this.full, vals, i0, i1, stride, this.extras[i]) as never);
+    requestAnimationFrame(() => {
+      this.applying = false;
+    });
+  }
+
   lastBar(): { time: number; open: number; high: number; low: number; close: number; volume: number } | null {
     if (!this.full || this.full.length === 0) return null;
     const n = this.full.length - 1;
