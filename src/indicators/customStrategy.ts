@@ -42,6 +42,13 @@ export const INDS: IndDef[] = [
   { key: 'signal', label: 'Signal', hasParam: false, defParam: 0 },
   { key: 'emacd', label: 'eMACD', hasParam: false, defParam: 0 },
   { key: 'stdir', label: 'Supertrend yön (1=yukarı)', hasParam: false, defParam: 0 },
+  { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 14 },
+  { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 252 },
+  { key: 'donhi', label: 'Donchian üst (N gün)', hasParam: true, defParam: 20 },
+  { key: 'donlo', label: 'Donchian alt (N gün)', hasParam: true, defParam: 10 },
+  { key: 'bbup', label: 'Bollinger üst (N,2σ)', hasParam: true, defParam: 20 },
+  { key: 'bbmid', label: 'Bollinger orta (SMA N)', hasParam: true, defParam: 20 },
+  { key: 'bbdn', label: 'Bollinger alt (N,2σ)', hasParam: true, defParam: 20 },
 ];
 
 export const OPS: { key: Op; label: string }[] = [
@@ -100,6 +107,26 @@ export function candidateStrategies(): CustomStrategy[] {
   // ── Supertrend direction ──
   list.push({ name: 'Supertrend yukarı', buy: [C('stdir', 'gt', 'val', 0.5)], sell: [C('stdir', 'lt', 'val', 0.5)] });
 
+  // ── Donchian breakout (Turtle) ──
+  for (const [hi, lo] of [[20, 10], [55, 20], [100, 50]]) list.push({ name: `Donchian ${hi}/${lo}`, buy: [C('price', 'gt', 'ind', 0, 'donhi', 0, hi)], sell: [C('price', 'lt', 'ind', 0, 'donlo', 0, lo)] });
+
+  // ── Momentum / ROC (time-series momentum) ──
+  for (const p of [126, 252]) {
+    list.push({ name: `Momentum ${p} (ROC>0)`, buy: [C('roc', 'gt', 'val', 0, 'emacd', p)], sell: [C('roc', 'lt', 'val', 0, 'emacd', p)] });
+    list.push({ name: `Momentum ${p} + Trend(200)`, buy: [C('roc', 'gt', 'val', 0, 'emacd', p), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('roc', 'lt', 'val', 0, 'emacd', p)] });
+  }
+
+  // ── Bollinger breakout ──
+  for (const p of [20, 50]) list.push({ name: `Bollinger ${p} kırılımı`, buy: [C('price', 'gt', 'ind', 0, 'bbup', 0, p)], sell: [C('price', 'lt', 'ind', 0, 'bbmid', 0, p)] });
+
+  // ── ADX trend-strength filter (only trade strong trends) ──
+  for (const th of [20, 25, 30]) {
+    const adxf = C('adx', 'gt', 'val', th, 'emacd', 14);
+    list.push({ name: `MACD>0 + ADX>${th}`, buy: [C('macd', 'gt', 'val', 0), adxf], sell: [C('macd', 'lt', 'val', 0)] });
+    list.push({ name: `%R(260)>50 + ADX>${th}`, buy: [C('wr', 'gt', 'val', 50, 'emacd', 260), adxf], sell: [C('wr', 'lt', 'val', 50, 'emacd', 260)] });
+    list.push({ name: `Fiyat>EMA200 + ADX>${th}`, buy: [C('price', 'gt', 'ind', 0, 'ema', 0, 200), adxf], sell: [C('price', 'lt', 'ind', 0, 'ema', 0, 200)] });
+  }
+
   // ── Trend-filtered momentum (2 conditions: momentum AND price > long EMA) ──
   const filters: [string, number][] = [['EMA200', 200], ['EMA377', 377]];
   for (const [fname, fp] of filters) {
@@ -134,6 +161,20 @@ function computeSeries(c: Candles, ind: string, p: number): Float64Array {
       return macdSeries(c).emacd;
     case 'stdir':
       return supertrendDir(c, 10, 3);
+    case 'adx':
+      return adxArr(c, Math.max(2, p));
+    case 'roc':
+      return rocArr(close, Math.max(1, p));
+    case 'donhi':
+      return donchianBound(c, Math.max(1, p), true);
+    case 'donlo':
+      return donchianBound(c, Math.max(1, p), false);
+    case 'bbup':
+      return bollingerBand(c, Math.max(2, p), 'up');
+    case 'bbmid':
+      return bollingerBand(c, Math.max(2, p), 'mid');
+    case 'bbdn':
+      return bollingerBand(c, Math.max(2, p), 'dn');
     default:
       return close;
   }
@@ -230,6 +271,93 @@ function williamsR(c: Candles, len: number): Float64Array {
   for (let i = 0; i < n; i++) {
     const d = hh[i] - ll[i];
     out[i] = d !== 0 ? (100 * (c.close[i] - hh[i])) / d + 100 : NaN;
+  }
+  return out;
+}
+
+// Rate of change (%) vs `len` bars ago — time-series momentum.
+function rocArr(close: Float64Array, len: number): Float64Array {
+  const n = close.length;
+  const out = new Float64Array(n).fill(NaN);
+  for (let i = len; i < n; i++) out[i] = close[i - len] > 0 ? (close[i] / close[i - len] - 1) * 100 : NaN;
+  return out;
+}
+
+// Donchian channel bound over the PRIOR `len` bars (excludes the current bar) so
+// `price > donhi` is a genuine breakout and `price < donlo` a breakdown.
+function donchianBound(c: Candles, len: number, upper: boolean): Float64Array {
+  const roll = upper ? rollingHighest(c.high, len) : rollingLowest(c.low, len);
+  const n = c.length;
+  const out = new Float64Array(n).fill(NaN);
+  for (let i = 1; i < n; i++) out[i] = roll[i - 1];
+  return out;
+}
+
+// Bollinger band (mean ± 2σ over `len`).
+function bollingerBand(c: Candles, len: number, which: 'up' | 'dn' | 'mid'): Float64Array {
+  const close = c.close;
+  const n = close.length;
+  const out = new Float64Array(n).fill(NaN);
+  let sum = 0;
+  let sumsq = 0;
+  for (let i = 0; i < n; i++) {
+    sum += close[i];
+    sumsq += close[i] * close[i];
+    if (i >= len) {
+      sum -= close[i - len];
+      sumsq -= close[i - len] * close[i - len];
+    }
+    if (i >= len - 1) {
+      const mean = sum / len;
+      const sd = Math.sqrt(Math.max(0, sumsq / len - mean * mean));
+      out[i] = which === 'mid' ? mean : which === 'up' ? mean + 2 * sd : mean - 2 * sd;
+    }
+  }
+  return out;
+}
+
+// Wilder ADX (trend strength, 0–100). High = strong trend (worth following).
+function adxArr(c: Candles, len: number): Float64Array {
+  const n = c.length;
+  const out = new Float64Array(n).fill(NaN);
+  if (n < len + 1) return out;
+  const tr = new Float64Array(n);
+  const pdm = new Float64Array(n);
+  const ndm = new Float64Array(n);
+  for (let i = 1; i < n; i++) {
+    const up = c.high[i] - c.high[i - 1];
+    const dn = c.low[i - 1] - c.low[i];
+    pdm[i] = up > dn && up > 0 ? up : 0;
+    ndm[i] = dn > up && dn > 0 ? dn : 0;
+    tr[i] = Math.max(c.high[i] - c.low[i], Math.abs(c.high[i] - c.close[i - 1]), Math.abs(c.low[i] - c.close[i - 1]));
+  }
+  let str = 0;
+  let spdm = 0;
+  let sndm = 0;
+  for (let i = 1; i <= len; i++) {
+    str += tr[i];
+    spdm += pdm[i];
+    sndm += ndm[i];
+  }
+  const dx = new Float64Array(n).fill(NaN);
+  for (let i = len + 1; i < n; i++) {
+    str = str - str / len + tr[i];
+    spdm = spdm - spdm / len + pdm[i];
+    sndm = sndm - sndm / len + ndm[i];
+    const pdi = str ? (100 * spdm) / str : 0;
+    const ndi = str ? (100 * sndm) / str : 0;
+    const s = pdi + ndi;
+    dx[i] = s ? (100 * Math.abs(pdi - ndi)) / s : 0;
+  }
+  const firstDx = len + 1;
+  if (firstDx + len > n) return out;
+  let adx = 0;
+  for (let i = firstDx; i < firstDx + len; i++) adx += dx[i];
+  adx /= len;
+  out[firstDx + len - 1] = adx;
+  for (let i = firstDx + len; i < n; i++) {
+    adx = (adx * (len - 1) + dx[i]) / len;
+    out[i] = adx;
   }
   return out;
 }
