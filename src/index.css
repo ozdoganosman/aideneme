@@ -1499,6 +1499,115 @@ button.ctl:disabled {
 }
 
 /* Rich portfolio cards */
+/* Buy/Sell side toggle */
+.pf-side {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.pf-side button {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pf-side button.active.buy {
+  background: rgba(38, 166, 154, 0.18);
+  border-color: var(--up);
+  color: var(--up);
+}
+.pf-side button.active.sell {
+  background: rgba(239, 83, 80, 0.18);
+  border-color: var(--down);
+  color: var(--down);
+}
+.pf-addbtn.sell {
+  color: var(--down);
+}
+.pf-sell {
+  margin-left: auto;
+  background: rgba(239, 83, 80, 0.14);
+  border: 1px solid #6e3331;
+  color: #f0a3a1;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pf-sell:hover {
+  background: rgba(239, 83, 80, 0.26);
+}
+/* Closed positions + transaction log */
+.pf-section {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.pf-sechead {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.pf-closed {
+  padding: 6px 4px;
+  border-bottom: 1px solid #161922;
+  cursor: pointer;
+}
+.pf-closed:hover {
+  background: var(--panel-2);
+}
+.pf-closed-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.pf-cz {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pf-closed-sub {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.pf-txn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  font-size: 12px;
+  border-bottom: 1px solid #161922;
+}
+.pf-txn-side {
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.pf-txn-side.buy {
+  background: rgba(38, 166, 154, 0.18);
+  color: var(--up);
+}
+.pf-txn-side.sell {
+  background: rgba(239, 83, 80, 0.18);
+  color: var(--down);
+}
+.pf-txn-date {
+  margin-left: auto;
+  font-size: 11px;
+}
+
 .pf-card {
   padding: 8px;
   border-radius: 7px;

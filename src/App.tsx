@@ -3,7 +3,7 @@ import { Chart, IndicatorSettings } from './components/Chart';
 import { IndicatorParams, DEFAULT_PARAMS } from './indicators/calc';
 import { SymbolSearch } from './components/SymbolSearch';
 import { Watchlist } from './components/Watchlist';
-import { Portfolio, Holding } from './components/Portfolio';
+import { Portfolio, Holding, Txn, deriveLedger } from './components/Portfolio';
 import { IndicatorMenu } from './components/IndicatorMenu';
 import { Trades } from './components/Trades';
 // Heavy, on-demand modals → split into their own chunks (faster first load).
@@ -133,7 +133,26 @@ export default function App() {
   const [watchAdded, setWatchAdded] = useState<Record<string, { t: number; p: number }>>(() =>
     lsGet('borsaWatchAdded', {}),
   );
-  const [portfolio, setPortfolio] = useState<Holding[]>(() => lsGet('borsaPortfolio', []));
+  // Portfolio is a transaction ledger (source of truth); open positions + closed
+  // trades + realized P&L are derived from it.
+  const [txns, setTxns] = useState<Txn[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('borsaTxns') || 'null');
+      if (Array.isArray(raw)) return raw as Txn[];
+    } catch {
+      /* ignore */
+    }
+    try {
+      const old = JSON.parse(localStorage.getItem('borsaPortfolio') || 'null'); // migrate legacy holdings
+      if (Array.isArray(old))
+        return old.map((h: Holding, i: number) => ({ id: 'mig' + i, t: Math.floor(Date.now() / 1000), symbol: h.symbol, side: 'buy' as const, qty: h.qty, price: h.cost }));
+    } catch {
+      /* ignore */
+    }
+    return [];
+  });
+  const ledger = useMemo(() => deriveLedger(txns), [txns]);
+  const portfolio = ledger.open;
   const [customStrats, setCustomStrats] = useState<CustomStrategy[]>(() => lsGet('borsaStrats', []));
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
     lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true, bollinger: false, donchian: false, adx: false, roc: false }),
@@ -170,7 +189,7 @@ export default function App() {
       return changed ? n : m;
     });
   }, [quotes, watchlist]);
-  useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
+  useEffect(() => localStorage.setItem('borsaTxns', JSON.stringify(txns)), [txns]);
   useEffect(() => localStorage.setItem('borsaStrats', JSON.stringify(customStrats)), [customStrats]);
   // Register custom strategies so the chart/trades can draw them by name (using
   // the user's indicator periods for MACD etc.). Done during render (not in an
@@ -532,27 +551,20 @@ export default function App() {
               </div>
               {leftTab === 'portfolio' ? (
                 <Portfolio
-                  holdings={portfolio}
+                  txns={txns}
+                  positions={portfolio}
+                  closed={ledger.closed}
+                  realized={ledger.realized}
                   quotes={quotes}
                   spark={spark}
                   symbols={symbols}
-                  onAdd={(h) =>
-                    setPortfolio((p) => {
-                      // Merge into an existing lot at weighted-average cost instead
-                      // of creating a duplicate card (which would split the slice and
-                      // show only the first lot's cost line).
-                      const i = p.findIndex((x) => x.symbol === h.symbol);
-                      if (i < 0) return [...p, h];
-                      const cur = p[i];
-                      const tq = cur.qty + h.qty;
-                      const merged: Holding = { symbol: h.symbol, qty: tq, cost: tq > 0 ? (cur.qty * cur.cost + h.qty * h.cost) / tq : h.cost };
-                      return p.map((x, idx) => (idx === i ? merged : x));
-                    })
-                  }
-                  onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
+                  onAddTxn={(t) => setTxns((x) => [...x, t])}
+                  onRemoveTxn={(id) => setTxns((x) => x.filter((t) => t.id !== id))}
                   onSelect={selectSymbol}
                   onAnalyze={() => setShowAnalysis(true)}
-                  onImport={(h) => setPortfolio(h)}
+                  onImport={(h) =>
+                    setTxns(h.map((x, i) => ({ id: 'imp' + Date.now().toString(36) + i, t: Math.floor(Date.now() / 1000), symbol: x.symbol, side: 'buy' as const, qty: x.qty, price: x.cost })))
+                  }
                 />
               ) : (
                 <Trades
