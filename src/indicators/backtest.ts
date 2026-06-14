@@ -404,9 +404,78 @@ export function optimize(c: Candles): { results: StrategyResult[]; holdPct: numb
   return { results: out, holdPct, holdAnn };
 }
 
+// Strategies discovered via the optimizer get registered here so the chart and
+// trades panel can redraw them by name (they aren't in the static registry).
+const customStrategies: StrategyDef[] = [];
+export function registerCustomStrategy(def: StrategyDef): void {
+  if (!customStrategies.some((d) => d.name === def.name)) customStrategies.push(def);
+}
+
 export function buildPositionByName(name: string, c: Candles): Uint8Array | null {
-  const d = strategyList().find((d) => d.name === name);
+  const d = strategyList().find((d) => d.name === name) || customStrategies.find((d) => d.name === name);
   return d ? d.build(c) : null;
+}
+
+// ── Parameter optimizer (per-symbol): sweep a family and rank by annualized ───
+export function optFamilies(): string[] {
+  return ['Supertrend (ATR)', 'Williams %R > eşik', 'EMA kesişimi', 'Paşa Birleşik (%R+EMA+ST)'];
+}
+
+function prAbove(c: Candles, len: number, th: number): Uint8Array {
+  const pr = prArr(c, len);
+  const n = c.length;
+  const p = new Uint8Array(n);
+  for (let i = 0; i < n; i++) p[i] = Number.isFinite(pr[i]) && pr[i] > th ? 1 : 0;
+  return p;
+}
+
+function pasaVariant(c: Candles, th: number, emaP: number): Uint8Array {
+  const pr = prArr(c, 260);
+  const ef = emaArr(c.close, emaP);
+  const st = supertrend(c, 10, 3);
+  const n = c.length;
+  const p = new Uint8Array(n);
+  let cur = 0;
+  for (let i = 0; i < n; i++) {
+    if (cur === 0) {
+      if (Number.isFinite(pr[i]) && pr[i] > th && c.close[i] > ef[i] && st[i] === 1) cur = 1;
+    } else if (Number.isFinite(pr[i]) && pr[i] < th) {
+      cur = 0;
+    }
+    p[i] = cur;
+  }
+  return p;
+}
+
+function paramVariants(family: string): StrategyDef[] {
+  const defs: StrategyDef[] = [];
+  if (family === 'Supertrend (ATR)') {
+    for (const len of [7, 10, 14, 20]) for (const mult of [2, 3, 4]) defs.push({ name: `Supertrend ${len}/${mult}`, build: (c) => supertrend(c, len, mult) });
+  } else if (family === 'Williams %R > eşik') {
+    for (const len of [50, 100, 260]) for (const th of [40, 50, 60]) defs.push({ name: `%R ${len} > ${th}`, build: (c) => prAbove(c, len, th) });
+  } else if (family === 'EMA kesişimi') {
+    for (const [a, b] of [[9, 21], [20, 50], [50, 100], [50, 200], [89, 377], [100, 200]]) defs.push(emaCross(a, b));
+  } else if (family === 'Paşa Birleşik (%R+EMA+ST)') {
+    for (const th of [50, 55, 60]) for (const emaP of [200, 377, 610]) defs.push({ name: `Paşa %R>${th} + EMA${emaP} + ST`, build: (c) => pasaVariant(c, th, emaP) });
+  }
+  return defs;
+}
+
+export interface OptResult {
+  name: string;
+  res: StrategyResult;
+  def: StrategyDef;
+}
+
+export function optimizeFamily(c: Candles, family: string): OptResult[] {
+  const close = c.close;
+  const n = c.length;
+  const holdPct = n > 1 ? (close[n - 1] / close[0] - 1) * 100 : 0;
+  const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
+  const holdAnn = years > 0 && close[0] > 0 ? (Math.pow(close[n - 1] / close[0], 1 / years) - 1) * 100 : 0;
+  const out = paramVariants(family).map((d) => ({ name: d.name, def: d, res: simulate(close, d.build(c), holdPct, holdAnn, d.name, years) }));
+  out.sort((a, b) => b.res.annPct - a.res.annPct);
+  return out;
 }
 
 export interface Trade {

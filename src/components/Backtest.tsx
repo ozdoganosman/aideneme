@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Candles } from '../data/types';
-import { optimize, StrategyResult, explainStrategy } from '../indicators/backtest';
+import { optimize, StrategyResult, explainStrategy, optimizeFamily, optFamilies, registerCustomStrategy, OptResult } from '../indicators/backtest';
 import { fetchStrategies, StrategiesFile, TopCombo } from '../data/bistStatic';
 
 interface Props {
@@ -18,7 +18,12 @@ export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrat
   const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number; holdAnn: number } | null>(null);
   const [market, setMarket] = useState<StrategiesFile | null>(null);
   const [marketLoaded, setMarketLoaded] = useState(false);
-  const [tab, setTab] = useState<'market' | 'top' | 'symbol'>('market');
+  const [tab, setTab] = useState<'market' | 'top' | 'symbol' | 'opt'>('market');
+  const [optFamily, setOptFamily] = useState(optFamilies()[0]);
+  const optResults = useMemo<OptResult[]>(
+    () => (tab === 'opt' ? optimizeFamily(candles, optFamily) : []),
+    [tab, optFamily, candles],
+  );
 
   useEffect(() => {
     setData(null);
@@ -43,6 +48,12 @@ export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrat
     onClose();
   };
 
+  const pickOpt = (r: OptResult) => {
+    registerCustomStrategy(r.def);
+    onSelect(r.name);
+    onClose();
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -60,6 +71,9 @@ export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrat
           </button>
           <button className={tab === 'symbol' ? 'active' : ''} onClick={() => setTab('symbol')}>
             📈 {symbol}
+          </button>
+          <button className={tab === 'opt' ? 'active' : ''} onClick={() => setTab('opt')}>
+            🔧 Optimize
           </button>
         </div>
 
@@ -87,11 +101,51 @@ export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrat
             </div>
           </details>
 
-          {tab === 'market'
-            ? renderMarket(market, marketLoaded, pick)
-            : tab === 'top'
-              ? renderTop(market, marketLoaded, pickCombo)
-              : renderSymbol(data, pick, candles.length)}
+          {tab === 'market' ? (
+            renderMarket(market, marketLoaded, pick)
+          ) : tab === 'top' ? (
+            renderTop(market, marketLoaded, pickCombo)
+          ) : tab === 'opt' ? (
+            <>
+              <p className="bt-intro">
+                <b>{symbol}</b> üzerinde bir gösterge ailesinin parametrelerini tarar ve en yüksek <b>yıllık</b> getiriyi
+                veren ayarı bulur. Bir satıra <b>tıkla</b> → grafikte uygula.
+              </p>
+              <div className="scr-build" style={{ marginBottom: 4 }}>
+                <label className="scr-pick">
+                  Aile
+                  <select value={optFamily} onChange={(e) => setOptFamily(e.target.value)}>
+                    {optFamilies().map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="lg-muted">{optResults.length} kombinasyon denendi</span>
+              </div>
+              <div className="bt-list">
+                {optResults.slice(0, 15).map((r, i) => (
+                  <div key={r.name} className="bt-srow clickable" onClick={() => pickOpt(r)} title="Grafikte uygula">
+                    <div className="bt-srow-head">
+                      <span className="bt-rank">{i + 1}</span>
+                      <span className="bt-srow-name">{r.name}</span>
+                      <span className={'bt-srow-val ' + (r.res.annPct >= 0 ? 'up' : 'down')}>
+                        {fmtPct(r.res.annPct)}
+                        <span className="bt-tag">yıl</span>
+                      </span>
+                    </div>
+                    <div className="bt-srow-sub">
+                      toplam {fmtX(r.res.retPct)} · {r.res.trades} işlem · Kazanma %{r.res.winRate.toFixed(0)} · DD -
+                      {r.res.maxDD.toFixed(0)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            renderSymbol(data, pick, candles.length)
+          )}
           <div className="bt-hint">
             Çubuk = <b>yıllık getiri</b> (gün başına kâra göre normalize — uzun sürede biriken büyük toplamlar artık
             haksız öne çıkmıyor). Bir stratejiye <b>tıkla</b> → grafikte AL/SAT noktaları işaretlenir.
