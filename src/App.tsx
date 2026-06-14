@@ -81,15 +81,18 @@ function dragSheet(e: RPointerEvent<HTMLElement>, close: () => void): void {
     sheet.style.transition = 'none';
     sheet.style.transform = `translateY(${dy}px)`;
   };
-  const up = () => {
+  const up = (ev?: globalThis.PointerEvent) => {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
     sheet.style.transition = '';
     sheet.style.transform = '';
-    if (dy > 90) close();
+    // Don't close on pointercancel (gesture interrupted), only on a real release.
+    if (dy > 90 && ev?.type !== 'pointercancel') close();
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
 }
 
 export default function App() {
@@ -140,6 +143,9 @@ export default function App() {
   const abortRef = useRef<AbortController | null>(null);
   const dailyRef = useRef<Candles | null>(null);
   const firstRef = useRef(true);
+  const loadingRef = useRef(false); // true while a load is in flight (for changeTf)
+  const tfRef = useRef(tf); // latest timeframe, read at load-resolve time (avoids stale capture)
+  tfRef.current = tf;
   const lastKeyRef = useRef<string | null>(null);
 
   useEffect(() => localStorage.setItem('borsaWatchLists', JSON.stringify(lists)), [lists]);
@@ -184,10 +190,10 @@ export default function App() {
     async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
       const prov = opts?.provider ?? provider;
       const sym = (opts?.symbol ?? symbol).toUpperCase().trim();
-      const tframe = opts?.tf ?? tf;
       if (prov === 'bist' && !sym) return;
 
       setLoading(true);
+      loadingRef.current = true;
       setError(null);
       setStatus('Yükleniyor…');
       setFocusTrade(null);
@@ -196,16 +202,21 @@ export default function App() {
       abortRef.current = ac;
       try {
         let c: Candles;
+        let key: string;
         if (prov === 'synthetic') {
           await new Promise((r) => setTimeout(r, 0));
+          if (ac.signal.aborted) return; // a newer load superseded this one
           c = generateSynthetic(sym || 'SYNTH', SYNTH_BARS, 60);
           dailyRef.current = null;
+          key = 'synthetic';
         } else {
           const daily = await fetchBistStatic(sym, ac.signal);
+          if (ac.signal.aborted) return;
           dailyRef.current = daily;
+          const tframe = opts?.tf ?? tfRef.current; // latest tf at resolve time
           c = resample(daily, tframe);
+          key = `bist|${tframe}`;
         }
-        const key = prov === 'synthetic' ? 'synthetic' : `bist|${tframe}`;
         setFitOnLoad(firstRef.current || key !== lastKeyRef.current);
         firstRef.current = false;
         lastKeyRef.current = key;
@@ -216,16 +227,24 @@ export default function App() {
         setError((e as Error)?.message ?? String(e));
         setStatus('Hata');
       } finally {
-        setLoading(false);
+        // Only the still-current load resets the flags (an aborted/superseded
+        // load must not flip loading off while a newer one is running).
+        if (abortRef.current === ac) {
+          setLoading(false);
+          loadingRef.current = false;
+        }
       }
     },
-    [provider, symbol, tf],
+    [provider, symbol],
   );
 
   const changeTf = (newTf: TF) => {
     setTf(newTf);
     setFocusTrade(null);
     if (provider !== 'bist' || !dailyRef.current) return;
+    // A symbol load is in flight → don't resample the PREVIOUS symbol's daily;
+    // the in-flight load resolves with the new symbol at the latest tf (tfRef).
+    if (loadingRef.current) return;
     const c = resample(dailyRef.current, newTf);
     setFitOnLoad(true);
     lastKeyRef.current = `bist|${newTf}`;
@@ -517,7 +536,19 @@ export default function App() {
                   quotes={quotes}
                   spark={spark}
                   symbols={symbols}
-                  onAdd={(h) => setPortfolio((p) => [...p, h])}
+                  onAdd={(h) =>
+                    setPortfolio((p) => {
+                      // Merge into an existing lot at weighted-average cost instead
+                      // of creating a duplicate card (which would split the slice and
+                      // show only the first lot's cost line).
+                      const i = p.findIndex((x) => x.symbol === h.symbol);
+                      if (i < 0) return [...p, h];
+                      const cur = p[i];
+                      const tq = cur.qty + h.qty;
+                      const merged: Holding = { symbol: h.symbol, qty: tq, cost: tq > 0 ? (cur.qty * cur.cost + h.qty * h.cost) / tq : h.cost };
+                      return p.map((x, idx) => (idx === i ? merged : x));
+                    })
+                  }
                   onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
                   onSelect={selectSymbol}
                   onAnalyze={() => setShowAnalysis(true)}
