@@ -42,13 +42,13 @@ export const INDS: IndDef[] = [
   { key: 'signal', label: 'Signal', hasParam: false, defParam: 0 },
   { key: 'emacd', label: 'eMACD', hasParam: false, defParam: 0 },
   { key: 'stdir', label: 'Supertrend yön (1=yukarı)', hasParam: false, defParam: 0 },
-  { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 14 },
-  { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 252 },
-  { key: 'donhi', label: 'Donchian üst (N gün)', hasParam: true, defParam: 20 },
-  { key: 'donlo', label: 'Donchian alt (N gün)', hasParam: true, defParam: 10 },
-  { key: 'bbup', label: 'Bollinger üst (N,2σ)', hasParam: true, defParam: 20 },
-  { key: 'bbmid', label: 'Bollinger orta (SMA N)', hasParam: true, defParam: 20 },
-  { key: 'bbdn', label: 'Bollinger alt (N,2σ)', hasParam: true, defParam: 20 },
+  { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 260 },
+  { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 260 },
+  { key: 'donhi', label: 'Donchian üst (N gün)', hasParam: true, defParam: 260 },
+  { key: 'donlo', label: 'Donchian alt (N gün)', hasParam: true, defParam: 260 },
+  { key: 'bbup', label: 'Bollinger üst (N,2σ)', hasParam: true, defParam: 260 },
+  { key: 'bbmid', label: 'Bollinger orta (SMA N)', hasParam: true, defParam: 260 },
+  { key: 'bbdn', label: 'Bollinger alt (N,2σ)', hasParam: true, defParam: 260 },
 ];
 
 export const OPS: { key: Op; label: string }[] = [

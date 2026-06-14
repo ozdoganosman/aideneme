@@ -219,9 +219,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const donHi = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian üst'), 0);
     const donLo = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian alt'), 0);
     // ADX (14) pane + ROC (100) pane — collapsed unless toggled on.
-    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, 'ADX (14)'), 3);
+    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, 'ADX (260)'), 3);
     adx.createPriceLine({ price: 25, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '25' });
-    const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, 'ROC (100)'), 4);
+    const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, 'ROC (260)'), 4);
     roc.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
     const panes = chart.panes();
@@ -577,27 +577,27 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             {settings.bollinger && (
               <>
                 {'  '}
-                <span style={{ color: '#5c9ded' }}>BB (20) {fp(legend.bbUp)}/{fp(legend.bbMid)}/{fp(legend.bbDn)}</span>
+                <span style={{ color: '#5c9ded' }}>BB (260) {fp(legend.bbUp)}/{fp(legend.bbMid)}/{fp(legend.bbDn)}</span>
               </>
             )}
             {settings.donchian && (
               <>
                 {'  '}
-                <span style={{ color: '#d9a441' }}>Donchian (20) {fp(legend.donHi)}/{fp(legend.donLo)}</span>
+                <span style={{ color: '#d9a441' }}>Donchian (260) {fp(legend.donHi)}/{fp(legend.donLo)}</span>
               </>
             )}
           </div>
 
           {settings.adx && tops[3] != null && (
             <div className="pane-legend" style={{ top: tops[3] + 6 }}>
-              <span style={{ color: '#ab47bc' }}>ADX (14)</span> {fn(legend.adx, 1)}{' '}
+              <span style={{ color: '#ab47bc' }}>ADX (260)</span> {fn(legend.adx, 1)}{' '}
               <span className="lg-muted">{legend.adx >= 25 ? '· güçlü trend' : '· zayıf/yatay'}</span>
             </div>
           )}
 
           {settings.roc && tops[4] != null && (
             <div className="pane-legend" style={{ top: tops[4] + 6 }}>
-              <span style={{ color: '#26c6da' }}>Momentum / ROC (100)</span> {fn(legend.roc, 1)}%
+              <span style={{ color: '#26c6da' }}>Momentum / ROC (260)</span> {fn(legend.roc, 1)}%
             </div>
           )}
 

@@ -165,14 +165,15 @@ export interface ExtraBundle {
   roc: Float64Array;
 }
 export function computeExtras(c: Candles): ExtraBundle {
+  // All on the app's 260-day (≈1 yıl) paradigm, like Williams %R 260 / EMA 377-610.
   return {
-    bbUp: bollingerBand(c, 20, 'up'),
-    bbMid: bollingerBand(c, 20, 'mid'),
-    bbDn: bollingerBand(c, 20, 'dn'),
-    donHi: donchianBound(c, 20, true),
-    donLo: donchianBound(c, 20, false),
-    adx: adxArr(c, 14),
-    roc: rocArr(c.close, 100),
+    bbUp: bollingerBand(c, 260, 'up'),
+    bbMid: bollingerBand(c, 260, 'mid'),
+    bbDn: bollingerBand(c, 260, 'dn'),
+    donHi: donchianBound(c, 260, true),
+    donLo: donchianBound(c, 260, false),
+    adx: adxArr(c, 260),
+    roc: rocArr(c.close, 260),
   };
 }
 
