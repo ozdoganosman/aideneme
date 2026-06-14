@@ -375,10 +375,11 @@ button.ctl:disabled {
   font-size: 12px;
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
-  background: rgba(14, 15, 19, 0.6);
+  background: rgba(14, 15, 19, 0.74);
+  backdrop-filter: blur(4px);
   border: 1px solid #1c1f2a;
   border-radius: 7px;
-  padding: 5px 9px;
+  padding: 6px 10px;
 }
 
 /* Trade focus card (over the chart) */
@@ -388,7 +389,8 @@ button.ctl:disabled {
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
-  background: rgba(20, 23, 31, 0.96);
+  background: rgba(20, 23, 31, 0.92);
+  backdrop-filter: blur(4px);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 30px 8px 12px;
@@ -745,12 +747,17 @@ button.ctl:disabled {
 /* ---- Status bar ---- */
 .status {
   display: flex;
-  gap: 18px;
+  align-items: center;
+  gap: 16px;
   padding: 6px 12px;
   background: var(--panel);
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.status > :last-child {
+  margin-left: auto;
 }
 
 /* ---- Body: sidebar + main ---- */
