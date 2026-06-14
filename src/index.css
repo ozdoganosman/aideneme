@@ -34,6 +34,17 @@
   box-sizing: border-box;
 }
 
+::selection {
+  background: var(--accent-weak);
+}
+
+.ctl:focus-visible,
+.seg button:focus-visible,
+.bt-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 html,
 body,
 #root {
@@ -542,6 +553,7 @@ button.ctl:disabled {
 .bt-tabs button.active {
   color: #fff;
   border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
 .bt-intro {
@@ -604,6 +616,7 @@ button.ctl:disabled {
 }
 .bt-srow.clickable:hover {
   background: var(--panel-2);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .bt-srow-head {
   display: flex;
@@ -611,10 +624,18 @@ button.ctl:disabled {
   gap: 8px;
 }
 .bt-rank {
-  width: 18px;
-  text-align: right;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 700;
 }
 .bt-srow-name {
   flex: 1;
@@ -636,7 +657,7 @@ button.ctl:disabled {
 }
 .bt-barwrap {
   height: 6px;
-  margin: 4px 0 0 26px;
+  margin: 4px 0 0 28px;
   background: #1a1d27;
   border-radius: 3px;
   overflow: hidden;
@@ -652,13 +673,13 @@ button.ctl:disabled {
   background: linear-gradient(90deg, #b23b3f, #ef5350);
 }
 .bt-srow-sub {
-  margin: 3px 0 0 26px;
+  margin: 3px 0 0 28px;
   color: var(--muted);
   font-size: 11px;
 }
 .bt-srow-explain {
-  margin: 2px 0 0 26px;
-  color: #6b7280;
+  margin: 2px 0 0 28px;
+  color: #79808f;
   font-size: 11px;
   line-height: 1.4;
 }
