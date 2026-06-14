@@ -2510,6 +2510,85 @@ button.ctl:disabled {
     background: var(--accent-weak);
     box-shadow: inset 0 2px 0 var(--accent);
   }
+
+  /* ── New panels: phone-friendly ───────────────────────────────────────── */
+  /* Risk grid → 2 columns instead of 4 */
+  .pa-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Indicator menu (with period inputs): fit screen + scroll */
+  .ind-pop {
+    min-width: 0;
+    width: min(92vw, 360px);
+    max-width: 92vw;
+    max-height: 62vh;
+    overflow-y: auto;
+  }
+  .ind-num {
+    width: 54px;
+    padding: 5px 6px;
+  }
+  .ind-tog {
+    flex: 1 0 50%;
+  }
+
+  /* Screener filter builders: bigger tap targets, sensible wrapping */
+  .scr-build {
+    gap: 6px;
+  }
+  .scr-build select,
+  .scr-build input {
+    font-size: 13px;
+    padding: 7px 8px;
+  }
+  .scr-pick {
+    flex: 1 1 100%;
+  }
+  .scr-pick select {
+    flex: 1;
+  }
+  .scr-build .scr-add {
+    flex: 1 1 auto;
+  }
+
+  /* Optimizer result rows wrap; keep "Kullan" reachable */
+  .opt-row {
+    flex-wrap: wrap;
+  }
+  .opt-use {
+    margin-left: auto;
+  }
+
+  /* Strategy builder condition rows: tap-friendly */
+  .cond select {
+    flex: 1 1 30%;
+    min-width: 0;
+  }
+  .cond select,
+  .cond input {
+    padding: 7px 7px;
+    font-size: 13px;
+  }
+  .cond-p {
+    flex: 0 0 56px;
+    width: 56px;
+  }
+  .cond-v {
+    flex: 0 0 76px;
+    width: 76px;
+  }
+
+  /* Drawing toolbar: larger touch targets */
+  .draw-tools {
+    top: 30px;
+    padding: 5px;
+  }
+  .draw-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
 }
 
 /* Landscape phones (short): hide the symbol header + stats to give chart height */
