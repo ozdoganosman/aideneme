@@ -36,7 +36,6 @@ export class LodController {
   private win = { i0: 0, i1: 0, stride: 1 };
   private raf = 0;
   private hasView = false; // becomes true after the first render
-  private decLen = 0; // length of the currently rendered (decimated) series
   private bandSegs: { a: number; b: number }[] = []; // per-trade P&L band ranges
 
   constructor(
@@ -49,20 +48,17 @@ export class LodController {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
   }
 
-  // fit=true frames the latest bars; fit=false preserves the current zoom (visible
-  // bar count) and the gap from the right edge (used when only the symbol changes).
+  // fit=true frames the latest bars; fit=false keeps the same DATE window when
+  // only the symbol changes (robust to differing history lengths — bar-count
+  // preserve made shorter/longer symbols "spread" across the screen).
   setData(full: Candles, extraVals: Float64Array[], fit = true) {
     // New dataset → drop any P&L bands from the previous symbol/strategy.
     this.bandSegs = [];
     for (const b of this.bandPool) b.setData([]);
-    let preserve: { visReal: number; gapReal: number } | null = null;
+    let keep: { from: number; to: number } | null = null;
     if (!fit && this.hasView && this.full) {
-      const lr = this.chart.timeScale().getVisibleLogicalRange();
-      if (lr) {
-        const visReal = Math.max(1, (lr.to - lr.from) * this.win.stride);
-        const gapReal = (this.decLen - lr.to) * this.win.stride; // bars from view-right to data end
-        preserve = { visReal, gapReal };
-      }
+      const vr = this.chart.timeScale().getVisibleRange();
+      if (vr) keep = { from: vr.from as number, to: vr.to as number };
     }
 
     this.full = full;
@@ -75,8 +71,8 @@ export class LodController {
       return;
     }
 
-    if (preserve) {
-      this.renderForView(preserve.visReal, preserve.gapReal);
+    if (keep) {
+      this.focusRange(keep.from, keep.to, 0); // same date window, no padding
     } else {
       const show = Math.min(400, full.length);
       this.renderWindow(full.length - show, full.length, true);
@@ -84,61 +80,17 @@ export class LodController {
     this.hasView = true;
   }
 
-  // Render the new dataset keeping the same zoom (visReal bars across the view)
-  // and the same distance from the right edge (gapReal).
-  private renderForView(visReal: number, gapReal: number) {
-    if (!this.full) return;
-    const len = this.full.length;
-    // Clamp to the NEW dataset: switching from a scrolled-back large symbol to a
-    // shorter one could otherwise make toReal/fromReal negative → blank viewport.
-    gapReal = Math.max(0, Math.min(gapReal, len - 1));
-    visReal = Math.max(1, Math.min(visReal, len));
-    const toReal = len - gapReal;
-    const fromReal = Math.max(0, toReal - visReal);
-    const stride = strideFor(visReal, this.targetBuckets);
-    const margin = Math.max(visReal, this.targetBuckets);
-    let w0 = Math.floor(fromReal - margin);
-    let w1 = Math.ceil(toReal + margin);
-    if (w0 < 0) w0 = 0;
-    if (w1 > len) w1 = len;
-
-    const { candles, volumes } = decimate(this.full, w0, w1, stride);
-    if (candles.length === 0) {
-      const show = Math.min(400, len);
-      this.renderWindow(len - show, len, true);
-      return;
-    }
-
-    this.applying = true;
-    this.candle.setData(candles);
-    this.volume.setData(volumes);
-    for (let k = 0; k < this.extras.length; k++) {
-      const vals = this.extraVals[k];
-      if (!vals) continue;
-      this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
-    }
-    this.win = { i0: w0, i1: w1, stride };
-    this.decLen = candles.length;
-    this.renderBands();
-    // Map the desired real-index viewport into decimated logical coordinates.
-    this.chart.timeScale().setVisibleLogicalRange({
-      from: (fromReal - w0) / stride,
-      to: (toReal - w0) / stride,
-    });
-    requestAnimationFrame(() => {
-      this.applying = false;
-    });
-  }
-
-  // Zoom to a specific date range at full detail (used to inspect one trade).
-  focusRange(t0: number, t1: number) {
+  // Zoom to a specific date range (used to inspect one trade, and to keep the
+  // same date window when only the symbol changes). padFrac=0 → exact window.
+  focusRange(t0: number, t1: number, padFrac = 0.3) {
     if (!this.full || this.full.length === 0) return;
     const len = this.full.length;
     const i0 = lb(this.full.time, t0);
     let i1 = lb(this.full.time, t1);
+    if (i1 > len - 1) i1 = len - 1;
     if (i1 < i0) i1 = i0;
     const span = Math.max(2, i1 - i0);
-    const pad = Math.max(3, Math.round(span * 0.3));
+    const pad = padFrac > 0 ? Math.max(3, Math.round(span * padFrac)) : 0;
     const visLo = Math.max(0, i0 - pad);
     const visHi = Math.min(len - 1, i1 + pad);
     const stride = strideFor(visHi - visLo + 1, this.targetBuckets);
@@ -160,7 +112,6 @@ export class LodController {
       this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
     }
     this.win = { i0: w0, i1: w1, stride };
-    this.decLen = candles.length;
     this.renderBands();
     this.chart.timeScale().setVisibleRange({
       from: this.full.time[visLo] as UTCTimestamp,
@@ -223,7 +174,6 @@ export class LodController {
       this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
     }
     this.win = { i0: w0, i1: w1, stride };
-    this.decLen = candles.length;
     this.renderBands();
     this.chart.timeScale().setVisibleLogicalRange({
       from: (visLo - w0) / stride,
@@ -251,7 +201,6 @@ export class LodController {
       this.extras[k].series.setData(buildExtra(this.full, vals, i0, i1, s, this.extras[k]) as never);
     }
     this.win = { i0, i1, stride: s };
-    this.decLen = candles.length;
     this.renderBands();
 
     if (fit) {
