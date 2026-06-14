@@ -2335,3 +2335,16 @@ button.ctl:disabled {
   border-color: var(--down);
   color: var(--down);
 }
+
+/* Strategy equity curve sparkline */
+.eq-wrap {
+  margin: 6px 0 0 28px;
+}
+.eq-spark {
+  display: block;
+  width: 100%;
+  height: 34px;
+  background: #12151c;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}

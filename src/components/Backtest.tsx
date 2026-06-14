@@ -40,14 +40,19 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
   const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
   const [scan, setScan] = useState<{ rows: Combo[]; done: number; total: number; running: boolean } | null>(null);
 
-  // Backtest each saved strategy on the current symbol.
+  // Backtest each saved strategy on the current symbol (+ equity curve).
   const results = useMemo(
     () =>
       strats
-        .map((s) => ({ s, r: evalPosition(candles, buildCustomPosition(candles, s)) }))
+        .map((s) => {
+          const pos = buildCustomPosition(candles, s);
+          return { s, r: evalPosition(candles, pos), eq: equitySpark(candles.close, pos) };
+        })
         .sort((a, b) => b.r.annPct - a.r.annPct),
     [strats, candles],
   );
+  const maxAnn = Math.max(...results.map((x) => Math.abs(x.r.annPct)), 1);
+  const topMax = scan ? Math.max(...scan.rows.map((t) => Math.abs(t.ann)), 1) : 1;
 
   const setBuy = (buy: Cond[]) => setDraft((d) => ({ ...d, buy }));
   const setSell = (sell: Cond[]) => setDraft((d) => ({ ...d, sell }));
@@ -167,7 +172,7 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                 <div className="bt-note">Henüz strateji yok. Yukarıdan koşulları seçip kaydet.</div>
               ) : (
                 <div className="bt-list">
-                  {results.map(({ s, r }, i) => (
+                  {results.map(({ s, r, eq }, i) => (
                     <div key={s.id} className="bt-srow">
                       <div className="bt-srow-head">
                         <span className="bt-rank">{i + 1}</span>
@@ -177,9 +182,15 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                           <span className="bt-tag">yıl</span>
                         </span>
                       </div>
+                      <div className="bt-barwrap">
+                        <div className={'bt-bar ' + (r.annPct >= 0 ? 'pos' : 'neg')} style={{ width: barW(r.annPct, maxAnn) }} />
+                      </div>
                       <div className="bt-srow-sub">
                         toplam {fmtX(r.retPct)} · {r.trades} işlem · Kazanma %{r.winRate.toFixed(0)} · Düşüş -
                         {r.maxDD.toFixed(0)}%
+                      </div>
+                      <div className="eq-wrap" title="Sermaye eğrisi (1₺ stratejiyle nasıl büyürdü)">
+                        <EquitySpark data={eq} />
                       </div>
                       <div className="bt-srow-explain">{describe(s)}</div>
                       <div className="sb-rowbtns">
@@ -226,6 +237,9 @@ export function Backtest({ candles, symbol, universe, strats, onSave, onApply, o
                             {fmtPct(t.ann)}
                             <span className="bt-tag">yıl</span>
                           </span>
+                        </div>
+                        <div className="bt-barwrap">
+                          <div className={'bt-bar ' + (t.ann >= 0 ? 'pos' : 'neg')} style={{ width: barW(t.ann, topMax) }} />
                         </div>
                         <div className="bt-srow-sub">
                           toplam {fmtX(t.ret)} · {t.trades} işlem · Kazanma %{t.win.toFixed(0)} · Düşüş -{t.dd.toFixed(0)}%
@@ -332,4 +346,40 @@ function fmtX(r: number): string {
 function fmtPct(r: number): string {
   if (!isFinite(r)) return '—';
   return (r >= 0 ? '+' : '') + (Math.abs(r) < 10 ? r.toFixed(1) : Math.round(r).toString()) + '%';
+}
+function barW(v: number, max: number): string {
+  return Math.max(3, Math.min(100, (Math.abs(v) / max) * 100)) + '%';
+}
+
+// Downsampled equity curve (1 unit compounded only while the strategy holds).
+function equitySpark(close: Float64Array, pos: Uint8Array, points = 90): number[] {
+  const n = close.length;
+  if (n < 2) return [];
+  const step = Math.max(1, Math.floor(n / points));
+  const out: number[] = [];
+  let e = 1;
+  for (let i = 1; i < n; i++) {
+    if (pos[i - 1]) e *= close[i] / close[i - 1];
+    if (i % step === 0) out.push(e);
+  }
+  out.push(e);
+  return out;
+}
+
+function EquitySpark({ data }: { data: number[] }) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data, 1);
+  const max = Math.max(...data, 1);
+  const rng = max - min || 1;
+  const W = 300;
+  const H = 34;
+  const y = (v: number) => (H - 1 - ((v - min) / rng) * (H - 2)).toFixed(1);
+  const pts = data.map((v, i) => `${((i / (data.length - 1)) * (W - 2) + 1).toFixed(1)},${y(v)}`).join(' ');
+  const up = data[data.length - 1] >= 1;
+  return (
+    <svg className="eq-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+      <line x1="0" y1={y(1)} x2={W} y2={y(1)} stroke="#3a4150" strokeWidth="1" strokeDasharray="3 3" />
+      <polyline points={pts} fill="none" stroke={up ? '#26a69a' : '#ef5350'} strokeWidth="1.6" />
+    </svg>
+  );
 }
