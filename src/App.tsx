@@ -6,6 +6,7 @@ import { Portfolio, Holding } from './components/Portfolio';
 import { IndicatorMenu } from './components/IndicatorMenu';
 import { Trades } from './components/Trades';
 import { Backtest } from './components/Backtest';
+import { PortfolioAnalysis } from './components/PortfolioAnalysis';
 import { computeStats } from './indicators/stats';
 import type { Trade } from './indicators/backtest';
 import { Candles, BIST_SYMBOLS } from './data/types';
@@ -45,6 +46,7 @@ export default function App() {
   const [symbols, setSymbols] = useState<string[]>(BIST_SYMBOLS);
   const [fitOnLoad, setFitOnLoad] = useState(true);
   const [showBt, setShowBt] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
@@ -345,6 +347,7 @@ export default function App() {
                   onAdd={(h) => setPortfolio((p) => [...p, h])}
                   onRemove={(i) => setPortfolio((p) => p.filter((_, idx) => idx !== i))}
                   onSelect={selectSymbol}
+                  onAnalyze={() => setShowAnalysis(true)}
                 />
               ) : (
                 <Trades
@@ -490,6 +493,15 @@ export default function App() {
             setLeftTab('trades');
             setShowLeft(true);
           }}
+        />
+      )}
+
+      {showAnalysis && (
+        <PortfolioAnalysis
+          holdings={portfolio}
+          quotes={quotes}
+          onClose={() => setShowAnalysis(false)}
+          onSelect={selectSymbol}
         />
       )}
     </div>

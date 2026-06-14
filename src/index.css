@@ -892,6 +892,136 @@ button.ctl:disabled {
   background: var(--accent);
   border-radius: 2px;
 }
+.pf-analyze {
+  width: 100%;
+  margin: 4px 0 8px;
+  padding: 8px;
+  background: var(--accent-weak);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  color: #cfe0ff;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pf-analyze:hover {
+  background: rgba(59, 130, 246, 0.26);
+}
+
+/* Portfolio analysis modal */
+.pa-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.pa-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.pa-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.pa-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.pa-grid .lg-muted {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.pa-verdict {
+  margin-top: 8px;
+  font-size: 12px;
+}
+.pa-verdict.warn,
+.warn {
+  color: #f59e0b;
+}
+.pa-portrisk {
+  font-size: 12px;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.pa-risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pa-risk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.pa-risk-sym {
+  font-weight: 700;
+  min-width: 56px;
+}
+.pa-risk-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+}
+.pa-risk-badge.low {
+  color: var(--up);
+  background: rgba(38, 166, 154, 0.14);
+}
+.pa-risk-badge.mid {
+  color: #f5d061;
+  background: rgba(245, 208, 97, 0.12);
+}
+.pa-risk-badge.high {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+}
+.pa-risk-badge.xhigh {
+  color: var(--down);
+  background: rgba(239, 83, 80, 0.16);
+}
+.pa-tech {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+.pa-tech:first-of-type {
+  border-top: none;
+}
+.pa-tech:hover .pa-tech-head b {
+  color: var(--accent);
+}
+.pa-tech-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.pa-lean {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+}
+.pa-bullets {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .pf-summary {
   margin-top: 8px;
   padding-top: 8px;

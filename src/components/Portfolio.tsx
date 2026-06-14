@@ -15,6 +15,7 @@ interface Props {
   onAdd: (h: Holding) => void;
   onRemove: (index: number) => void;
   onSelect: (s: string) => void;
+  onAnalyze: () => void;
 }
 
 // Stable per-holding colors — same color ties a card to its donut slice.
@@ -23,7 +24,7 @@ const PALETTE = [
   '#ec4899', '#f97316', '#84cc16', '#06b6d4', '#eab308', '#8b5cf6',
 ];
 
-export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, onSelect }: Props) {
+export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, onSelect, onAnalyze }: Props) {
   const [sym, setSym] = useState('');
   const [qty, setQty] = useState('');
   const [cost, setCost] = useState('');
@@ -132,6 +133,12 @@ export function Portfolio({ holdings, quotes, spark, symbols, onAdd, onRemove, o
 
       {holdings.length > 0 && totVal > 0 && (
         <Donut rows={rows} total={totVal} totDay={totDay} totDayPct={totDayPct} />
+      )}
+
+      {holdings.length > 0 && (
+        <button className="pf-analyze" onClick={onAnalyze} title="Risk, dağılım ve sade teknik analiz">
+          📊 Risk & Teknik Analiz
+        </button>
       )}
 
       {rows.map((r) => {
