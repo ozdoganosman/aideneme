@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Candles } from '../data/types';
 import { evalPosition } from '../indicators/backtest';
 import { fetchBistStatic, fetchScreener } from '../data/bistStatic';
@@ -312,6 +312,30 @@ function CondGroup({ label, conds, onChange }: { label: string; conds: Cond[]; o
   );
 }
 
+// Decimal-friendly value input: keeps the raw text so "0.", "0.00", "0.0083"
+// can be typed (a controlled number would strip the trailing dot/zeros).
+function ValInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [txt, setTxt] = useState(String(value));
+  useEffect(() => {
+    if (parseFloat(txt.replace(',', '.')) !== value) setTxt(Number.isFinite(value) ? String(value) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <input
+      className="cond-v"
+      value={txt}
+      inputMode="decimal"
+      placeholder="değer"
+      onChange={(e) => {
+        const raw = e.target.value;
+        setTxt(raw);
+        const v = parseFloat(raw.replace(',', '.'));
+        if (Number.isFinite(v)) onChange(v);
+      }}
+    />
+  );
+}
+
 function CondRow({ c, onChange, onRemove }: { c: Cond; onChange: (c: Cond) => void; onRemove: () => void }) {
   return (
     <div className="cond">
@@ -337,7 +361,7 @@ function CondRow({ c, onChange, onRemove }: { c: Cond; onChange: (c: Cond) => vo
         <option value="ind">Gösterge</option>
       </select>
       {c.tgt === 'val' ? (
-        <input className="cond-v" value={c.val} inputMode="decimal" onChange={(e) => onChange({ ...c, val: parseFloat(e.target.value.replace(',', '.')) || 0 })} />
+        <ValInput value={c.val} onChange={(v) => onChange({ ...c, val: v })} />
       ) : (
         <>
           <select value={c.ind2} onChange={(e) => onChange({ ...c, ind2: e.target.value })}>
