@@ -70,10 +70,45 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 8px 12px;
+  padding: 7px 12px;
   background: linear-gradient(180deg, #15181f, #11131a);
   border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+/* Inline price quote in the toolbar (merged symbol header) */
+.tb-quote {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  padding-left: 2px;
+}
+.tb-price {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+.tb-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+.tb-badge.pos {
+  color: var(--up);
+  background: rgba(38, 166, 154, 0.15);
+}
+.tb-badge.neg {
+  color: var(--down);
+  background: rgba(239, 83, 80, 0.15);
+}
+.chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
 }
 
 .brand {
@@ -174,10 +209,12 @@ body {
 /* Autocomplete dropdown — absolute overlay so it never shifts the toolbar. */
 .search {
   position: relative;
+  flex: 0 1 180px;
+  min-width: 80px;
 }
 
 .search input {
-  width: 170px;
+  width: 100%;
 }
 
 .search-dropdown {
@@ -2016,7 +2053,8 @@ button.ctl:disabled {
   }
   .brand,
   .hint,
-  .tb-div {
+  .tb-div,
+  .tb-quote {
     display: none;
   }
   .menu-btn {

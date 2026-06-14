@@ -334,6 +334,14 @@ export default function App() {
             >
               {starred ? '★' : '☆'}
             </button>
+            {isFinite(lastC) && (
+              <span className="tb-quote" title={company}>
+                <span className="tb-price">{fp(lastC)}</span>
+                <span className={'tb-badge ' + (dChg >= 0 ? 'pos' : 'neg')}>
+                  {dChg >= 0 ? '▲' : '▼'} {Math.abs(dChg).toFixed(2)}%
+                </span>
+              </span>
+            )}
           </>
         )}
 
@@ -342,7 +350,7 @@ export default function App() {
             <div className="seg">
               {(['D', 'W', 'M'] as TF[]).map((t) => (
                 <button key={t} className={t === tf ? 'active' : ''} onClick={() => changeTf(t)}>
-                  {TF_LABEL[t]}
+                  {t === 'D' ? '1G' : t === 'W' ? '1H' : '1A'}
                 </button>
               ))}
             </div>
@@ -366,7 +374,7 @@ export default function App() {
           </button>
           {strategy && (
             <span className="chip">
-              {strategy}
+              <span className="chip-name">{strategy}</span>
               <button onClick={() => setStrategy(null)} title="İşaretleri kaldır">×</button>
             </span>
           )}
@@ -389,7 +397,6 @@ export default function App() {
             ◨
           </button>
         </div>
-        <span className="hint">sürükle · tekerlek: zoom · çift tık: sığdır</span>
       </header>
 
       {tbMenu && <div className="tb-menu-backdrop" onClick={() => setTbMenu(false)} />}
@@ -445,19 +452,6 @@ export default function App() {
         )}
 
         <main className="main">
-          <div className="symhead">
-            <span className="sh-ticker">{provider === 'bist' ? symbol : 'SENTETİK'}</span>
-            {company && <span className="sh-name">{company}</span>}
-            <span className="spacer" />
-            {isFinite(lastC) && (
-              <>
-                <span className="sh-price">{fp(lastC)}</span>
-                <span className={'sh-badge ' + (dChg >= 0 ? 'pos' : 'neg')}>
-                  {dChg >= 0 ? '▲' : '▼'} {Math.abs(dChg).toFixed(2)}%
-                </span>
-              </>
-            )}
-          </div>
           {stats && (
             <div className="symstats">
               <span>
@@ -566,6 +560,7 @@ export default function App() {
       <footer className="status">
         <span>{provider === 'bist' ? `BIST · ${TF_LABEL[tf]}` : 'Sentetik · stres testi'}</span>
         <span>Mum: {candles ? candles.length.toLocaleString() : 0}</span>
+        <span className="lg-muted">sürükle · tekerlek: zoom · çift tık: sığdır</span>
         <span className={error ? 'down' : ''}>{error ? `Hata: ${error}` : status}</span>
       </footer>
 
