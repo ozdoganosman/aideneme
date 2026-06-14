@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   createChart,
   createSeriesMarkers,
@@ -102,6 +102,40 @@ interface MeasureView {
   up: boolean;
 }
 
+// ── Manual drawings (trend line / horizontal S-R / Fibonacci) ────────────────
+type DrawTool = 'none' | 'trend' | 'hline' | 'fib';
+interface Draw {
+  id: number;
+  type: 'trend' | 'hline' | 'fib';
+  a: { t: number; p: number };
+  b?: { t: number; p: number };
+}
+type PView =
+  | { id: number; sel: boolean; kind: 'hline'; y: number; price: number }
+  | { id: number; sel: boolean; kind: 'trend'; ax: number; ay: number; bx: number; by: number }
+  | { id: number; sel: boolean; kind: 'fib'; ax: number; ay: number; bx: number; by: number; levels: { r: number; y: number; price: number }[] };
+const FIBS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+const drawKey = (sym: string) => 'borsaDraw:' + sym;
+function loadDraws(sym: string): Draw[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(drawKey(sym)) || 'null');
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+// Distance from point (px,py) to segment (ax,ay)-(bx,by).
+function distToSeg(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  let t = l2 ? ((px - ax) * dx + (py - ay) * dy) / l2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+
 const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
   color,
   lineWidth: width,
@@ -130,6 +164,112 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const shiftRef = useRef(false);
   const measureRef = useRef<{ a: MPt; b: MPt | null; frozen: boolean } | null>(null);
   const prevCandlesRef = useRef<Candles | null>(null);
+  // Manual drawings
+  const drawToolRef = useRef<DrawTool>('none');
+  const drawingsRef = useRef<Draw[]>([]);
+  const pendingRef = useRef<{ t: number; p: number } | null>(null);
+  const lastCrossRef = useRef<{ t: number; p: number } | null>(null);
+  const selDrawRef = useRef<number | null>(null);
+  const drawViewRef = useRef<PView[]>([]);
+  const symRef = useRef(symbol);
+  symRef.current = symbol;
+  const [drawTool, setDrawTool] = useState<DrawTool>('none');
+  const [drawView, setDrawView] = useState<PView[]>([]);
+  const [drawCount, setDrawCount] = useState(0);
+
+  // Re-project all drawings (+ the in-progress one) to pixels for the overlay.
+  const recomputeDraw = useCallback(() => {
+    const chart = chartApiRef.current;
+    const s = seriesRef.current;
+    const lod = lodRef.current;
+    if (!chart || !s || !lod) return;
+    const yOf = (p: number) => s.candle.priceToCoordinate(p);
+    const out: PView[] = [];
+    const push = (d: Draw) => {
+      const sel = selDrawRef.current === d.id;
+      if (d.type === 'hline') {
+        const y = yOf(d.a.p);
+        if (y != null) out.push({ id: d.id, sel, kind: 'hline', y: y as number, price: d.a.p });
+        return;
+      }
+      if (!d.b) return;
+      const ax = lod.xForTime(d.a.t);
+      const bx = lod.xForTime(d.b.t);
+      const ay = yOf(d.a.p);
+      const by = yOf(d.b.p);
+      if (ax == null || bx == null || ay == null || by == null) return;
+      if (d.type === 'trend') out.push({ id: d.id, sel, kind: 'trend', ax, ay, bx, by });
+      else {
+        const levels = FIBS.map((r) => {
+          const price = d.a.p + (d.b!.p - d.a.p) * r;
+          const yy = yOf(price);
+          return { r, y: yy == null ? NaN : (yy as number), price };
+        }).filter((l) => Number.isFinite(l.y));
+        out.push({ id: d.id, sel, kind: 'fib', ax, ay, bx, by, levels });
+      }
+    };
+    for (const d of drawingsRef.current) push(d);
+    const pend = pendingRef.current;
+    const cross = lastCrossRef.current;
+    const tool = drawToolRef.current;
+    if (pend && cross && (tool === 'trend' || tool === 'fib')) push({ id: -1, type: tool, a: pend, b: cross });
+    drawViewRef.current = out;
+    setDrawView(out);
+  }, []);
+
+  const persistDraws = useCallback(() => {
+    try {
+      localStorage.setItem(drawKey(symRef.current), JSON.stringify(drawingsRef.current));
+    } catch {
+      /* quota */
+    }
+  }, []);
+  const addDraw = useCallback(
+    (d: Draw) => {
+      drawingsRef.current = [...drawingsRef.current, d];
+      setDrawCount(drawingsRef.current.length);
+      persistDraws();
+      recomputeDraw();
+    },
+    [persistDraws, recomputeDraw],
+  );
+  const removeDraw = useCallback(
+    (id: number) => {
+      drawingsRef.current = drawingsRef.current.filter((d) => d.id !== id);
+      if (selDrawRef.current === id) selDrawRef.current = null;
+      setDrawCount(drawingsRef.current.length);
+      persistDraws();
+      recomputeDraw();
+    },
+    [persistDraws, recomputeDraw],
+  );
+  const pickTool = (t: DrawTool) => {
+    const nt = drawToolRef.current === t ? 'none' : t;
+    drawToolRef.current = nt;
+    pendingRef.current = null;
+    setDrawTool(nt);
+    recomputeDraw();
+  };
+  const undoDraw = () => {
+    const arr = drawingsRef.current;
+    if (arr.length) removeDraw(arr[arr.length - 1].id);
+  };
+  const clearDraws = () => {
+    drawingsRef.current = [];
+    selDrawRef.current = null;
+    pendingRef.current = null;
+    setDrawCount(0);
+    persistDraws();
+    recomputeDraw();
+  };
+  // Load this symbol's drawings whenever the symbol changes.
+  useEffect(() => {
+    drawingsRef.current = loadDraws(symbol);
+    pendingRef.current = null;
+    selDrawRef.current = null;
+    setDrawCount(drawingsRef.current.length);
+    recomputeDraw();
+  }, [symbol, recomputeDraw]);
 
   const [legend, setLegend] = useState<LegendVals | null>(null);
   const [tops, setTops] = useState<number[]>([]);
@@ -305,8 +445,38 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       setMeasure({ ax, ay, bx, by, dPrice, dPct, days: Math.round((m.b.time - m.a.time) / 86400), up: dPrice >= 0 });
     };
     chart.subscribeClick((param) => {
-      const m = measureRef.current;
       if (!param.point || param.time == null) return;
+      const price = candle.coordinateToPrice(param.point.y);
+      const tool = drawToolRef.current;
+      // Drawing tool active (no Shift) → place anchors instead of measuring.
+      if (tool !== 'none' && !shiftRef.current) {
+        if (price == null) return;
+        const pt = { t: param.time as number, p: price as number };
+        if (tool === 'hline') addDraw({ id: Date.now(), type: 'hline', a: pt });
+        else if (!pendingRef.current) {
+          pendingRef.current = pt;
+          recomputeDraw();
+        } else {
+          addDraw({ id: Date.now(), type: tool, a: pendingRef.current, b: pt });
+          pendingRef.current = null;
+        }
+        return;
+      }
+      // Cursor mode (no tool, no Shift): click a drawing to delete it.
+      if (tool === 'none' && !shiftRef.current) {
+        const { x, y } = param.point;
+        let hit: number | null = null;
+        for (const v of drawViewRef.current) {
+          const near = v.kind === 'hline' ? Math.abs(y - v.y) <= 6 : distToSeg(x, y, v.ax, v.ay, v.bx, v.by) <= 6;
+          if (near) hit = v.id;
+        }
+        if (hit != null) {
+          removeDraw(hit);
+          return;
+        }
+      }
+      // Otherwise: measure tool (Shift+click).
+      const m = measureRef.current;
       if (!shiftRef.current) {
         if (m) {
           measureRef.current = null;
@@ -314,7 +484,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
         }
         return;
       }
-      const price = candle.coordinateToPrice(param.point.y);
       if (price == null) return;
       const pt: MPt = { time: param.time as number, price: price as number };
       if (!m || m.frozen) measureRef.current = { a: pt, b: pt, frozen: false };
@@ -323,12 +492,21 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     });
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       if (measureRef.current?.b) refreshMeasure();
+      recomputeDraw();
     });
     const onKey = (e: KeyboardEvent) => {
       shiftRef.current = e.shiftKey;
-      if (e.key === 'Escape' && measureRef.current) {
-        measureRef.current = null;
-        setMeasure(null);
+      if (e.key === 'Escape') {
+        if (measureRef.current) {
+          measureRef.current = null;
+          setMeasure(null);
+        }
+        if (pendingRef.current || drawToolRef.current !== 'none') {
+          pendingRef.current = null;
+          drawToolRef.current = 'none';
+          setDrawTool('none');
+          recomputeDraw();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -336,11 +514,15 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
     chart.subscribeCrosshairMove((param) => {
       const m = measureRef.current;
-      if (m && !m.frozen && param.point && param.time != null) {
+      if (param.point && param.time != null) {
         const p = seriesRef.current?.candle.coordinateToPrice(param.point.y);
         if (p != null) {
-          m.b = { time: param.time as number, price: p as number };
-          refreshMeasure();
+          lastCrossRef.current = { t: param.time as number, p: p as number };
+          if (m && !m.frozen) {
+            m.b = { time: param.time as number, price: p as number };
+            refreshMeasure();
+          }
+          if (pendingRef.current) recomputeDraw(); // live preview of the 2nd anchor
         }
       }
       const s = seriesRef.current!;
@@ -419,6 +601,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       fit,
     );
     if (!hoveringRef.current) setLegend(lv);
+    recomputeDraw(); // re-anchor manual drawings to the new window
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, params]);
 
   // Indicator visibility toggles.
@@ -535,6 +719,42 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   return (
     <>
       <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />
+
+      {/* Drawing toolbar */}
+      <div className="draw-tools">
+        <button className={'draw-btn' + (drawTool === 'trend' ? ' on' : '')} onClick={() => pickTool('trend')} title="Trend çizgisi (2 nokta)">╱</button>
+        <button className={'draw-btn' + (drawTool === 'hline' ? ' on' : '')} onClick={() => pickTool('hline')} title="Yatay çizgi (destek/direnç)">─</button>
+        <button className={'draw-btn' + (drawTool === 'fib' ? ' on' : '')} onClick={() => pickTool('fib')} title="Fibonacci (2 nokta)">≣</button>
+        <button className="draw-btn" onClick={undoDraw} disabled={drawCount === 0} title="Son çizimi geri al">↶</button>
+        <button className="draw-btn" onClick={clearDraws} disabled={drawCount === 0} title="Tüm çizimleri sil">🗑</button>
+        {drawTool !== 'none' && <div className="draw-hint">{drawTool === 'hline' ? 'tıkla' : pendingRef.current ? '2. nokta' : '1. nokta'}</div>}
+      </div>
+
+      {/* Manual drawings overlay */}
+      {drawView.length > 0 && (
+        <svg className="measure-overlay" width="100%" height="100%">
+          {drawView.map((v) =>
+            v.kind === 'hline' ? (
+              <g key={v.id}>
+                <line x1={0} y1={v.y} x2="100%" y2={v.y} stroke={v.sel ? '#f0b90b' : '#5c9ded'} strokeWidth={v.sel ? 1.8 : 1.3} />
+              </g>
+            ) : v.kind === 'trend' ? (
+              <line key={v.id} x1={v.ax} y1={v.ay} x2={v.bx} y2={v.by} stroke={v.id < 0 ? '#888' : v.sel ? '#f0b90b' : '#5c9ded'} strokeWidth={1.6} strokeDasharray={v.id < 0 ? '4 3' : undefined} />
+            ) : (
+              <g key={v.id}>
+                <line x1={v.ax} y1={v.ay} x2={v.bx} y2={v.by} stroke={v.id < 0 ? '#888' : '#777'} strokeWidth={1} strokeDasharray="2 3" />
+                {v.levels.map((l) => (
+                  <g key={l.r}>
+                    <line x1={Math.min(v.ax, v.bx)} y1={l.y} x2={Math.max(v.ax, v.bx)} y2={l.y} stroke={v.sel ? '#f0b90b' : '#d9a441'} strokeWidth={1} />
+                    <text x={Math.max(v.ax, v.bx) + 4} y={l.y + 3} fill="#d9a441" fontSize="10">{(l.r * 100).toFixed(1)}%</text>
+                  </g>
+                ))}
+              </g>
+            ),
+          )}
+        </svg>
+      )}
+
       {measure && (
         <>
           <svg className="measure-overlay" width="100%" height="100%">

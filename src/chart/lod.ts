@@ -6,6 +6,7 @@ import {
   HistogramData,
   LineData,
   LogicalRange,
+  Logical,
 } from 'lightweight-charts';
 import { Candles, LiveBar, emptyCandles } from '../data/types';
 
@@ -331,6 +332,33 @@ export class LodController {
       const seg = this.bandSegs[k];
       this.bandPool[k].setData(buildBand(this.full, seg.a, seg.b, i0, i1, stride) as never);
     }
+  }
+
+  // Nearest full-data index for a timestamp (binary search). Used by drawings to
+  // re-anchor across zoom/pan even when the bar isn't in the current window.
+  indexForTime(t: number): number {
+    if (!this.full || this.full.length === 0) return 0;
+    const arr = this.full.time;
+    const hi0 = this.full.length - 1;
+    if (t <= arr[0]) return 0;
+    if (t >= arr[hi0]) return hi0;
+    let lo = 0;
+    let hi = hi0;
+    while (lo < hi) {
+      const m = (lo + hi) >>> 1;
+      if (arr[m] < t) lo = m + 1;
+      else hi = m;
+    }
+    return lo;
+  }
+
+  // Screen x for a timestamp, via the current decimated window → logical coord.
+  // Works for off-window times too (extrapolated), so drawings stay anchored.
+  xForTime(t: number): number | null {
+    if (!this.full) return null;
+    const ri = this.indexForTime(t);
+    const logical = (ri - this.win.i0) / this.win.stride;
+    return this.chart.timeScale().logicalToCoordinate(logical as Logical);
   }
 
   lastBar(): { time: number; open: number; high: number; low: number; close: number; volume: number } | null {

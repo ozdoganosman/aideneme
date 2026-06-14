@@ -416,6 +416,53 @@ button.ctl:disabled {
   z-index: 4;
   pointer-events: none;
 }
+/* Drawing toolbar */
+.draw-tools {
+  position: absolute;
+  left: 8px;
+  top: 32px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(20, 24, 31, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+}
+.draw-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.draw-btn:hover {
+  background: #222633;
+  color: var(--text);
+}
+.draw-btn.on {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  color: #cfe0ff;
+}
+.draw-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.draw-hint {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+
 .measure-label {
   position: absolute;
   z-index: 6;
