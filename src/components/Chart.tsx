@@ -276,6 +276,12 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const [measure, setMeasure] = useState<MeasureView | null>(null);
 
   useEffect(() => {
+    // On phones the right-axis series-title labels (EMA/BB/Donchian/…) pile up
+    // and overlap; the top legend already names every line, so drop the axis
+    // titles on narrow screens. `t()` blanks a title only in compact mode.
+    const compact = typeof window !== 'undefined' && window.innerWidth < 768;
+    const t = (s: string) => (compact ? '' : s);
+
     const chart: IChartApi = createChart(elRef.current!, {
       autoSize: true,
       layout: {
@@ -333,8 +339,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350' },
       0,
     );
-    const ema377 = chart.addSeries(LineSeries, lineOpts('#f0b90b', 1, 'EMA 377'), 0);
-    const ema610 = chart.addSeries(LineSeries, lineOpts('#9aa0b0', 1, 'EMA 610'), 0);
+    const ema377 = chart.addSeries(LineSeries, lineOpts('#f0b90b', 1, t('EMA 377')), 0);
+    const ema610 = chart.addSeries(LineSeries, lineOpts('#9aa0b0', 1, t('EMA 610')), 0);
 
     // Volume overlays the bottom of the price pane on its own scale, so its
     // value label ("barem") shows at the bottom-right of the price window.
@@ -344,32 +350,32 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       0,
     );
 
-    const wilR = chart.addSeries(LineSeries, lineOpts('#7E57C2', 2, 'Williams %R'), 1);
+    const wilR = chart.addSeries(LineSeries, lineOpts('#7E57C2', 2, t('Williams %R')), 1);
     const wilEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1), 1);
     const wilEma120 = chart.addSeries(LineSeries, lineOpts('#42a5f5', 1), 1);
     wilR.createPriceLine({ price: 98, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '98' });
     wilR.createPriceLine({ price: 50, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
     wilR.createPriceLine({ price: 5, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '5' });
 
-    const mMacd = chart.addSeries(LineSeries, lineOpts('#ff2fa6', 1, 'MACD'), 2);
-    const mSignal = chart.addSeries(LineSeries, lineOpts('#FF6D00', 1, 'Signal'), 2);
-    const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, 'eMACD'), 2);
+    const mMacd = chart.addSeries(LineSeries, lineOpts('#ff2fa6', 1, t('MACD')), 2);
+    const mSignal = chart.addSeries(LineSeries, lineOpts('#FF6D00', 1, t('Signal')), 2);
+    const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, t('eMACD')), 2);
     mMacd.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
     // Bollinger (20,2σ) + Donchian (20) — price-pane overlays.
-    const bbUp = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, 'BB üst'), 0);
-    const bbMid = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, 'BB orta'), 0);
-    const bbDn = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, 'BB alt'), 0);
+    const bbUp = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, t('BB üst')), 0);
+    const bbMid = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, t('BB orta')), 0);
+    const bbDn = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, t('BB alt')), 0);
     bbUp.applyOptions({ lineStyle: LineStyle.Dashed });
     bbDn.applyOptions({ lineStyle: LineStyle.Dashed });
-    const donHi = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian üst'), 0);
-    const donLo = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian alt'), 0);
+    const donHi = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, t('Donchian üst')), 0);
+    const donLo = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, t('Donchian alt')), 0);
     // ADX (14) pane + ROC (100) pane — collapsed unless toggled on.
-    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, 'ADX (28)'), 3);
-    const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, 'ADX EMA (14)'), 3);
+    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, t('ADX (28)')), 3);
+    const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, t('ADX EMA (14)')), 3);
     adx.createPriceLine({ price: 25, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '25' });
-    const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, 'ROC (260)'), 4);
-    const rocEma = chart.addSeries(LineSeries, lineOpts('#42a5f5', 1, 'ROC EMA (120)'), 4);
+    const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, t('ROC (260)')), 4);
+    const rocEma = chart.addSeries(LineSeries, lineOpts('#42a5f5', 1, t('ROC EMA (120)')), 4);
     roc.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
     const panes = chart.panes();

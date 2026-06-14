@@ -57,6 +57,11 @@ body {
   color: var(--text);
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Stop the whole page from scroll-bouncing / pull-to-refresh on mobile, and
+     keep the browser from auto-inflating text after a (now-disabled) zoom. */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 .app {
@@ -340,6 +345,9 @@ button.ctl:disabled {
   position: relative;
   flex: 1;
   min-height: 0;
+  /* The chart library captures pan/pinch itself; tell the browser not to
+     hijack those gestures for page scroll/zoom (the cause of "ekran zoom"). */
+  touch-action: none;
 }
 
 .legend {
@@ -2648,6 +2656,7 @@ button.ctl:disabled {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     touch-action: pan-y;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
   /* Draggable grab handle pinned to the top of the sheet (swipe down to close) */
   .sheet-grab {
@@ -2720,6 +2729,11 @@ button.ctl:disabled {
   .pane-legend {
     font-size: 10px;
     left: 6px;
+    /* Keep clear of the right price scale and wrap instead of overflowing
+       off-screen (the OHLC + EMA + volume line was being cut off). */
+    right: 58px;
+    white-space: normal;
+    line-height: 1.55;
   }
   /* Footer + toolbar panel toggles replaced by a persistent bottom bar */
   .status {
@@ -2732,6 +2746,9 @@ button.ctl:disabled {
     display: flex;
     border-top: 1px solid var(--border);
     background: var(--panel);
+    /* viewport-fit=cover lets content reach the edges; keep the bar above the
+       phone's home/gesture indicator. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .mobilebar button {
     flex: 1;
