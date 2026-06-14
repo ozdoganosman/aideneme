@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type PointerEvent as RPointerEvent } from 'react';
 import { Chart, IndicatorSettings } from './components/Chart';
 import { IndicatorParams, DEFAULT_PARAMS } from './indicators/calc';
 import { SymbolSearch } from './components/SymbolSearch';
@@ -6,9 +6,10 @@ import { Watchlist } from './components/Watchlist';
 import { Portfolio, Holding } from './components/Portfolio';
 import { IndicatorMenu } from './components/IndicatorMenu';
 import { Trades } from './components/Trades';
-import { Backtest } from './components/Backtest';
-import { PortfolioAnalysis } from './components/PortfolioAnalysis';
-import { Screener } from './components/Screener';
+// Heavy, on-demand modals → split into their own chunks (faster first load).
+const Backtest = lazy(() => import('./components/Backtest').then((m) => ({ default: m.Backtest })));
+const PortfolioAnalysis = lazy(() => import('./components/PortfolioAnalysis').then((m) => ({ default: m.PortfolioAnalysis })));
+const Screener = lazy(() => import('./components/Screener').then((m) => ({ default: m.Screener })));
 import { computeStats } from './indicators/stats';
 import { registerCustomStrategy, type Trade } from './indicators/backtest';
 import { CustomStrategy, buildCustomPosition } from './indicators/customStrategy';
@@ -378,6 +379,17 @@ export default function App() {
   const dChg = isFinite(lastC) && isFinite(prevC) && prevC ? ((lastC - prevC) / prevC) * 100 : 0;
   const company = provider === 'bist' ? names[symbol] || '' : 'Sentetik veri';
 
+  // Fallback shown while a lazy-loaded modal chunk downloads.
+  const modalLoader = (
+    <div className="modal-backdrop">
+      <div className="modal modal-loader">
+        <div className="bt-note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="spinner" /> Yükleniyor…
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="app">
       <header className="toolbar">
@@ -679,6 +691,7 @@ export default function App() {
       </nav>
 
       {showBt && candles && (
+        <Suspense fallback={modalLoader}>
         <Backtest
           candles={candles}
           symbol={provider === 'bist' ? symbol : 'SENTETİK'}
@@ -703,21 +716,26 @@ export default function App() {
           }}
           onClose={() => setShowBt(false)}
         />
+        </Suspense>
       )}
 
       {showAnalysis && (
-        <PortfolioAnalysis
-          holdings={portfolio}
-          quotes={quotes}
-          strats={customStrats}
-          params={indParams}
-          onClose={() => setShowAnalysis(false)}
-          onSelect={selectSymbol}
-        />
+        <Suspense fallback={modalLoader}>
+          <PortfolioAnalysis
+            holdings={portfolio}
+            quotes={quotes}
+            strats={customStrats}
+            params={indParams}
+            onClose={() => setShowAnalysis(false)}
+            onSelect={selectSymbol}
+          />
+        </Suspense>
       )}
 
       {showScreener && (
-        <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} />
+        <Suspense fallback={modalLoader}>
+          <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} />
+        </Suspense>
       )}
     </div>
   );

@@ -2243,6 +2243,13 @@ button.ctl:disabled {
   background: #222633;
 }
 
+.modal-loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+}
+
 /* Indicator menu with editable periods */
 .ind-pop {
   white-space: normal;
