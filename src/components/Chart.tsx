@@ -55,7 +55,7 @@ interface Props {
 interface LegendVals {
   o: number; h: number; l: number; c: number; v: number;
   ema377: number; ema610: number;
-  wilR: number; wilEma: number;
+  wilR: number; wilEma: number; wilEma120: number;
   macd: number; signal: number; emacd: number;
   bbUp: number; bbMid: number; bbDn: number;
   donHi: number; donLo: number;
@@ -69,6 +69,7 @@ type SeriesBag = {
   volume: ISeriesApi<'Histogram'>;
   wilR: ISeriesApi<'Line'>;
   wilEma: ISeriesApi<'Line'>;
+  wilEma120: ISeriesApi<'Line'>;
   mMacd: ISeriesApi<'Line'>;
   mSignal: ISeriesApi<'Line'>;
   mEma: ISeriesApi<'Line'>;
@@ -202,6 +203,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
     const wilR = chart.addSeries(LineSeries, lineOpts('#7E57C2', 2, 'Williams %R'), 1);
     const wilEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1), 1);
+    const wilEma120 = chart.addSeries(LineSeries, lineOpts('#42a5f5', 1), 1);
     wilR.createPriceLine({ price: 98, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '98' });
     wilR.createPriceLine({ price: 50, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
     wilR.createPriceLine({ price: 5, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '5' });
@@ -241,6 +243,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: ema610, kind: 'line' },
       { series: wilR, kind: 'line' },
       { series: wilEma, kind: 'line' },
+      { series: wilEma120, kind: 'line' },
       { series: mMacd, kind: 'line' },
       { series: mSignal, kind: 'line' },
       { series: mEma, kind: 'line' },
@@ -256,7 +259,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const lod = new LodController(chart, candle, volume, extras, bands);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma, bbUp, bbMid, bbDn, donHi, donLo, adx, adxEma, roc };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, wilEma120, mMacd, mSignal, mEma, bbUp, bbMid, bbDn, donHi, donLo, adx, adxEma, roc };
     markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
@@ -345,7 +348,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
           setLegend({
             o: c.open, h: c.high, l: c.low, c: c.close, v: hv(s.volume),
             ema377: lv(s.ema377), ema610: lv(s.ema610),
-            wilR: lv(s.wilR), wilEma: lv(s.wilEma),
+            wilR: lv(s.wilR), wilEma: lv(s.wilEma), wilEma120: lv(s.wilEma120),
             macd: lv(s.mMacd), signal: lv(s.mSignal), emacd: lv(s.mEma),
             bbUp: lv(s.bbUp), bbMid: lv(s.bbMid), bbDn: lv(s.bbDn),
             donHi: lv(s.donHi), donLo: lv(s.donLo),
@@ -391,7 +394,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       o: candles.open[n - 1], h: candles.high[n - 1], l: candles.low[n - 1],
       c: candles.close[n - 1], v: candles.volume[n - 1],
       ema377: lastFin(ind.ema377p), ema610: lastFin(ind.ema610p),
-      wilR: lastFin(ind.percentR), wilEma: lastFin(ind.emawil),
+      wilR: lastFin(ind.percentR), wilEma: lastFin(ind.emawil), wilEma120: lastFin(ind.emawil120),
       macd: lastFin(ind.macdN), signal: lastFin(ind.signalN), emacd: lastFin(ind.eMacDN),
       bbUp: lastFin(ex.bbUp), bbMid: lastFin(ex.bbMid), bbDn: lastFin(ex.bbDn),
       donHi: lastFin(ex.donHi), donLo: lastFin(ex.donLo),
@@ -402,7 +405,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     lodRef.current.setData(
       candles,
       [
-        ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN,
+        ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.emawil120, ind.macdN, ind.signalN, ind.eMacDN,
         ex.bbUp, ex.bbMid, ex.bbDn, ex.donHi, ex.donLo, ex.adx, ex.adxEma, ex.roc,
       ],
       fitRef.current,
@@ -418,7 +421,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     s.ema377.applyOptions({ visible: settings.ema });
     s.ema610.applyOptions({ visible: settings.ema });
     s.volume.applyOptions({ visible: settings.volume });
-    [s.wilR, s.wilEma].forEach((x) => x.applyOptions({ visible: settings.williams }));
+    [s.wilR, s.wilEma, s.wilEma120].forEach((x) => x.applyOptions({ visible: settings.williams }));
     [s.mMacd, s.mSignal, s.mEma].forEach((x) => x.applyOptions({ visible: settings.macd }));
     [s.bbUp, s.bbMid, s.bbDn].forEach((x) => x.applyOptions({ visible: settings.bollinger }));
     [s.donHi, s.donLo].forEach((x) => x.applyOptions({ visible: settings.donchian }));
@@ -608,7 +611,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
           {settings.williams && tops[1] != null && (
             <div className="pane-legend" style={{ top: tops[1] + 6 }}>
               <span style={{ color: '#7E57C2' }}>Williams %R (260)</span> {fn(legend.wilR, 1)}{' '}
-              <span style={{ color: '#26a69a' }}>EMA (260) {fn(legend.wilEma, 1)}</span>
+              <span style={{ color: '#26a69a' }}>EMA (260) {fn(legend.wilEma, 1)}</span>{' '}
+              <span style={{ color: '#42a5f5' }}>EMA (120) {fn(legend.wilEma120, 1)}</span>
             </div>
           )}
 

@@ -184,7 +184,8 @@ export interface IndBundle {
   ema377p: Float64Array; // ema(close, 377) — price overlay
   ema610p: Float64Array; // ema(close, 610) — price overlay
   percentR: Float64Array; // Williams %R + 100
-  emawil: Float64Array; // ema of %R
+  emawil: Float64Array; // ema of %R (260)
+  emawil120: Float64Array; // ema of %R (120) — faster
   macdN: Float64Array; // macd / fast
   signalN: Float64Array;
   histN: Float64Array;
@@ -233,6 +234,7 @@ export function computeIndicators(c: Candles): IndBundle {
   }
 
   const emawil = emaArr(percentR, 260);
+  const emawil120 = emaArr(percentR, 120);
 
-  return { ema377p, ema610p, percentR, emawil, macdN, signalN, histN, eMacDN, deltaN };
+  return { ema377p, ema610p, percentR, emawil, emawil120, macdN, signalN, histN, eMacDN, deltaN };
 }
