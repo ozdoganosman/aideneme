@@ -88,8 +88,30 @@ export function Screener({ onClose, onSelect }: Props) {
     fetchBistSpark().then(setSpark).catch(() => {});
   }, []);
 
-  const cols = VIEWS[view].cols;
   const kind = COL(fk).kind;
+
+  // Columns shown = the selected view + any column we're filtering on (so the
+  // values you filter by are always visible in the table).
+  const filterKeys = useMemo(() => {
+    const s = new Set<Key>();
+    for (const f of filters) {
+      s.add(f.key);
+      if (f.key2) s.add(f.key2);
+    }
+    return s;
+  }, [filters]);
+  const cols = useMemo(() => {
+    const base = VIEWS[view].cols;
+    const seen = new Set<Key>(base);
+    const extra: Key[] = [];
+    filterKeys.forEach((k) => {
+      if (!seen.has(k)) {
+        seen.add(k);
+        extra.push(k);
+      }
+    });
+    return [...base, ...extra];
+  }, [view, filterKeys]);
 
   const rows = useMemo(() => {
     const items = data?.items ?? [];
@@ -251,7 +273,12 @@ export function Screener({ onClose, onSelect }: Props) {
                       <th className="scr-th-sym">Sembol</th>
                       <th className="scr-th-spark">Trend</th>
                       {cols.map((k) => (
-                        <th key={k} onClick={() => toggleSort(k)} title="Sırala">
+                        <th
+                          key={k}
+                          className={filterKeys.has(k) ? 'scr-th-filtered' : ''}
+                          onClick={() => toggleSort(k)}
+                          title="Sırala"
+                        >
                           {COL(k).label}
                           {sort.key === k ? (sort.dir < 0 ? ' ↓' : ' ↑') : ''}
                         </th>

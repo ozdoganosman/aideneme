@@ -927,6 +927,10 @@ button.ctl:disabled {
 .scr-th-sym {
   z-index: 2;
 }
+.scr-table th.scr-th-filtered {
+  color: #cfe0ff;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.16), var(--panel));
+}
 .scr-td-sym {
   display: flex;
   align-items: center;
