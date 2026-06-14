@@ -169,7 +169,7 @@ function renderRisk(rows: Row[], bench: number | null) {
               <>
                 <span className={'pa-risk-badge ' + r.a.riskClass}>{r.a.riskLabel}</span>
                 <span className="lg-muted">oyn ~%{r.a.volPct.toFixed(0)}</span>
-                <span className="down">DD -{r.a.maxDD.toFixed(0)}%</span>
+                <span className="down">Düşüş -{r.a.maxDD.toFixed(0)}%</span>
                 <span className={r.a.r1y >= 0 ? 'up' : 'down'}>
                   1Y {r.a.r1y >= 0 ? '+' : ''}
                   {r.a.r1y.toFixed(0)}%

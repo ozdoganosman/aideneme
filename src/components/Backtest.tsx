@@ -141,7 +141,7 @@ export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrat
                       </span>
                     </div>
                     <div className="bt-srow-sub">
-                      toplam {fmtX(r.res.retPct)} · {r.res.trades} işlem · Kazanma %{r.res.winRate.toFixed(0)} · DD -
+                      toplam {fmtX(r.res.retPct)} · {r.res.trades} işlem · Kazanma %{r.res.winRate.toFixed(0)} · Düşüş -
                       {r.res.maxDD.toFixed(0)}%
                     </div>
                   </div>
@@ -221,8 +221,8 @@ function renderMarket(
             tag={hasAnn ? 'yıl' : ''}
             sub={
               hasAnn
-                ? `gün başına ${perDay(r.avgAnn!)} · toplam ${fmtX(r.avgRet)} · Al-Tut %${r.beatPct.toFixed(0)} · DD -${r.avgDD.toFixed(0)}%`
-                : `Al-Tut'u geçme %${r.beatPct.toFixed(0)} · Kazanma %${r.avgWin.toFixed(0)} · DD -${r.avgDD.toFixed(0)}%`
+                ? `gün başına ${perDay(r.avgAnn!)} · toplam ${fmtX(r.avgRet)} · Al-Tut %${r.beatPct.toFixed(0)} · Düşüş -${r.avgDD.toFixed(0)}%`
+                : `Al-Tut'u geçme %${r.beatPct.toFixed(0)} · Kazanma %${r.avgWin.toFixed(0)} · Düşüş -${r.avgDD.toFixed(0)}%`
             }
             onClick={() => pick(r.name)}
           />
@@ -307,7 +307,7 @@ function renderTop(
               </span>
             </div>
             <div className="bt-srow-sub">
-              toplam {fmtX(t.ret)} · {t.trades} işlem · Kazanma %{t.win.toFixed(0)} · DD -{t.dd.toFixed(0)}%
+              toplam {fmtX(t.ret)} · {t.trades} işlem · Kazanma %{t.win.toFixed(0)} · Düşüş -{t.dd.toFixed(0)}%
             </div>
             <div className="bt-srow-explain">{explainStrategy(t.name)}</div>
           </div>
@@ -389,7 +389,7 @@ function renderSymbol(
             max={max}
             label={fmtPct(r.annPct)}
             tag="yıl"
-            sub={`gün başına ${perDay(r.annPct)} · toplam ${fmtX(r.retPct)} · Al-Tut'a ${fmtPct(r.annPct - data.holdAnn)} · ${r.trades} işlem · DD -${r.maxDD.toFixed(0)}%`}
+            sub={`gün başına ${perDay(r.annPct)} · toplam ${fmtX(r.retPct)} · Al-Tut'a ${fmtPct(r.annPct - data.holdAnn)} · ${r.trades} işlem · Düşüş -${r.maxDD.toFixed(0)}%`}
             onClick={() => pick(r.name)}
           />
         ))}
