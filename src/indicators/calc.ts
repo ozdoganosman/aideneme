@@ -164,6 +164,7 @@ export interface ExtraBundle {
   adx: Float64Array;
   adxEma: Float64Array;
   roc: Float64Array;
+  rocEma: Float64Array;
 }
 export function computeExtras(c: Candles): ExtraBundle {
   // Lookback indicators on the app's 260-day (≈1 yıl) paradigm (Williams %R 260 /
@@ -171,6 +172,7 @@ export function computeExtras(c: Candles): ExtraBundle {
   // to ~5 and never crosses 25, so it stays at a longer-than-default but still
   // functional 28 (with a 14 EMA signal).
   const adx = adxArr(c, 28);
+  const roc = rocArr(c.close, 260);
   return {
     bbUp: bollingerBand(c, 260, 'up'),
     bbMid: bollingerBand(c, 260, 'mid'),
@@ -179,7 +181,8 @@ export function computeExtras(c: Candles): ExtraBundle {
     donLo: donchianBound(c, 260, false),
     adx,
     adxEma: emaArr(adx, 14),
-    roc: rocArr(c.close, 260),
+    roc,
+    rocEma: emaArr(roc, 120),
   };
 }
 

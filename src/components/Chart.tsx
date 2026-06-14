@@ -59,7 +59,7 @@ interface LegendVals {
   macd: number; signal: number; emacd: number;
   bbUp: number; bbMid: number; bbDn: number;
   donHi: number; donLo: number;
-  adx: number; adxEma: number; roc: number;
+  adx: number; adxEma: number; roc: number; rocEma: number;
 }
 
 type SeriesBag = {
@@ -81,6 +81,7 @@ type SeriesBag = {
   adx: ISeriesApi<'Line'>;
   adxEma: ISeriesApi<'Line'>;
   roc: ISeriesApi<'Line'>;
+  rocEma: ISeriesApi<'Line'>;
 };
 
 const BAND_POOL = 48; // max trades shown as P&L bands (typical strategies have far fewer)
@@ -226,6 +227,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, 'ADX EMA (14)'), 3);
     adx.createPriceLine({ price: 25, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '25' });
     const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, 'ROC (260)'), 4);
+    const rocEma = chart.addSeries(LineSeries, lineOpts('#42a5f5', 1, 'ROC EMA (120)'), 4);
     roc.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
     const panes = chart.panes();
@@ -255,11 +257,12 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: adx, kind: 'line' },
       { series: adxEma, kind: 'line' },
       { series: roc, kind: 'line' },
+      { series: rocEma, kind: 'line' },
     ];
     const lod = new LodController(chart, candle, volume, extras, bands);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, wilEma120, mMacd, mSignal, mEma, bbUp, bbMid, bbDn, donHi, donLo, adx, adxEma, roc };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, wilEma120, mMacd, mSignal, mEma, bbUp, bbMid, bbDn, donHi, donLo, adx, adxEma, roc, rocEma };
     markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
@@ -352,7 +355,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             macd: lv(s.mMacd), signal: lv(s.mSignal), emacd: lv(s.mEma),
             bbUp: lv(s.bbUp), bbMid: lv(s.bbMid), bbDn: lv(s.bbDn),
             donHi: lv(s.donHi), donLo: lv(s.donLo),
-            adx: lv(s.adx), adxEma: lv(s.adxEma), roc: lv(s.roc),
+            adx: lv(s.adx), adxEma: lv(s.adxEma), roc: lv(s.roc), rocEma: lv(s.rocEma),
           });
           computeTops();
           return;
@@ -398,7 +401,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       macd: lastFin(ind.macdN), signal: lastFin(ind.signalN), emacd: lastFin(ind.eMacDN),
       bbUp: lastFin(ex.bbUp), bbMid: lastFin(ex.bbMid), bbDn: lastFin(ex.bbDn),
       donHi: lastFin(ex.donHi), donLo: lastFin(ex.donLo),
-      adx: lastFin(ex.adx), adxEma: lastFin(ex.adxEma), roc: lastFin(ex.roc),
+      adx: lastFin(ex.adx), adxEma: lastFin(ex.adxEma), roc: lastFin(ex.roc), rocEma: lastFin(ex.rocEma),
     };
     lastValsRef.current = lv;
 
@@ -406,7 +409,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       candles,
       [
         ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.emawil120, ind.macdN, ind.signalN, ind.eMacDN,
-        ex.bbUp, ex.bbMid, ex.bbDn, ex.donHi, ex.donLo, ex.adx, ex.adxEma, ex.roc,
+        ex.bbUp, ex.bbMid, ex.bbDn, ex.donHi, ex.donLo, ex.adx, ex.adxEma, ex.roc, ex.rocEma,
       ],
       fitRef.current,
     );
@@ -426,7 +429,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     [s.bbUp, s.bbMid, s.bbDn].forEach((x) => x.applyOptions({ visible: settings.bollinger }));
     [s.donHi, s.donLo].forEach((x) => x.applyOptions({ visible: settings.donchian }));
     [s.adx, s.adxEma].forEach((x) => x.applyOptions({ visible: settings.adx }));
-    s.roc.applyOptions({ visible: settings.roc });
+    [s.roc, s.rocEma].forEach((x) => x.applyOptions({ visible: settings.roc }));
     const panes = chart.panes();
     panes[1]?.setStretchFactor(settings.williams ? 2 : 0.0001);
     panes[2]?.setStretchFactor(settings.macd ? 2.2 : 0.0001);
@@ -604,7 +607,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
           {settings.roc && tops[4] != null && (
             <div className="pane-legend" style={{ top: tops[4] + 6 }}>
-              <span style={{ color: '#26c6da' }}>Momentum / ROC (260)</span> {fn(legend.roc, 1)}%
+              <span style={{ color: '#26c6da' }}>Momentum / ROC (260)</span> {fn(legend.roc, 1)}%{' '}
+              <span style={{ color: '#42a5f5' }}>EMA (120) {fn(legend.rocEma, 1)}</span>
             </div>
           )}
 

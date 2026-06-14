@@ -45,6 +45,7 @@ export const INDS: IndDef[] = [
   { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 28 },
   { key: 'adxema', label: 'ADX EMA', hasParam: true, defParam: 14 },
   { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 260 },
+  { key: 'rocema', label: 'Momentum / ROC EMA', hasParam: true, defParam: 120 },
   { key: 'donhi', label: 'Donchian üst (N gün)', hasParam: true, defParam: 260 },
   { key: 'donlo', label: 'Donchian alt (N gün)', hasParam: true, defParam: 260 },
   { key: 'bbup', label: 'Bollinger üst (N,2σ)', hasParam: true, defParam: 260 },
@@ -168,6 +169,8 @@ function computeSeries(c: Candles, ind: string, p: number): Float64Array {
       return emaArr(adxArr(c, Math.max(2, p)), Math.max(1, p));
     case 'roc':
       return rocArr(close, Math.max(1, p));
+    case 'rocema':
+      return emaArr(rocArr(close, 260), Math.max(1, p));
     case 'donhi':
       return donchianBound(c, Math.max(1, p), true);
     case 'donlo':
