@@ -140,6 +140,7 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
       dayPct: pc ? ((pr - pc) / pc) * 100 : 0,
     };
   });
+  rows.sort((a, b) => b.val - a.val); // heaviest position first (color already fixed per symbol)
   const totVal = rows.reduce((s, r) => s + r.val, 0);
   const totCost = positions.reduce((s, h) => s + h.cost * h.qty, 0);
   const totPnl = totVal - totCost;
