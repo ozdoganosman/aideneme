@@ -1,5 +1,5 @@
 import { Candles } from '../data/types';
-import { emaArr, rollingVWMA, rollingHighest, rollingLowest } from './calc';
+import { emaArr, rollingVWMA, rollingHighest, rollingLowest, rocArr, donchianBound, bollingerBand, adxArr } from './calc';
 
 // ── User-built, rule-based strategies ───────────────────────────────────────
 // A strategy = BUY conditions (all must hold to enter) + SELL conditions (all
@@ -271,93 +271,6 @@ function williamsR(c: Candles, len: number): Float64Array {
   for (let i = 0; i < n; i++) {
     const d = hh[i] - ll[i];
     out[i] = d !== 0 ? (100 * (c.close[i] - hh[i])) / d + 100 : NaN;
-  }
-  return out;
-}
-
-// Rate of change (%) vs `len` bars ago — time-series momentum.
-function rocArr(close: Float64Array, len: number): Float64Array {
-  const n = close.length;
-  const out = new Float64Array(n).fill(NaN);
-  for (let i = len; i < n; i++) out[i] = close[i - len] > 0 ? (close[i] / close[i - len] - 1) * 100 : NaN;
-  return out;
-}
-
-// Donchian channel bound over the PRIOR `len` bars (excludes the current bar) so
-// `price > donhi` is a genuine breakout and `price < donlo` a breakdown.
-function donchianBound(c: Candles, len: number, upper: boolean): Float64Array {
-  const roll = upper ? rollingHighest(c.high, len) : rollingLowest(c.low, len);
-  const n = c.length;
-  const out = new Float64Array(n).fill(NaN);
-  for (let i = 1; i < n; i++) out[i] = roll[i - 1];
-  return out;
-}
-
-// Bollinger band (mean ± 2σ over `len`).
-function bollingerBand(c: Candles, len: number, which: 'up' | 'dn' | 'mid'): Float64Array {
-  const close = c.close;
-  const n = close.length;
-  const out = new Float64Array(n).fill(NaN);
-  let sum = 0;
-  let sumsq = 0;
-  for (let i = 0; i < n; i++) {
-    sum += close[i];
-    sumsq += close[i] * close[i];
-    if (i >= len) {
-      sum -= close[i - len];
-      sumsq -= close[i - len] * close[i - len];
-    }
-    if (i >= len - 1) {
-      const mean = sum / len;
-      const sd = Math.sqrt(Math.max(0, sumsq / len - mean * mean));
-      out[i] = which === 'mid' ? mean : which === 'up' ? mean + 2 * sd : mean - 2 * sd;
-    }
-  }
-  return out;
-}
-
-// Wilder ADX (trend strength, 0–100). High = strong trend (worth following).
-function adxArr(c: Candles, len: number): Float64Array {
-  const n = c.length;
-  const out = new Float64Array(n).fill(NaN);
-  if (n < len + 1) return out;
-  const tr = new Float64Array(n);
-  const pdm = new Float64Array(n);
-  const ndm = new Float64Array(n);
-  for (let i = 1; i < n; i++) {
-    const up = c.high[i] - c.high[i - 1];
-    const dn = c.low[i - 1] - c.low[i];
-    pdm[i] = up > dn && up > 0 ? up : 0;
-    ndm[i] = dn > up && dn > 0 ? dn : 0;
-    tr[i] = Math.max(c.high[i] - c.low[i], Math.abs(c.high[i] - c.close[i - 1]), Math.abs(c.low[i] - c.close[i - 1]));
-  }
-  let str = 0;
-  let spdm = 0;
-  let sndm = 0;
-  for (let i = 1; i <= len; i++) {
-    str += tr[i];
-    spdm += pdm[i];
-    sndm += ndm[i];
-  }
-  const dx = new Float64Array(n).fill(NaN);
-  for (let i = len + 1; i < n; i++) {
-    str = str - str / len + tr[i];
-    spdm = spdm - spdm / len + pdm[i];
-    sndm = sndm - sndm / len + ndm[i];
-    const pdi = str ? (100 * spdm) / str : 0;
-    const ndi = str ? (100 * sndm) / str : 0;
-    const s = pdi + ndi;
-    dx[i] = s ? (100 * Math.abs(pdi - ndi)) / s : 0;
-  }
-  const firstDx = len + 1;
-  if (firstDx + len > n) return out;
-  let adx = 0;
-  for (let i = firstDx; i < firstDx + len; i++) adx += dx[i];
-  adx /= len;
-  out[firstDx + len - 1] = adx;
-  for (let i = firstDx + len; i < n; i++) {
-    adx = (adx * (len - 1) + dx[i]) / len;
-    out[i] = adx;
   }
   return out;
 }

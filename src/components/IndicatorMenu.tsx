@@ -10,6 +10,10 @@ const ITEMS: [keyof IndicatorSettings, string][] = [
   ['volume', 'Hacim'],
   ['williams', 'Williams %R'],
   ['macd', 'MACD'],
+  ['bollinger', 'Bollinger (20,2σ)'],
+  ['donchian', 'Donchian (20)'],
+  ['adx', 'ADX (14) — trend gücü'],
+  ['roc', 'Momentum / ROC (100)'],
 ];
 
 export function IndicatorMenu({ settings, onChange }: Props) {

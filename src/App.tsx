@@ -129,7 +129,7 @@ export default function App() {
   const [portfolio, setPortfolio] = useState<Holding[]>(() => lsGet('borsaPortfolio', []));
   const [customStrats, setCustomStrats] = useState<CustomStrategy[]>(() => lsGet('borsaStrats', []));
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
-    lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true }),
+    lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true, bollinger: false, donchian: false, adx: false, roc: false }),
   );
 
   const abortRef = useRef<AbortController | null>(null);

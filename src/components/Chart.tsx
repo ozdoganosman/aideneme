@@ -22,7 +22,7 @@ import {
 } from 'lightweight-charts';
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
-import { computeIndicators } from '../indicators/calc';
+import { computeIndicators, computeExtras } from '../indicators/calc';
 import { signalsFor, buildPositionByName } from '../indicators/backtest';
 
 export interface IndicatorSettings {
@@ -30,6 +30,10 @@ export interface IndicatorSettings {
   volume: boolean;
   williams: boolean;
   macd: boolean;
+  bollinger: boolean;
+  donchian: boolean;
+  adx: boolean;
+  roc: boolean;
 }
 
 export interface ChartHandle {
@@ -53,6 +57,9 @@ interface LegendVals {
   ema377: number; ema610: number;
   wilR: number; wilEma: number;
   macd: number; signal: number; emacd: number;
+  bbUp: number; bbMid: number; bbDn: number;
+  donHi: number; donLo: number;
+  adx: number; roc: number;
 }
 
 type SeriesBag = {
@@ -65,6 +72,13 @@ type SeriesBag = {
   mMacd: ISeriesApi<'Line'>;
   mSignal: ISeriesApi<'Line'>;
   mEma: ISeriesApi<'Line'>;
+  bbUp: ISeriesApi<'Line'>;
+  bbMid: ISeriesApi<'Line'>;
+  bbDn: ISeriesApi<'Line'>;
+  donHi: ISeriesApi<'Line'>;
+  donLo: ISeriesApi<'Line'>;
+  adx: ISeriesApi<'Line'>;
+  roc: ISeriesApi<'Line'>;
 };
 
 const BAND_POOL = 48; // max trades shown as P&L bands (typical strategies have far fewer)
@@ -196,10 +210,26 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, 'eMACD'), 2);
     mMacd.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
+    // Bollinger (20,2σ) + Donchian (20) — price-pane overlays.
+    const bbUp = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, 'BB üst'), 0);
+    const bbMid = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, 'BB orta'), 0);
+    const bbDn = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, 'BB alt'), 0);
+    bbUp.applyOptions({ lineStyle: LineStyle.Dashed });
+    bbDn.applyOptions({ lineStyle: LineStyle.Dashed });
+    const donHi = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian üst'), 0);
+    const donLo = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, 'Donchian alt'), 0);
+    // ADX (14) pane + ROC (100) pane — collapsed unless toggled on.
+    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, 'ADX (14)'), 3);
+    adx.createPriceLine({ price: 25, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '25' });
+    const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, 'ROC (100)'), 4);
+    roc.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
+
     const panes = chart.panes();
     panes[0]?.setStretchFactor(6);
     panes[1]?.setStretchFactor(2); // Williams %R
     panes[2]?.setStretchFactor(2.2); // MACD
+    panes[3]?.setStretchFactor(0.0001); // ADX (off by default)
+    panes[4]?.setStretchFactor(0.0001); // ROC (off by default)
     // Volume fills the bottom ~22% of the price pane; price keeps the top ~78%.
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
     candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.22 } });
@@ -212,11 +242,18 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: mMacd, kind: 'line' },
       { series: mSignal, kind: 'line' },
       { series: mEma, kind: 'line' },
+      { series: bbUp, kind: 'line' },
+      { series: bbMid, kind: 'line' },
+      { series: bbDn, kind: 'line' },
+      { series: donHi, kind: 'line' },
+      { series: donLo, kind: 'line' },
+      { series: adx, kind: 'line' },
+      { series: roc, kind: 'line' },
     ];
     const lod = new LodController(chart, candle, volume, extras, bands);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, mMacd, mSignal, mEma, bbUp, bbMid, bbDn, donHi, donLo, adx, roc };
     markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
@@ -307,6 +344,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             ema377: lv(s.ema377), ema610: lv(s.ema610),
             wilR: lv(s.wilR), wilEma: lv(s.wilEma),
             macd: lv(s.mMacd), signal: lv(s.mSignal), emacd: lv(s.mEma),
+            bbUp: lv(s.bbUp), bbMid: lv(s.bbMid), bbDn: lv(s.bbDn),
+            donHi: lv(s.donHi), donLo: lv(s.donLo),
+            adx: lv(s.adx), roc: lv(s.roc),
           });
           computeTops();
           return;
@@ -338,6 +378,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   useEffect(() => {
     if (!lodRef.current || !candles) return;
     const ind = computeIndicators(candles);
+    const ex = computeExtras(candles);
     const n = candles.length;
     const lastFin = (a: Float64Array) => {
       for (let i = a.length - 1; i >= 0; i--) if (isFinite(a[i])) return a[i];
@@ -349,12 +390,18 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       ema377: lastFin(ind.ema377p), ema610: lastFin(ind.ema610p),
       wilR: lastFin(ind.percentR), wilEma: lastFin(ind.emawil),
       macd: lastFin(ind.macdN), signal: lastFin(ind.signalN), emacd: lastFin(ind.eMacDN),
+      bbUp: lastFin(ex.bbUp), bbMid: lastFin(ex.bbMid), bbDn: lastFin(ex.bbDn),
+      donHi: lastFin(ex.donHi), donLo: lastFin(ex.donLo),
+      adx: lastFin(ex.adx), roc: lastFin(ex.roc),
     };
     lastValsRef.current = lv;
 
     lodRef.current.setData(
       candles,
-      [ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN, new Float64Array(n)],
+      [
+        ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.macdN, ind.signalN, ind.eMacDN,
+        ex.bbUp, ex.bbMid, ex.bbDn, ex.donHi, ex.donLo, ex.adx, ex.roc,
+      ],
       fitRef.current,
     );
     if (!hoveringRef.current) setLegend(lv);
@@ -370,9 +417,15 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     s.volume.applyOptions({ visible: settings.volume });
     [s.wilR, s.wilEma].forEach((x) => x.applyOptions({ visible: settings.williams }));
     [s.mMacd, s.mSignal, s.mEma].forEach((x) => x.applyOptions({ visible: settings.macd }));
+    [s.bbUp, s.bbMid, s.bbDn].forEach((x) => x.applyOptions({ visible: settings.bollinger }));
+    [s.donHi, s.donLo].forEach((x) => x.applyOptions({ visible: settings.donchian }));
+    s.adx.applyOptions({ visible: settings.adx });
+    s.roc.applyOptions({ visible: settings.roc });
     const panes = chart.panes();
     panes[1]?.setStretchFactor(settings.williams ? 2 : 0.0001);
     panes[2]?.setStretchFactor(settings.macd ? 2.2 : 0.0001);
+    panes[3]?.setStretchFactor(settings.adx ? 1.6 : 0.0001);
+    panes[4]?.setStretchFactor(settings.roc ? 1.6 : 0.0001);
     // Reserve the bottom slice of the price pane for volume only when shown.
     s.candle.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: settings.volume ? 0.22 : 0.04 } });
   }, [settings]);
@@ -521,7 +574,32 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
                 <span className="lg-muted">Hac</span> {fv(legend.v)}
               </>
             )}
+            {settings.bollinger && (
+              <>
+                {'  '}
+                <span style={{ color: '#5c9ded' }}>BB (20) {fp(legend.bbUp)}/{fp(legend.bbMid)}/{fp(legend.bbDn)}</span>
+              </>
+            )}
+            {settings.donchian && (
+              <>
+                {'  '}
+                <span style={{ color: '#d9a441' }}>Donchian (20) {fp(legend.donHi)}/{fp(legend.donLo)}</span>
+              </>
+            )}
           </div>
+
+          {settings.adx && tops[3] != null && (
+            <div className="pane-legend" style={{ top: tops[3] + 6 }}>
+              <span style={{ color: '#ab47bc' }}>ADX (14)</span> {fn(legend.adx, 1)}{' '}
+              <span className="lg-muted">{legend.adx >= 25 ? '· güçlü trend' : '· zayıf/yatay'}</span>
+            </div>
+          )}
+
+          {settings.roc && tops[4] != null && (
+            <div className="pane-legend" style={{ top: tops[4] + 6 }}>
+              <span style={{ color: '#26c6da' }}>Momentum / ROC (100)</span> {fn(legend.roc, 1)}%
+            </div>
+          )}
 
           {settings.williams && tops[1] != null && (
             <div className="pane-legend" style={{ top: tops[1] + 6 }}>
