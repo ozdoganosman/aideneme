@@ -1,471 +1,311 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Candles } from '../data/types';
-import { optimize, StrategyResult, explainStrategy, optimizeFamily, optFamilies, registerCustomStrategy, OptResult } from '../indicators/backtest';
-import { fetchStrategies, StrategiesFile, TopCombo } from '../data/bistStatic';
+import { evalPosition } from '../indicators/backtest';
+import { fetchBistStatic } from '../data/bistStatic';
+import {
+  CustomStrategy,
+  Cond,
+  INDS,
+  OPS,
+  hasParam,
+  newCond,
+  buildCustomPosition,
+} from '../indicators/customStrategy';
 
 interface Props {
   candles: Candles;
   symbol: string;
+  universe: string[];
+  strats: CustomStrategy[];
+  onSave: (s: CustomStrategy[]) => void;
+  onApply: (s: CustomStrategy) => void;
+  onPickCombo: (sym: string, s: CustomStrategy) => void;
   onClose: () => void;
-  onSelect: (name: string) => void;
-  onPickSymbolStrategy: (sym: string, name: string) => void;
 }
 
-// Exclude short-term / high-turnover strategies (avg holding < ~5 weeks).
-const MIN_HOLD = 25;
+interface Combo {
+  sym: string;
+  strat: CustomStrategy;
+  ann: number;
+  ret: number;
+  trades: number;
+  win: number;
+  dd: number;
+}
 
-export function Backtest({ candles, symbol, onClose, onSelect, onPickSymbolStrategy }: Props) {
-  const [data, setData] = useState<{ results: StrategyResult[]; holdPct: number; holdAnn: number } | null>(null);
-  const [market, setMarket] = useState<StrategiesFile | null>(null);
-  const [marketLoaded, setMarketLoaded] = useState(false);
-  const [tab, setTab] = useState<'market' | 'top' | 'symbol' | 'opt'>(
-    () => (localStorage.getItem('borsaBtTab') as 'market' | 'top' | 'symbol' | 'opt') || 'market',
+const blankDraft = (): CustomStrategy => ({ id: '', name: '', buy: [newCond()], sell: [] });
+
+export function Backtest({ candles, symbol, universe, strats, onSave, onApply, onPickCombo, onClose }: Props) {
+  const [tab, setTab] = useState<'mine' | 'top'>('mine');
+  const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
+  const [scan, setScan] = useState<{ rows: Combo[]; done: number; total: number; running: boolean } | null>(null);
+
+  // Backtest each saved strategy on the current symbol.
+  const results = useMemo(
+    () =>
+      strats
+        .map((s) => ({ s, r: evalPosition(candles, buildCustomPosition(candles, s)) }))
+        .sort((a, b) => b.r.annPct - a.r.annPct),
+    [strats, candles],
   );
-  useEffect(() => {
-    localStorage.setItem('borsaBtTab', tab);
-  }, [tab]);
-  const [optFamily, setOptFamily] = useState(optFamilies()[0]);
-  const optResults = useMemo<OptResult[]>(
-    () => (tab === 'opt' ? optimizeFamily(candles, optFamily) : []),
-    [tab, optFamily, candles],
-  );
 
-  useEffect(() => {
-    setData(null);
-    const t = setTimeout(() => setData(optimize(candles)), 20);
-    return () => clearTimeout(t);
-  }, [candles]);
+  const setBuy = (buy: Cond[]) => setDraft((d) => ({ ...d, buy }));
+  const setSell = (sell: Cond[]) => setDraft((d) => ({ ...d, sell }));
 
-  useEffect(() => {
-    fetchStrategies()
-      .then(setMarket)
-      .catch(() => setMarket(null))
-      .finally(() => setMarketLoaded(true));
-  }, []);
-
-  const pick = (name: string) => {
-    onSelect(name);
-    onClose();
+  const save = () => {
+    const name = draft.name.trim();
+    if (!name || draft.buy.length === 0) return;
+    const id = draft.id || String(Date.now());
+    const next = [...strats.filter((s) => s.id !== id), { ...draft, id, name }];
+    onSave(next);
+    setDraft(blankDraft());
   };
+  const del = (id: string) => onSave(strats.filter((s) => s.id !== id));
+  const edit = (s: CustomStrategy) =>
+    setDraft({ id: s.id, name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
 
-  const pickCombo = (sym: string, name: string) => {
-    onPickSymbolStrategy(sym, name);
-    onClose();
-  };
-
-  const pickOpt = (r: OptResult) => {
-    registerCustomStrategy(r.def);
-    onSelect(r.name);
-    onClose();
+  const runScan = async () => {
+    if (!strats.length || !universe.length) return;
+    setScan({ rows: [], done: 0, total: universe.length, running: true });
+    const best = new Map<string, Combo>();
+    const queue = [...universe];
+    let done = 0;
+    const worker = async () => {
+      while (queue.length) {
+        const sym = queue.shift()!;
+        try {
+          const c = await fetchBistStatic(sym);
+          if (c.length >= 80) {
+            for (const s of strats) {
+              const r = evalPosition(c, buildCustomPosition(c, s));
+              if (r.trades > 0) {
+                const prev = best.get(sym);
+                if (!prev || r.annPct > prev.ann)
+                  best.set(sym, { sym, strat: s, ann: r.annPct, ret: r.retPct, trades: r.trades, win: r.winRate, dd: r.maxDD });
+              }
+            }
+          }
+        } catch {
+          /* skip */
+        }
+        done++;
+        setScan((p) => (p ? { ...p, done } : p));
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, worker));
+    const rows = [...best.values()].sort((a, b) => b.ann - a.ann).slice(0, 20);
+    setScan({ rows, done, total: universe.length, running: false });
   };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <b>Strateji Taraması</b>
+          <b>Stratejilerim {strats.length > 0 && `· ${strats.length}`}</b>
           <button className="row-x" onClick={onClose} title="Kapat">×</button>
         </div>
 
         <div className="bt-tabs">
-          <button className={tab === 'market' ? 'active' : ''} onClick={() => setTab('market')}>
-            📊 Piyasa Geneli{market ? ` · ${market.nSymbols} hisse` : ''}
+          <button className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
+            🛠️ Stratejilerim
           </button>
           <button className={tab === 'top' ? 'active' : ''} onClick={() => setTab('top')}>
             🏅 En İyi 20
           </button>
-          <button className={tab === 'symbol' ? 'active' : ''} onClick={() => setTab('symbol')}>
-            📈 {symbol}
-          </button>
-          <button className={tab === 'opt' ? 'active' : ''} onClick={() => setTab('opt')}>
-            🔧 Optimize
-          </button>
         </div>
 
         <div className="modal-body">
-          <details className="bt-glossary">
-            <summary>ℹ️ Stratejiler ne demek? (basitçe)</summary>
-            <div>
-              <p>
-                <b>📈 Trend takibi (EMA / MACD):</b> Fiyat yükselişe geçince AL, düşüşe dönünce SAT — "yükselen ata bin".
-                Trendli piyasada kazandırır, yatay piyasada yıpratır.
-              </p>
-              <p>
-                <b>🔄 Dipten al, tepeden sat (Williams %R):</b> Fiyat aşırı düşünce AL, aşırı yükselince SAT. Dalgalı/yatay
-                piyasada iyi, güçlü trendde geç kalır.
-              </p>
-              <p className="lg-muted">
-                Sayılar gün sayısıdır: küçük = hızlı/çok işlem (kısa vadeli), büyük = yavaş/az işlem (uzun vadeli). Her
-                stratejinin altında mantığı yazıyor.
-              </p>
-              <p className="lg-muted">
-                <b>Yıllık / gün başına:</b> Sıralama artık toplam getiriye değil, <b>yıllık ortalama (gün başına)
-                kâra</b> göre — 20 yılda biriken dev bir toplam, hızlı bir kazançla adil kıyaslansın diye. Böylece çoğu
-                stratejinin aslında <b>Al-Tut</b>'u zor geçtiği görülür.
-              </p>
-            </div>
-          </details>
-
-          {tab === 'market' ? (
-            renderMarket(market, marketLoaded, pick)
-          ) : tab === 'top' ? (
-            renderTop(market, marketLoaded, pickCombo)
-          ) : tab === 'opt' ? (
+          {tab === 'mine' ? (
             <>
+              <div className="sb-card">
+                <div className="sb-title">{draft.id ? '✏️ Stratejiyi düzenle' : '➕ Yeni strateji'}</div>
+                <input
+                  className="sb-name"
+                  placeholder="Strateji adı (ör. %R Güç Dönüşü)"
+                  value={draft.name}
+                  onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                />
+                <CondGroup label="AL koşulları (hepsi sağlanınca girer)" conds={draft.buy} onChange={setBuy} />
+                <CondGroup
+                  label="SAT koşulları (boşsa: AL koşulu bozulunca çıkar)"
+                  conds={draft.sell}
+                  onChange={setSell}
+                />
+                <div className="sb-actions">
+                  <button className="scr-add" onClick={save}>
+                    {draft.id ? 'Güncelle' : 'Kaydet'}
+                  </button>
+                  {(draft.id || draft.name) && (
+                    <button className="sb-clear" onClick={() => setDraft(blankDraft())}>
+                      Temizle
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <p className="bt-intro">
-                <b>{symbol}</b> üzerinde bir gösterge ailesinin parametrelerini tarar ve en yüksek <b>yıllık</b> getiriyi
-                veren ayarı bulur. Bir satıra <b>tıkla</b> → grafikte uygula.
+                <b>{symbol}</b> üzerinde kayıtlı stratejilerin sonuçları (<b>yıllık</b> getiriye göre). Bir satıra tıkla →
+                grafikte AL/SAT işaretlenir.
               </p>
-              <div className="scr-build" style={{ marginBottom: 4 }}>
-                <label className="scr-pick">
-                  Aile
-                  <select value={optFamily} onChange={(e) => setOptFamily(e.target.value)}>
-                    {optFamilies().map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <span className="lg-muted">{optResults.length} kombinasyon denendi</span>
-              </div>
-              <div className="bt-list">
-                {optResults.slice(0, 15).map((r, i) => (
-                  <div key={r.name} className="bt-srow clickable" onClick={() => pickOpt(r)} title="Grafikte uygula">
-                    <div className="bt-srow-head">
-                      <span className="bt-rank">{i + 1}</span>
-                      <span className="bt-srow-name">{r.name}</span>
-                      <span className={'bt-srow-val ' + (r.res.annPct >= 0 ? 'up' : 'down')}>
-                        {fmtPct(r.res.annPct)}
-                        <span className="bt-tag">yıl</span>
-                      </span>
+
+              {results.length === 0 ? (
+                <div className="bt-note">Henüz strateji yok. Yukarıdan koşulları seçip kaydet.</div>
+              ) : (
+                <div className="bt-list">
+                  {results.map(({ s, r }, i) => (
+                    <div key={s.id} className="bt-srow">
+                      <div className="bt-srow-head">
+                        <span className="bt-rank">{i + 1}</span>
+                        <span className="bt-srow-name">{s.name}</span>
+                        <span className={'bt-srow-val ' + (r.annPct >= 0 ? 'up' : 'down')}>
+                          {fmtPct(r.annPct)}
+                          <span className="bt-tag">yıl</span>
+                        </span>
+                      </div>
+                      <div className="bt-srow-sub">
+                        toplam {fmtX(r.retPct)} · {r.trades} işlem · Kazanma %{r.winRate.toFixed(0)} · Düşüş -
+                        {r.maxDD.toFixed(0)}%
+                      </div>
+                      <div className="bt-srow-explain">{describe(s)}</div>
+                      <div className="sb-rowbtns">
+                        <button onClick={() => onApply(s)}>📈 Grafikte göster</button>
+                        <button onClick={() => edit(s)}>Düzenle</button>
+                        <button className="sb-del" onClick={() => del(s.id)}>Sil</button>
+                      </div>
                     </div>
-                    <div className="bt-srow-sub">
-                      toplam {fmtX(r.res.retPct)} · {r.res.trades} işlem · Kazanma %{r.res.winRate.toFixed(0)} · Düşüş -
-                      {r.res.maxDD.toFixed(0)}%
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
-            renderSymbol(data, pick, candles)
+            <>
+              <p className="bt-intro">
+                Kayıtlı stratejilerini ~{universe.length} hissede (izleme listen + portföyün + likit BIST hisseleri)
+                tarar; <b>yıllık</b> getirisi en yüksek 20 <b>hisse + strateji</b> eşleşmesini listeler. Bir satıra tıkla
+                → o hisseyi açar ve stratejiyi işaretler.
+              </p>
+              <div className="sb-actions">
+                <button className="scr-add" onClick={runScan} disabled={!strats.length || scan?.running}>
+                  {scan?.running ? `Taranıyor… ${scan.done}/${scan.total}` : '🔍 Tara'}
+                </button>
+                {!strats.length && <span className="bt-note">Önce "Stratejilerim"den strateji ekle.</span>}
+              </div>
+              {scan && !scan.running && (
+                <div className="bt-list">
+                  {scan.rows.length === 0 ? (
+                    <div className="bt-note">Eşleşen sonuç yok.</div>
+                  ) : (
+                    scan.rows.map((t, i) => (
+                      <div
+                        key={t.sym + t.strat.id}
+                        className="bt-srow clickable"
+                        onClick={() => onPickCombo(t.sym, t.strat)}
+                        title="Hisseyi aç + grafikte göster"
+                      >
+                        <div className="bt-srow-head">
+                          <span className="bt-rank">{i + 1}</span>
+                          <span className="bt-srow-name">
+                            <b>{t.sym}</b> · {t.strat.name}
+                          </span>
+                          <span className={'bt-srow-val ' + (t.ann >= 0 ? 'up' : 'down')}>
+                            {fmtPct(t.ann)}
+                            <span className="bt-tag">yıl</span>
+                          </span>
+                        </div>
+                        <div className="bt-srow-sub">
+                          toplam {fmtX(t.ret)} · {t.trades} işlem · Kazanma %{t.win.toFixed(0)} · Düşüş -{t.dd.toFixed(0)}%
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+              <div className="bt-hint">⚠️ Geçmişe dönük; yatırım tavsiyesi değildir.</div>
+            </>
           )}
-          <div className="bt-hint">
-            Çubuk = <b>yıllık getiri</b> (gün başına kâra göre normalize — uzun sürede biriken büyük toplamlar artık
-            haksız öne çıkmıyor). Bir stratejiye <b>tıkla</b> → grafikte AL/SAT noktaları işaretlenir.
-            <br />⚠️ Geçmişe dönük (in-sample); geçmiş performans geleceği garanti etmez.
-          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function renderMarket(
-  market: StrategiesFile | null,
-  loaded: boolean,
-  pick: (n: string) => void,
-) {
-  if (!loaded) return <div className="bt-note">Yükleniyor…</div>;
-  if (!market || market.results.length === 0)
-    return <div className="bt-note">Piyasa geneli sonuç henüz hazır değil (CI bir sonraki dağıtımda üretecek).</div>;
-
-  const hasAnn = market.results.some((r) => r.avgAnn != null);
-  const key = (r: StrategiesFile['results'][number]) => (hasAnn ? r.avgAnn ?? -999 : r.avgRet);
-  const filtered = market.results.filter((r) => (r.avgHold ?? 999) >= MIN_HOLD);
-  const list = (filtered.length ? filtered : market.results).slice().sort((a, b) => key(b) - key(a));
-  const rows = list.slice(0, 12);
-  const max = Math.max(...rows.map((r) => Math.abs(key(r))), 1);
-  const w = list[0];
-  const holdAnn = market.holdAnnAvg;
-
+function CondGroup({ label, conds, onChange }: { label: string; conds: Cond[]; onChange: (c: Cond[]) => void }) {
+  const set = (i: number, c: Cond) => onChange(conds.map((x, idx) => (idx === i ? c : x)));
   return (
-    <>
-      <p className="bt-intro">
-        ~{market.nSymbols} BIST hissesinin tümünde geçmiş günlük veriyle test edildi;{' '}
-        {hasAnn ? <b>yıllık (gün başına) getiri</b> : <b>ortalama getiri</b>}ye göre sıralı (kısa vadeli / çok işlem
-        yapanlar hariç). Karşılaştırma — <b>Al-Tut</b>{' '}
-        {hasAnn && holdAnn != null ? (
-          <>
-            yıllık ort.: <b className="up">{fmtPct(holdAnn)}</b>
-          </>
-        ) : (
-          <>
-            ort.: <b className="up">{fmtX(market.holdAvg)}</b>
-          </>
-        )}
-      </p>
-
-      <Winner
-        name={w.name}
-        big={hasAnn ? fmtPct(w.avgAnn!) : fmtX(w.avgRet)}
-        tag={hasAnn ? 'yıllık' : ''}
-        stats={
-          hasAnn
-            ? `gün başına ${perDay(w.avgAnn!)} · toplam ${fmtX(w.avgRet)} · Al-Tut'u %${w.beatPct.toFixed(0)} geçti · Kazanma %${w.avgWin.toFixed(0)}`
-            : `Medyan ${fmtX(w.medRet)} · Hisselerin %${w.beatPct.toFixed(0)}'inde Al-Tut'u geçti · Kazanma %${w.avgWin.toFixed(0)}`
-        }
-        onClick={() => pick(w.name)}
-      />
-
-      <div className="bt-list">
-        {rows.map((r, i) => (
-          <Row
-            key={r.name}
-            rank={i + 1}
-            name={r.name}
-            value={hasAnn ? r.avgAnn ?? 0 : r.avgRet}
-            max={max}
-            label={hasAnn ? fmtPct(r.avgAnn!) : fmtX(r.avgRet)}
-            tag={hasAnn ? 'yıl' : ''}
-            sub={
-              hasAnn
-                ? `gün başına ${perDay(r.avgAnn!)} · toplam ${fmtX(r.avgRet)} · Al-Tut %${r.beatPct.toFixed(0)} · Düşüş -${r.avgDD.toFixed(0)}%`
-                : `Al-Tut'u geçme %${r.beatPct.toFixed(0)} · Kazanma %${r.avgWin.toFixed(0)} · Düşüş -${r.avgDD.toFixed(0)}%`
-            }
-            onClick={() => pick(r.name)}
-          />
-        ))}
-      </div>
-    </>
+    <div className="sb-group">
+      <div className="sb-grouplabel">{label}</div>
+      {conds.map((c, i) => (
+        <CondRow key={i} c={c} onChange={(nc) => set(i, nc)} onRemove={() => onChange(conds.filter((_, idx) => idx !== i))} />
+      ))}
+      <button className="sb-addcond" onClick={() => onChange([...conds, newCond()])}>
+        + koşul ekle
+      </button>
+    </div>
   );
 }
 
-// Aggregate which indicator families dominate the Top-20 and feature them.
-function renderWinners(top: TopCombo[]) {
-  if (!top || top.length === 0) return null;
-  const fam = new Map<string, { n: number; sum: number }>();
-  for (const t of top) {
-    const f = indicatorFamily(t.name);
-    const e = fam.get(f) ?? { n: 0, sum: 0 };
-    e.n += 1;
-    e.sum += t.ann;
-    fam.set(f, e);
-  }
-  const ranked = [...fam.entries()]
-    .map(([name, v]) => ({ name, n: v.n, avg: v.sum / v.n }))
-    .sort((a, b) => b.n - a.n || b.avg - a.avg);
-  const champ = ranked[0];
+function CondRow({ c, onChange, onRemove }: { c: Cond; onChange: (c: Cond) => void; onRemove: () => void }) {
   return (
-    <div className="bt-winners">
-      <div className="bt-winners-title">🏆 Öne çıkan göstergeler (bu listede en çok kazandıranlar)</div>
-      <div className="bt-winners-chips">
-        {ranked.map((r, i) => (
-          <span key={r.name} className={'bt-wchip' + (i === 0 ? ' top' : '')} title={`Ortalama yıllık ${fmtPct(r.avg)}`}>
-            {r.name} <b>×{r.n}</b> <span className="lg-muted">{fmtPct(r.avg)}</span>
-          </span>
+    <div className="cond">
+      <select value={c.ind} onChange={(e) => onChange({ ...c, ind: e.target.value })}>
+        {INDS.map((i) => (
+          <option key={i.key} value={i.key}>
+            {i.label}
+          </option>
         ))}
-      </div>
-      {champ && (
-        <div className="bt-winners-note">
-          En baskın: <b>{champ.name}</b> — Top-20'de <b>{champ.n}</b> hissede zirvede, ortalama{' '}
-          <b className="up">{fmtPct(champ.avg)}</b>/yıl. Strateji seçerken bunlara odaklanmak mantıklı.
-        </div>
+      </select>
+      {hasParam(c.ind) && (
+        <input className="cond-p" value={c.p} inputMode="numeric" onChange={(e) => onChange({ ...c, p: +e.target.value || 0 })} />
       )}
-    </div>
-  );
-}
-
-function renderTop(
-  market: StrategiesFile | null,
-  loaded: boolean,
-  pickCombo: (sym: string, name: string) => void,
-) {
-  if (!loaded) return <div className="bt-note">Yükleniyor…</div>;
-  const top = market?.top ?? [];
-  if (top.length === 0)
-    return <div className="bt-note">En iyi 20 listesi henüz hazır değil (CI bir sonraki dağıtımda üretecek).</div>;
-
-  return (
-    <>
-      <p className="bt-intro">
-        ~{market?.nSymbols ?? 0} BIST hissesi × tüm stratejiler içinde geçmişte <b>yıllık</b> getirisi en yüksek 20{' '}
-        <b>hisse + strateji</b> eşleşmesi (her hisse için en iyi stratejisi; yalnızca{' '}
-        <b>en az {market?.topMinYears ?? 10} yıllık</b> geçmişi olan firmalar). Bir satıra <b>tıkla</b> → o hisseyi açar
-        ve stratejiyi grafiğe işaretler.
-      </p>
-
-      {renderWinners(top)}
-
-      <div className="bt-list">
-        {top.map((t, i) => (
-          <div
-            key={t.sym + t.name}
-            className="bt-srow clickable"
-            onClick={() => pickCombo(t.sym, t.name)}
-            title={`${t.sym} aç + ${t.name} göster`}
-          >
-            <div className="bt-srow-head">
-              <span className="bt-rank">{i + 1}</span>
-              <span className="bt-srow-name">
-                <b>{t.sym}</b> · {t.name}
-              </span>
-              <span className="bt-srow-val up">
-                {fmtPct(t.ann)}
-                <span className="bt-tag">yıl</span>
-              </span>
-            </div>
-            <div className="bt-srow-sub">
-              toplam {fmtX(t.ret)} · {t.trades} işlem · Kazanma %{t.win.toFixed(0)} · Düşüş -{t.dd.toFixed(0)}%
-            </div>
-            <div className="bt-srow-explain">{explainStrategy(t.name)}</div>
-          </div>
+      <select value={c.op} onChange={(e) => onChange({ ...c, op: e.target.value as Cond['op'] })}>
+        {OPS.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
         ))}
-      </div>
-    </>
-  );
-}
-
-// Annualized buy & hold (CAGR) from `years` ago to now; null if history shorter.
-function holdAnnSince(c: Candles, years: number | null): number | null {
-  const n = c.length;
-  if (n < 2) return null;
-  const tlast = c.time[n - 1];
-  let idx = 0;
-  if (years != null) {
-    const cut = tlast - years * 365.25 * 86400;
-    if (c.time[0] > cut) return null;
-    while (idx < n - 1 && c.time[idx] < cut) idx++;
-  }
-  const span = (tlast - c.time[idx]) / (365.25 * 86400);
-  if (span <= 0 || c.close[idx] <= 0) return null;
-  return (Math.pow(c.close[n - 1] / c.close[idx], 1 / span) - 1) * 100;
-}
-
-function renderSymbol(
-  data: { results: StrategyResult[]; holdPct: number; holdAnn: number } | null,
-  pick: (n: string) => void,
-  c: Candles,
-) {
-  if (!data)
-    return (
-      <div className="bt-note" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div className="spinner" /> Hesaplanıyor…
-      </div>
-    );
-
-  const nBars = c.length;
-  const filtered = data.results.filter((r) => r.trades > 0 && nBars / r.trades >= MIN_HOLD);
-  const list = filtered.length ? filtered : data.results;
-  const rows = list.slice(0, 12);
-  const max = Math.max(...rows.map((r) => Math.abs(r.annPct)), Math.abs(data.holdAnn), 1);
-  const w = list[0];
-
-  return (
-    <>
-      <p className="bt-intro">
-        Bu hissede her strateji geçmişte otomatik uygulanırsa ne kazandırırdı — <b>yıllık (gün başına)</b> getiriye göre
-        sıralı (kısa vadeli / çok işlem yapanlar hariç).
-        <br />
-        <b>Al-Tut yıllık (CAGR) — o tarihten beri alıp tutsaydın:</b>{' '}
-        {([['1Y', 1], ['5Y', 5], ['10Y', 10], ['Tüm', null]] as [string, number | null][]).map(([lbl, y], i) => {
-          const v = holdAnnSince(c, y);
-          return (
-            <span key={lbl}>
-              {i > 0 ? ' · ' : ' '}
-              {lbl}:{' '}
-              {v == null ? <span className="lg-muted">—</span> : <b className={v >= 0 ? 'up' : 'down'}>{fmtPct(v)}</b>}
-            </span>
-          );
-        })}
-      </p>
-
-      <Winner
-        name={w.name}
-        big={fmtPct(w.annPct)}
-        tag="yıllık"
-        stats={`gün başına ${perDay(w.annPct)} · toplam ${fmtX(w.retPct)} · Al-Tut'a ${fmtPct(w.annPct - data.holdAnn)} · ${w.trades} işlem · Kazanma %${w.winRate.toFixed(0)}`}
-        onClick={() => pick(w.name)}
-      />
-
-      <div className="bt-list">
-        {rows.map((r, i) => (
-          <Row
-            key={r.name}
-            rank={i + 1}
-            name={r.name}
-            value={r.annPct}
-            max={max}
-            label={fmtPct(r.annPct)}
-            tag="yıl"
-            sub={`gün başına ${perDay(r.annPct)} · toplam ${fmtX(r.retPct)} · Al-Tut'a ${fmtPct(r.annPct - data.holdAnn)} · ${r.trades} işlem · Düşüş -${r.maxDD.toFixed(0)}%`}
-            onClick={() => pick(r.name)}
-          />
-        ))}
-      </div>
-    </>
-  );
-}
-
-function Winner({
-  name,
-  big,
-  tag,
-  stats,
-  onClick,
-}: {
-  name: string;
-  big: string;
-  tag?: string;
-  stats: string;
-  onClick: () => void;
-}) {
-  return (
-    <div className="bt-winner clickable" onClick={onClick} title={explainStrategy(name)}>
-      <div className="bt-winner-l">
-        <div className="bt-winner-badge">🏆 En iyi</div>
-        <div className="bt-winner-name">{name}</div>
-        <div className="bt-winner-stats">{stats}</div>
-      </div>
-      <div className="bt-winner-big up">
-        {big}
-        {tag && <span className="bt-tag">{tag}</span>}
-      </div>
+      </select>
+      <select value={c.tgt} onChange={(e) => onChange({ ...c, tgt: e.target.value as 'val' | 'ind' })}>
+        <option value="val">Değer</option>
+        <option value="ind">Gösterge</option>
+      </select>
+      {c.tgt === 'val' ? (
+        <input className="cond-v" value={c.val} inputMode="decimal" onChange={(e) => onChange({ ...c, val: parseFloat(e.target.value.replace(',', '.')) || 0 })} />
+      ) : (
+        <>
+          <select value={c.ind2} onChange={(e) => onChange({ ...c, ind2: e.target.value })}>
+            {INDS.map((i) => (
+              <option key={i.key} value={i.key}>
+                {i.label}
+              </option>
+            ))}
+          </select>
+          {hasParam(c.ind2) && (
+            <input className="cond-p" value={c.p2} inputMode="numeric" onChange={(e) => onChange({ ...c, p2: +e.target.value || 0 })} />
+          )}
+        </>
+      )}
+      <button className="cond-x" onClick={onRemove} title="Koşulu kaldır">×</button>
     </div>
   );
 }
 
-function Row({
-  rank,
-  name,
-  value,
-  max,
-  label,
-  tag,
-  sub,
-  onClick,
-}: {
-  rank: number;
-  name: string;
-  value: number;
-  max: number;
-  label: string;
-  tag?: string;
-  sub: string;
-  onClick: () => void;
-}) {
-  const width = Math.max(3, Math.min(100, (Math.abs(value) / max) * 100));
-  return (
-    <div className="bt-srow clickable" onClick={onClick} title="Grafikte göster">
-      <div className="bt-srow-head">
-        <span className="bt-rank">{rank}</span>
-        <span className="bt-srow-name">{name}</span>
-        <span className={'bt-srow-val ' + (value >= 0 ? 'up' : 'down')}>
-          {label}
-          {tag && <span className="bt-tag">{tag}</span>}
-        </span>
-      </div>
-      <div className="bt-barwrap">
-        <div className={'bt-bar ' + (value >= 0 ? 'pos' : 'neg')} style={{ width: width + '%' }} />
-      </div>
-      <div className="bt-srow-sub">{sub}</div>
-      <div className="bt-srow-explain">{explainStrategy(name)}</div>
-    </div>
-  );
+// Plain-language one-liner of a strategy's rules.
+function describe(s: CustomStrategy): string {
+  const part = (c: Cond) => {
+    const left = ind(c.ind, c.p);
+    const opl = c.op === 'gt' ? '>' : c.op === 'lt' ? '<' : c.op === 'cu' ? '↗ keser' : '↘ keser';
+    const right = c.tgt === 'val' ? String(c.val) : ind(c.ind2, c.p2);
+    return `${left} ${opl} ${right}`;
+  };
+  const buy = s.buy.map(part).join(' ve ');
+  const sell = s.sell.length ? s.sell.map(part).join(' ve ') : 'AL koşulu bozulunca';
+  return `AL: ${buy}  →  SAT: ${sell}`;
+}
+function ind(key: string, p: number): string {
+  const lbl = INDS.find((i) => i.key === key)?.label ?? key;
+  return hasParam(key) ? `${lbl}(${p})` : lbl;
 }
 
-// Big returns as a multiplier (e.g. 64x), smaller ones as %.
 function fmtX(r: number): string {
   if (!isFinite(r)) return '—';
   if (r >= 1000) {
@@ -474,29 +314,7 @@ function fmtX(r: number): string {
   }
   return (r >= 0 ? '+' : '') + Math.round(r) + '%';
 }
-
-// Annualized return as a plain percent (always sensible-sized, no x).
 function fmtPct(r: number): string {
   if (!isFinite(r)) return '—';
   return (r >= 0 ? '+' : '') + (Math.abs(r) < 10 ? r.toFixed(1) : Math.round(r).toString()) + '%';
-}
-
-// Normalize a strategy name to its underlying indicator family.
-function indicatorFamily(name: string): string {
-  if (name.startsWith('Supertrend')) return 'Supertrend';
-  if (name.startsWith('Donchian')) return 'Donchian kırılımı';
-  if (name.startsWith('Momentum')) return 'Momentum (ROC)';
-  if (name.startsWith('Paşa+Cedid')) return 'Paşa+Cedid';
-  if (name.startsWith('RSI')) return 'RSI';
-  if (name.startsWith('%R')) return 'Williams %R';
-  if (name.startsWith('MACD')) return 'MACD';
-  if (name.startsWith('EMA')) return 'EMA kesişimi';
-  return name;
-}
-
-// Daily-compounded equivalent of an annualized return ("gün başına" kâr).
-function perDay(ann: number): string {
-  if (!isFinite(ann) || ann <= -100) return '—';
-  const d = (Math.pow(1 + ann / 100, 1 / 365.25) - 1) * 100;
-  return (d >= 0 ? '+' : '') + d.toFixed(3) + '%';
 }

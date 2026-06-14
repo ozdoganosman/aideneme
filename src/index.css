@@ -2212,3 +2212,126 @@ button.ctl:disabled {
     display: none;
   }
 }
+
+/* Strategy builder */
+.sb-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.sb-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+}
+.sb-name {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+  outline: none;
+  margin-bottom: 8px;
+}
+.sb-name:focus {
+  border-color: var(--accent);
+}
+.sb-group {
+  margin-bottom: 8px;
+}
+.sb-grouplabel {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.cond {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+  align-items: center;
+}
+.cond select,
+.cond input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-size: 12px;
+  outline: none;
+}
+.cond select:focus,
+.cond input:focus {
+  border-color: var(--accent);
+}
+.cond-p {
+  width: 52px;
+}
+.cond-v {
+  width: 70px;
+}
+.cond-x {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.cond-x:hover {
+  color: var(--down);
+}
+.sb-addcond {
+  background: none;
+  border: 1px dashed var(--border-2);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sb-addcond:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.sb-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.sb-clear {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 6px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sb-rowbtns {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 0 28px;
+}
+.sb-rowbtns button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.sb-rowbtns button:hover {
+  border-color: var(--accent);
+}
+.sb-rowbtns .sb-del:hover {
+  border-color: var(--down);
+  color: var(--down);
+}

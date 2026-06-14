@@ -408,7 +408,17 @@ export function optimize(c: Candles): { results: StrategyResult[]; holdPct: numb
 // trades panel can redraw them by name (they aren't in the static registry).
 const customStrategies: StrategyDef[] = [];
 export function registerCustomStrategy(def: StrategyDef): void {
-  if (!customStrategies.some((d) => d.name === def.name)) customStrategies.push(def);
+  const i = customStrategies.findIndex((d) => d.name === def.name);
+  if (i >= 0) customStrategies[i] = def;
+  else customStrategies.push(def);
+}
+
+// Backtest an arbitrary precomputed position array on a symbol's candles.
+export function evalPosition(c: Candles, pos: Uint8Array): StrategyResult {
+  const close = c.close;
+  const n = c.length;
+  const years = n > 1 ? Math.max((c.time[n - 1] - c.time[0]) / (365.25 * 86400), 1e-6) : 0;
+  return simulate(close, pos, 0, 0, '', years);
 }
 
 export function buildPositionByName(name: string, c: Candles): Uint8Array | null {

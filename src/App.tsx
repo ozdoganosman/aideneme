@@ -9,7 +9,8 @@ import { Backtest } from './components/Backtest';
 import { PortfolioAnalysis } from './components/PortfolioAnalysis';
 import { Screener } from './components/Screener';
 import { computeStats } from './indicators/stats';
-import type { Trade } from './indicators/backtest';
+import { registerCustomStrategy, type Trade } from './indicators/backtest';
+import { CustomStrategy, buildCustomPosition } from './indicators/customStrategy';
 import { Candles, BIST_SYMBOLS } from './data/types';
 import {
   fetchBistStatic,
@@ -93,6 +94,7 @@ export default function App() {
     lsGet('borsaWatchAdded', {}),
   );
   const [portfolio, setPortfolio] = useState<Holding[]>(() => lsGet('borsaPortfolio', []));
+  const [customStrats, setCustomStrats] = useState<CustomStrategy[]>(() => lsGet('borsaStrats', []));
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
     lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true }),
   );
@@ -124,6 +126,11 @@ export default function App() {
     });
   }, [quotes, watchlist]);
   useEffect(() => localStorage.setItem('borsaPortfolio', JSON.stringify(portfolio)), [portfolio]);
+  useEffect(() => localStorage.setItem('borsaStrats', JSON.stringify(customStrats)), [customStrats]);
+  // Register custom strategies so the chart/trades can draw them by name.
+  useEffect(() => {
+    customStrats.forEach((s) => registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s) }));
+  }, [customStrats]);
   useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
   useEffect(() => localStorage.setItem('borsaLeftTab', JSON.stringify(leftTab)), [leftTab]);
@@ -265,6 +272,17 @@ export default function App() {
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
   const starred = watchlist.includes(symbol);
   const stats = useMemo(() => computeStats(candles), [candles]);
+
+  // Bounded universe for the custom-strategy "En İyi 20" client-side scan.
+  const universe = useMemo(() => {
+    const core = [
+      'THYAO', 'GARAN', 'AKBNK', 'ASELS', 'KCHOL', 'SISE', 'EREGL', 'BIMAS', 'SAHOL', 'TUPRS',
+      'FROTO', 'PGSUS', 'TCELL', 'ISCTR', 'YKBNK', 'KOZAL', 'KOZAA', 'SASA', 'HEKTS', 'TOASO',
+      'TTKOM', 'PETKM', 'ENKAI', 'KRDMD', 'VESTL', 'GUBRF', 'ARCLK', 'OYAKC', 'TAVHL', 'DOHOL',
+      'EKGYO', 'ALARK', 'MGROS', 'ULKER', 'SOKM', 'TKFEN', 'AEFES', 'BRSAN', 'KONTR', 'SMRTG',
+    ];
+    return Array.from(new Set([...watchlist, ...portfolio.map((h) => h.symbol), ...core])).slice(0, 80);
+  }, [watchlist, portfolio]);
 
   // Active left tab reflects onto the chart: Portföy → avg-cost line for the held
   // symbol; İşlemler → strategy markers. Collapsed → neither.
@@ -564,18 +582,25 @@ export default function App() {
         <Backtest
           candles={candles}
           symbol={provider === 'bist' ? symbol : 'SENTETİK'}
-          onClose={() => setShowBt(false)}
-          onSelect={(name) => {
-            setStrategy(name);
+          universe={universe}
+          strats={customStrats}
+          onSave={setCustomStrats}
+          onApply={(s) => {
+            registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s) });
+            setStrategy(s.name);
             setLeftTab('trades');
             setShowLeft(true);
+            setShowBt(false);
           }}
-          onPickSymbolStrategy={(sym, name) => {
+          onPickCombo={(sym, s) => {
+            registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s) });
             selectSymbol(sym);
-            setStrategy(name);
+            setStrategy(s.name);
             setLeftTab('trades');
             setShowLeft(true);
+            setShowBt(false);
           }}
+          onClose={() => setShowBt(false)}
         />
       )}
 
