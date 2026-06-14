@@ -84,7 +84,7 @@ export function PortfolioAnalysis({ holdings, quotes, onClose, onSelect }: Props
           ) : (
             <>
               {renderConcentration(rows)}
-              {series && <ValueChartCard pv={series.pv} xv={series.xv} chg={series.chg} xchg={series.xchg} />}
+              {series && <ValueChartCard pv={series.pv} xv={series.xv} chg={series.chg} xchg={series.xchg} t0={series.t0} t1={series.t1} />}
               {renderRisk(rows, bench)}
               {renderTech(rows, pick)}
               <div className="bt-hint">
@@ -286,10 +286,17 @@ function buildValueSeries(holdings: Holding[], hist: Map<string, Candles>, xu: C
   };
   const pv = norm(pvRaw);
   const xv = xu ? norm(xvRaw) : [];
-  return { pv, xv, chg: pv.length ? pv[pv.length - 1] - 100 : 0, xchg: xv.length ? xv[xv.length - 1] - 100 : 0 };
+  return {
+    pv,
+    xv,
+    chg: pv.length ? pv[pv.length - 1] - 100 : 0,
+    xchg: xv.length ? xv[xv.length - 1] - 100 : 0,
+    t0: sampled[0],
+    t1: sampled[sampled.length - 1],
+  };
 }
 
-function ValueChartCard({ pv, xv, chg, xchg }: { pv: number[]; xv: number[]; chg: number; xchg: number }) {
+function ValueChartCard({ pv, xv, chg, xchg, t0, t1 }: { pv: number[]; xv: number[]; chg: number; xchg: number; t0: number; t1: number }) {
   const all = [...pv, ...xv].filter((v) => isFinite(v));
   if (all.length < 2) return null;
   const min = Math.min(...all);
@@ -304,9 +311,26 @@ function ValueChartCard({ pv, xv, chg, xchg }: { pv: number[]; xv: number[]; chg
   const xvLine = xv.length ? xv.map((v, i) => `${xx(i, xv.length)},${y(v)}`).join(' ') : '';
   const up = chg >= 0;
   const col = up ? '#26a69a' : '#ef5350';
+  const fmtD = (t: number) => {
+    const d = new Date(t * 1000);
+    return `${d.getMonth() + 1}.${d.getFullYear()}`;
+  };
+  // Plain-language verdict comparing the portfolio to the index over the period.
+  const hasX = xv.length > 0;
+  const diff = chg - xchg;
+  const verdict = !hasX
+    ? `Bu dönemde portföyünün değeri %${Math.abs(chg).toFixed(0)} ${chg >= 0 ? 'arttı' : 'azaldı'}.`
+    : diff >= 0
+      ? `Portföyün endeksi (XU100) ${Math.abs(diff).toFixed(0)} puan geçti 👏`
+      : `Portföyün endeksin (XU100) ${Math.abs(diff).toFixed(0)} puan gerisinde kaldı.`;
   return (
     <div className="pa-card">
       <div className="pa-card-title">📈 Portföy Değeri (zaman)</div>
+      <div className="pv-desc lg-muted">
+        Bugünkü hisse adetlerini geçmişe uygularsak portföyün toplam değeri nasıl seyrederdi — BIST 100 (XU100) endeksiyle
+        kıyas. İkisi de başlangıçta <b>100</b>'e eşitlendi. Dönem: <b>{fmtD(t0)} → {fmtD(t1)}</b> (tüm hisselerin ortak en
+        uzun geçmişi).
+      </div>
       <svg className="pv-chart" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
         <polygon points={area} fill={up ? 'rgba(38,166,154,0.16)' : 'rgba(239,83,80,0.16)'} />
         {xvLine && <polyline points={xvLine} fill="none" stroke="#6b7280" strokeWidth="1.2" strokeDasharray="4 3" />}
@@ -314,17 +338,17 @@ function ValueChartCard({ pv, xv, chg, xchg }: { pv: number[]; xv: number[]; chg
       </svg>
       <div className="pv-legend">
         <span>
-          <i className="pv-dot" style={{ background: col }} /> Portföy{' '}
+          <i className="pv-dot" style={{ background: col }} /> Portföyün (bugünkü adetlerle){' '}
           <b className={up ? 'up' : 'down'}>{(chg >= 0 ? '+' : '') + chg.toFixed(0)}%</b>
         </span>
-        {xv.length > 0 && (
+        {hasX && (
           <span>
-            <i className="pv-dot" style={{ background: '#6b7280' }} /> XU100{' '}
+            <i className="pv-dot pv-dash" /> XU100 (BIST 100 endeksi){' '}
             <b className={xchg >= 0 ? 'up' : 'down'}>{(xchg >= 0 ? '+' : '') + xchg.toFixed(0)}%</b>
           </span>
         )}
-        <span className="lg-muted">(mevcut adetlerle, ortak dönem)</span>
       </div>
+      <div className={'pv-verdict ' + (!hasX ? '' : diff >= 0 ? 'up' : 'down')}>{verdict}</div>
     </div>
   );
 }
