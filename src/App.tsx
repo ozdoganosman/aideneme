@@ -114,7 +114,8 @@ export default function App() {
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
-  const [leftTab, setLeftTab] = useState<'portfolio' | 'txns' | 'trades'>(() => lsGet('borsaLeftTab', 'portfolio'));
+  const [leftTab, setLeftTab] = useState<'portfolio' | 'txns'>(() => (lsGet<string>('borsaLeftTab', 'portfolio') === 'txns' ? 'txns' : 'portfolio'));
+  const [stratOpen, setStratOpen] = useState<boolean>(() => lsGet('borsaStratOpen', false));
   const wide0 = !isNarrow();
   const [showLeft, setShowLeft] = useState<boolean>(() => lsGet('borsaShowLeft', wide0));
   const [showRight, setShowRight] = useState<boolean>(() => lsGet('borsaShowRight', wide0));
@@ -204,6 +205,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('borsaIndParams', JSON.stringify(indParams)), [indParams]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
   useEffect(() => localStorage.setItem('borsaLeftTab', JSON.stringify(leftTab)), [leftTab]);
+  useEffect(() => localStorage.setItem('borsaStratOpen', JSON.stringify(stratOpen)), [stratOpen]);
   useEffect(() => localStorage.setItem('borsaShowLeft', JSON.stringify(showLeft)), [showLeft]);
   useEffect(() => localStorage.setItem('borsaShowRight', JSON.stringify(showRight)), [showRight]);
 
@@ -404,11 +406,11 @@ export default function App() {
     return Array.from(new Set([...watchlist, ...portfolio.map((h) => h.symbol), ...core])).slice(0, 80);
   }, [watchlist, portfolio]);
 
-  // Active left tab reflects onto the chart: Portföy → avg-cost line for the held
-  // symbol; İşlemler → strategy markers. Collapsed → neither.
-  const reflectTrades = showLeft && leftTab === 'trades';
+  // Panel reflects onto the chart: held symbol → avg-cost line; the (bottom)
+  // Strateji section open → strategy AL/SAT markers. Collapsed panel → neither.
+  const reflectTrades = showLeft && stratOpen;
   const costLine = useMemo(() => {
-    if (!showLeft || leftTab !== 'portfolio' || provider !== 'bist') return null;
+    if (!showLeft || provider !== 'bist') return null;
     const h = portfolio.find((x) => x.symbol === symbol);
     if (!h || !(h.cost > 0)) return null;
     const q = quotes[symbol];
@@ -417,7 +419,7 @@ export default function App() {
     const c = h.cost.toLocaleString('en-US', { maximumFractionDigits: h.cost >= 1000 ? 0 : 2 });
     const label = isFinite(pnlPct) ? `Maliyet ${c} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : `Maliyet ${c}`;
     return { price: h.cost, label };
-  }, [showLeft, leftTab, provider, portfolio, symbol, quotes]);
+  }, [showLeft, provider, portfolio, symbol, quotes]);
   const lastC = candles && candles.length ? candles.close[candles.length - 1] : NaN;
   const prevC = candles && candles.length > 1 ? candles.close[candles.length - 2] : NaN;
   const dChg = isFinite(lastC) && isFinite(prevC) && prevC ? ((lastC - prevC) / prevC) * 100 : 0;
@@ -550,14 +552,11 @@ export default function App() {
                 <button className={leftTab === 'txns' ? 'active' : ''} onClick={() => setLeftTab('txns')}>
                   İşlemler{txns.length ? ` · ${txns.length}` : ''}
                 </button>
-                <button className={leftTab === 'trades' ? 'active' : ''} onClick={() => setLeftTab('trades')}>
-                  Strateji
-                </button>
                 <button className="lt-hide" onClick={() => setShowLeft(false)} title="Paneli gizle (geniş grafik)">
                   ⟨
                 </button>
               </div>
-              {leftTab === 'portfolio' || leftTab === 'txns' ? (
+              <div className="lt-body">
                 <Portfolio
                   view={leftTab === 'txns' ? 'log' : 'main'}
                   txns={txns}
@@ -575,16 +574,23 @@ export default function App() {
                     setTxns(h.map((x, i) => ({ id: 'imp' + Date.now().toString(36) + i, t: Math.floor(Date.now() / 1000), symbol: x.symbol, side: 'buy' as const, qty: x.qty, price: x.cost })))
                   }
                 />
-              ) : (
-                <Trades
-                  strategy={strategy}
-                  candles={candles}
-                  onSelectTrade={(t) => {
-                    setFocusTrade(t);
-                    setLog(true);
-                  }}
-                />
-              )}
+              </div>
+              {/* Strateji: panelin en altında, açılır/kapanır bölüm */}
+              <div className="lt-strat">
+                <button className="lt-strathead" onClick={() => setStratOpen((v) => !v)} title="Uygulanan stratejinin işlemleri + grafik AL/SAT">
+                  <span>{stratOpen ? '▾' : '▸'} Strateji{strategy ? ' · işlemler' : ''}</span>
+                </button>
+                {stratOpen && (
+                  <Trades
+                    strategy={strategy}
+                    candles={candles}
+                    onSelectTrade={(t) => {
+                      setFocusTrade(t);
+                      setLog(true);
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </aside>
         ) : (
@@ -767,7 +773,7 @@ export default function App() {
           onApply={(s) => {
             registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) });
             setStrategy(s.name);
-            setLeftTab('trades');
+            setStratOpen(true);
             setShowLeft(true);
             setShowBt(false);
           }}
@@ -775,7 +781,7 @@ export default function App() {
             registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) });
             selectSymbol(sym);
             setStrategy(s.name);
-            setLeftTab('trades');
+            setStratOpen(true);
             setShowLeft(true);
             setShowBt(false);
           }}
