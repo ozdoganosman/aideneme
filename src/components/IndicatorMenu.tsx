@@ -19,7 +19,7 @@ const GROUPS: { key: keyof IndicatorSettings; label: string; fields: [keyof Indi
   { key: 'adx', label: 'ADX', fields: [['adx', 'ADX'], ['adxEma', 'EMA']] },
   { key: 'roc', label: 'Momentum / ROC', fields: [['roc', 'N'], ['rocEma', 'EMA']] },
   { key: 'sr', label: 'Destek / Direnç (oto)', fields: [] },
-  { key: 'patterns', label: 'Mum Formasyonu', fields: [] },
+  { key: 'patterns', label: 'Formasyonlar (üçgen/kama/OBO…)', fields: [] },
 ];
 
 // Smooth integer input: keeps local text so it can be cleared/retyped, commits

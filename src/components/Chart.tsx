@@ -23,7 +23,7 @@ import {
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
 import { computeIndicators, computeExtras, IndicatorParams, DEFAULT_PARAMS } from '../indicators/calc';
-import { detectSR, detectPatterns } from '../indicators/patterns';
+import { detectSR, detectFormations, Formation } from '../indicators/patterns';
 import { signalsFor, buildPositionByName } from '../indicators/backtest';
 
 export interface IndicatorSettings {
@@ -110,6 +110,15 @@ type PView =
   | { id: number; sel: boolean; kind: 'trend'; ax: number; ay: number; bx: number; by: number }
   | { id: number; sel: boolean; kind: 'fib'; ax: number; ay: number; bx: number; by: number; levels: { r: number; y: number; price: number }[] };
 const FIBS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+// Projected (pixel) view of a detected chart formation for the overlay.
+interface FView {
+  dir: 'bull' | 'bear' | 'neutral';
+  label: string;
+  lx: number;
+  ly: number;
+  segs: { ax: number; ay: number; bx: number; by: number }[];
+  pts: { x: number; y: number }[];
+}
 const drawKey = (sym: string) => 'borsaDraw:' + sym;
 function loadDraws(sym: string): Draw[] {
   try {
@@ -233,11 +242,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const bandsRef = useRef<ISeriesApi<'Baseline'>[]>([]);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const costLineRef = useRef<IPriceLine | null>(null);
-  // Auto S/R price lines + the two marker sources (strategy signals + detected
-  // candlestick patterns) that share the single marker layer.
+  // Auto S/R price lines + detected chart formations (drawn as overlay lines).
   const srLinesRef = useRef<IPriceLine[]>([]);
-  const stratMarkersRef = useRef<SeriesMarker<Time>[]>([]);
-  const patMarkersRef = useRef<SeriesMarker<Time>[]>([]);
+  const formationsRef = useRef<Formation[]>([]);
   const lastValsRef = useRef<LegendVals | null>(null);
   const hoveringRef = useRef(false);
   const fitRef = useRef(true);
@@ -267,15 +274,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const [drawTool, setDrawTool] = useState<DrawTool>('none');
   const [drawView, setDrawView] = useState<PView[]>([]);
   const [drawCount, setDrawCount] = useState(0);
-
-  // Strategy signals and pattern markers share one marker layer — merge both
-  // sources (sorted by time, as lightweight-charts requires) and apply.
-  const applyMarkers = useCallback(() => {
-    const m = markersRef.current;
-    if (!m) return;
-    const all = [...stratMarkersRef.current, ...patMarkersRef.current].sort((a, b) => (a.time as number) - (b.time as number));
-    m.setMarkers(all);
-  }, []);
+  const [formView, setFormView] = useState<FView[]>([]);
 
   // Re-project all drawings (+ the in-progress one) to pixels for the overlay.
   const recomputeDraw = useCallback(() => {
@@ -315,6 +314,35 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     if (pend && cross && (tool === 'trend' || tool === 'fib')) push({ id: -1, type: tool, a: pend, b: cross });
     drawViewRef.current = out;
     setDrawView(out);
+  }, []);
+
+  // Project detected formations (time/price anchors) to pixels for the overlay.
+  const recomputeForm = useCallback(() => {
+    const s = seriesRef.current;
+    const lod = lodRef.current;
+    if (!s || !lod) {
+      setFormView([]);
+      return;
+    }
+    const out: FView[] = [];
+    for (const f of formationsRef.current) {
+      const segs = f.segs
+        .map((sg) => ({ ax: lod.xForTime(sg[0].t), ay: s.candle.priceToCoordinate(sg[0].p), bx: lod.xForTime(sg[1].t), by: s.candle.priceToCoordinate(sg[1].p) }))
+        .filter((sg) => sg.ax != null && sg.ay != null && sg.bx != null && sg.by != null) as FView['segs'];
+      const pts = f.pts
+        .map((pt) => ({ x: lod.xForTime(pt.t), y: s.candle.priceToCoordinate(pt.p) }))
+        .filter((pt) => pt.x != null && pt.y != null) as FView['pts'];
+      if (!segs.length && !pts.length) continue;
+      // Label at the top-right of the formation.
+      let lx = -Infinity;
+      let ly = Infinity;
+      for (const pt of pts) {
+        if (pt.x > lx) lx = pt.x;
+        if (pt.y < ly) ly = pt.y;
+      }
+      out.push({ dir: f.dir, label: f.label, lx: isFinite(lx) ? lx : 0, ly: isFinite(ly) ? ly - 6 : 0, segs, pts });
+    }
+    setFormView(out);
   }, []);
 
   const persistDraws = useCallback(() => {
@@ -618,6 +646,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       if (measureRef.current?.b) refreshMeasure();
       recomputeDraw();
+      recomputeForm();
       refreshVP();
     });
     const onKey = (e: KeyboardEvent) => {
@@ -677,6 +706,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const ro = new ResizeObserver(() => {
       computeTops();
       refreshVP();
+      recomputeForm();
     });
     ro.observe(elRef.current!);
     computeTops();
@@ -766,17 +796,16 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const bands = bandsRef.current;
     if (!m) return;
     if (!strategy || !candles) {
-      stratMarkersRef.current = [];
-      applyMarkers();
+      m.setMarkers([]);
       if (lod) lod.setBands([]);
       return;
     }
-    stratMarkersRef.current = signalsFor(strategy, candles).map((sig) =>
+    const markers: SeriesMarker<Time>[] = signalsFor(strategy, candles).map((sig) =>
       sig.kind === 'buy'
         ? { time: sig.time as UTCTimestamp, position: 'belowBar' as const, color: '#26a69a', shape: 'arrowUp' as const, text: 'AL' }
         : { time: sig.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: 'SAT' },
     );
-    applyMarkers();
+    m.setMarkers(markers);
     // Split the position array into trade segments [a..b] (b includes the sell bar).
     const pos = buildPositionByName(strategy, candles);
     const segs: { a: number; b: number }[] = [];
@@ -844,20 +873,11 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     }
   }, [settings.sr, candles]);
 
-  // Candlestick pattern markers (hammer, star, engulfing, doji).
+  // Detect chart formations (triangle/wedge/double top-bottom/H&S) on data change.
   useEffect(() => {
-    if (!markersRef.current) return;
-    patMarkersRef.current = !settings.patterns || !candles
-      ? []
-      : detectPatterns(candles).map((p) =>
-          p.dir === 'bull'
-            ? { time: p.time as UTCTimestamp, position: 'belowBar' as const, color: '#26a69a', shape: 'arrowUp' as const, text: p.label }
-            : p.dir === 'bear'
-              ? { time: p.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: p.label }
-              : { time: p.time as UTCTimestamp, position: 'aboveBar' as const, color: '#9aa0b0', shape: 'circle' as const, text: p.label },
-        );
-    applyMarkers();
-  }, [settings.patterns, candles, applyMarkers]);
+    formationsRef.current = settings.patterns && candles ? detectFormations(candles) : [];
+    recomputeForm();
+  }, [settings.patterns, candles, recomputeForm]);
 
   // Logarithmic / normal price scale.
   useEffect(() => {
@@ -926,6 +946,27 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
         <button className="draw-btn" onClick={clearDraws} disabled={drawCount === 0} title="Tüm çizimleri sil">🗑</button>
         {drawTool !== 'none' && <div className="draw-hint">{drawTool === 'hline' ? 'tıkla' : pendingRef.current ? '2. nokta' : '1. nokta'}</div>}
       </div>
+
+      {/* Detected chart formations (triangle/wedge/double/H&S) */}
+      {settings.patterns && formView.length > 0 && (
+        <svg className="measure-overlay" width="100%" height="100%">
+          {formView.map((f, fi) => {
+            const col = f.dir === 'bull' ? '#26a69a' : f.dir === 'bear' ? '#ef5350' : '#d9a441';
+            return (
+              <g key={fi}>
+                {f.segs.map((sg, si) => (
+                  <line key={si} x1={sg.ax} y1={sg.ay} x2={sg.bx} y2={sg.by} stroke={col} strokeWidth={1.6} strokeDasharray={si >= f.segs.length - 1 ? '5 3' : undefined} opacity={0.9} />
+                ))}
+                {f.pts.map((pt, pi) => (
+                  <circle key={pi} cx={pt.x} cy={pt.y} r={3} fill={col} />
+                ))}
+                <rect x={f.lx - 2} y={f.ly - 12} width={f.label.length * 6.4 + 6} height={14} rx={3} fill="rgba(14,15,19,0.85)" />
+                <text x={f.lx + 1} y={f.ly - 1} fill={col} fontSize="10" fontWeight="700">{f.label}</text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
 
       {/* Manual drawings overlay */}
       {drawView.length > 0 && (
