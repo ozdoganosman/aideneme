@@ -2391,49 +2391,39 @@ button.ctl:disabled {
 /* ---- Sidebar panels (watchlist / portfolio) ---- */
 .panel {
   padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
 }
-/* Left sidebar = resizable vertical split: content on top, Strateji list below */
-.sidebar.left {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.sidebar.left .panel {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-/* Draggable divider above the Strateji list (drag up/down to resize) */
-.lt-resizer {
+/* Strateji işlemleri paneli: fiyat grafiğinin altında, yukarı/aşağı çekilebilir */
+.cb-resizer {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   cursor: row-resize;
   user-select: none;
   touch-action: none;
 }
-.lt-resizer:hover {
+.cb-resizer:hover {
   color: var(--text);
 }
-.lt-grip {
+.cb-grip {
   flex-shrink: 0;
-  width: 26px;
+  width: 30px;
   height: 4px;
   border-radius: 2px;
   background: #4a5163;
 }
-.lt-strat {
+.cb-strat {
   flex-shrink: 0;
   overflow-y: auto;
-  padding: 0 10px;
+  background: var(--panel);
+  padding: 4px 12px 8px;
 }
 
 .panel-title {
@@ -2867,14 +2857,6 @@ button.ctl:disabled {
     overscroll-behavior: contain;
     touch-action: pan-y;
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-  /* On mobile keep the sheet as one scroll area (no desktop resizable split) */
-  .sidebar.left {
-    display: block;
-    overflow-y: auto;
-  }
-  .sidebar.left .panel {
-    overflow: visible;
   }
   /* Draggable grab handle pinned to the top of the sheet (swipe down to close) */
   .sheet-grab {

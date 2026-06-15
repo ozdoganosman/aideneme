@@ -96,14 +96,14 @@ function dragSheet(e: RPointerEvent<HTMLElement>, close: () => void): void {
   window.addEventListener('pointercancel', up);
 }
 
-// Drag the divider above the Strateji list up/down to resize it. Height is set
-// directly during the drag (smooth) and committed to state on release.
+// Drag the divider above the Strateji panel (under the chart) up/down to resize
+// it. Height is set directly during the drag (smooth), committed on release.
 function stratResize(e: RPointerEvent<HTMLElement>, commit: (h: number) => void): void {
-  const aside = e.currentTarget.closest('.sidebar') as HTMLElement | null;
-  const strat = aside?.querySelector('.lt-strat') as HTMLElement | null;
-  if (!aside || !strat) return;
+  const main = e.currentTarget.closest('.main') as HTMLElement | null;
+  const strat = main?.querySelector('.cb-strat') as HTMLElement | null;
+  if (!main || !strat) return;
   e.preventDefault();
-  const rect = aside.getBoundingClientRect();
+  const rect = main.getBoundingClientRect();
   let h = strat.getBoundingClientRect().height;
   const move = (ev: globalThis.PointerEvent) => {
     h = Math.max(0, Math.min(rect.height - 150, rect.bottom - ev.clientY));
@@ -563,7 +563,7 @@ export default function App() {
 
       <div className="body">
         {showLeft ? (
-          <aside className="sidebar left">
+          <aside className="sidebar">
             <div className="sheet-grab" onPointerDown={(e) => dragSheet(e, () => setShowLeft(false))} />
             <div className="panel">
               <div className="lefttabs">
@@ -599,21 +599,6 @@ export default function App() {
                   }
                 />
               </div>
-            </div>
-            {/* Strateji: panelden ayrı, yukarı/aşağı çekilebilen liste */}
-            <div className="lt-resizer" onPointerDown={(e) => stratResize(e, setStratH)} title="Yukarı/aşağı çek — strateji işlemleri">
-              <span className="lt-grip" />
-              Strateji{strategy ? ' · işlemler' : ''}
-            </div>
-            <div className="lt-strat" style={{ height: stratH }}>
-              <Trades
-                strategy={strategy}
-                candles={candles}
-                onSelectTrade={(t) => {
-                  setFocusTrade(t);
-                  setLog(true);
-                }}
-              />
             </div>
           </aside>
         ) : (
@@ -705,6 +690,25 @@ export default function App() {
               focus={reflectTrades && focusTrade ? { entryTime: focusTrade.entryTime, exitTime: focusTrade.exitTime } : null}
             />
           </div>
+          {/* Strateji işlemleri: grafiğin altında, yukarı/aşağı çekilebilen panel */}
+          {strategy && (
+            <>
+              <div className="cb-resizer" onPointerDown={(e) => stratResize(e, setStratH)} title="Yukarı/aşağı çek — strateji işlemleri">
+                <span className="cb-grip" />
+                Strateji · {strategy}
+              </div>
+              <div className="cb-strat" style={{ height: stratH }}>
+                <Trades
+                  strategy={strategy}
+                  candles={candles}
+                  onSelectTrade={(t) => {
+                    setFocusTrade(t);
+                    setLog(true);
+                  }}
+                />
+              </div>
+            </>
+          )}
         </main>
 
         {showRight ? (
