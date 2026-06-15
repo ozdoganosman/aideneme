@@ -176,6 +176,33 @@ export const DEFAULT_PARAMS: IndicatorParams = {
   adx: 28, adxEma: 14, roc: 260, rocEma: 120,
 };
 
+// Period currently active on the chart for a builder/screener indicator key, so
+// new strategy conditions and live filters default to what the user sees on the
+// chart. Returns 0 when the key has no chart-period concept (e.g. price, macd).
+export function activePeriod(key: string, p: IndicatorParams = DEFAULT_PARAMS): number {
+  switch (key) {
+    case 'ema':
+    case 'emadist':
+      return p.emaFast;
+    case 'wr':
+      return p.wr;
+    case 'wrema':
+      return p.wrEmaA;
+    case 'adx':
+      return p.adx;
+    case 'adxema':
+      return p.adxEma;
+    case 'roc':
+      return p.roc;
+    case 'rocema':
+      return p.rocEma;
+    case 'rsi':
+      return 14;
+    default:
+      return 0;
+  }
+}
+
 // Translates the user's "Williams Paşa" (%R) and "NizamiCedid" (MACD) Pine
 // indicators. MACD plots are normalized by the fast EMA, exactly as in the
 // original script.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
-import { emaArr, adxArr, rollingHighest, rollingLowest } from '../indicators/calc';
+import { emaArr, adxArr, rollingHighest, rollingLowest, activePeriod, IndicatorParams } from '../indicators/calc';
 import { useEscClose } from '../useEscClose';
 
 // ── Live (period-aware) indicator filter ─────────────────────────────────────
@@ -74,6 +74,7 @@ interface Props {
   onClose: () => void;
   onSelect: (s: string) => void;
   onAddToWatch: (syms: string[], mode: 'add' | 'new') => void;
+  params: IndicatorParams; // chart's active periods → seed the live filter
 }
 
 function readScrState(): { view?: number; filters?: Filter[]; sort?: { key: Key; dir: 1 | -1 }; q?: string } {
@@ -153,7 +154,7 @@ const PRESETS: { label: string; fs: Filter[] }[] = [
 
 const PAL = ['#3b82f6', '#26a69a', '#f59e0b', '#a855f7', '#ef5350', '#14b8a6', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
 
-export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
+export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   useEscClose(onClose);
   const [data, setData] = useState<ScreenerFile | null>(null);
   const [spark, setSpark] = useState<Record<string, number[]>>({});
@@ -179,7 +180,13 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
   // Live (period-aware) filters
   const [liveFs, setLiveFs] = useState<LiveF[]>([]);
   const [lind, setLind] = useState('wr');
-  const [lp, setLp] = useState('260');
+  const [lp, setLp] = useState(() => String(activePeriod('wr', params) || 260));
+  // Switching the live indicator re-seeds its period from the chart's setting.
+  const pickLind = (k: string) => {
+    setLind(k);
+    const ap = activePeriod(k, params);
+    if (ap) setLp(String(ap));
+  };
   const [lop, setLop] = useState<'gt' | 'lt'>('gt');
   const [lval, setLval] = useState('50');
   const [liveSet, setLiveSet] = useState<Set<string> | null>(null);
@@ -420,7 +427,7 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
 
               <div className="scr-build scr-live">
                 <span className="lg-muted" title="İstediğin periyotla anlık hesaplar (snapshot ile sınırlanan hisseleri indirir)">🔬 Canlı (periyotlu):</span>
-                <select value={lind} onChange={(e) => setLind(e.target.value)}>
+                <select value={lind} onChange={(e) => pickLind(e.target.value)}>
                   {LIVE_INDS.map((i) => (
                     <option key={i.key} value={i.key}>{i.label}</option>
                   ))}

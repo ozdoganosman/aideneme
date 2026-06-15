@@ -13,7 +13,7 @@ import {
   buildCustomPosition,
   candidateStrategies,
 } from '../indicators/customStrategy';
-import { IndicatorParams } from '../indicators/calc';
+import { IndicatorParams, activePeriod } from '../indicators/calc';
 import { useEscClose } from '../useEscClose';
 
 interface Props {
@@ -165,7 +165,15 @@ function fmtAgo(ts: number): string {
   return `${Math.floor(h / 24)} gün önce`;
 }
 
-const blankDraft = (): CustomStrategy => ({ id: '', name: '', buy: [newCond()], sell: [] });
+// Seed a condition's indicator periods from the chart's active settings so a new
+// rule starts from "what I see on the chart" (then it stays editable).
+const seedCond = (c: Cond, p: IndicatorParams): Cond => ({
+  ...c,
+  p: activePeriod(c.ind, p) || c.p,
+  p2: activePeriod(c.ind2, p) || c.p2,
+});
+const seededCond = (p: IndicatorParams): Cond => seedCond(newCond(), p);
+const seededBlank = (p: IndicatorParams): CustomStrategy => ({ id: '', name: '', buy: [seededCond(p)], sell: [] });
 const N_CANDIDATES = candidateStrategies().length; // how many combos the optimizer tries
 
 // Researched best rules from the two indicators (Williams Paşa + NizamiCedid).
@@ -196,7 +204,7 @@ const SUGGESTED: { name: string; buy: Cond[]; sell: Cond[] }[] = [
 export function Backtest({ candles, symbol, universe, strats, params, onSave, onApply, onPickCombo, onClose }: Props) {
   useEscClose(onClose);
   const [tab, setTab] = useState<'mine' | 'top'>('mine');
-  const [draft, setDraft] = useState<CustomStrategy>(blankDraft);
+  const [draft, setDraft] = useState<CustomStrategy>(() => seededBlank(params));
   const [expanded, setExpanded] = useState<string | null>(null);
   // Restore the last saved scan so reopening the modal shows it instantly.
   const [scan, setScan] = useState<{ rows: Combo[]; done: number; total: number; running: boolean } | null>(() => {
@@ -365,7 +373,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
     const id = draft.id || String(Date.now());
     const next = [...strats.filter((s) => s.id !== id), { ...draft, id, name }];
     onSave(next);
-    setDraft(blankDraft());
+    setDraft(seededBlank(params));
   };
   const del = (id: string) => onSave(strats.filter((s) => s.id !== id));
   const addSuggested = () => {
@@ -492,11 +500,12 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
                   value={draft.name}
                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
                 />
-                <CondGroup label="AL koşulları (hepsi sağlanınca girer)" conds={draft.buy} onChange={setBuy} />
+                <CondGroup label="AL koşulları (hepsi sağlanınca girer)" conds={draft.buy} onChange={setBuy} params={params} />
                 <CondGroup
                   label="SAT koşulları (boşsa: AL koşulu bozulunca çıkar)"
                   conds={draft.sell}
                   onChange={setSell}
+                  params={params}
                 />
                 <div className="bt-note">
                   Her koşulun yanındaki kutudan periyodu ayarla. MACD/Signal/eMACD periyotları üstteki <b>İndikatörler ▾</b>{' '}
@@ -538,7 +547,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
                     {draft.id ? 'Güncelle' : 'Kaydet'}
                   </button>
                   {(draft.id || draft.name) && (
-                    <button className="sb-clear" onClick={() => setDraft(blankDraft())}>
+                    <button className="sb-clear" onClick={() => setDraft(seededBlank(params))}>
                       Temizle
                     </button>
                   )}
@@ -780,15 +789,15 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
   );
 }
 
-function CondGroup({ label, conds, onChange }: { label: string; conds: Cond[]; onChange: (c: Cond[]) => void }) {
+function CondGroup({ label, conds, onChange, params }: { label: string; conds: Cond[]; onChange: (c: Cond[]) => void; params: IndicatorParams }) {
   const set = (i: number, c: Cond) => onChange(conds.map((x, idx) => (idx === i ? c : x)));
   return (
     <div className="sb-group">
       <div className="sb-grouplabel">{label}</div>
       {conds.map((c, i) => (
-        <CondRow key={i} c={c} onChange={(nc) => set(i, nc)} onRemove={() => onChange(conds.filter((_, idx) => idx !== i))} />
+        <CondRow key={i} c={c} params={params} onChange={(nc) => set(i, nc)} onRemove={() => onChange(conds.filter((_, idx) => idx !== i))} />
       ))}
-      <button className="sb-addcond" onClick={() => onChange([...conds, newCond()])}>
+      <button className="sb-addcond" onClick={() => onChange([...conds, seededCond(params)])}>
         + koşul ekle
       </button>
     </div>
@@ -819,10 +828,13 @@ function ValInput({ value, onChange }: { value: number; onChange: (v: number) =>
   );
 }
 
-function CondRow({ c, onChange, onRemove }: { c: Cond; onChange: (c: Cond) => void; onRemove: () => void }) {
+function CondRow({ c, params, onChange, onRemove }: { c: Cond; params: IndicatorParams; onChange: (c: Cond) => void; onRemove: () => void }) {
+  // Switching the indicator re-seeds its period from the chart's active setting.
+  const pickInd = (ind: string) => onChange({ ...c, ind, p: activePeriod(ind, params) || c.p });
+  const pickInd2 = (ind2: string) => onChange({ ...c, ind2, p2: activePeriod(ind2, params) || c.p2 });
   return (
     <div className="cond">
-      <select value={c.ind} onChange={(e) => onChange({ ...c, ind: e.target.value })}>
+      <select value={c.ind} onChange={(e) => pickInd(e.target.value)}>
         {INDS.map((i) => (
           <option key={i.key} value={i.key}>
             {i.label}
@@ -847,7 +859,7 @@ function CondRow({ c, onChange, onRemove }: { c: Cond; onChange: (c: Cond) => vo
         <ValInput value={c.val} onChange={(v) => onChange({ ...c, val: v })} />
       ) : (
         <>
-          <select value={c.ind2} onChange={(e) => onChange({ ...c, ind2: e.target.value })}>
+          <select value={c.ind2} onChange={(e) => pickInd2(e.target.value)}>
             {INDS.map((i) => (
               <option key={i.key} value={i.key}>
                 {i.label}
