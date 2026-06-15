@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchScreener, ScreenerItem, isIndexSymbol } from '../data/bistStatic';
+import { fetchScreener, fetchBistStatic, ScreenerItem, isIndexSymbol } from '../data/bistStatic';
+import { Candles } from '../data/types';
 import { useEscClose } from '../useEscClose';
 
 interface Props {
@@ -8,7 +9,8 @@ interface Props {
 }
 
 // Colour metrics: tile colour = this return, clamped to ±clamp for contrast.
-const METRICS: { key: keyof ScreenerItem; label: string; clamp: number }[] = [
+type MetricKey = 'ch' | 'r1m' | 'r3m' | 'r1y';
+const METRICS: { key: MetricKey; label: string; clamp: number }[] = [
   { key: 'ch', label: 'Günlük %', clamp: 6 },
   { key: 'r1m', label: '1 Ay %', clamp: 20 },
   { key: 'r3m', label: '3 Ay %', clamp: 40 },
@@ -61,6 +63,26 @@ interface Tile {
   y: number;
   w: number;
   h: number;
+}
+
+interface SecCell {
+  s: string;
+  label: string;
+  ch: number;
+  r1m: number;
+  r3m: number;
+  r1y: number;
+}
+
+// % change vs the close ~`days` calendar days ago (mirrors screener.py's ret()).
+function pctAgo(c: Candles, days: number): number {
+  const n = c.length;
+  if (n < 2) return NaN;
+  const target = c.time[n - 1] - days * 86400;
+  let i = n - 1;
+  while (i > 0 && c.time[i] > target) i--;
+  const past = c.close[i];
+  return past > 0 ? (c.close[n - 1] / past - 1) * 100 : NaN;
 }
 
 // Squarified treemap (Bruls, Huizing & van Wijk). Items must be sorted by area
@@ -138,6 +160,7 @@ export function HeatMap({ onClose, onSelect }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [mode, setMode] = useState<'stocks' | 'sectors'>('stocks');
   const [metric, setMetric] = useState(0);
+  const [secData, setSecData] = useState<SecCell[] | null>(null);
   const [hover, setHover] = useState<{ it: ScreenerItem; x: number; y: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -179,19 +202,41 @@ export function HeatMap({ onClose, onSelect }: Props) {
     return squarify(data.map((d) => ({ item: d.item, area: d.area * scale })), size.w, size.h);
   }, [items, size.w, size.h]);
 
-  // Sector board: each BIST sub-sector index, coloured by its return for the
-  // chosen period, sorted best→worst so inflows cluster at the top.
+  // Sector board: fetch each BIST sub-sector index's price file directly (the
+  // screener.json is stock-only) and compute period returns once, on first open.
+  useEffect(() => {
+    if (mode !== 'sectors' || secData) return;
+    let alive = true;
+    (async () => {
+      const out = await Promise.all(
+        SECTORS.map(async (sec) => {
+          try {
+            const c = await fetchBistStatic(sec.s);
+            if (c.length < 2) return null;
+            const n = c.length;
+            const ch = c.close[n - 2] > 0 ? (c.close[n - 1] / c.close[n - 2] - 1) * 100 : NaN;
+            return { s: sec.s, label: sec.label, ch, r1m: pctAgo(c, 30), r3m: pctAgo(c, 90), r1y: pctAgo(c, 365) } as SecCell;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (alive) setSecData(out.filter((x): x is SecCell => x != null));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [mode, secData]);
+
+  // Colour each sector by its return for the chosen period, best→worst so
+  // inflows cluster at the top.
   const sectors = useMemo(() => {
-    if (!items) return [];
-    const by = new Map(items.map((it) => [it.s, it]));
-    return SECTORS.map((sec) => {
-      const it = by.get(sec.s);
-      const v = it ? Number(it[m.key]) : NaN;
-      return { ...sec, v, it };
-    })
-      .filter((c) => c.it && isFinite(c.v))
+    if (!secData) return [];
+    return secData
+      .map((c) => ({ ...c, v: c[m.key] }))
+      .filter((c) => isFinite(c.v))
       .sort((a, b) => b.v - a.v);
-  }, [items, m.key]);
+  }, [secData, m.key]);
 
   const pick = (s: string) => {
     onSelect(s);
@@ -293,7 +338,8 @@ export function HeatMap({ onClose, onSelect }: Props) {
               </div>
               )}
 
-              {mode === 'sectors' && (
+              {mode === 'sectors' && !secData && <div className="bt-note">Sektör verileri yükleniyor…</div>}
+              {mode === 'sectors' && secData && (
                 <div className="hm-sectors">
                   {sectors.map((c) => (
                     <button
@@ -301,7 +347,7 @@ export function HeatMap({ onClose, onSelect }: Props) {
                       className="hm-sec"
                       style={{ background: heatColor(c.v, m.clamp) }}
                       onClick={() => pick(c.s)}
-                      title={`${c.it?.n ?? c.label} · Günlük ${fpct(c.it?.ch)} · 1A ${fpct(c.it?.r1m)} · 3A ${fpct(c.it?.r3m)} · 1Y ${fpct(c.it?.r1y)}`}
+                      title={`${c.label} · Günlük ${fpct(c.ch)} · 1A ${fpct(c.r1m)} · 3A ${fpct(c.r3m)} · 1Y ${fpct(c.r1y)}`}
                     >
                       <b>{c.label}</b>
                       <span>{(c.v >= 0 ? '+' : '') + (m.clamp >= 40 ? Math.round(c.v) : c.v.toFixed(1)) + '%'}</span>

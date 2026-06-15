@@ -87,8 +87,9 @@ def main() -> int:
     names = load_names()
     items = []
 
-    # NOTE: index symbols (XU100, XBANK, …) are kept in screener.json — the stock
-    # views filter them out client-side, while the sector heat map needs them.
+    # NOTE: index symbols (XU100, XBANK, …) stay in screener.json — harmless, the
+    # stock views filter them client-side (isIndexSymbol). The sector heat map
+    # reads index prices from their own per-symbol files, not from here.
     for fp in sorted(glob.glob(str(OUT / "*.json"))):
         if os.path.basename(fp) in SKIP:
             continue
