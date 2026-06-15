@@ -159,7 +159,7 @@ export default function App() {
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
     lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true, adx: false, roc: false }),
   );
-  const [indParams, setIndParams] = useState<IndicatorParams>(() => ({ ...DEFAULT_PARAMS, ...lsGet('borsaIndParams', {}) }));
+  const [indParams, setIndParams] = useState<IndicatorParams>(() => migrateIndParams({ ...DEFAULT_PARAMS, ...lsGet('borsaIndParams', {}) }));
 
   const abortRef = useRef<AbortController | null>(null);
   const dailyRef = useRef<Candles | null>(null);
@@ -810,6 +810,17 @@ export default function App() {
 
 function pct(v: number): string {
   return isFinite(v) ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : '—';
+}
+
+// ADX and its EMA are short smoothing lengths (typically 7–28). A value left over
+// in localStorage from the old "260 paradigm" (ADX 260 / EMA 120) is useless —
+// ADX(260) flattens to ~5 and never crosses 25 — so heal out-of-range persisted
+// values back to the current defaults instead of showing nonsense in the menu.
+function migrateIndParams(p: IndicatorParams): IndicatorParams {
+  const q = { ...p };
+  if (!(q.adx >= 2 && q.adx <= 80)) q.adx = DEFAULT_PARAMS.adx;
+  if (!(q.adxEma >= 1 && q.adxEma <= 60)) q.adxEma = DEFAULT_PARAMS.adxEma;
+  return q;
 }
 
 function fp(v: number): string {
