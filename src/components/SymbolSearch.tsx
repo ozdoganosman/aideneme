@@ -40,7 +40,14 @@ export function SymbolSearch({ value, symbols, onChange, onSubmit }: Props) {
           setOpen(true);
           setActive(0);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={(e) => {
+          setOpen(true);
+          // Select the current symbol so the first keystroke replaces it — start a
+          // new search instantly instead of deleting the old text by hand. rAF
+          // defers past the click's mouseup so the selection actually sticks.
+          const el = e.currentTarget;
+          requestAnimationFrame(() => el.select());
+        }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') {
             setActive((a) => Math.min(a + 1, matches.length - 1));
