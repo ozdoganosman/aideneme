@@ -10,6 +10,7 @@ import { Trades } from './components/Trades';
 const Backtest = lazy(() => import('./components/Backtest').then((m) => ({ default: m.Backtest })));
 const PortfolioAnalysis = lazy(() => import('./components/PortfolioAnalysis').then((m) => ({ default: m.PortfolioAnalysis })));
 const Screener = lazy(() => import('./components/Screener').then((m) => ({ default: m.Screener })));
+const HeatMap = lazy(() => import('./components/HeatMap').then((m) => ({ default: m.HeatMap })));
 import { computeStats } from './indicators/stats';
 import { registerCustomStrategy, type Trade } from './indicators/backtest';
 import { CustomStrategy, buildCustomPosition } from './indicators/customStrategy';
@@ -108,6 +109,7 @@ export default function App() {
   const [showBt, setShowBt] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showScreener, setShowScreener] = useState(false);
+  const [showHeat, setShowHeat] = useState(false);
   const [tbMenu, setTbMenu] = useState(false);
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
@@ -384,8 +386,8 @@ export default function App() {
   }, [candles, provider]);
 
   useEffect(() => {
-    if (showBt || showScreener || showAnalysis) setTbMenu(false);
-  }, [showBt, showScreener, showAnalysis]);
+    if (showBt || showScreener || showAnalysis || showHeat) setTbMenu(false);
+  }, [showBt, showScreener, showAnalysis, showHeat]);
 
   const tfLabel = provider === 'synthetic' ? 'SİM' : tf === 'D' ? '1G' : tf === 'W' ? '1H' : '1A';
   const starred = watchlist.includes(symbol);
@@ -497,6 +499,9 @@ export default function App() {
           </button>
           <button className="ctl" onClick={() => setShowScreener(true)} title="Hisse tarama (filtreler)">
             Tara
+          </button>
+          <button className="ctl" onClick={() => setShowHeat(true)} title="Piyasa ısı haritası (treemap)">
+            Isı
           </button>
           <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
             <span className={loading ? 'spinning' : ''}>⟳</span>
@@ -791,6 +796,12 @@ export default function App() {
       {showScreener && (
         <Suspense fallback={modalLoader}>
           <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} />
+        </Suspense>
+      )}
+
+      {showHeat && (
+        <Suspense fallback={modalLoader}>
+          <HeatMap onClose={() => setShowHeat(false)} onSelect={selectSymbol} />
         </Suspense>
       )}
     </div>

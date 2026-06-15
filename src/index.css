@@ -610,6 +610,82 @@ button.ctl:disabled {
   font-size: 12px;
 }
 
+/* ── Market heat map (treemap) ───────────────────────────────────────────── */
+.hm-modal {
+  height: 88vh;
+}
+.hm-body {
+  flex: 1;
+  min-height: 0;
+}
+.hm-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.hm-legend-bar {
+  display: inline-block;
+  width: 120px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.hm-hint {
+  font-size: 11px;
+}
+.hm-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #0e0f13;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.hm-svg {
+  display: block;
+}
+.hm-svg g:hover rect {
+  stroke: #fff;
+  stroke-width: 2;
+}
+.hm-sym {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 2px;
+}
+.hm-val {
+  fill: rgba(255, 255, 255, 0.92);
+  font-size: 10px;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.5);
+  stroke-width: 2px;
+}
+.hm-tip {
+  position: fixed;
+  z-index: 110;
+  pointer-events: none;
+  max-width: 240px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
 .bt-section-title {
   font-size: 13px;
   font-weight: 600;
