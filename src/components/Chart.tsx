@@ -23,6 +23,7 @@ import {
 import { Candles, LiveBar } from '../data/types';
 import { LodController, ExtraSpec } from '../chart/lod';
 import { computeIndicators, computeExtras, IndicatorParams, DEFAULT_PARAMS } from '../indicators/calc';
+import { detectSR, detectPatterns } from '../indicators/patterns';
 import { signalsFor, buildPositionByName } from '../indicators/backtest';
 
 export interface IndicatorSettings {
@@ -33,6 +34,8 @@ export interface IndicatorSettings {
   adx: boolean;
   roc: boolean;
   volprofile: boolean;
+  sr: boolean;
+  patterns: boolean;
 }
 
 export interface ChartHandle {
@@ -230,6 +233,11 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const bandsRef = useRef<ISeriesApi<'Baseline'>[]>([]);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const costLineRef = useRef<IPriceLine | null>(null);
+  // Auto S/R price lines + the two marker sources (strategy signals + detected
+  // candlestick patterns) that share the single marker layer.
+  const srLinesRef = useRef<IPriceLine[]>([]);
+  const stratMarkersRef = useRef<SeriesMarker<Time>[]>([]);
+  const patMarkersRef = useRef<SeriesMarker<Time>[]>([]);
   const lastValsRef = useRef<LegendVals | null>(null);
   const hoveringRef = useRef(false);
   const fitRef = useRef(true);
@@ -259,6 +267,15 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const [drawTool, setDrawTool] = useState<DrawTool>('none');
   const [drawView, setDrawView] = useState<PView[]>([]);
   const [drawCount, setDrawCount] = useState(0);
+
+  // Strategy signals and pattern markers share one marker layer — merge both
+  // sources (sorted by time, as lightweight-charts requires) and apply.
+  const applyMarkers = useCallback(() => {
+    const m = markersRef.current;
+    if (!m) return;
+    const all = [...stratMarkersRef.current, ...patMarkersRef.current].sort((a, b) => (a.time as number) - (b.time as number));
+    m.setMarkers(all);
+  }, []);
 
   // Re-project all drawings (+ the in-progress one) to pixels for the overlay.
   const recomputeDraw = useCallback(() => {
@@ -749,16 +766,17 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const bands = bandsRef.current;
     if (!m) return;
     if (!strategy || !candles) {
-      m.setMarkers([]);
+      stratMarkersRef.current = [];
+      applyMarkers();
       if (lod) lod.setBands([]);
       return;
     }
-    const markers: SeriesMarker<Time>[] = signalsFor(strategy, candles).map((sig) =>
+    stratMarkersRef.current = signalsFor(strategy, candles).map((sig) =>
       sig.kind === 'buy'
         ? { time: sig.time as UTCTimestamp, position: 'belowBar' as const, color: '#26a69a', shape: 'arrowUp' as const, text: 'AL' }
         : { time: sig.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: 'SAT' },
     );
-    m.setMarkers(markers);
+    applyMarkers();
     // Split the position array into trade segments [a..b] (b includes the sell bar).
     const pos = buildPositionByName(strategy, candles);
     const segs: { a: number; b: number }[] = [];
@@ -802,6 +820,44 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       });
     }
   }, [costLine]);
+
+  // Auto support/resistance: pivot-clustered horizontal levels as price lines.
+  useEffect(() => {
+    const s = seriesRef.current;
+    if (!s) return;
+    srLinesRef.current.forEach((pl) => s.candle.removePriceLine(pl));
+    srLinesRef.current = [];
+    if (!settings.sr || !candles || !candles.length) return;
+    const last = candles.close[candles.length - 1];
+    for (const lv of detectSR(candles)) {
+      const res = lv.price >= last; // above price = resistance, below = support
+      srLinesRef.current.push(
+        s.candle.createPriceLine({
+          price: lv.price,
+          color: res ? 'rgba(239,83,80,0.7)' : 'rgba(38,166,154,0.7)',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `${res ? 'Dir' : 'Dest'}·${lv.touches}`,
+        }),
+      );
+    }
+  }, [settings.sr, candles]);
+
+  // Candlestick pattern markers (hammer, star, engulfing, doji).
+  useEffect(() => {
+    if (!markersRef.current) return;
+    patMarkersRef.current = !settings.patterns || !candles
+      ? []
+      : detectPatterns(candles).map((p) =>
+          p.dir === 'bull'
+            ? { time: p.time as UTCTimestamp, position: 'belowBar' as const, color: '#26a69a', shape: 'arrowUp' as const, text: p.label }
+            : p.dir === 'bear'
+              ? { time: p.time as UTCTimestamp, position: 'aboveBar' as const, color: '#ef5350', shape: 'arrowDown' as const, text: p.label }
+              : { time: p.time as UTCTimestamp, position: 'aboveBar' as const, color: '#9aa0b0', shape: 'circle' as const, text: p.label },
+        );
+    applyMarkers();
+  }, [settings.patterns, candles, applyMarkers]);
 
   // Logarithmic / normal price scale.
   useEffect(() => {

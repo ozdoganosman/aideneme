@@ -157,7 +157,7 @@ export default function App() {
   const portfolio = ledger.open;
   const [customStrats, setCustomStrats] = useState<CustomStrategy[]>(() => lsGet('borsaStrats', []));
   const [settings, setSettings] = useState<IndicatorSettings>(() =>
-    lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true, adx: false, roc: false, volprofile: false }),
+    lsGet('borsaIndicators', { ema: true, volume: true, williams: true, macd: true, adx: false, roc: false, volprofile: false, sr: false, patterns: false }),
   );
   const [indParams, setIndParams] = useState<IndicatorParams>(() => migrateIndParams({ ...DEFAULT_PARAMS, ...lsGet('borsaIndParams', {}) }));
 

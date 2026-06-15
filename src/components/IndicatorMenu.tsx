@@ -18,6 +18,8 @@ const GROUPS: { key: keyof IndicatorSettings; label: string; fields: [keyof Indi
   { key: 'macd', label: 'MACD (NizamiCedid)', fields: [['macdFast', 'hızlı'], ['macdSlow', 'yavaş'], ['macdSig', 'sinyal'], ['macdVwma', 'eMACD']] },
   { key: 'adx', label: 'ADX', fields: [['adx', 'ADX'], ['adxEma', 'EMA']] },
   { key: 'roc', label: 'Momentum / ROC', fields: [['roc', 'N'], ['rocEma', 'EMA']] },
+  { key: 'sr', label: 'Destek / Direnç (oto)', fields: [] },
+  { key: 'patterns', label: 'Mum Formasyonu', fields: [] },
 ];
 
 // Smooth integer input: keeps local text so it can be cleared/retyped, commits
