@@ -2391,32 +2391,49 @@ button.ctl:disabled {
 /* ---- Sidebar panels (watchlist / portfolio) ---- */
 .panel {
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+}
+/* Left sidebar = resizable vertical split: content on top, Strateji list below */
+.sidebar.left {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
-  box-sizing: border-box;
+  overflow: hidden;
 }
-/* Strateji section pinned to the very bottom of the left panel */
-.lt-strat {
-  margin: 8px -10px 0;
-  margin-top: auto;
-  padding: 4px 10px 0;
+.sidebar.left .panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* Draggable divider above the Strateji list (drag up/down to resize) */
+.lt-resizer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
   border-top: 1px solid var(--border);
-}
-.lt-strathead {
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
-  padding: 6px 0 4px;
-  cursor: pointer;
+  cursor: row-resize;
+  user-select: none;
+  touch-action: none;
 }
-.lt-strathead:hover {
+.lt-resizer:hover {
   color: var(--text);
+}
+.lt-grip {
+  flex-shrink: 0;
+  width: 26px;
+  height: 4px;
+  border-radius: 2px;
+  background: #4a5163;
+}
+.lt-strat {
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 0 10px;
 }
 
 .panel-title {
@@ -2850,6 +2867,14 @@ button.ctl:disabled {
     overscroll-behavior: contain;
     touch-action: pan-y;
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  /* On mobile keep the sheet as one scroll area (no desktop resizable split) */
+  .sidebar.left {
+    display: block;
+    overflow-y: auto;
+  }
+  .sidebar.left .panel {
+    overflow: visible;
   }
   /* Draggable grab handle pinned to the top of the sheet (swipe down to close) */
   .sheet-grab {

@@ -96,6 +96,30 @@ function dragSheet(e: RPointerEvent<HTMLElement>, close: () => void): void {
   window.addEventListener('pointercancel', up);
 }
 
+// Drag the divider above the Strateji list up/down to resize it. Height is set
+// directly during the drag (smooth) and committed to state on release.
+function stratResize(e: RPointerEvent<HTMLElement>, commit: (h: number) => void): void {
+  const aside = e.currentTarget.closest('.sidebar') as HTMLElement | null;
+  const strat = aside?.querySelector('.lt-strat') as HTMLElement | null;
+  if (!aside || !strat) return;
+  e.preventDefault();
+  const rect = aside.getBoundingClientRect();
+  let h = strat.getBoundingClientRect().height;
+  const move = (ev: globalThis.PointerEvent) => {
+    h = Math.max(0, Math.min(rect.height - 150, rect.bottom - ev.clientY));
+    strat.style.height = h + 'px';
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    window.removeEventListener('pointercancel', up);
+    commit(Math.round(h));
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+  window.addEventListener('pointercancel', up);
+}
+
 export default function App() {
   const [provider, setProvider] = useState<Provider>('bist');
   const [symbol, setSymbol] = useState('THYAO');
@@ -115,7 +139,7 @@ export default function App() {
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
   const [leftTab, setLeftTab] = useState<'portfolio' | 'txns'>(() => (lsGet<string>('borsaLeftTab', 'portfolio') === 'txns' ? 'txns' : 'portfolio'));
-  const [stratOpen, setStratOpen] = useState<boolean>(() => lsGet('borsaStratOpen', false));
+  const [stratH, setStratH] = useState<number>(() => lsGet('borsaStratH', 0));
   const wide0 = !isNarrow();
   const [showLeft, setShowLeft] = useState<boolean>(() => lsGet('borsaShowLeft', wide0));
   const [showRight, setShowRight] = useState<boolean>(() => lsGet('borsaShowRight', wide0));
@@ -205,7 +229,7 @@ export default function App() {
   useEffect(() => localStorage.setItem('borsaIndParams', JSON.stringify(indParams)), [indParams]);
   useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
   useEffect(() => localStorage.setItem('borsaLeftTab', JSON.stringify(leftTab)), [leftTab]);
-  useEffect(() => localStorage.setItem('borsaStratOpen', JSON.stringify(stratOpen)), [stratOpen]);
+  useEffect(() => localStorage.setItem('borsaStratH', JSON.stringify(stratH)), [stratH]);
   useEffect(() => localStorage.setItem('borsaShowLeft', JSON.stringify(showLeft)), [showLeft]);
   useEffect(() => localStorage.setItem('borsaShowRight', JSON.stringify(showRight)), [showRight]);
 
@@ -408,7 +432,7 @@ export default function App() {
 
   // Panel reflects onto the chart: held symbol → avg-cost line; the (bottom)
   // Strateji section open → strategy AL/SAT markers. Collapsed panel → neither.
-  const reflectTrades = showLeft && stratOpen;
+  const reflectTrades = showLeft && stratH > 50;
   const costLine = useMemo(() => {
     if (!showLeft || provider !== 'bist') return null;
     const h = portfolio.find((x) => x.symbol === symbol);
@@ -539,7 +563,7 @@ export default function App() {
 
       <div className="body">
         {showLeft ? (
-          <aside className="sidebar">
+          <aside className="sidebar left">
             <div className="sheet-grab" onPointerDown={(e) => dragSheet(e, () => setShowLeft(false))} />
             <div className="panel">
               <div className="lefttabs">
@@ -575,22 +599,21 @@ export default function App() {
                   }
                 />
               </div>
-              {/* Strateji: panelin en altında, açılır/kapanır bölüm */}
-              <div className="lt-strat">
-                <button className="lt-strathead" onClick={() => setStratOpen((v) => !v)} title="Uygulanan stratejinin işlemleri + grafik AL/SAT">
-                  <span>{stratOpen ? '▾' : '▸'} Strateji{strategy ? ' · işlemler' : ''}</span>
-                </button>
-                {stratOpen && (
-                  <Trades
-                    strategy={strategy}
-                    candles={candles}
-                    onSelectTrade={(t) => {
-                      setFocusTrade(t);
-                      setLog(true);
-                    }}
-                  />
-                )}
-              </div>
+            </div>
+            {/* Strateji: panelden ayrı, yukarı/aşağı çekilebilen liste */}
+            <div className="lt-resizer" onPointerDown={(e) => stratResize(e, setStratH)} title="Yukarı/aşağı çek — strateji işlemleri">
+              <span className="lt-grip" />
+              Strateji{strategy ? ' · işlemler' : ''}
+            </div>
+            <div className="lt-strat" style={{ height: stratH }}>
+              <Trades
+                strategy={strategy}
+                candles={candles}
+                onSelectTrade={(t) => {
+                  setFocusTrade(t);
+                  setLog(true);
+                }}
+              />
             </div>
           </aside>
         ) : (
@@ -773,7 +796,7 @@ export default function App() {
           onApply={(s) => {
             registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) });
             setStrategy(s.name);
-            setStratOpen(true);
+            setStratH((h) => Math.max(h, 240));
             setShowLeft(true);
             setShowBt(false);
           }}
@@ -781,7 +804,7 @@ export default function App() {
             registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) });
             selectSymbol(sym);
             setStrategy(s.name);
-            setStratOpen(true);
+            setStratH((h) => Math.max(h, 240));
             setShowLeft(true);
             setShowBt(false);
           }}
