@@ -179,16 +179,6 @@ def main() -> int:
         wre2_arr = ema(pr, 120)  # %R EMA (120)
         wre2 = float(wre2_arr[-1]) if np.isfinite(wre2_arr[-1]) else wr
         roc = float((last / close[n - 261] - 1) * 100) if n > 260 and close[n - 261] > 0 else None
-        # Bollinger %b (260, 2σ): 0 = lower band, 100 = upper band
-        bbp = None
-        if n >= 260:
-            m260 = float(close[-260:].mean())
-            sd260 = float(close[-260:].std(ddof=0))
-            if sd260 > 0:
-                bbp = float((last - (m260 - 2 * sd260)) / (4 * sd260) * 100)
-        # Donchian(260) position: 0 = 52w low, 100 = 52w high (reuses hh/ll)
-        rng = hh[-1] - ll[-1]
-        dcp = float((last - ll[-1]) / rng * 100) if rng > 0 else None
 
         items.append({
             "s": sym,
@@ -218,8 +208,6 @@ def main() -> int:
             "adx": (round(adx_last) if adx_last is not None else None),
             "wre2": round(wre2),
             "roc": (round(roc) if roc is not None else None),
-            "bbp": (round(bbp) if bbp is not None else None),
-            "dcp": (round(dcp) if dcp is not None else None),
         })
 
     OUT.mkdir(parents=True, exist_ok=True)

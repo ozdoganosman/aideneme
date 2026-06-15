@@ -30,8 +30,6 @@ export interface IndicatorSettings {
   volume: boolean;
   williams: boolean;
   macd: boolean;
-  bollinger: boolean;
-  donchian: boolean;
   adx: boolean;
   roc: boolean;
 }
@@ -58,8 +56,6 @@ interface LegendVals {
   ema377: number; ema610: number;
   wilR: number; wilEma: number; wilEma120: number;
   macd: number; signal: number; emacd: number;
-  bbUp: number; bbMid: number; bbDn: number;
-  donHi: number; donLo: number;
   adx: number; adxEma: number; roc: number; rocEma: number;
 }
 
@@ -74,11 +70,6 @@ type SeriesBag = {
   mMacd: ISeriesApi<'Line'>;
   mSignal: ISeriesApi<'Line'>;
   mEma: ISeriesApi<'Line'>;
-  bbUp: ISeriesApi<'Line'>;
-  bbMid: ISeriesApi<'Line'>;
-  bbDn: ISeriesApi<'Line'>;
-  donHi: ISeriesApi<'Line'>;
-  donLo: ISeriesApi<'Line'>;
   adx: ISeriesApi<'Line'>;
   adxEma: ISeriesApi<'Line'>;
   roc: ISeriesApi<'Line'>;
@@ -276,9 +267,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const [measure, setMeasure] = useState<MeasureView | null>(null);
 
   useEffect(() => {
-    // On phones the right-axis series-title labels (EMA/BB/Donchian/…) pile up
-    // and overlap; the top legend already names every line, so drop the axis
-    // titles on narrow screens. `t()` blanks a title only in compact mode.
+    // On phones the right-axis series-title labels (EMA/MACD/ADX/…) pile up and
+    // overlap; the top legend already names every line, so drop the axis titles
+    // on narrow screens. `t()` blanks a title only in compact mode.
     const compact = typeof window !== 'undefined' && window.innerWidth < 768;
     const t = (s: string) => (compact ? '' : s);
 
@@ -362,14 +353,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, t('eMACD')), 2);
     mMacd.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
-    // Bollinger (20,2σ) + Donchian (20) — price-pane overlays.
-    const bbUp = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, t('BB üst')), 0);
-    const bbMid = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, t('BB orta')), 0);
-    const bbDn = chart.addSeries(LineSeries, lineOpts('#5c9ded', 1, t('BB alt')), 0);
-    bbUp.applyOptions({ lineStyle: LineStyle.Dashed });
-    bbDn.applyOptions({ lineStyle: LineStyle.Dashed });
-    const donHi = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, t('Donchian üst')), 0);
-    const donLo = chart.addSeries(LineSeries, lineOpts('#d9a441', 1, t('Donchian alt')), 0);
     // ADX (14) pane + ROC (100) pane — collapsed unless toggled on.
     const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, t('ADX (28)')), 3);
     const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, t('ADX EMA (14)')), 3);
@@ -397,11 +380,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       { series: mMacd, kind: 'line' },
       { series: mSignal, kind: 'line' },
       { series: mEma, kind: 'line' },
-      { series: bbUp, kind: 'line' },
-      { series: bbMid, kind: 'line' },
-      { series: bbDn, kind: 'line' },
-      { series: donHi, kind: 'line' },
-      { series: donLo, kind: 'line' },
       { series: adx, kind: 'line' },
       { series: adxEma, kind: 'line' },
       { series: roc, kind: 'line' },
@@ -410,7 +388,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const lod = new LodController(chart, candle, volume, extras, bands);
     lodRef.current = lod;
     chartApiRef.current = chart;
-    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, wilEma120, mMacd, mSignal, mEma, bbUp, bbMid, bbDn, donHi, donLo, adx, adxEma, roc, rocEma };
+    seriesRef.current = { candle, ema377, ema610, volume, wilR, wilEma, wilEma120, mMacd, mSignal, mEma, adx, adxEma, roc, rocEma };
     markersRef.current = createSeriesMarkers(candle, []);
 
     const computeTops = () => {
@@ -543,8 +521,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
             ema377: lv(s.ema377), ema610: lv(s.ema610),
             wilR: lv(s.wilR), wilEma: lv(s.wilEma), wilEma120: lv(s.wilEma120),
             macd: lv(s.mMacd), signal: lv(s.mSignal), emacd: lv(s.mEma),
-            bbUp: lv(s.bbUp), bbMid: lv(s.bbMid), bbDn: lv(s.bbDn),
-            donHi: lv(s.donHi), donLo: lv(s.donLo),
             adx: lv(s.adx), adxEma: lv(s.adxEma), roc: lv(s.roc), rocEma: lv(s.rocEma),
           });
           computeTops();
@@ -589,8 +565,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       ema377: lastFin(ind.ema377p), ema610: lastFin(ind.ema610p),
       wilR: lastFin(ind.percentR), wilEma: lastFin(ind.emawil), wilEma120: lastFin(ind.emawil120),
       macd: lastFin(ind.macdN), signal: lastFin(ind.signalN), emacd: lastFin(ind.eMacDN),
-      bbUp: lastFin(ex.bbUp), bbMid: lastFin(ex.bbMid), bbDn: lastFin(ex.bbDn),
-      donHi: lastFin(ex.donHi), donLo: lastFin(ex.donLo),
       adx: lastFin(ex.adx), adxEma: lastFin(ex.adxEma), roc: lastFin(ex.roc), rocEma: lastFin(ex.rocEma),
     };
     lastValsRef.current = lv;
@@ -602,7 +576,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       candles,
       [
         ind.ema377p, ind.ema610p, ind.percentR, ind.emawil, ind.emawil120, ind.macdN, ind.signalN, ind.eMacDN,
-        ex.bbUp, ex.bbMid, ex.bbDn, ex.donHi, ex.donLo, ex.adx, ex.adxEma, ex.roc, ex.rocEma,
+        ex.adx, ex.adxEma, ex.roc, ex.rocEma,
       ],
       fit,
     );
@@ -621,8 +595,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     s.volume.applyOptions({ visible: settings.volume });
     [s.wilR, s.wilEma, s.wilEma120].forEach((x) => x.applyOptions({ visible: settings.williams }));
     [s.mMacd, s.mSignal, s.mEma].forEach((x) => x.applyOptions({ visible: settings.macd }));
-    [s.bbUp, s.bbMid, s.bbDn].forEach((x) => x.applyOptions({ visible: settings.bollinger }));
-    [s.donHi, s.donLo].forEach((x) => x.applyOptions({ visible: settings.donchian }));
     [s.adx, s.adxEma].forEach((x) => x.applyOptions({ visible: settings.adx }));
     [s.roc, s.rocEma].forEach((x) => x.applyOptions({ visible: settings.roc }));
     const panes = chart.panes();
@@ -813,18 +785,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
               <>
                 {'  '}
                 <span className="lg-muted">Hac</span> {fv(legend.v)}
-              </>
-            )}
-            {settings.bollinger && (
-              <>
-                {'  '}
-                <span style={{ color: '#5c9ded' }}>BB ({params.bb}) {fp(legend.bbUp)}/{fp(legend.bbMid)}/{fp(legend.bbDn)}</span>
-              </>
-            )}
-            {settings.donchian && (
-              <>
-                {'  '}
-                <span style={{ color: '#d9a441' }}>Donchian ({params.don}) {fp(legend.donHi)}/{fp(legend.donLo)}</span>
               </>
             )}
           </div>

@@ -75,41 +75,6 @@ export function rocArr(close: Float64Array, len: number): Float64Array {
   return out;
 }
 
-// Donchian channel bound over the PRIOR `len` bars (excludes the current bar) so
-// `price > donHi` is a genuine breakout and `price < donLo` a breakdown.
-export function donchianBound(c: Candles, len: number, upper: boolean): Float64Array {
-  const roll = upper ? rollingHighest(c.high, len) : rollingLowest(c.low, len);
-  const n = c.length;
-  const out = new Float64Array(n).fill(NaN);
-  // Need a FULL prior window (i-1 covers len bars) before the channel is valid,
-  // otherwise a partial-window high/low fires false breakouts during warmup.
-  for (let i = len; i < n; i++) out[i] = roll[i - 1];
-  return out;
-}
-
-// Bollinger band (mean ± 2σ over `len`).
-export function bollingerBand(c: Candles, len: number, which: 'up' | 'dn' | 'mid'): Float64Array {
-  const close = c.close;
-  const n = close.length;
-  const out = new Float64Array(n).fill(NaN);
-  let sum = 0;
-  let sumsq = 0;
-  for (let i = 0; i < n; i++) {
-    sum += close[i];
-    sumsq += close[i] * close[i];
-    if (i >= len) {
-      sum -= close[i - len];
-      sumsq -= close[i - len] * close[i - len];
-    }
-    if (i >= len - 1) {
-      const mean = sum / len;
-      const sd = Math.sqrt(Math.max(0, sumsq / len - mean * mean));
-      out[i] = which === 'mid' ? mean : which === 'up' ? mean + 2 * sd : mean - 2 * sd;
-    }
-  }
-  return out;
-}
-
 // Wilder ADX (trend strength, 0–100). High = strong trend (worth following).
 export function adxArr(c: Candles, len: number): Float64Array {
   const n = c.length;
@@ -158,27 +123,17 @@ export function adxArr(c: Candles, len: number): Float64Array {
 
 // Display-period bundle for the chart overlays/panes.
 export interface ExtraBundle {
-  bbUp: Float64Array;
-  bbMid: Float64Array;
-  bbDn: Float64Array;
-  donHi: Float64Array;
-  donLo: Float64Array;
   adx: Float64Array;
   adxEma: Float64Array;
   roc: Float64Array;
   rocEma: Float64Array;
 }
 export function computeExtras(c: Candles, p: IndicatorParams = DEFAULT_PARAMS): ExtraBundle {
-  // Lookback indicators default to the 260-day paradigm; ADX is a *smoothing*
-  // parameter so it defaults to 28 (it flattens to ~5 and never crosses 25 at 260).
+  // ADX is a *smoothing* parameter so it defaults to 28 (it flattens to ~5 and
+  // never crosses 25 at the 260-day paradigm); ROC stays at the 260 lookback.
   const adx = adxArr(c, p.adx);
   const roc = rocArr(c.close, p.roc);
   return {
-    bbUp: bollingerBand(c, p.bb, 'up'),
-    bbMid: bollingerBand(c, p.bb, 'mid'),
-    bbDn: bollingerBand(c, p.bb, 'dn'),
-    donHi: donchianBound(c, p.don, true),
-    donLo: donchianBound(c, p.don, false),
     adx,
     adxEma: emaArr(adx, p.adxEma),
     roc,
@@ -210,8 +165,6 @@ export interface IndicatorParams {
   macdSlow: number; // slow (260)
   macdSig: number; // signal (50)
   macdVwma: number; // eMACD vwma (185)
-  bb: number; // Bollinger (260)
-  don: number; // Donchian (260)
   adx: number; // ADX (28)
   adxEma: number; // ADX EMA (14)
   roc: number; // Momentum/ROC (260)
@@ -220,7 +173,7 @@ export interface IndicatorParams {
 export const DEFAULT_PARAMS: IndicatorParams = {
   emaFast: 377, emaSlow: 610, wr: 260, wrEmaA: 260, wrEmaB: 120,
   macdFast: 120, macdSlow: 260, macdSig: 50, macdVwma: 185,
-  bb: 260, don: 260, adx: 28, adxEma: 14, roc: 260, rocEma: 120,
+  adx: 28, adxEma: 14, roc: 260, rocEma: 120,
 };
 
 // Translates the user's "Williams Paşa" (%R) and "NizamiCedid" (MACD) Pine

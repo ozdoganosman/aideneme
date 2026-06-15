@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
-import { emaArr, adxArr, bollingerBand, rollingHighest, rollingLowest } from '../indicators/calc';
+import { emaArr, adxArr, rollingHighest, rollingLowest } from '../indicators/calc';
 import { useEscClose } from '../useEscClose';
 
 // ── Live (period-aware) indicator filter ─────────────────────────────────────
@@ -20,8 +20,6 @@ const LIVE_INDS: { key: string; label: string }[] = [
   { key: 'adx', label: 'ADX' },
   { key: 'roc', label: 'Momentum / ROC %' },
   { key: 'emadist', label: 'Fiyat/EMA farkı %' },
-  { key: 'bbp', label: 'Bollinger %b' },
-  { key: 'dcp', label: 'Donchian konum %' },
 ];
 const liveLabel = (k: string) => LIVE_INDS.find((i) => i.key === k)?.label ?? k;
 const liveCandles = new Map<string, Candles>(); // session cache (avoid re-downloading)
@@ -59,16 +57,6 @@ function liveValue(c: Candles, ind: string, p: number): number {
   if (ind === 'emadist') {
     const e = emaArr(c.close, pp);
     return e[last] ? (c.close[last] / e[last] - 1) * 100 : NaN;
-  }
-  if (ind === 'bbp') {
-    const up = bollingerBand(c, Math.max(2, pp), 'up');
-    const dn = bollingerBand(c, Math.max(2, pp), 'dn');
-    return up[last] > dn[last] ? ((c.close[last] - dn[last]) / (up[last] - dn[last])) * 100 : NaN;
-  }
-  if (ind === 'dcp') {
-    const hh = rollingHighest(c.high, pp);
-    const ll = rollingLowest(c.low, pp);
-    return hh[last] > ll[last] ? ((c.close[last] - ll[last]) / (hh[last] - ll[last])) * 100 : NaN;
   }
   // wr / wrema
   const hh = rollingHighest(c.high, pp);
@@ -113,8 +101,6 @@ const COLS: ColDef[] = [
   { key: 'wre2', label: '%R EMA (120)', kind: 'num' },
   { key: 'adx', label: 'ADX (28)', kind: 'num' },
   { key: 'roc', label: 'Momentum %', kind: 'pct' },
-  { key: 'dcp', label: 'Donchian konum %', kind: 'num' },
-  { key: 'bbp', label: 'Bollinger %b', kind: 'num' },
   { key: 'mc', label: 'MACD (NC)', kind: 'dec' },
   { key: 'sg', label: 'Signal (NC)', kind: 'dec' },
   { key: 'em', label: 'eMACD (NC)', kind: 'dec' },
@@ -139,7 +125,7 @@ const VIEWS: { label: string; cols: Key[] }[] = [
   { label: 'Genel', cols: ['p', 'ch', 'rsi', 'r1y', 'vol', 'e200'] },
   { label: 'Williams Paşa (%R)', cols: ['p', 'wr', 'wre', 'rsi', 'e200', 'st'] },
   { label: 'NizamiCedid (MACD)', cols: ['p', 'mc', 'sg', 'em', 'dl'] },
-  { label: 'ADX / Momentum', cols: ['p', 'adx', 'roc', 'dcp', 'bbp'] },
+  { label: 'ADX / Momentum', cols: ['p', 'adx', 'roc'] },
   { label: 'Trend / EMA', cols: ['p', 'e50', 'e200', 'gc', 'st'] },
   { label: 'MACD & momentum', cols: ['p', 'mu', 'ch', 'r3m', 'r1y'] },
   { label: 'Getiri', cols: ['p', 'r1m', 'r3m', 'r1y'] },

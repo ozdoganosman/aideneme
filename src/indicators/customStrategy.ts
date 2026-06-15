@@ -1,5 +1,5 @@
 import { Candles } from '../data/types';
-import { emaArr, rollingVWMA, rollingHighest, rollingLowest, rocArr, donchianBound, bollingerBand, adxArr, IndicatorParams, DEFAULT_PARAMS } from './calc';
+import { emaArr, rollingVWMA, rollingHighest, rollingLowest, rocArr, adxArr, IndicatorParams, DEFAULT_PARAMS } from './calc';
 
 // ── User-built, rule-based strategies ───────────────────────────────────────
 // A strategy = BUY conditions (all must hold to enter) + SELL conditions (all
@@ -46,11 +46,6 @@ export const INDS: IndDef[] = [
   { key: 'adxema', label: 'ADX EMA', hasParam: true, defParam: 14 },
   { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 260 },
   { key: 'rocema', label: 'Momentum / ROC EMA', hasParam: true, defParam: 120 },
-  { key: 'donhi', label: 'Donchian üst (N gün)', hasParam: true, defParam: 260 },
-  { key: 'donlo', label: 'Donchian alt (N gün)', hasParam: true, defParam: 260 },
-  { key: 'bbup', label: 'Bollinger üst (N,2σ)', hasParam: true, defParam: 260 },
-  { key: 'bbmid', label: 'Bollinger orta (SMA N)', hasParam: true, defParam: 260 },
-  { key: 'bbdn', label: 'Bollinger alt (N,2σ)', hasParam: true, defParam: 260 },
 ];
 
 export const OPS: { key: Op; label: string }[] = [
@@ -109,17 +104,11 @@ export function candidateStrategies(): CustomStrategy[] {
   // ── Supertrend direction ──
   list.push({ name: 'Supertrend yukarı', buy: [C('stdir', 'gt', 'val', 0.5)], sell: [C('stdir', 'lt', 'val', 0.5)] });
 
-  // ── Donchian breakout (Turtle) ──
-  for (const [hi, lo] of [[20, 10], [55, 20], [100, 50]]) list.push({ name: `Donchian ${hi}/${lo}`, buy: [C('price', 'gt', 'ind', 0, 'donhi', 0, hi)], sell: [C('price', 'lt', 'ind', 0, 'donlo', 0, lo)] });
-
   // ── Momentum / ROC (time-series momentum) ──
   for (const p of [126, 252]) {
     list.push({ name: `Momentum ${p} (ROC>0)`, buy: [C('roc', 'gt', 'val', 0, 'emacd', p)], sell: [C('roc', 'lt', 'val', 0, 'emacd', p)] });
     list.push({ name: `Momentum ${p} + Trend(200)`, buy: [C('roc', 'gt', 'val', 0, 'emacd', p), C('price', 'gt', 'ind', 0, 'ema', 0, 200)], sell: [C('roc', 'lt', 'val', 0, 'emacd', p)] });
   }
-
-  // ── Bollinger breakout ──
-  for (const p of [20, 50]) list.push({ name: `Bollinger ${p} kırılımı`, buy: [C('price', 'gt', 'ind', 0, 'bbup', 0, p)], sell: [C('price', 'lt', 'ind', 0, 'bbmid', 0, p)] });
 
   // ── ADX trend-strength filter (only trade strong trends) ──
   for (const th of [20, 25, 30]) {
@@ -171,16 +160,6 @@ function computeSeries(c: Candles, ind: string, p: number, gp: IndicatorParams):
       return rocArr(close, Math.max(1, p));
     case 'rocema':
       return emaArr(rocArr(close, gp.roc), Math.max(1, p));
-    case 'donhi':
-      return donchianBound(c, Math.max(1, p), true);
-    case 'donlo':
-      return donchianBound(c, Math.max(1, p), false);
-    case 'bbup':
-      return bollingerBand(c, Math.max(2, p), 'up');
-    case 'bbmid':
-      return bollingerBand(c, Math.max(2, p), 'mid');
-    case 'bbdn':
-      return bollingerBand(c, Math.max(2, p), 'dn');
     default:
       return close;
   }

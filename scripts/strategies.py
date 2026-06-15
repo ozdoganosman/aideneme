@@ -64,21 +64,6 @@ def supertrend_pos(high, low, close, length, mult):
     return p
 
 
-def donchian_pos(high, low, entry_n, exit_n):
-    n = len(high)
-    hh = pd.Series(high).rolling(entry_n, min_periods=1).max().to_numpy()
-    ll = pd.Series(low).rolling(exit_n, min_periods=1).min().to_numpy()
-    p = np.zeros(n, dtype=np.int8)
-    cur = 0
-    for i in range(1, n):
-        if cur == 0 and high[i] >= hh[i - 1]:
-            cur = 1
-        elif cur == 1 and low[i] <= ll[i - 1]:
-            cur = 0
-        p[i] = cur
-    return p
-
-
 def roc_pos(close, length):
     n = len(close)
     p = np.zeros(n, dtype=np.int8)
@@ -147,26 +132,6 @@ def pasa_birlesik_pos(close, high, low):
     return p
 
 
-def bollinger_pos(close, length, k):
-    n = len(close)
-    s = pd.Series(close)
-    mean = s.rolling(length, min_periods=length).mean().to_numpy()
-    std = s.rolling(length, min_periods=length).std(ddof=0).to_numpy()
-    upper = mean + k * std
-    p = np.zeros(n, dtype=np.int8)
-    cur = 0
-    for i in range(n):
-        if not np.isfinite(upper[i]):
-            p[i] = cur
-            continue
-        if cur == 0 and close[i] > upper[i]:
-            cur = 1
-        elif cur == 1 and close[i] < mean[i]:
-            cur = 0
-        p[i] = cur
-    return p
-
-
 def backtest(close: np.ndarray, pos: np.ndarray):
     n = len(close)
     if n < 3:
@@ -218,8 +183,6 @@ def strategies_for(close, high, low):
     # ── Stronger trend / breakout / volatility strategies ──────────────────────
     out["Supertrend 10/3"] = supertrend_pos(high, low, close, 10, 3.0)
     out["Supertrend 20/4"] = supertrend_pos(high, low, close, 20, 4.0)
-    out["Donchian 20/10 kırılımı"] = donchian_pos(high, low, 20, 10)
-    out["Donchian 55/20 kırılımı"] = donchian_pos(high, low, 55, 20)
     out["Momentum 120 (ROC>0)"] = roc_pos(close, 120)
     out["Momentum 252 (ROC>0)"] = roc_pos(close, 252)
 
@@ -236,7 +199,6 @@ def strategies_for(close, high, low):
     out["RSI 14 > 50"] = np.where(np.isfinite(r14 := rsi_arr(close, 14)) & (r14 > 50), 1, 0).astype(np.int8)
     out["RSI 50 > 50"] = np.where(np.isfinite(r50 := rsi_arr(close, 50)) & (r50 > 50), 1, 0).astype(np.int8)
 
-    out["Bollinger 20 kırılımı"] = bollinger_pos(close, 20, 2.0)
     out["Paşa+Cedid (Trend 610 + MACD)"] = pasa_cedid_pos(close)
     out["Paşa Birleşik (%R+EMA+Supertrend)"] = pasa_birlesik_pos(close, high, low)
 

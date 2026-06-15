@@ -15,8 +15,6 @@ const GROUPS: { key: keyof IndicatorSettings; label: string; fields: [keyof Indi
   { key: 'volume', label: 'Hacim', fields: [] },
   { key: 'williams', label: 'Williams %R', fields: [['wr', '%R'], ['wrEmaA', 'EMA·1'], ['wrEmaB', 'EMA·2']] },
   { key: 'macd', label: 'MACD (NizamiCedid)', fields: [['macdFast', 'hızlı'], ['macdSlow', 'yavaş'], ['macdSig', 'sinyal'], ['macdVwma', 'eMACD']] },
-  { key: 'bollinger', label: 'Bollinger', fields: [['bb', 'N']] },
-  { key: 'donchian', label: 'Donchian', fields: [['don', 'N']] },
   { key: 'adx', label: 'ADX', fields: [['adx', 'ADX'], ['adxEma', 'EMA']] },
   { key: 'roc', label: 'Momentum / ROC', fields: [['roc', 'N'], ['rocEma', 'EMA']] },
 ];

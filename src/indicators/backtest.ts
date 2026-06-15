@@ -95,21 +95,6 @@ function supertrend(c: Candles, len: number, mult: number): Uint8Array {
   return p;
 }
 
-// Donchian / Turtle breakout: enter on an N-bar high, exit on an M-bar low.
-function donchian(c: Candles, entryN: number, exitN: number): Uint8Array {
-  const n = c.length;
-  const hh = rollingHighest(c.high, entryN);
-  const ll = rollingLowest(c.low, exitN);
-  const p = new Uint8Array(n);
-  let cur = 0;
-  for (let i = 1; i < n; i++) {
-    if (cur === 0 && c.high[i] >= hh[i - 1]) cur = 1;
-    else if (cur === 1 && c.low[i] <= ll[i - 1]) cur = 0;
-    p[i] = cur;
-  }
-  return p;
-}
-
 // Time-series momentum: long when price is above where it was `len` bars ago.
 function roc(c: Candles, len: number): Uint8Array {
   const n = c.length;
@@ -140,34 +125,6 @@ function rsiArr(close: Float64Array, len: number): Float64Array {
     out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
   }
   return out;
-}
-
-// Bollinger breakout: buy a push above the upper band, exit back at the mean.
-function bollinger(c: Candles, len: number, k: number): Uint8Array {
-  const close = c.close;
-  const n = close.length;
-  const p = new Uint8Array(n);
-  let cur = 0;
-  for (let i = 0; i < n; i++) {
-    if (i < len - 1) {
-      p[i] = cur;
-      continue;
-    }
-    let sum = 0;
-    for (let j = i - len + 1; j <= i; j++) sum += close[j];
-    const mean = sum / len;
-    let v = 0;
-    for (let j = i - len + 1; j <= i; j++) {
-      const d = close[j] - mean;
-      v += d * d;
-    }
-    const sd = Math.sqrt(v / len);
-    const upper = mean + k * sd;
-    if (cur === 0 && close[i] > upper) cur = 1;
-    else if (cur === 1 && close[i] < mean) cur = 0;
-    p[i] = cur;
-  }
-  return p;
 }
 
 function emaCrossFiltered(c: Candles, a: number, b: number, filt: number): Uint8Array {
@@ -276,8 +233,6 @@ export function strategyList(): StrategyDef[] {
   // ── Stronger trend / breakout / volatility strategies ──────────────────────
   defs.push({ name: 'Supertrend 10/3', build: (c) => supertrend(c, 10, 3) });
   defs.push({ name: 'Supertrend 20/4', build: (c) => supertrend(c, 20, 4) });
-  defs.push({ name: 'Donchian 20/10 kırılımı', build: (c) => donchian(c, 20, 10) });
-  defs.push({ name: 'Donchian 55/20 kırılımı', build: (c) => donchian(c, 55, 20) });
   defs.push({ name: 'Momentum 120 (ROC>0)', build: (c) => roc(c, 120) });
   defs.push({ name: 'Momentum 252 (ROC>0)', build: (c) => roc(c, 252) });
   defs.push({ name: 'EMA 9/21 + Trend 200', build: (c) => emaCrossFiltered(c, 9, 21, 200) });
@@ -305,7 +260,6 @@ export function strategyList(): StrategyDef[] {
       },
     });
   }
-  defs.push({ name: 'Bollinger 20 kırılımı', build: (c) => bollinger(c, 20, 2) });
   defs.push({ name: 'Paşa+Cedid (Trend 610 + MACD)', build: pasaCedid });
   defs.push({ name: 'Paşa Birleşik (%R+EMA+Supertrend)', build: pasaBirlesik });
 
@@ -323,12 +277,8 @@ export function explainStrategy(name: string): string {
     return '🛡️ Trend filtreli: Yalnızca uzun vadeli trend yukarıyken (fiyat 200 günlük ortalamanın üstünde) AL sinyali verir; trend aşağıyken nakitte bekler. Yatay/düşen piyasadaki yanlış alımları eler, düşüşü (drawdown) azaltır.';
   if (name.startsWith('Supertrend'))
     return '📈 Trend takibi + otomatik stop: Fiyat, oynaklığa (ATR) göre ayarlanan bir takip çizgisinin üstündeyken AL; çizginin altına sarkınca SAT. Yükselen trende biner, sert dönüşte erken çıkıp düşüşü sınırlar.';
-  if (name.startsWith('Donchian'))
-    return '🚀 Kırılım (Turtle): Fiyat son haftaların en yükseğini aşıp yeni zirve yapınca AL; son günlerin en düşüğüne inince SAT. Güçlü trendleri en baştan yakalamaya çalışır.';
   if (name.startsWith('Momentum'))
     return '🚀 Momentum: Fiyat birkaç ay öncesine göre daha yüksekse (yukarı gidiyorsa) AL, daha düşükse SAT. "Kazanan kazanmaya devam eder" mantığı.';
-  if (name.startsWith('Bollinger'))
-    return '🚀 Oynaklık kırılımı: Fiyat üst banda taşacak kadar güçlü hareket edince AL, ortalamasına geri dönünce SAT.';
   if (name.startsWith('RSI'))
     return '💪 Güç takibi: Güç göstergesi (RSI) 50 eşiğinin üstüne çıkınca (alıcılar baskın) AL, altına inince SAT.';
   if ((m = name.match(/^EMA (\d+)\//)))
