@@ -155,7 +155,7 @@ function computeSeries(c: Candles, ind: string, p: number, gp: IndicatorParams):
     case 'adx':
       return adxArr(c, Math.max(2, p));
     case 'adxema':
-      return emaArr(adxArr(c, Math.max(2, p)), Math.max(1, p));
+      return emaArr(adxArr(c, gp.adx), Math.max(1, p));
     case 'roc':
       return rocArr(close, Math.max(1, p));
     case 'rocema':
