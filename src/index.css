@@ -685,6 +685,62 @@ button.ctl:disabled {
   font-size: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
+.hm-modes {
+  display: inline-flex;
+  border: 1px solid var(--border-2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.hm-modes button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hm-modes button.active {
+  background: var(--accent-weak);
+  color: #fff;
+}
+.hm-sectors {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 6px;
+  align-content: start;
+}
+.hm-sec {
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  min-height: 72px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.hm-sec b {
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+.hm-sec span {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.hm-sec:hover {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
 
 .bt-section-title {
   font-size: 13px;

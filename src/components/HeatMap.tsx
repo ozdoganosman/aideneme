@@ -15,6 +15,35 @@ const METRICS: { key: keyof ScreenerItem; label: string; clamp: number }[] = [
   { key: 'r1y', label: '1 Yıl %', clamp: 90 },
 ];
 
+// BIST sub-sector indices (mutually exclusive economic sectors) → readable
+// Turkish labels. We colour each by its index return to show where money is
+// flowing in/out; volume for these indices is unreliable so tiles are uniform.
+const SECTORS: { s: string; label: string }[] = [
+  { s: 'XBANK', label: 'Banka' },
+  { s: 'XHOLD', label: 'Holding' },
+  { s: 'XSGRT', label: 'Sigorta' },
+  { s: 'XFINK', label: 'Fin. Kiralama/Faktoring' },
+  { s: 'XAKUR', label: 'Aracı Kurumlar' },
+  { s: 'XGMYO', label: 'Gayrimenkul YO' },
+  { s: 'XYORT', label: 'Menkul Kıymet YO' },
+  { s: 'XGIDA', label: 'Gıda, İçecek' },
+  { s: 'XKMYA', label: 'Kimya, Petrol, Plastik' },
+  { s: 'XMANA', label: 'Metal Ana' },
+  { s: 'XMESY', label: 'Metal Eşya, Makine' },
+  { s: 'XTAST', label: 'Taş, Toprak (Çimento)' },
+  { s: 'XTEKS', label: 'Tekstil, Deri' },
+  { s: 'XKAGT', label: 'Orman, Kağıt, Basım' },
+  { s: 'XMADN', label: 'Madencilik' },
+  { s: 'XELKT', label: 'Elektrik' },
+  { s: 'XILTM', label: 'İletişim' },
+  { s: 'XULAS', label: 'Ulaştırma' },
+  { s: 'XTCRT', label: 'Ticaret' },
+  { s: 'XTRZM', label: 'Turizm' },
+  { s: 'XINSA', label: 'İnşaat' },
+  { s: 'XBLSM', label: 'Bilişim' },
+  { s: 'XSPOR', label: 'Spor' },
+];
+
 const NEU = [43, 47, 58]; // neutral (~#2b2f3a)
 const UP = [38, 166, 154]; // green (#26a69a)
 const DN = [239, 83, 80]; // red (#ef5350)
@@ -107,6 +136,7 @@ export function HeatMap({ onClose, onSelect }: Props) {
   useEscClose(onClose);
   const [items, setItems] = useState<ScreenerItem[] | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [mode, setMode] = useState<'stocks' | 'sectors'>('stocks');
   const [metric, setMetric] = useState(0);
   const [hover, setHover] = useState<{ it: ScreenerItem; x: number; y: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -131,7 +161,7 @@ export function HeatMap({ onClose, onSelect }: Props) {
     ro.observe(el);
     setSize({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
-  }, [loaded]);
+  }, [loaded, mode]);
 
   const m = METRICS[metric];
   const tiles = useMemo(() => {
@@ -149,6 +179,20 @@ export function HeatMap({ onClose, onSelect }: Props) {
     return squarify(data.map((d) => ({ item: d.item, area: d.area * scale })), size.w, size.h);
   }, [items, size.w, size.h]);
 
+  // Sector board: each BIST sub-sector index, coloured by its return for the
+  // chosen period, sorted best→worst so inflows cluster at the top.
+  const sectors = useMemo(() => {
+    if (!items) return [];
+    const by = new Map(items.map((it) => [it.s, it]));
+    return SECTORS.map((sec) => {
+      const it = by.get(sec.s);
+      const v = it ? Number(it[m.key]) : NaN;
+      return { ...sec, v, it };
+    })
+      .filter((c) => c.it && isFinite(c.v))
+      .sort((a, b) => b.v - a.v);
+  }, [items, m.key]);
+
   const pick = (s: string) => {
     onSelect(s);
     onClose();
@@ -158,7 +202,7 @@ export function HeatMap({ onClose, onSelect }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal wide hm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <b>🗺️ Piyasa Isı Haritası{items ? ` · ${tiles.length} hisse` : ''}</b>
+          <b>🗺️ Piyasa Isı Haritası{items ? ` · ${mode === 'stocks' ? `${tiles.length} hisse` : `${sectors.length} sektör`}` : ''}</b>
           <button className="row-x" onClick={onClose} title="Kapat" aria-label="Kapat">
             ×
           </button>
@@ -171,6 +215,14 @@ export function HeatMap({ onClose, onSelect }: Props) {
           ) : (
             <>
               <div className="hm-controls">
+                <div className="hm-modes">
+                  <button className={mode === 'stocks' ? 'active' : ''} onClick={() => setMode('stocks')}>
+                    Hisseler
+                  </button>
+                  <button className={mode === 'sectors' ? 'active' : ''} onClick={() => setMode('sectors')}>
+                    Sektörler
+                  </button>
+                </div>
                 <label className="scr-pick">
                   🎨 Renk
                   <select value={metric} onChange={(e) => setMetric(Number(e.target.value))}>
@@ -186,9 +238,14 @@ export function HeatMap({ onClose, onSelect }: Props) {
                   <span className="hm-legend-bar" style={{ background: `linear-gradient(90deg, ${mix(NEU, DN, 1)}, ${mix(NEU, DN, 0.3)}, #2b2f3a, ${mix(NEU, UP, 0.3)}, ${mix(NEU, UP, 1)})` }} />
                   <span className="lg-muted">+{m.clamp}%</span>
                 </div>
-                <span className="lg-muted hm-hint">Boyut = işlem hacmi (fiyat × ort. hacim) · tıkla → grafikte aç</span>
+                <span className="lg-muted hm-hint">
+                  {mode === 'stocks'
+                    ? 'Boyut = işlem hacmi (fiyat × ort. hacim) · tıkla → grafikte aç'
+                    : 'Renk = sektör endeksinin getirisi (para girişi/çıkışı) · tıkla → grafikte aç'}
+                </span>
               </div>
 
+              {mode === 'stocks' && (
               <div className="hm-wrap" ref={wrapRef} onMouseLeave={() => setHover(null)}>
                 <svg width={size.w} height={size.h} className="hm-svg">
                   {tiles.map((t) => {
@@ -234,6 +291,25 @@ export function HeatMap({ onClose, onSelect }: Props) {
                   </div>
                 )}
               </div>
+              )}
+
+              {mode === 'sectors' && (
+                <div className="hm-sectors">
+                  {sectors.map((c) => (
+                    <button
+                      key={c.s}
+                      className="hm-sec"
+                      style={{ background: heatColor(c.v, m.clamp) }}
+                      onClick={() => pick(c.s)}
+                      title={`${c.it?.n ?? c.label} · Günlük ${fpct(c.it?.ch)} · 1A ${fpct(c.it?.r1m)} · 3A ${fpct(c.it?.r3m)} · 1Y ${fpct(c.it?.r1y)}`}
+                    >
+                      <b>{c.label}</b>
+                      <span>{(c.v >= 0 ? '+' : '') + (m.clamp >= 40 ? Math.round(c.v) : c.v.toFixed(1)) + '%'}</span>
+                    </button>
+                  ))}
+                  {!sectors.length && <div className="bt-note">Sektör endeksi verisi bulunamadı.</div>}
+                </div>
+              )}
             </>
           )}
         </div>
