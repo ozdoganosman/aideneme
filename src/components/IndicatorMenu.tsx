@@ -13,6 +13,7 @@ interface Props {
 const GROUPS: { key: keyof IndicatorSettings; label: string; fields: [keyof IndicatorParams, string][] }[] = [
   { key: 'ema', label: 'EMA', fields: [['emaFast', 'hızlı'], ['emaSlow', 'yavaş']] },
   { key: 'volume', label: 'Hacim', fields: [] },
+  { key: 'volprofile', label: 'Hacim Profili', fields: [] },
   { key: 'williams', label: 'Williams %R', fields: [['wr', '%R'], ['wrEmaA', 'EMA·1'], ['wrEmaB', 'EMA·2']] },
   { key: 'macd', label: 'MACD (NizamiCedid)', fields: [['macdFast', 'hızlı'], ['macdSlow', 'yavaş'], ['macdSig', 'sinyal'], ['macdVwma', 'eMACD']] },
   { key: 'adx', label: 'ADX', fields: [['adx', 'ADX'], ['adxEma', 'EMA']] },

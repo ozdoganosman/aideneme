@@ -32,6 +32,7 @@ export interface IndicatorSettings {
   macd: boolean;
   adx: boolean;
   roc: boolean;
+  volprofile: boolean;
 }
 
 export interface ChartHandle {
@@ -135,6 +136,89 @@ const lineOpts = (color: string, width: 1 | 2 | 3 = 1, title = '') => ({
   title,
 });
 
+// ── Volume profile (horizontal volume-by-price over the visible window) ──────
+interface VPBar { y: number; h: number; w: number; inVA: boolean; isPOC: boolean }
+interface VPView {
+  bars: VPBar[];
+  right: number;
+  pocY: number | null;
+  vahY: number | null;
+  valY: number | null;
+  pocPrice: number;
+  vah: number;
+  val: number;
+}
+// First index whose time >= target (binary search on an ascending time array).
+function idxGte(time: ArrayLike<number>, target: number, n: number): number {
+  let lo = 0;
+  let hi = n;
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if (time[m] < target) lo = m + 1;
+    else hi = m;
+  }
+  return lo;
+}
+// Bin volume by price across [i0,i1], find POC + 70% value area, and lay out
+// right-anchored horizontal bars. `yOf` maps a price to a pixel Y.
+function buildVP(c: Candles, i0: number, i1: number, nb: number, yOf: (p: number) => number | null, right: number, maxBarW: number): VPView | null {
+  if (i1 < i0) return null;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = i0; i <= i1; i++) {
+    if (c.low[i] < lo) lo = c.low[i];
+    if (c.high[i] > hi) hi = c.high[i];
+  }
+  if (!(hi > lo)) return null;
+  const binSz = (hi - lo) / nb;
+  const vol = new Float64Array(nb);
+  for (let i = i0; i <= i1; i++) {
+    const v = c.volume[i];
+    if (!(v > 0)) continue;
+    let b0 = Math.floor((c.low[i] - lo) / binSz);
+    let b1 = Math.floor((c.high[i] - lo) / binSz);
+    b0 = Math.max(0, Math.min(nb - 1, b0));
+    b1 = Math.max(0, Math.min(nb - 1, b1));
+    const share = v / (b1 - b0 + 1);
+    for (let b = b0; b <= b1; b++) vol[b] += share;
+  }
+  let poc = 0;
+  let maxVol = 0;
+  let total = 0;
+  for (let b = 0; b < nb; b++) {
+    total += vol[b];
+    if (vol[b] > maxVol) {
+      maxVol = vol[b];
+      poc = b;
+    }
+  }
+  if (!(maxVol > 0)) return null;
+  // Value area: expand from the POC outward toward the heavier neighbour until
+  // 70% of volume is captured.
+  let lb = poc;
+  let hb = poc;
+  let acc = vol[poc];
+  const tgt = total * 0.7;
+  while (acc < tgt && (lb > 0 || hb < nb - 1)) {
+    const below = lb > 0 ? vol[lb - 1] : -1;
+    const above = hb < nb - 1 ? vol[hb + 1] : -1;
+    if (above >= below) acc += vol[++hb];
+    else acc += vol[--lb];
+  }
+  const bars: VPBar[] = [];
+  for (let b = 0; b < nb; b++) {
+    if (vol[b] <= 0) continue;
+    const yT = yOf(lo + (b + 1) * binSz);
+    const yB = yOf(lo + b * binSz);
+    if (yT == null || yB == null) continue;
+    bars.push({ y: yT, h: Math.max(1, yB - yT - 1), w: (vol[b] / maxVol) * maxBarW, inVA: b >= lb && b <= hb, isPOC: b === poc });
+  }
+  const pocPrice = lo + (poc + 0.5) * binSz;
+  const vah = lo + (hb + 1) * binSz;
+  const val = lo + lb * binSz;
+  return { bars, right, pocY: yOf(pocPrice), vahY: yOf(vah), valY: yOf(val), pocPrice, vah, val };
+}
+
 export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   { candles, fitOnLoad, settings, params = DEFAULT_PARAMS, symbol, tfLabel, strategy, costLine, log, focus },
   ref,
@@ -164,6 +248,14 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const drawViewRef = useRef<PView[]>([]);
   const symRef = useRef(symbol);
   symRef.current = symbol;
+  // Volume profile: kept in refs so the long-lived chart subscriptions can read
+  // the current candles / toggle without re-binding.
+  const candlesRef = useRef<Candles | null>(candles);
+  candlesRef.current = candles;
+  const vpOnRef = useRef(settings.volprofile);
+  vpOnRef.current = settings.volprofile;
+  const refreshVPRef = useRef<() => void>(() => {});
+  const [vp, setVp] = useState<VPView | null>(null);
   const [drawTool, setDrawTool] = useState<DrawTool>('none');
   const [drawView, setDrawView] = useState<PView[]>([]);
   const [drawCount, setDrawCount] = useState(0);
@@ -474,9 +566,42 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       else measureRef.current = { a: m.a, b: pt, frozen: true };
       refreshMeasure();
     });
+    // Volume profile over the visible window (recomputed on zoom/pan/resize).
+    const refreshVP = () => {
+      if (!vpOnRef.current) {
+        setVp(null);
+        return;
+      }
+      const c = candlesRef.current;
+      const ts = chart.timeScale();
+      const vr = c && c.length ? ts.getVisibleRange() : null;
+      if (!c || !vr) {
+        setVp(null);
+        return;
+      }
+      const n = c.length;
+      const from = vr.from as number;
+      const to = vr.to as number;
+      let i0 = Math.max(0, idxGte(c.time, from, n));
+      let i1 = idxGte(c.time, to, n);
+      if (i1 >= n || c.time[i1] > to) i1--;
+      i1 = Math.min(n - 1, i1);
+      if (i1 < i0) {
+        setVp(null);
+        return;
+      }
+      const paneH = chart.panes()[0]?.getHeight() ?? 300;
+      const nb = Math.max(12, Math.min(48, Math.round(paneH / 12)));
+      const right = ts.width();
+      const maxBarW = Math.min(right * 0.32, 160);
+      setVp(buildVP(c, i0, i1, nb, (p) => candle.priceToCoordinate(p), right, maxBarW));
+    };
+    refreshVPRef.current = refreshVP;
+
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       if (measureRef.current?.b) refreshMeasure();
       recomputeDraw();
+      refreshVP();
     });
     const onKey = (e: KeyboardEvent) => {
       shiftRef.current = e.shiftKey;
@@ -532,7 +657,10 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       computeTops();
     });
 
-    const ro = new ResizeObserver(() => computeTops());
+    const ro = new ResizeObserver(() => {
+      computeTops();
+      refreshVP();
+    });
     ro.observe(elRef.current!);
     computeTops();
 
@@ -582,8 +710,14 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     );
     if (!hoveringRef.current) setLegend(lv);
     recomputeDraw(); // re-anchor manual drawings to the new window
+    refreshVPRef.current(); // recompute the volume profile for the new data
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, params]);
+
+  // Recompute / clear the volume profile when it's toggled on/off.
+  useEffect(() => {
+    refreshVPRef.current();
+  }, [settings.volprofile]);
 
   // Indicator visibility toggles.
   useEffect(() => {
@@ -698,6 +832,34 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   return (
     <>
       <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />
+
+      {/* Volume profile (horizontal volume-by-price; POC + value area) */}
+      {settings.volprofile && vp && (
+        <svg className="vp-overlay" width="100%" height="100%">
+          {vp.bars.map((b, i) => (
+            <rect
+              key={i}
+              x={vp.right - b.w}
+              y={b.y}
+              width={b.w}
+              height={b.h}
+              className={b.isPOC ? 'vp-poc' : b.inVA ? 'vp-va' : 'vp-bar'}
+            />
+          ))}
+          {vp.valY != null && vp.vahY != null && (
+            <>
+              <line x1={vp.right - 168} y1={vp.vahY} x2={vp.right} y2={vp.vahY} className="vp-valine" />
+              <line x1={vp.right - 168} y1={vp.valY} x2={vp.right} y2={vp.valY} className="vp-valine" />
+            </>
+          )}
+          {vp.pocY != null && (
+            <>
+              <line x1={0} y1={vp.pocY} x2={vp.right} y2={vp.pocY} className="vp-pocline" />
+              <text x={4} y={vp.pocY - 3} className="vp-poclbl">POC {fp(vp.pocPrice)}</text>
+            </>
+          )}
+        </svg>
+      )}
 
       {/* Drawing toolbar */}
       <div className="draw-tools">

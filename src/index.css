@@ -424,6 +424,38 @@ button.ctl:disabled {
   z-index: 4;
   pointer-events: none;
 }
+/* Volume profile overlay (behind drawings/measure, over the candles) */
+.vp-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.vp-bar {
+  fill: rgba(120, 144, 180, 0.22);
+}
+.vp-va {
+  fill: rgba(38, 166, 154, 0.32);
+}
+.vp-poc {
+  fill: rgba(240, 185, 11, 0.55);
+}
+.vp-pocline {
+  stroke: #f0b90b;
+  stroke-width: 1;
+  stroke-dasharray: 5 3;
+  opacity: 0.8;
+}
+.vp-valine {
+  stroke: rgba(38, 166, 154, 0.7);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.vp-poclbl {
+  fill: #f0b90b;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
 /* Drawing toolbar */
 .draw-tools {
   position: absolute;
