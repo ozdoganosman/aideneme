@@ -129,8 +129,8 @@ export interface ExtraBundle {
   rocEma: Float64Array;
 }
 export function computeExtras(c: Candles, p: IndicatorParams = DEFAULT_PARAMS): ExtraBundle {
-  // ADX is a *smoothing* parameter so it defaults to 28 (it flattens to ~5 and
-  // never crosses 25 at the 260-day paradigm); ROC stays at the 260 lookback.
+  // All long-term by the 260-day paradigm (ADX 260 / EMA 120 too). Note ADX(260)
+  // flattens to ~5 and rarely crosses 25 — kept long for paradigm consistency.
   const adx = adxArr(c, p.adx);
   const roc = rocArr(c.close, p.roc);
   return {
@@ -173,7 +173,7 @@ export interface IndicatorParams {
 export const DEFAULT_PARAMS: IndicatorParams = {
   emaFast: 377, emaSlow: 610, wr: 260, wrEmaA: 260, wrEmaB: 120,
   macdFast: 120, macdSlow: 260, macdSig: 50, macdVwma: 185,
-  adx: 28, adxEma: 14, roc: 260, rocEma: 120,
+  adx: 260, adxEma: 120, roc: 260, rocEma: 120,
 };
 
 // Period currently active on the chart for a builder/screener indicator key, so

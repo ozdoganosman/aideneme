@@ -42,8 +42,8 @@ export const INDS: IndDef[] = [
   { key: 'signal', label: 'Signal', hasParam: false, defParam: 0 },
   { key: 'emacd', label: 'eMACD', hasParam: false, defParam: 0 },
   { key: 'stdir', label: 'Supertrend yön (1=yukarı)', hasParam: false, defParam: 0 },
-  { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 28 },
-  { key: 'adxema', label: 'ADX EMA', hasParam: true, defParam: 14 },
+  { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 260 },
+  { key: 'adxema', label: 'ADX EMA', hasParam: true, defParam: 120 },
   { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 260 },
   { key: 'rocema', label: 'Momentum / ROC EMA', hasParam: true, defParam: 120 },
 ];

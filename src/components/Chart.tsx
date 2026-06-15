@@ -353,9 +353,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const mEma = chart.addSeries(LineSeries, lineOpts('#e6e6e6', 2, t('eMACD')), 2);
     mMacd.createPriceLine({ price: 0, color: '#4a4f5e', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' });
 
-    // ADX (14) pane + ROC (100) pane — collapsed unless toggled on.
-    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, t('ADX (28)')), 3);
-    const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, t('ADX EMA (14)')), 3);
+    // ADX (260) pane + ROC (260) pane — collapsed unless toggled on.
+    const adx = chart.addSeries(LineSeries, lineOpts('#ab47bc', 2, t('ADX (260)')), 3);
+    const adxEma = chart.addSeries(LineSeries, lineOpts('#26a69a', 1, t('ADX EMA (120)')), 3);
     adx.createPriceLine({ price: 25, color: '#787B86', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '25' });
     const roc = chart.addSeries(LineSeries, lineOpts('#26c6da', 2, t('ROC (260)')), 4);
     const rocEma = chart.addSeries(LineSeries, lineOpts('#42a5f5', 1, t('ROC EMA (120)')), 4);

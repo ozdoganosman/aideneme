@@ -812,15 +812,19 @@ function pct(v: number): string {
   return isFinite(v) ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : '—';
 }
 
-// ADX and its EMA are short smoothing lengths (typically 7–28). A value left over
-// in localStorage from the old "260 paradigm" (ADX 260 / EMA 120) is useless —
-// ADX(260) flattens to ~5 and never crosses 25 — so heal out-of-range persisted
-// values back to the current defaults instead of showing nonsense in the menu.
+// One-time: adopt the long-period ADX defaults (ADX 260 / EMA 120, per the
+// 260-day paradigm) for users whose saved settings still carry old short values.
+// Runs once (version flag), then respects whatever the user sets afterwards.
 function migrateIndParams(p: IndicatorParams): IndicatorParams {
-  const q = { ...p };
-  if (!(q.adx >= 2 && q.adx <= 80)) q.adx = DEFAULT_PARAMS.adx;
-  if (!(q.adxEma >= 1 && q.adxEma <= 60)) q.adxEma = DEFAULT_PARAMS.adxEma;
-  return q;
+  if (lsGet('borsaIndParamsV', 0) < 2) {
+    try {
+      localStorage.setItem('borsaIndParamsV', '2');
+    } catch {
+      /* ignore */
+    }
+    return { ...p, adx: DEFAULT_PARAMS.adx, adxEma: DEFAULT_PARAMS.adxEma };
+  }
+  return p;
 }
 
 function fp(v: number): string {
