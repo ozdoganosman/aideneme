@@ -104,14 +104,28 @@ export function detectFormations(c: Candles, strength = 6, lookback = 340): Form
   const fp = (x: Piv): FPoint => ({ t: x.t, p: x.p });
   const seg = (a: Piv, b: Piv): [FPoint, FPoint] => [fp(a), fp(b)];
 
-  // Head & shoulders / inverse — needs five alternating pivots.
-  if (L >= 5) {
-    const [a, b, d, e, f] = piv.slice(L - 5);
+  // Head & shoulders / inverse. Scan the few most recent 5-pivot windows (a
+  // trailing breakout pivot can shift the last-5 onto the wrong parity), and
+  // require proper geometry so an OBO is never mistaken for a TOBO:
+  //   OBO  → 3 peaks, head highest, shoulders ~equal and ABOVE a level neckline
+  //   TOBO → 3 troughs, head lowest, shoulders ~equal and BELOW a level neckline
+  for (let end = L; end >= Math.max(5, L - 2); end--) {
+    const [a, b, d, e, f] = piv.slice(end - 5, end);
     const neck: [FPoint, FPoint] = [fp(b), { t: f.t, p: b.p + ((e.p - b.p) / (e.t - b.t || 1)) * (f.t - b.t) }];
-    if (a.hi && !b.hi && d.hi && !e.hi && f.hi && d.p > a.p && d.p > f.p && near(a.p, f.p) && d.p - Math.max(a.p, f.p) > tol * 0.5) {
+    if (
+      a.hi && !b.hi && d.hi && !e.hi && f.hi &&
+      near(a.p, f.p) && near(b.p, e.p) &&
+      d.p - Math.max(a.p, f.p) > tol && // head clearly above shoulders
+      Math.min(a.p, f.p) > Math.max(b.p, e.p) // shoulders above the neckline
+    ) {
       return [{ kind: 'obo', label: 'OBO (Omuz-Baş-Omuz)', dir: 'bear', segs: [seg(a, b), seg(b, d), seg(d, e), seg(e, f), neck], pts: [a, b, d, e, f].map(fp) }];
     }
-    if (!a.hi && b.hi && !d.hi && e.hi && !f.hi && d.p < a.p && d.p < f.p && near(a.p, f.p) && Math.min(a.p, f.p) - d.p > tol * 0.5) {
+    if (
+      !a.hi && b.hi && !d.hi && e.hi && !f.hi &&
+      near(a.p, f.p) && near(b.p, e.p) &&
+      Math.min(a.p, f.p) - d.p > tol && // head clearly below shoulders
+      Math.max(a.p, f.p) < Math.min(b.p, e.p) // shoulders below the neckline
+    ) {
       return [{ kind: 'tobo', label: 'TOBO (Ters O-B-O)', dir: 'bull', segs: [seg(a, b), seg(b, d), seg(d, e), seg(e, f), neck], pts: [a, b, d, e, f].map(fp) }];
     }
   }
