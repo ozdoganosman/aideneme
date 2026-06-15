@@ -115,6 +115,13 @@ export async function fetchBistNames(signal?: AbortSignal): Promise<Record<strin
   }
 }
 
+// BIST index symbols (XU100, XU030, XBANK, BISTTLREF, …) all use an X- or BIST-
+// prefix that no stock ticker uses. Used to keep indices out of stock-only views
+// (heat map, screener) even when an older screener.json still lists them.
+export function isIndexSymbol(s: string): boolean {
+  return /^X/.test(s) || s.startsWith('BIST');
+}
+
 // Per-symbol current indicator snapshot for the screener (built in CI by
 // scripts/screener.py). Compact keys keep the file small for ~650 symbols.
 export interface ScreenerItem {

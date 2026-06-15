@@ -24,7 +24,17 @@ from strategies import ema, rsi_arr, supertrend_pos  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "bist"
 SKIP = {"symbols.json", "quotes.json", "strategies.json", "names.json", "spark.json", "screener.json"}
-SCHEMA_VERSION = 3  # bump when item fields change to force a recompute
+SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
+SCHEMA_VERSION = 4  # bump when item fields change to force a recompute
+
+
+def load_index_symbols() -> set:
+    """Index symbols (XU100, XBANK, BISTTLREF, …) — excluded; this is a stock screener."""
+    try:
+        d = json.load(open(SYMBOLS_FILE, encoding="utf-8"))
+        return {s["name"] for s in d.get("indices", [])}
+    except Exception:
+        return set()
 
 
 def adx_wilder(high, low, close, length: int):
@@ -85,12 +95,15 @@ def main() -> int:
             pass
 
     names = load_names()
+    indices = load_index_symbols()
     items = []
 
     for fp in sorted(glob.glob(str(OUT / "*.json"))):
         if os.path.basename(fp) in SKIP:
             continue
         sym = os.path.splitext(os.path.basename(fp))[0]
+        if sym in indices:
+            continue  # endeks (XU100, XBANK, …) — hisse taramasına girmez
         try:
             recs = json.load(open(fp, encoding="utf-8"))["data"]
         except Exception:

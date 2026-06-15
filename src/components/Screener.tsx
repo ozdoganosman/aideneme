@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchScreener, fetchBistSpark, fetchBistStatic, ScreenerFile, ScreenerItem } from '../data/bistStatic';
+import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
 import { emaArr, adxArr, rollingHighest, rollingLowest } from '../indicators/calc';
 import { useEscClose } from '../useEscClose';
@@ -186,7 +186,11 @@ export function Screener({ onClose, onSelect, onAddToWatch }: Props) {
   const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
-    fetchScreener().then(setData).catch(() => setData(null)).finally(() => setLoaded(true));
+    // Drop indices (XU100, XBANK, …) — this is a stock screener, not an index list.
+    fetchScreener()
+      .then((d) => setData(d ? { ...d, items: d.items.filter((it) => !isIndexSymbol(it.s)) } : null))
+      .catch(() => setData(null))
+      .finally(() => setLoaded(true));
     fetchBistSpark().then(setSpark).catch(() => {});
   }, []);
   useEffect(() => {

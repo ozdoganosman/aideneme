@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchScreener, ScreenerItem } from '../data/bistStatic';
+import { fetchScreener, ScreenerItem, isIndexSymbol } from '../data/bistStatic';
 import { useEscClose } from '../useEscClose';
 
 interface Props {
@@ -137,7 +137,9 @@ export function HeatMap({ onClose, onSelect }: Props) {
   const tiles = useMemo(() => {
     if (!items || size.w < 2 || size.h < 2) return [];
     // Size weight = trading value (price × avg volume) → liquid names dominate.
+    // Indices (XU100, XBANK, …) are not stocks and dwarf everything, so drop them.
     const data = items
+      .filter((it) => !isIndexSymbol(it.s))
       .map((it) => ({ item: it, area: (it.p > 0 ? it.p : 0) * (it.av > 0 ? it.av : 0) }))
       .filter((d) => d.area > 0)
       .sort((a, b) => b.area - a.area);
