@@ -114,7 +114,7 @@ export default function App() {
   const [strategy, setStrategy] = useState<string | null>(null);
   const [log, setLog] = useState<boolean>(() => lsGet('borsaLog', false));
   const [focusTrade, setFocusTrade] = useState<Trade | null>(null);
-  const [leftTab, setLeftTab] = useState<'portfolio' | 'trades'>(() => lsGet('borsaLeftTab', 'portfolio'));
+  const [leftTab, setLeftTab] = useState<'portfolio' | 'txns' | 'trades'>(() => lsGet('borsaLeftTab', 'portfolio'));
   const wide0 = !isNarrow();
   const [showLeft, setShowLeft] = useState<boolean>(() => lsGet('borsaShowLeft', wide0));
   const [showRight, setShowRight] = useState<boolean>(() => lsGet('borsaShowRight', wide0));
@@ -547,15 +547,19 @@ export default function App() {
                 >
                   Portföy{portfolio.length ? ` · ${portfolio.length}` : ''}
                 </button>
+                <button className={leftTab === 'txns' ? 'active' : ''} onClick={() => setLeftTab('txns')}>
+                  İşlemler{txns.length ? ` · ${txns.length}` : ''}
+                </button>
                 <button className={leftTab === 'trades' ? 'active' : ''} onClick={() => setLeftTab('trades')}>
-                  İşlemler
+                  Strateji
                 </button>
                 <button className="lt-hide" onClick={() => setShowLeft(false)} title="Paneli gizle (geniş grafik)">
                   ⟨
                 </button>
               </div>
-              {leftTab === 'portfolio' ? (
+              {leftTab === 'portfolio' || leftTab === 'txns' ? (
                 <Portfolio
+                  view={leftTab === 'txns' ? 'log' : 'main'}
                   txns={txns}
                   positions={portfolio}
                   closed={ledger.closed}

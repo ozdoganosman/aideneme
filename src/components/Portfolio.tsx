@@ -97,6 +97,7 @@ interface Props {
   onImport: (h: Holding[]) => void;
   onSelect: (s: string) => void;
   onAnalyze: () => void;
+  view?: 'main' | 'log'; // 'log' renders only the transaction history (own tab)
 }
 
 // Stable per-holding colors — same color ties a card to its donut slice.
@@ -108,7 +109,7 @@ const PALETTE = [
 const tid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const nowSec = () => Math.floor(Date.now() / 1000);
 
-export function Portfolio({ txns, positions, closed, realized, quotes, spark, symbols, onAddTxn, onRemoveTxn, onImport, onSelect, onAnalyze }: Props) {
+export function Portfolio({ txns, positions, closed, realized, quotes, spark, symbols, onAddTxn, onRemoveTxn, onImport, onSelect, onAnalyze, view = 'main' }: Props) {
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [sym, setSym] = useState('');
   const [qty, setQty] = useState('');
@@ -116,7 +117,6 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
   const [acOpen, setAcOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [showClosed, setShowClosed] = useState(false);
-  const [showLog, setShowLog] = useState(false);
 
   const matches = acOpen && sym ? rank(symbols, sym.toUpperCase()) : [];
   const posMap = useMemo(() => new Map(positions.map((h) => [h.symbol, h])), [positions]);
@@ -207,6 +207,26 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
     setQty(String(h.qty));
     setPrice(quotes[h.symbol]?.c ? String(quotes[h.symbol].c) : '');
   };
+
+  // Dedicated "İşlemler" tab → only the recorded transaction history.
+  if (view === 'log') {
+    if (!txns.length) return <div className="panel-empty">Henüz işlem yok. Portföy sekmesinden AL/SAT ekle.</div>;
+    return (
+      <div className="pf-section pf-txnlist">
+        {[...txns]
+          .sort((a, b) => b.t - a.t)
+          .map((t) => (
+            <div key={t.id} className="pf-txn">
+              <span className={'pf-txn-side ' + t.side}>{t.side === 'buy' ? 'AL' : 'SAT'}</span>
+              <b>{t.symbol}</b>
+              <span className="lg-muted">{fmtQty(t.qty)} × {money(t.price)}</span>
+              <span className="pf-txn-date lg-muted">{fmtDate(t.t)}</span>
+              <button className="row-x" title="İşlemi sil" onClick={() => onRemoveTxn(t.id)}>×</button>
+            </div>
+          ))}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -392,26 +412,6 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
         </div>
       )}
 
-      {/* Transaction log */}
-      {txns.length > 0 && (
-        <div className="pf-section">
-          <button className="pf-sechead" onClick={() => setShowLog((v) => !v)}>
-            {showLog ? '▾' : '▸'} İşlem geçmişi ({txns.length})
-          </button>
-          {showLog &&
-            [...txns]
-              .sort((a, b) => b.t - a.t)
-              .map((t) => (
-                <div key={t.id} className="pf-txn">
-                  <span className={'pf-txn-side ' + t.side}>{t.side === 'buy' ? 'AL' : 'SAT'}</span>
-                  <b>{t.symbol}</b>
-                  <span className="lg-muted">{fmtQty(t.qty)} × {money(t.price)}</span>
-                  <span className="pf-txn-date lg-muted">{fmtDate(t.t)}</span>
-                  <button className="row-x" title="İşlemi sil" onClick={() => onRemoveTxn(t.id)}>×</button>
-                </div>
-              ))}
-        </div>
-      )}
     </>
   );
 }
