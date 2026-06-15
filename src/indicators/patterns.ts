@@ -134,36 +134,100 @@ export function detectFormations(c: Candles, strength = 6, lookback = 340): Form
   // the recent lows, then classify by their slopes. Checked before double
   // top/bottom because a rising-lows/falling-highs triangle also ends in an
   // H,L,H (or L,H,L) that would otherwise look like a double.
-  if (L >= 4) {
+  // Triangle / wedge. Strict, because loose versions fire on any trend leg:
+  // regression-fit a line through the recent highs and another through the lows,
+  // then require (1) tight collinear fit, (2) genuine convergence (gap clearly
+  // narrowing, not crossed), (3) the candles stay contained between the lines,
+  // and (4) ≥3 touches on one side. Drawn from the fitted lines, not raw pivots.
+  if (L >= 5) {
     const win = piv.slice(Math.max(0, L - 6));
     const highs = win.filter((x) => x.hi);
     const lows = win.filter((x) => !x.hi);
-    if (highs.length >= 2 && lows.length >= 2) {
-      const h1 = highs[0];
-      const h2 = highs[highs.length - 1];
-      const l1 = lows[0];
-      const l2 = lows[lows.length - 1];
-      const dH = h2.p - h1.p;
-      const dL = l2.p - l1.p;
-      const m = tol * 0.4;
+    if (highs.length >= 2 && lows.length >= 2 && (highs.length >= 3 || lows.length >= 3)) {
+      const fit = (pts: Piv[]) => {
+        const n = pts.length;
+        let sx = 0;
+        let sy = 0;
+        let sxx = 0;
+        let sxy = 0;
+        for (const q of pts) {
+          sx += q.i;
+          sy += q.p;
+          sxx += q.i * q.i;
+          sxy += q.i * q.p;
+        }
+        const den = n * sxx - sx * sx;
+        const slope = den ? (n * sxy - sx * sy) / den : 0;
+        const b = (sy - slope * sx) / n;
+        let maxDev = 0;
+        for (const q of pts) {
+          const dv = Math.abs(q.p - (slope * q.i + b));
+          if (dv > maxDev) maxDev = dv;
+        }
+        return { slope, b, maxDev };
+      };
+      const fh = fit(highs);
+      const fl = fit(lows);
+      const i0 = win[0].i;
+      const i1 = win[win.length - 1].i;
+      const span = i1 - i0;
+      const res = (i: number) => fh.slope * i + fh.b;
+      const sup = (i: number) => fl.slope * i + fl.b;
+      // Measure convergence only where BOTH lines have real pivots (no
+      // extrapolation), else a line drawn past its last pivot can falsely cross.
+      const iS = Math.max(highs[0].i, lows[0].i);
+      const iE = Math.min(highs[highs.length - 1].i, lows[lows.length - 1].i);
+      const gapS = res(iS) - sup(iS);
+      const gapE = res(iE) - sup(iE);
+      const dH = fh.slope * span;
+      const dL = fl.slope * span;
+      const mm = tol * 0.4;
       const flatH = Math.abs(dH) <= tol * 0.5;
       const flatL = Math.abs(dL) <= tol * 0.5;
+      let viol = 0;
+      let bars = 0;
+      for (let i = Math.max(0, i0); i <= i1 && i < c.length; i++) {
+        bars++;
+        if (c.high[i] > res(i) + tol * 0.4 || c.low[i] < sup(i) - tol * 0.4) viol++;
+      }
+      const ok =
+        span >= 20 &&
+        iE > iS &&
+        fh.maxDev <= tol * 0.5 &&
+        fl.maxDev <= tol * 0.5 && // pivots truly lie on the lines
+        gapS > tol * 1.2 &&
+        gapE > 0 &&
+        gapE < gapS * 0.7 && // clearly converging, not crossed
+        bars > 0 &&
+        viol / bars <= 0.1; // price stays inside the channel
       let kind = '';
       let label = '';
       let dir: Formation['dir'] = 'neutral';
-      if (flatH && dL > m) {
-        kind = 'asc'; label = 'Yükselen Üçgen'; dir = 'bull';
-      } else if (flatL && dH < -m) {
-        kind = 'desc'; label = 'Alçalan Üçgen'; dir = 'bear';
-      } else if (dH < -m && dL > m) {
-        kind = 'sym'; label = 'Simetrik Üçgen'; dir = 'neutral';
-      } else if (dH > m && dL > m) {
-        kind = 'rwedge'; label = 'Yükselen Kama'; dir = 'bear';
-      } else if (dH < -m && dL < -m) {
-        kind = 'fwedge'; label = 'Düşen Kama'; dir = 'bull';
+      if (ok) {
+        if (flatH && dL > mm) {
+          kind = 'asc'; label = 'Yükselen Üçgen'; dir = 'bull';
+        } else if (flatL && dH < -mm) {
+          kind = 'desc'; label = 'Alçalan Üçgen'; dir = 'bear';
+        } else if (dH < -mm && dL > mm) {
+          kind = 'sym'; label = 'Simetrik Üçgen'; dir = 'neutral';
+        } else if (dH > mm && dL > mm) {
+          kind = 'rwedge'; label = 'Yükselen Kama'; dir = 'bear';
+        } else if (dH < -mm && dL < -mm) {
+          kind = 'fwedge'; label = 'Düşen Kama'; dir = 'bull';
+        }
       }
       if (kind) {
-        return [{ kind, label, dir, segs: [seg(h1, h2), seg(l1, l2)], pts: [h1, h2, l1, l2].map(fp) }];
+        // Draw each fitted line over its own pivots' span (so they don't cross
+        // from extrapolation).
+        const hA = highs[0];
+        const hB = highs[highs.length - 1];
+        const lA = lows[0];
+        const lB = lows[lows.length - 1];
+        const r0: FPoint = { t: hA.t, p: res(hA.i) };
+        const r1: FPoint = { t: hB.t, p: res(hB.i) };
+        const s0: FPoint = { t: lA.t, p: sup(lA.i) };
+        const s1: FPoint = { t: lB.t, p: sup(lB.i) };
+        return [{ kind, label, dir, segs: [[r0, r1], [s0, s1]], pts: [...highs, ...lows].map(fp) }];
       }
     }
   }
