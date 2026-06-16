@@ -424,6 +424,15 @@ button.ctl:disabled {
   z-index: 4;
   pointer-events: none;
 }
+/* Manual drawings (trend / horizontal / Fibonacci) — painted on a canvas in
+   sync with the candles. Input is handled on the chart container, so the canvas
+   itself stays click-through. */
+.draw-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
 /* Volume profile overlay (behind drawings/measure, over the candles) */
 .vp-overlay {
   position: absolute;

@@ -110,6 +110,28 @@ type PView =
   | { id: number; sel: boolean; kind: 'trend'; ax: number; ay: number; bx: number; by: number }
   | { id: number; sel: boolean; kind: 'fib'; ax: number; ay: number; bx: number; by: number; levels: { r: number; y: number; price: number }[] };
 const FIBS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+// Which part of a drawing a pointer grabbed: an endpoint, the body (move), or an
+// hline's price level. Drives drag-to-edit (TradingView-style handles).
+type DPart = 'a' | 'b' | 'body' | 'price';
+type DragState =
+  | { kind: 'create'; tool: 'trend' | 'fib'; downX: number; downY: number; moved: boolean }
+  | {
+      kind: 'edit';
+      id: number;
+      part: DPart;
+      startI: number; // bar index under the cursor at grab
+      startP: number; // price under the cursor at grab
+      origA: { i: number; p: number };
+      origB: { i: number; p: number } | null;
+      downX: number;
+      downY: number;
+      moved: boolean;
+    };
+// Drawing colours (canvas overlay).
+const DRAW_LINE = '#5c9ded';
+const DRAW_SEL = '#f0b90b';
+const DRAW_HOVER = '#8fbaff';
+const DRAW_PREVIEW = '#8a8f9c';
 // Projected (pixel) view of a detected chart formation for the overlay.
 interface FView {
   dir: 'bull' | 'bear' | 'neutral';
@@ -254,13 +276,17 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const shiftRef = useRef(false);
   const measureRef = useRef<{ a: MPt; b: MPt | null; frozen: boolean } | null>(null);
   const prevCandlesRef = useRef<Candles | null>(null);
-  // Manual drawings
+  // Manual drawings (rendered on a synchronously-painted canvas overlay so they
+  // track the candles 1:1 during pan/zoom — no React/SVG frame lag).
+  const drawCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawToolRef = useRef<DrawTool>('none');
   const drawingsRef = useRef<Draw[]>([]);
   const pendingRef = useRef<{ t: number; p: number } | null>(null);
   const lastCrossRef = useRef<{ t: number; p: number } | null>(null);
   const selDrawRef = useRef<number | null>(null);
   const drawViewRef = useRef<PView[]>([]);
+  const dragRef = useRef<DragState | null>(null);
+  const hoverRef = useRef<{ id: number; part: DPart } | null>(null);
   const symRef = useRef(symbol);
   symRef.current = symbol;
   // Volume profile: kept in refs so the long-lived chart subscriptions can read
@@ -272,9 +298,88 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
   const refreshVPRef = useRef<() => void>(() => {});
   const [vp, setVp] = useState<VPView | null>(null);
   const [drawTool, setDrawTool] = useState<DrawTool>('none');
-  const [drawView, setDrawView] = useState<PView[]>([]);
   const [drawCount, setDrawCount] = useState(0);
   const [formView, setFormView] = useState<FView[]>([]);
+
+  // Paint all drawings (+ in-progress preview, selection handles) to the overlay
+  // canvas. Called synchronously from the same handlers that move the chart, so
+  // the lines never lag the candles. Reads pixel geometry from drawViewRef.
+  const paintDraws = useCallback(() => {
+    const cv = drawCanvasRef.current;
+    const el = elRef.current;
+    if (!cv || !el) return;
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    if (w === 0 || h === 0) return;
+    const dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      cv.style.width = w + 'px';
+      cv.style.height = h + 'px';
+    }
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineJoin = 'round';
+    ctx.font = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const seg = (ax: number, ay: number, bx: number, by: number, color: string, width: number, dash?: number[]) => {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dash || []);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.restore();
+    };
+    const handle = (x: number, y: number) => {
+      ctx.save();
+      ctx.fillStyle = '#0e0f13';
+      ctx.strokeStyle = DRAW_SEL;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
+    const hov = hoverRef.current;
+    for (const v of drawViewRef.current) {
+      const preview = v.id < 0;
+      const sel = v.sel;
+      const hovered = !preview && hov?.id === v.id;
+      const base = preview ? DRAW_PREVIEW : sel ? DRAW_SEL : hovered ? DRAW_HOVER : DRAW_LINE;
+      if (v.kind === 'hline') {
+        seg(0, v.y, w, v.y, base, sel ? 2 : 1.4, preview ? [5, 4] : undefined);
+        if (sel) handle(w - 16, v.y);
+      } else if (v.kind === 'trend') {
+        seg(v.ax, v.ay, v.bx, v.by, base, sel || hovered ? 2 : 1.6, preview ? [5, 4] : undefined);
+        if (sel) {
+          handle(v.ax, v.ay);
+          handle(v.bx, v.by);
+        }
+      } else {
+        // Fibonacci: faint diagonal anchor + horizontal levels with % labels.
+        seg(v.ax, v.ay, v.bx, v.by, preview ? DRAW_PREVIEW : '#6b7280', 1, [2, 3]);
+        const lo = Math.min(v.ax, v.bx);
+        const hi = Math.max(v.ax, v.bx);
+        for (const l of v.levels) {
+          seg(lo, l.y, hi, l.y, sel ? DRAW_SEL : '#d9a441', 1);
+          ctx.save();
+          ctx.fillStyle = '#d9a441';
+          ctx.fillText((l.r * 100).toFixed(1) + '%', hi + 4, l.y + 3);
+          ctx.restore();
+        }
+        if (sel) {
+          handle(v.ax, v.ay);
+          handle(v.bx, v.by);
+        }
+      }
+    }
+  }, []);
 
   // Re-project all drawings (+ the in-progress one) to pixels for the overlay.
   const recomputeDraw = useCallback(() => {
@@ -313,8 +418,8 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     const tool = drawToolRef.current;
     if (pend && cross && (tool === 'trend' || tool === 'fib')) push({ id: -1, type: tool, a: pend, b: cross });
     drawViewRef.current = out;
-    setDrawView(out);
-  }, []);
+    paintDraws();
+  }, [paintDraws]);
 
   // Project detected formations (time/price anchors) to pixels for the overlay.
   const recomputeForm = useCallback(() => {
@@ -376,6 +481,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     drawToolRef.current = nt;
     pendingRef.current = null;
     setDrawTool(nt);
+    if (elRef.current) elRef.current.style.cursor = nt === 'none' ? '' : 'crosshair';
     recomputeDraw();
   };
   const undoDraw = () => {
@@ -414,19 +520,31 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       autoSize: true,
       layout: {
         background: { color: '#0e0f13' },
-        textColor: '#9aa0b0',
+        textColor: '#b2b5be', // TradingView-style brighter axis text
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontSize: 12,
+        panes: { separatorColor: '#2a2e39', separatorHoverColor: 'rgba(120,134,160,0.25)', enableResize: true },
       },
-      grid: { vertLines: { color: '#161922' }, horzLines: { color: '#161922' } },
+      // Even, very subtle grid — let the candles carry the chart (TradingView feel).
+      grid: { vertLines: { color: '#1a1d27' }, horzLines: { color: '#1a1d27' } },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: '#3a4150', labelBackgroundColor: '#2a3142' },
-        horzLine: { color: '#3a4150', labelBackgroundColor: '#2a3142' },
+        vertLine: { color: '#6a7184', width: 1, style: LineStyle.LargeDashed, labelBackgroundColor: '#2a2e39' },
+        horzLine: { color: '#6a7184', width: 1, style: LineStyle.LargeDashed, labelBackgroundColor: '#2a2e39' },
       },
-      rightPriceScale: { borderColor: '#222632' },
+      // Cleaner axes: subtle border, no tick marks, a little right breathing room.
+      rightPriceScale: { borderColor: '#2a2e39', borderVisible: true, ticksVisible: false, entireTextOnly: true },
       // minBarSpacing default is 0.5 px/bar — the wall you hit when zooming out.
       // Lower it so bars can compress much further (more zoom-out / whitespace).
-      timeScale: { borderColor: '#222632', timeVisible: true, secondsVisible: false, minBarSpacing: 0.06 },
+      timeScale: {
+        borderColor: '#2a2e39',
+        timeVisible: true,
+        secondsVisible: false,
+        ticksVisible: false,
+        minBarSpacing: 0.06,
+        rightOffset: 4,
+        lockVisibleTimeRangeOnResize: true,
+      },
     });
 
     // Strategy P&L bands pool: one BaselineSeries per trade, created BEFORE the
@@ -565,48 +683,21 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       const dPct = m.a.price ? (m.b.price / m.a.price - 1) * 100 : 0;
       setMeasure({ ax, ay, bx, by, dPrice, dPct, days: Math.round((m.b.time - m.a.time) / 86400), up: dPrice >= 0 });
     };
+    // Measure tool (Shift+click). Manual drawings are created/edited via the
+    // pointer handlers below (drag-to-draw + draggable handles), not here.
     chart.subscribeClick((param) => {
-      if (!param.point || param.time == null) return;
-      const price = candle.coordinateToPrice(param.point.y);
-      const tool = drawToolRef.current;
-      // Drawing tool active (no Shift) → place anchors instead of measuring.
-      if (tool !== 'none' && !shiftRef.current) {
-        if (price == null) return;
-        const pt = { t: param.time as number, p: price as number };
-        if (tool === 'hline') addDraw({ id: Date.now(), type: 'hline', a: pt });
-        else if (!pendingRef.current) {
-          pendingRef.current = pt;
-          recomputeDraw();
-        } else {
-          addDraw({ id: Date.now(), type: tool, a: pendingRef.current, b: pt });
-          pendingRef.current = null;
-        }
-        return;
-      }
-      // Cursor mode (no tool, no Shift): click a drawing to delete it.
-      if (tool === 'none' && !shiftRef.current) {
-        const { x, y } = param.point;
-        let hit: number | null = null;
-        for (const v of drawViewRef.current) {
-          const near = v.kind === 'hline' ? Math.abs(y - v.y) <= 6 : distToSeg(x, y, v.ax, v.ay, v.bx, v.by) <= 6;
-          if (near) hit = v.id;
-        }
-        if (hit != null) {
-          removeDraw(hit);
-          return;
-        }
-      }
-      // Otherwise: measure tool (Shift+click).
-      const m = measureRef.current;
       if (!shiftRef.current) {
-        if (m) {
+        if (measureRef.current) {
           measureRef.current = null;
           setMeasure(null);
         }
         return;
       }
+      if (!param.point || param.time == null) return;
+      const price = candle.coordinateToPrice(param.point.y);
       if (price == null) return;
       const pt: MPt = { time: param.time as number, price: price as number };
+      const m = measureRef.current;
       if (!m || m.frozen) measureRef.current = { a: pt, b: pt, frozen: false };
       else measureRef.current = { a: m.a, b: pt, frozen: true };
       refreshMeasure();
@@ -649,19 +740,251 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       recomputeForm();
       refreshVP();
     });
+    // ── Manual drawings: drag to draw, drag handles to edit (mouse + touch) ─────
+    // We intercept mousedown/touchstart in the CAPTURE phase on the chart host so
+    // we can block lightweight-charts' own pan/zoom for this gesture only when the
+    // pointer is actually drawing or grabbing a drawing.
+    const rectXY = (clientX: number, clientY: number) => {
+      const r = elRef.current!.getBoundingClientRect();
+      return { x: clientX - r.left, y: clientY - r.top };
+    };
+    // Nearest grabbable part of a drawing under (x,y): endpoint > body/price.
+    const hitTest = (x: number, y: number): { id: number; part: DPart } | null => {
+      const R = 9;
+      for (const v of drawViewRef.current) {
+        if (v.id < 0 || v.kind === 'hline') continue;
+        if (Math.hypot(x - v.ax, y - v.ay) <= R) return { id: v.id, part: 'a' };
+        if (Math.hypot(x - v.bx, y - v.by) <= R) return { id: v.id, part: 'b' };
+      }
+      for (const v of drawViewRef.current) {
+        if (v.id < 0) continue;
+        if (v.kind === 'hline') {
+          if (Math.abs(y - v.y) <= 6) return { id: v.id, part: 'price' };
+        } else if (distToSeg(x, y, v.ax, v.ay, v.bx, v.by) <= 6) {
+          return { id: v.id, part: 'body' };
+        } else if (v.kind === 'fib') {
+          const lo = Math.min(v.ax, v.bx) - 6;
+          const hi = Math.max(v.ax, v.bx) + 6;
+          for (const l of v.levels) if (Math.abs(y - l.y) <= 5 && x >= lo && x <= hi) return { id: v.id, part: 'body' };
+        }
+      }
+      return null;
+    };
+    const finishTool = () => {
+      drawToolRef.current = 'none';
+      pendingRef.current = null;
+      setDrawTool('none');
+      if (elRef.current) elRef.current.style.cursor = '';
+      recomputeDraw();
+    };
+    // Start an interaction at (x,y). Returns true if a drawing was created or
+    // grabbed — the caller then blocks the chart's own pan/zoom for this gesture.
+    const beginAt = (x: number, y: number): boolean => {
+      const s = seriesRef.current;
+      const lod = lodRef.current;
+      if (!s || !lod) return false;
+      const price = s.candle.coordinateToPrice(y);
+      const tool = drawToolRef.current;
+      if (tool !== 'none') {
+        if (price == null) return false;
+        const t = lod.timeForX(x);
+        if (t == null) return false;
+        if (tool === 'hline') {
+          addDraw({ id: Date.now(), type: 'hline', a: { t, p: price as number } });
+          finishTool();
+          return true;
+        }
+        if (pendingRef.current) {
+          addDraw({ id: Date.now(), type: tool, a: pendingRef.current, b: { t, p: price as number } });
+          finishTool();
+          return true;
+        }
+        pendingRef.current = { t, p: price as number };
+        lastCrossRef.current = { t, p: price as number };
+        dragRef.current = { kind: 'create', tool, downX: x, downY: y, moved: false };
+        recomputeDraw();
+        return true;
+      }
+      const hit = hitTest(x, y);
+      if (hit && price != null) {
+        const d = drawingsRef.current.find((dd) => dd.id === hit.id);
+        if (!d) return false;
+        selDrawRef.current = hit.id;
+        dragRef.current = {
+          kind: 'edit',
+          id: hit.id,
+          part: hit.part,
+          startI: lod.indexForX(x) ?? 0,
+          startP: price as number,
+          origA: { i: lod.indexForTime(d.a.t), p: d.a.p },
+          origB: d.b ? { i: lod.indexForTime(d.b.t), p: d.b.p } : null,
+          downX: x,
+          downY: y,
+          moved: false,
+        };
+        recomputeDraw();
+        return true;
+      }
+      // Empty space → deselect (caller does NOT block, so the chart pans).
+      if (selDrawRef.current != null) {
+        selDrawRef.current = null;
+        recomputeDraw();
+      }
+      return false;
+    };
+    const moveAt = (x: number, y: number) => {
+      const drag = dragRef.current;
+      const s = seriesRef.current;
+      const lod = lodRef.current;
+      if (!drag || !s || !lod) return;
+      if (Math.hypot(x - drag.downX, y - drag.downY) > 3) drag.moved = true;
+      const p = s.candle.coordinateToPrice(y);
+      if (drag.kind === 'create') {
+        const t = lod.timeForX(x);
+        if (p != null && t != null) lastCrossRef.current = { t, p: p as number };
+        recomputeDraw();
+        return;
+      }
+      const d = drawingsRef.current.find((dd) => dd.id === drag.id);
+      if (!d || p == null) return;
+      if (drag.part === 'price') {
+        d.a = { ...d.a, p: p as number };
+      } else if (drag.part === 'a' || drag.part === 'b') {
+        const t = lod.timeForX(x);
+        if (t == null) return;
+        if (drag.part === 'a') d.a = { t, p: p as number };
+        else if (d.b) d.b = { t, p: p as number };
+      } else {
+        // Body move: translate both anchors by whole-bar Δ + price Δ.
+        const curI = lod.indexForX(x);
+        if (curI == null) return;
+        const dI = curI - drag.startI;
+        const dP = (p as number) - drag.startP;
+        const aT = lod.timeAtIndex(drag.origA.i + dI);
+        if (aT != null) d.a = { t: aT, p: drag.origA.p + dP };
+        if (d.b && drag.origB) {
+          const bT = lod.timeAtIndex(drag.origB.i + dI);
+          if (bT != null) d.b = { t: bT, p: drag.origB.p + dP };
+        }
+      }
+      recomputeDraw();
+    };
+    const endDrag = () => {
+      const drag = dragRef.current;
+      dragRef.current = null;
+      if (!drag) return;
+      if (drag.kind === 'create') {
+        if (drag.moved && pendingRef.current && lastCrossRef.current) {
+          const a = pendingRef.current;
+          const b = lastCrossRef.current;
+          pendingRef.current = null;
+          addDraw({ id: Date.now(), type: drag.tool, a, b });
+          finishTool();
+        }
+        return; // not dragged → keep the first anchor for a 2nd click
+      }
+      if (drag.moved) persistDraws();
+      recomputeDraw();
+    };
+    // Mouse
+    const onMouseMove = (e: MouseEvent) => {
+      const { x, y } = rectXY(e.clientX, e.clientY);
+      moveAt(x, y);
+    };
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove, true);
+      window.removeEventListener('mouseup', onMouseUp, true);
+      endDrag();
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0 || shiftRef.current) return; // left only; Shift = measure
+      const { x, y } = rectXY(e.clientX, e.clientY);
+      if (!beginAt(x, y)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (dragRef.current) {
+        window.addEventListener('mousemove', onMouseMove, true);
+        window.addEventListener('mouseup', onMouseUp, true);
+      }
+    };
+    // Touch (single finger; multi-touch pinch-zoom passes through to the chart)
+    const onTouchMove = (e: TouchEvent) => {
+      if (!dragRef.current || e.touches.length !== 1) return;
+      e.preventDefault();
+      const { x, y } = rectXY(e.touches[0].clientX, e.touches[0].clientY);
+      moveAt(x, y);
+    };
+    const onTouchEnd = () => {
+      window.removeEventListener('touchmove', onTouchMove, true);
+      window.removeEventListener('touchend', onTouchEnd, true);
+      window.removeEventListener('touchcancel', onTouchEnd, true);
+      endDrag();
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      if (shiftRef.current || e.touches.length !== 1) return;
+      const { x, y } = rectXY(e.touches[0].clientX, e.touches[0].clientY);
+      if (drawToolRef.current === 'none' && !hitTest(x, y)) return; // let the chart pan
+      if (!beginAt(x, y)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (dragRef.current) {
+        window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
+        window.addEventListener('touchend', onTouchEnd, true);
+        window.addEventListener('touchcancel', onTouchEnd, true);
+      }
+    };
+    elRef.current?.addEventListener('mousedown', onMouseDown, true);
+    elRef.current?.addEventListener('touchstart', onTouchStart, { capture: true, passive: false });
+    // Hover feedback: cursor + handle highlight (separate from the legend crosshair).
+    chart.subscribeCrosshairMove((param) => {
+      if (dragRef.current) return;
+      const el = elRef.current;
+      if (!el) return;
+      if (drawToolRef.current !== 'none') {
+        el.style.cursor = 'crosshair';
+        if (hoverRef.current) {
+          hoverRef.current = null;
+          paintDraws();
+        }
+        return;
+      }
+      const hit = param.point ? hitTest(param.point.x, param.point.y) : null;
+      el.style.cursor = hit ? (hit.part === 'a' || hit.part === 'b' ? 'pointer' : hit.part === 'price' ? 'ns-resize' : 'move') : '';
+      const prev = hoverRef.current?.id ?? null;
+      hoverRef.current = hit ? { id: hit.id, part: hit.part } : null;
+      if ((hit?.id ?? null) !== prev) paintDraws();
+    });
+
     const onKey = (e: KeyboardEvent) => {
       shiftRef.current = e.shiftKey;
+      const tgt = e.target as HTMLElement | null;
+      const typing = !!tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !typing && selDrawRef.current != null) {
+        e.preventDefault();
+        removeDraw(selDrawRef.current);
+        return;
+      }
       if (e.key === 'Escape') {
+        if (dragRef.current) {
+          dragRef.current = null;
+          window.removeEventListener('mousemove', onMouseMove, true);
+          window.removeEventListener('mouseup', onMouseUp, true);
+          window.removeEventListener('touchmove', onTouchMove, true);
+          window.removeEventListener('touchend', onTouchEnd, true);
+          window.removeEventListener('touchcancel', onTouchEnd, true);
+        }
         if (measureRef.current) {
           measureRef.current = null;
           setMeasure(null);
         }
+        if (selDrawRef.current != null) selDrawRef.current = null;
         if (pendingRef.current || drawToolRef.current !== 'none') {
           pendingRef.current = null;
           drawToolRef.current = 'none';
           setDrawTool('none');
-          recomputeDraw();
         }
+        if (elRef.current) elRef.current.style.cursor = '';
+        recomputeDraw();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -707,14 +1030,23 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       computeTops();
       refreshVP();
       recomputeForm();
+      recomputeDraw(); // resize the overlay canvas + re-anchor drawings
     });
     ro.observe(elRef.current!);
     computeTops();
 
+    const host = elRef.current;
     return () => {
       ro.disconnect();
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
+      window.removeEventListener('mousemove', onMouseMove, true);
+      window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('touchmove', onTouchMove, true);
+      window.removeEventListener('touchend', onTouchEnd, true);
+      window.removeEventListener('touchcancel', onTouchEnd, true);
+      host?.removeEventListener('mousedown', onMouseDown, true);
+      host?.removeEventListener('touchstart', onTouchStart, true);
       lod.destroy();
       lodRef.current = null;
       chartApiRef.current = null;
@@ -909,6 +1241,9 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
     <>
       <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />
 
+      {/* Manual drawings — painted on a canvas in lockstep with the candles */}
+      <canvas ref={drawCanvasRef} className="draw-canvas" />
+
       {/* Volume profile (horizontal volume-by-price; POC + value area) */}
       {settings.volprofile && vp && (
         <svg className="vp-overlay" width="100%" height="100%">
@@ -944,7 +1279,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
         <button className={'draw-btn' + (drawTool === 'fib' ? ' on' : '')} onClick={() => pickTool('fib')} title="Fibonacci (2 nokta)">≣</button>
         <button className="draw-btn" onClick={undoDraw} disabled={drawCount === 0} title="Son çizimi geri al">↶</button>
         <button className="draw-btn" onClick={clearDraws} disabled={drawCount === 0} title="Tüm çizimleri sil">🗑</button>
-        {drawTool !== 'none' && <div className="draw-hint">{drawTool === 'hline' ? 'tıkla' : pendingRef.current ? '2. nokta' : '1. nokta'}</div>}
+        {drawTool !== 'none' && <div className="draw-hint">{drawTool === 'hline' ? 'çizgi için tıkla' : 'sürükle ya da 2 nokta'}</div>}
       </div>
 
       {/* Detected chart formations (triangle/wedge/double/H&S) */}
@@ -965,31 +1300,6 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
               </g>
             );
           })}
-        </svg>
-      )}
-
-      {/* Manual drawings overlay */}
-      {drawView.length > 0 && (
-        <svg className="measure-overlay" width="100%" height="100%">
-          {drawView.map((v) =>
-            v.kind === 'hline' ? (
-              <g key={v.id}>
-                <line x1={0} y1={v.y} x2="100%" y2={v.y} stroke={v.sel ? '#f0b90b' : '#5c9ded'} strokeWidth={v.sel ? 1.8 : 1.3} />
-              </g>
-            ) : v.kind === 'trend' ? (
-              <line key={v.id} x1={v.ax} y1={v.ay} x2={v.bx} y2={v.by} stroke={v.id < 0 ? '#888' : v.sel ? '#f0b90b' : '#5c9ded'} strokeWidth={1.6} strokeDasharray={v.id < 0 ? '4 3' : undefined} />
-            ) : (
-              <g key={v.id}>
-                <line x1={v.ax} y1={v.ay} x2={v.bx} y2={v.by} stroke={v.id < 0 ? '#888' : '#777'} strokeWidth={1} strokeDasharray="2 3" />
-                {v.levels.map((l) => (
-                  <g key={l.r}>
-                    <line x1={Math.min(v.ax, v.bx)} y1={l.y} x2={Math.max(v.ax, v.bx)} y2={l.y} stroke={v.sel ? '#f0b90b' : '#d9a441'} strokeWidth={1} />
-                    <text x={Math.max(v.ax, v.bx) + 4} y={l.y + 3} fill="#d9a441" fontSize="10">{(l.r * 100).toFixed(1)}%</text>
-                  </g>
-                ))}
-              </g>
-            ),
-          )}
         </svg>
       )}
 

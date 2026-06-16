@@ -7,6 +7,7 @@ import {
   LineData,
   LogicalRange,
   Logical,
+  Coordinate,
 } from 'lightweight-charts';
 import { Candles, LiveBar, emptyCandles } from '../data/types';
 
@@ -366,6 +367,31 @@ export class LodController {
     const ri = this.indexForTime(t);
     const logical = (ri - this.win.i0) / this.win.stride;
     return this.chart.timeScale().logicalToCoordinate(logical as Logical);
+  }
+
+  // Inverse of xForTime: nearest real bar index at a screen x (drawing input maps
+  // the cursor back to a bar, so an anchor round-trips through xForTime exactly).
+  indexForX(x: number): number | null {
+    if (!this.full) return null;
+    const logical = this.chart.timeScale().coordinateToLogical(x as Coordinate);
+    if (logical == null) return null;
+    let ri = Math.round(this.win.i0 + (logical as number) * this.win.stride);
+    if (ri < 0) ri = 0;
+    if (ri > this.full.length - 1) ri = this.full.length - 1;
+    return ri;
+  }
+
+  // Bar time at a real index (clamped). Lets drawings translate by whole bars.
+  timeAtIndex(i: number): number | null {
+    if (!this.full || this.full.length === 0) return null;
+    const j = Math.max(0, Math.min(this.full.length - 1, i));
+    return this.full.time[j];
+  }
+
+  // Convenience: snapped bar time under a screen x (null in empty/no-data).
+  timeForX(x: number): number | null {
+    const ri = this.indexForX(x);
+    return ri == null ? null : this.timeAtIndex(ri);
   }
 
   lastBar(): { time: number; open: number; high: number; low: number; close: number; volume: number } | null {
