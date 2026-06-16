@@ -2472,6 +2472,28 @@ button.ctl:disabled {
 .cb-table .cb-r {
   text-align: right;
 }
+.cb-table th.cb-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.cb-table th.cb-sortable:hover {
+  color: #fff;
+}
+.cb-csv {
+  margin-left: auto;
+  background: var(--btn, #1f2937);
+  color: var(--muted);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cb-csv:hover {
+  color: #fff;
+  border-color: var(--accent, #3b82f6);
+}
 
 .panel-title {
   font-size: 11px;
