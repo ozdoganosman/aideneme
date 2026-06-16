@@ -1080,10 +1080,14 @@ button.ctl:disabled {
 .scr-build .scr-lp {
   width: 64px;
 }
-.scr-live {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--border);
+.scr-livehint {
+  font-size: 11px;
+  color: #d6c7ef;
+  background: rgba(123, 87, 194, 0.18);
+  border: 1px solid #7e57c2;
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
 }
 .scr-fchip-live {
   background: rgba(123, 87, 194, 0.18);

@@ -122,6 +122,15 @@ const COLS: ColDef[] = [
 ];
 const COL = (k: Key): ColDef => COLS.find((c) => c.key === k) as ColDef;
 
+// Snapshot columns that can ALSO be computed live at a custom period.
+const SNAP_TO_LIVE: Partial<Record<Key, string>> = { rsi: 'rsi', wr: 'wr', wre: 'wrema', wre2: 'wrema', adx: 'adx', roc: 'roc' };
+// Live-only target (no snapshot column): price distance from EMA.
+const EMADIST_KEY = 'emadist' as Key;
+// Filter targets = snapshot columns + the live-only one (emadist).
+const TARGETS: ColDef[] = [...COLS, { key: EMADIST_KEY, label: 'Fiyat/EMA farkı % (canlı)', kind: 'num' }];
+const TGT = (k: Key): ColDef => TARGETS.find((c) => c.key === k) ?? COL(k);
+const liveIndFor = (k: Key): string | null => (k === EMADIST_KEY ? 'emadist' : SNAP_TO_LIVE[k] ?? null);
+
 const VIEWS: { label: string; cols: Key[] }[] = [
   { label: 'Genel', cols: ['p', 'ch', 'rsi', 'r1y', 'vol', 'e200'] },
   { label: 'Williams Paşa (%R)', cols: ['p', 'wr', 'wre', 'rsi', 'e200', 'st'] },
@@ -177,18 +186,10 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     }
   });
   const [saveName, setSaveName] = useState('');
-  // Live (period-aware) filters
+  // Optional custom period for the filter above. Empty → use the fixed-period
+  // snapshot value (instant). Filled → run "live" (download candles + compute).
+  const [lp, setLp] = useState('');
   const [liveFs, setLiveFs] = useState<LiveF[]>([]);
-  const [lind, setLind] = useState('wr');
-  const [lp, setLp] = useState(() => String(activePeriod('wr', params) || 260));
-  // Switching the live indicator re-seeds its period from the chart's setting.
-  const pickLind = (k: string) => {
-    setLind(k);
-    const ap = activePeriod(k, params);
-    if (ap) setLp(String(ap));
-  };
-  const [lop, setLop] = useState<'gt' | 'lt'>('gt');
-  const [lval, setLval] = useState('50');
   const [liveSet, setLiveSet] = useState<Set<string> | null>(null);
   const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
 
@@ -216,7 +217,10 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     window.setTimeout(() => setMsg(''), 2500);
   };
 
-  const kind = COL(fk).kind;
+  const kind = TGT(fk).kind;
+  const liveInd = liveIndFor(fk); // live indicator key, or null if snapshot-only column
+  // This filter runs live when a custom period is given (or the target is live-only).
+  const liveMode = !!liveInd && cmp === 'val' && (fk === EMADIST_KEY || lp.trim() !== '');
 
   // Columns shown = the selected view + any column we're filtering on (so the
   // values you filter by are always visible in the table).
@@ -264,13 +268,6 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   }, [data, filters, sort, q]);
   const rows = useMemo(() => (liveSet ? base.filter((r) => liveSet.has(r.s)) : base), [base, liveSet]);
 
-  const addLive = () => {
-    const period = Math.max(1, Math.round(Number(lp)));
-    const v = parseFloat(lval.replace(',', '.'));
-    if (!Number.isFinite(period) || !Number.isFinite(v)) return;
-    setLiveFs((fs) => [...fs, { ind: lind, period, op: lop, val: v }]);
-    setLiveSet(null); // needs re-apply
-  };
   const runLive = async () => {
     if (!liveFs.length) {
       setLiveSet(null);
@@ -315,6 +312,17 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   };
 
   const addFilter = () => {
+    // Live path: a custom period (or the live-only target) → download + compute.
+    if (liveMode && liveInd) {
+      const period = Math.max(1, Math.round(Number(lp) || activePeriod(liveInd, params) || 14));
+      const v = parseFloat(val.replace(',', '.'));
+      if (!Number.isFinite(period) || !Number.isFinite(v)) return;
+      const o: 'gt' | 'lt' = op === 'lt' || op === 'lte' ? 'lt' : 'gt';
+      setLiveFs((fs) => [...fs.filter((x) => !(x.ind === liveInd && x.period === period && x.op === o)), { ind: liveInd, period, op: o, val: v }]);
+      setLiveSet(null); // needs re-apply
+      return;
+    }
+    // Snapshot path: filter the already-loaded snapshot (instant).
     let f: Filter;
     if (kind === 'bool') {
       f = { key: fk, op: 'is', val: Number(val) || 0 };
@@ -373,11 +381,15 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                   onChange={(e) => {
                     const k = e.target.value as Key;
                     setFk(k);
-                    setOp(COL(k).kind === 'bool' ? 'is' : 'gt');
-                    setVal(COL(k).kind === 'bool' ? '1' : '');
+                    setOp(TGT(k).kind === 'bool' ? 'is' : 'gt');
+                    setVal(TGT(k).kind === 'bool' ? '1' : '');
+                    setCmp('val');
+                    // live-only target needs a period; otherwise default to snapshot (empty).
+                    if (k === EMADIST_KEY) setLp(String(activePeriod('emadist', params) || 50));
+                    else if (!liveIndFor(k)) setLp('');
                   }}
                 >
-                  {COLS.map((c) => (
+                  {TARGETS.map((c) => (
                     <option key={c.key} value={c.key}>
                       {c.label}
                     </option>
@@ -390,17 +402,32 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                   </select>
                 ) : (
                   <>
-                    <select value={op} onChange={(e) => setOp(e.target.value)}>
+                    {liveInd && (
+                      <input
+                        className="scr-lp"
+                        value={lp}
+                        inputMode="numeric"
+                        placeholder="periyot"
+                        title="Periyot (gün). Doldurursan canlı hesaplanır (hisseleri indirir). Boş = hazır snapshot değeri."
+                        onChange={(e) => setLp(e.target.value)}
+                      />
+                    )}
+                    <select
+                      value={liveMode ? (op === 'lt' || op === 'lte' ? 'lt' : 'gt') : op}
+                      onChange={(e) => setOp(e.target.value)}
+                    >
                       <option value="gt">&gt; büyük</option>
-                      <option value="gte">≥</option>
+                      {!liveMode && <option value="gte">≥</option>}
                       <option value="lt">&lt; küçük</option>
-                      <option value="lte">≤</option>
-                      <option value="eq">= eşit</option>
+                      {!liveMode && <option value="lte">≤</option>}
+                      {!liveMode && <option value="eq">= eşit</option>}
                     </select>
-                    <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir kolon mu?">
-                      <option value="val">Değer</option>
-                      <option value="field">Veri (kolon)</option>
-                    </select>
+                    {fk !== EMADIST_KEY && (
+                      <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir kolon mu?">
+                        <option value="val">Değer</option>
+                        <option value="field">Veri (kolon)</option>
+                      </select>
+                    )}
                     {cmp === 'val' ? (
                       <input
                         value={val}
@@ -423,36 +450,20 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                 <button className="scr-add" onClick={addFilter}>
                   + Ekle
                 </button>
-              </div>
-
-              <div className="scr-build scr-live">
-                <span className="lg-muted" title="İstediğin periyotla anlık hesaplar (snapshot ile sınırlanan hisseleri indirir)">🔬 Canlı (periyotlu):</span>
-                <select value={lind} onChange={(e) => pickLind(e.target.value)}>
-                  {LIVE_INDS.map((i) => (
-                    <option key={i.key} value={i.key}>{i.label}</option>
-                  ))}
-                </select>
-                <input className="scr-lp" value={lp} inputMode="numeric" placeholder="periyot" onChange={(e) => setLp(e.target.value)} title="Periyot (gün)" />
-                <select value={lop} onChange={(e) => setLop(e.target.value as 'gt' | 'lt')}>
-                  <option value="gt">&gt; büyük</option>
-                  <option value="lt">&lt; küçük</option>
-                </select>
-                <input value={lval} inputMode="decimal" placeholder="değer" onChange={(e) => setLval(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addLive()} />
-                <button className="scr-add" onClick={addLive}>+ Ekle</button>
-                {liveFs.length > 0 && (
-                  <button className="scr-add" onClick={runLive} disabled={!!liveRun} title="Snapshot ile süzülen hisseleri indirip canlı hesaplar">
-                    {liveRun ? `Taranıyor… ${liveRun.done}/${liveRun.total}` : liveSet ? '↻ Canlı uygula' : '🔬 Canlı uygula'}
-                  </button>
-                )}
+                {liveMode && <span className="scr-livehint" title="Bu filtre canlı çalışır: + Ekle'den sonra aşağıdan 'Canlı uygula'ya bas">🔬 canlı</span>}
               </div>
               {liveFs.length > 0 && (
                 <div className="scr-chips">
+                  <span className="lg-muted">🔬 Canlı (özel periyot):</span>
                   {liveFs.map((f, i) => (
                     <span key={i} className="scr-fchip scr-fchip-live">
                       {liveLabel(f.ind)}({f.period}) {f.op === 'gt' ? '>' : '<'} {f.val}
                       <button aria-label="Filtreyi kaldır" title="Filtreyi kaldır" onClick={() => { setLiveFs((fs) => fs.filter((_, idx) => idx !== i)); setLiveSet(null); }}>×</button>
                     </span>
                   ))}
+                  <button className="scr-add" onClick={runLive} disabled={!!liveRun} title="Snapshot ile süzülen hisseleri indirip canlı hesaplar">
+                    {liveRun ? `Taranıyor… ${liveRun.done}/${liveRun.total}` : liveSet ? '↻ Canlı uygula' : '🔬 Canlı uygula'}
+                  </button>
                   <button className="scr-preset scr-clear" onClick={() => { setLiveFs([]); setLiveSet(null); }}>✕ canlı temizle</button>
                   {liveSet && <span className="lg-muted">canlı: {liveSet.size} eşleşti</span>}
                   {!liveSet && <span className="scan-stale">↻ "Canlı uygula"ya bas</span>}
@@ -598,7 +609,8 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                 {rows.length > 250 && <div className="bt-note">… ilk 250 gösteriliyor. Filtreyi daralt.</div>}
               </div>
               <div className="bt-hint">
-                ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç.
+                ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç. <b>Periyot</b> kutusunu
+                doldurursan o gösterge istediğin periyotla <b>canlı</b> hesaplanır (boşsa hazır snapshot değeri).
               </div>
             </>
           )}
