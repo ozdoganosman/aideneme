@@ -63,6 +63,14 @@ export function Trades({ strategy, candles, onSelectTrade }: Props) {
   const best = Math.max(...raw.map((t) => t.retPct));
   const worst = Math.min(...raw.map((t) => t.retPct));
   const totalCum = cum[cum.length - 1] ?? 0;
+  // Al-Tut: aynı yüklü dönemde hisseyi alıp elde tutmanın getirisi (motorun
+  // holdPct'i ile aynı tanım: ilk bardan son bara). Strateji nakitte beklediği
+  // günlerde fiyat-bazlı 0 kazanır; ikisi de [ilk bar … son bar] penceresinde.
+  const holdPct = candles.length > 1 ? (candles.close[candles.length - 1] / candles.close[0] - 1) * 100 : 0;
+  const gap = totalCum - holdPct; // yüzde puan farkı (+: strateji önde)
+  const beat = gap >= 0;
+  const gapMag = Math.abs(gap);
+  const gapTxt = (gapMag >= 10 ? Math.round(gapMag) : gapMag.toFixed(1)) + ' puan';
 
   // 3-durumlu sıralama: tıkla → azalan → artan → varsayılan (kronolojik)
   const toggle = (key: SortKey) =>
@@ -73,9 +81,21 @@ export function Trades({ strategy, candles, onSelectTrade }: Props) {
     <>
       <div className="cb-head">
         <b className="cb-name" title={strategy}>{strategy}</b>
+        <span
+          className="cb-vs"
+          title="Strateji = işlemlerin bileşik (birikimli) getirisi. Al-Tut = aynı dönemde hisseyi alıp elde tutmanın getirisi (işlem yok). Fark, yüzde puan cinsindendir."
+        >
+          <span className="cb-vs-lab">Strateji</span>
+          <span className={totalCum >= 0 ? 'up' : 'down'}>{sg(totalCum)}</span>
+          <span className="cb-vs-sep">vs</span>
+          <span className="cb-vs-lab">Al-Tut</span>
+          <span className={holdPct >= 0 ? 'up' : 'down'}>{sg(holdPct)}</span>
+          <span className={'cb-vs-tag ' + (beat ? 'up' : 'down')} title={beat ? 'Strateji, al-tut\'u geçiyor' : 'Strateji, al-tut\'un gerisinde'}>
+            {beat ? '▲' : '▼'} {gapTxt}
+          </span>
+        </span>
         <span className="lg-muted">
-          {n} işlem · %{Math.round((wins / n) * 100)} kazanç · birikim{' '}
-          <span className={totalCum >= 0 ? 'up' : 'down'}>{sg(totalCum)}</span> · ort{' '}
+          {n} işlem · %{Math.round((wins / n) * 100)} kazanç · ort{' '}
           <span className={avg >= 0 ? 'up' : 'down'}>{sg(avg)}</span> · en iyi <span className="up">{sg(best)}</span> · en kötü{' '}
           <span className="down">{sg(worst)}</span>
         </span>

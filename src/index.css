@@ -2458,6 +2458,30 @@ button.ctl:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Strateji vs Al-Tut skor rozeti (İşlemler paneli başlığı) */
+.cb-vs {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  background: var(--btn, #1f2937);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cb-vs-lab {
+  color: var(--muted);
+  font-weight: 500;
+}
+.cb-vs-sep {
+  color: var(--muted);
+  font-weight: 400;
+  opacity: 0.7;
+}
+.cb-vs-tag {
+  font-weight: 700;
+}
 .cb-table {
   width: 100%;
   border-collapse: collapse;
