@@ -1,0 +1,91 @@
+# Borsa — Yüksek Performanslı Web Grafiği
+
+Milyonlarca mumu **kasmadan** pan/zoom edebilen, web tabanlı borsa/trading grafiği.
+**React + TypeScript + Vite** ve **TradingView Lightweight Charts** üzerine kurulu.
+Veri: **API key gerektirmeyen, ücretsiz Binance public API** (gerçek piyasa, canlı
+WebSocket) + offline stres testi için **sentetik üreteç**.
+
+## Canlı demo
+
+Her push'ta build alınıp `gh-pages` branch'ine yayınlanır:
+**https://ozdoganosman.github.io/aideneme/**
+
+**Tek seferlik kurulum:** Repo → **Settings → Pages → Build and deployment →
+Source: "Deploy from a branch" → Branch: `gh-pages` / `(root)` → Save.**
+Sonrasında her push siteyi otomatik günceller.
+
+## Neden kasmıyor?
+
+Performansın sırrı kütüphane değil, **viewport decimation + LOD**'dur
+(`src/chart/lod.ts`):
+
+- Tüm veri seti bellekte tutulur (kolon bazlı `Float64Array`'ler).
+- Grafiğe **her zaman yalnızca görünen aralığın, ekran çözünürlüğüne indirgenmiş
+  bir penceresi** beslenir (min/max OHLC kovaları, ~4000 nokta).
+- Çizilen nokta sayısı **veri boyutundan bağımsız**; yakınlaştıkça detay artar
+  (LOD adımları 2'nin katı stride ile).
+
+Sonuç: 1m, 100k veya milyonlarca mum — pan/zoom hep akıcı.
+
+## Çalıştırma
+
+```bash
+npm install
+npm run dev      # http://localhost:5173
+# veya
+npm run build && npm run preview
+```
+
+## Kullanım
+
+- **Kaynak**: Sentetik (offline) veya Binance (canlı)
+- **Sembol**: kutuya yaz → otomatik tamamlama önerir (Binance seçiliyken tüm
+  pariteler ~2000+; offline'da yerleşik liste). Öneriden seç veya Enter.
+- **Periyot**: 1m / 5m / 15m / 1h / 4h / 1d
+- **Mum**: üretilecek/çekilecek bar sayısı (Sentetik'te milyonları dene)
+- **Yükle** · **Canlı** (Binance'de WebSocket, sentetikte simülasyon)
+- Grafik: sürükle = kaydır, tekerlek = zoom, çift tık = sığdır, üzerine gel = OHLCV
+
+## Mimari
+
+```
+src/
+├── main.tsx               React girişi
+├── App.tsx                durum + toolbar + canlı feed
+├── index.css             koyu tema / yerleşim
+├── components/
+│   ├── Chart.tsx          Lightweight Charts sarmalayıcı (mum + hacim)
+│   └── SymbolSearch.tsx   otomatik tamamlamalı sembol arama
+├── chart/
+│   └── lod.ts             viewport decimation + LOD (performansın kalbi)
+└── data/
+    ├── types.ts           Candles (kolon bazlı tipli diziler), periyotlar
+    ├── synthetic.ts       GBM ile milyonlarca mum (offline)
+    └── binance.ts         ücretsiz/key'siz REST klines + exchangeInfo + WS
+```
+
+## Veri kaynakları
+
+- **Binance** (ücretsiz, **API key YOK**): `klines` (geçmiş), `exchangeInfo`
+  (sembol listesi), `@kline` WebSocket (canlı). Tarayıcıdan CORS ile çalışır.
+- **Sentetik**: geometrik Brownian hareketi; internet gerekmez.
+- **BIST (statik, key'siz, proxy'siz)**: Veri **CI'da sunucu tarafında**
+  `scripts/build_bist.py` ile (`borsapy` paketi) çekilip `public/data/bist/*.json`
+  olarak yazılır; uygulama bu JSON'ları **kendi origin'inden** okur — yani
+  tarayıcıda CORS/key/proxy derdi yok. Günlük (1g) OHLCV. Veri her deploy'da ve
+  hafta içi zamanlanmış çalışmada tazelenir (`.github/workflows/deploy.yml`).
+  Sembol listesi `scripts/build_bist.py` içinden genişletilebilir.
+
+## İndikatörler
+
+İki özel indikatör (kullanıcının Pine script'lerinden) tüm veri üzerinde
+hesaplanır (`src/indicators/calc.ts`) ve mumlarla aynı kovalara indirgenir:
+
+- **Williams Paşa** — Williams %R(+100), length 260, EMA'sı, 98/50/5 çizgileri
+- **NizamiCedid (3. Selim)** — MACD (EMA 120/260, signal 50), VWMA-185 "eMACD",
+  fast EMA'ya normalize histogram/çizgiler + delta alanı, EMA 377/610 overlay
+
+## Dağıtım
+
+`.github/workflows/deploy.yml` her push'ta build alır ve GitHub Pages'e yayınlar.
+`vite.config.ts` içinde `base: './'` olduğundan alt-yol (`/aideneme/`) altında sorunsuz çalışır.
