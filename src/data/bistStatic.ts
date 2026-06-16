@@ -155,6 +155,7 @@ export interface ScreenerItem {
 }
 export interface ScreenerFile {
   generated: number;
+  asof?: string; // ISO date (YYYY-MM-DD) of the latest trading day in the snapshot
   items: ScreenerItem[];
 }
 

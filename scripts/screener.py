@@ -24,7 +24,7 @@ from strategies import ema, rsi_arr, supertrend_pos  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "bist"
 SKIP = {"symbols.json", "quotes.json", "strategies.json", "names.json", "spark.json", "screener.json"}
-SCHEMA_VERSION = 4  # bump when item fields change to force a recompute
+SCHEMA_VERSION = 5  # bump when item/file fields change to force a recompute
 
 
 def adx_wilder(high, low, close, length: int):
@@ -86,6 +86,7 @@ def main() -> int:
 
     names = load_names()
     items = []
+    asof_ts = 0  # en taze bar zamanı (verinin ait olduğu son işlem günü)
 
     # NOTE: index symbols (XU100, XBANK, …) stay in screener.json — harmless, the
     # stock views filter them client-side (isIndexSymbol). The sector heat map
@@ -112,6 +113,8 @@ def main() -> int:
         prev = close[-2] if n > 1 else last
         times = [r.get("t", 0) for r in recs]
         t0, t1 = times[0], times[-1]
+        if t1:
+            asof_ts = max(asof_ts, t1)
         years = (t1 - t0) / (365.25 * 86400.0) if t0 and t1 and t1 > t0 else n / 252.0
 
         def idx_since(days: int) -> int:
@@ -214,8 +217,9 @@ def main() -> int:
         })
 
     OUT.mkdir(parents=True, exist_ok=True)
+    asof = time.strftime("%Y-%m-%d", time.gmtime(asof_ts)) if asof_ts else None
     with open(sj, "w", encoding="utf-8") as fo:
-        json.dump({"generated": int(time.time()), "v": SCHEMA_VERSION, "items": items}, fo, separators=(",", ":"))
+        json.dump({"generated": int(time.time()), "v": SCHEMA_VERSION, "asof": asof, "items": items}, fo, separators=(",", ":"))
     print(f"[screener] {len(items)} hisse -> screener.json")
     return 0
 

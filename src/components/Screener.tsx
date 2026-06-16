@@ -353,7 +353,12 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <b>🔍 Hisse Tarama{data ? ` · ${data.items.length} hisse` : ''}</b>
+          <span className="scr-head-title">
+            <b>🔍 Hisse Tarama{data ? ` · ${data.items.length} hisse` : ''}</b>
+            {data?.asof && (
+              <span className="scr-asof" title="Verinin ait olduğu son işlem günü (snapshot)">📅 veri: {trDate(data.asof)}</span>
+            )}
+          </span>
           <button className="row-x" onClick={onClose} title="Kapat">×</button>
         </div>
         <div className="modal-body">
@@ -618,6 +623,12 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
       </div>
     </div>
   );
+}
+
+// "2026-06-16" → "16.06.2026" (tz-safe; no Date parsing)
+function trDate(iso: string): string {
+  const p = iso.split('-');
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : iso;
 }
 
 function passF(it: ScreenerItem, f: Filter): boolean {

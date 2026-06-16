@@ -629,6 +629,19 @@ button.ctl:disabled {
   font-size: 15px;
 }
 
+.scr-head-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.scr-asof {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .modal-body {
   padding: 12px 14px;
   overflow-y: auto;
