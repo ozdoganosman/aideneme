@@ -203,6 +203,21 @@ export function activePeriod(key: string, p: IndicatorParams = DEFAULT_PARAMS): 
   }
 }
 
+// Base period (the indicator *inside* a compound "X EMA") active on the chart —
+// the ADX/%R/ROC length, separate from the EMA length. 0 when not applicable.
+export function activeBase(key: string, p: IndicatorParams = DEFAULT_PARAMS): number {
+  switch (key) {
+    case 'adxema':
+      return p.adx;
+    case 'wrema':
+      return p.wr;
+    case 'rocema':
+      return p.roc;
+    default:
+      return 0;
+  }
+}
+
 // Translates the user's "Williams Paşa" (%R) and "NizamiCedid" (MACD) Pine
 // indicators. MACD plots are normalized by the fast EMA, exactly as in the
 // original script.

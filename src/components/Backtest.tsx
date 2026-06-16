@@ -9,11 +9,12 @@ import {
   INDS,
   OPS,
   hasParam,
+  baseLabel,
   newCond,
   buildCustomPosition,
   candidateStrategies,
 } from '../indicators/customStrategy';
-import { IndicatorParams, activePeriod } from '../indicators/calc';
+import { IndicatorParams, activePeriod, activeBase } from '../indicators/calc';
 import { useEscClose } from '../useEscClose';
 
 interface Props {
@@ -171,6 +172,8 @@ const seedCond = (c: Cond, p: IndicatorParams): Cond => ({
   ...c,
   p: activePeriod(c.ind, p) || c.p,
   p2: activePeriod(c.ind2, p) || c.p2,
+  pa: activeBase(c.ind, p) || undefined,
+  pa2: activeBase(c.ind2, p) || undefined,
 });
 const seededCond = (p: IndicatorParams): Cond => seedCond(newCond(), p);
 const seededBlank = (p: IndicatorParams): CustomStrategy => ({ id: '', name: '', buy: [seededCond(p)], sell: [] });
@@ -829,9 +832,22 @@ function ValInput({ value, onChange }: { value: number; onChange: (v: number) =>
 }
 
 function CondRow({ c, params, onChange, onRemove }: { c: Cond; params: IndicatorParams; onChange: (c: Cond) => void; onRemove: () => void }) {
-  // Switching the indicator re-seeds its period from the chart's active setting.
-  const pickInd = (ind: string) => onChange({ ...c, ind, p: activePeriod(ind, params) || c.p });
-  const pickInd2 = (ind2: string) => onChange({ ...c, ind2, p2: activePeriod(ind2, params) || c.p2 });
+  // Switching the indicator re-seeds its period(s) from the chart's active
+  // settings (base period for compound "X EMA" indicators too).
+  const pickInd = (ind: string) => onChange({ ...c, ind, p: activePeriod(ind, params) || c.p, pa: activeBase(ind, params) || undefined });
+  const pickInd2 = (ind2: string) => onChange({ ...c, ind2, p2: activePeriod(ind2, params) || c.p2, pa2: activeBase(ind2, params) || undefined });
+  const numIn = (val: number | undefined, set: (v: number | undefined) => void, title: string) => (
+    <input
+      className="cond-p"
+      value={val ?? ''}
+      inputMode="numeric"
+      title={title}
+      onChange={(e) => {
+        const v = +e.target.value;
+        set(v > 0 ? v : undefined);
+      }}
+    />
+  );
   return (
     <div className="cond">
       <select value={c.ind} onChange={(e) => pickInd(e.target.value)}>
@@ -841,8 +857,9 @@ function CondRow({ c, params, onChange, onRemove }: { c: Cond; params: Indicator
           </option>
         ))}
       </select>
+      {baseLabel(c.ind) && numIn(c.pa, (v) => onChange({ ...c, pa: v }), `${baseLabel(c.ind)} periyodu`)}
       {hasParam(c.ind) && (
-        <input className="cond-p" value={c.p} inputMode="numeric" onChange={(e) => onChange({ ...c, p: +e.target.value || 0 })} />
+        <input className="cond-p" value={c.p} inputMode="numeric" title={baseLabel(c.ind) ? 'EMA periyodu' : 'periyot'} onChange={(e) => onChange({ ...c, p: +e.target.value || 0 })} />
       )}
       <select value={c.op} onChange={(e) => onChange({ ...c, op: e.target.value as Cond['op'] })}>
         {OPS.map((o) => (
@@ -866,8 +883,9 @@ function CondRow({ c, params, onChange, onRemove }: { c: Cond; params: Indicator
               </option>
             ))}
           </select>
+          {baseLabel(c.ind2) && numIn(c.pa2, (v) => onChange({ ...c, pa2: v }), `${baseLabel(c.ind2)} periyodu`)}
           {hasParam(c.ind2) && (
-            <input className="cond-p" value={c.p2} inputMode="numeric" onChange={(e) => onChange({ ...c, p2: +e.target.value || 0 })} />
+            <input className="cond-p" value={c.p2} inputMode="numeric" title={baseLabel(c.ind2) ? 'EMA periyodu' : 'periyot'} onChange={(e) => onChange({ ...c, p2: +e.target.value || 0 })} />
           )}
         </>
       )}
@@ -879,18 +897,20 @@ function CondRow({ c, params, onChange, onRemove }: { c: Cond; params: Indicator
 // Plain-language one-liner of a strategy's rules.
 function describe(s: CustomStrategy): string {
   const part = (c: Cond) => {
-    const left = ind(c.ind, c.p);
+    const left = ind(c.ind, c.p, c.pa);
     const opl = c.op === 'gt' ? '>' : c.op === 'lt' ? '<' : c.op === 'cu' ? '↗ keser' : '↘ keser';
-    const right = c.tgt === 'val' ? String(c.val) : ind(c.ind2, c.p2);
+    const right = c.tgt === 'val' ? String(c.val) : ind(c.ind2, c.p2, c.pa2);
     return `${left} ${opl} ${right}`;
   };
   const buy = s.buy.map(part).join(' ve ');
   const sell = s.sell.length ? s.sell.map(part).join(' ve ') : 'AL koşulu bozulunca';
   return `AL: ${buy}  →  SAT: ${sell}`;
 }
-function ind(key: string, p: number): string {
+function ind(key: string, p: number, pa?: number): string {
   const lbl = INDS.find((i) => i.key === key)?.label ?? key;
-  return hasParam(key) ? `${lbl}(${p})` : lbl;
+  if (!hasParam(key)) return lbl;
+  const bl = baseLabel(key);
+  return bl && pa ? `${lbl}(${bl}${pa}, EMA${p})` : `${lbl}(${p})`;
 }
 
 function fmtX(r: number): string {

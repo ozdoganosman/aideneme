@@ -16,6 +16,8 @@ export interface Cond {
   val: number;
   ind2: string;
   p2: number;
+  pa?: number; // base period for compound "X EMA" indicators (e.g. ADX in ADX-EMA)
+  pa2?: number; // …same, for the right-hand indicator (ind2)
 }
 
 export interface CustomStrategy {
@@ -30,6 +32,7 @@ export interface IndDef {
   label: string;
   hasParam: boolean;
   defParam: number;
+  baseLabel?: string; // if set, this is a compound "X EMA" with a base period too
 }
 
 export const INDS: IndDef[] = [
@@ -37,15 +40,15 @@ export const INDS: IndDef[] = [
   { key: 'ema', label: 'EMA', hasParam: true, defParam: 50 },
   { key: 'rsi', label: 'RSI', hasParam: true, defParam: 14 },
   { key: 'wr', label: 'Williams %R', hasParam: true, defParam: 260 },
-  { key: 'wrema', label: 'Williams %R EMA', hasParam: true, defParam: 260 },
+  { key: 'wrema', label: 'Williams %R EMA', hasParam: true, defParam: 260, baseLabel: '%R' },
   { key: 'macd', label: 'MACD (NizamiCedid)', hasParam: false, defParam: 0 },
   { key: 'signal', label: 'Signal', hasParam: false, defParam: 0 },
   { key: 'emacd', label: 'eMACD', hasParam: false, defParam: 0 },
   { key: 'stdir', label: 'Supertrend yön (1=yukarı)', hasParam: false, defParam: 0 },
   { key: 'adx', label: 'ADX (trend gücü)', hasParam: true, defParam: 260 },
-  { key: 'adxema', label: 'ADX EMA', hasParam: true, defParam: 120 },
+  { key: 'adxema', label: 'ADX EMA', hasParam: true, defParam: 120, baseLabel: 'ADX' },
   { key: 'roc', label: 'Momentum / ROC (%)', hasParam: true, defParam: 260 },
-  { key: 'rocema', label: 'Momentum / ROC EMA', hasParam: true, defParam: 120 },
+  { key: 'rocema', label: 'Momentum / ROC EMA', hasParam: true, defParam: 120, baseLabel: 'ROC' },
 ];
 
 export const OPS: { key: Op; label: string }[] = [
@@ -60,6 +63,11 @@ export function indLabel(key: string): string {
 }
 export function hasParam(key: string): boolean {
   return INDS.find((i) => i.key === key)?.hasParam ?? false;
+}
+// Compound "X EMA" indicators carry a base period (e.g. ADX-EMA needs an ADX
+// period *and* an EMA period). Returns the base label ('ADX', '%R', 'ROC') or ''.
+export function baseLabel(key: string): string {
+  return INDS.find((i) => i.key === key)?.baseLabel ?? '';
 }
 
 export function newCond(): Cond {
@@ -131,7 +139,10 @@ export function candidateStrategies(): CustomStrategy[] {
   return list.map((s, i) => ({ id: 'opt-' + i, name: s.name, buy: s.buy, sell: s.sell }));
 }
 
-function computeSeries(c: Candles, ind: string, p: number, gp: IndicatorParams): Float64Array {
+// `p` = the indicator's (or EMA's) period; `pa` = the base period for compound
+// "X EMA" indicators (ADX/%R/ROC inside the EMA). When pa is undefined the base
+// falls back so legacy conditions and the optimizer keep their old behaviour.
+function computeSeries(c: Candles, ind: string, p: number, gp: IndicatorParams, pa?: number): Float64Array {
   const close = c.close;
   switch (ind) {
     case 'price':
@@ -143,7 +154,7 @@ function computeSeries(c: Candles, ind: string, p: number, gp: IndicatorParams):
     case 'wr':
       return williamsR(c, Math.max(1, p));
     case 'wrema':
-      return emaArr(williamsR(c, Math.max(1, p)), Math.max(1, p));
+      return emaArr(williamsR(c, Math.max(1, pa ?? p)), Math.max(1, p));
     case 'macd':
       return macdSeries(c, gp).macd;
     case 'signal':
@@ -155,11 +166,11 @@ function computeSeries(c: Candles, ind: string, p: number, gp: IndicatorParams):
     case 'adx':
       return adxArr(c, Math.max(2, p));
     case 'adxema':
-      return emaArr(adxArr(c, gp.adx), Math.max(1, p));
+      return emaArr(adxArr(c, Math.max(2, pa ?? gp.adx)), Math.max(1, p));
     case 'roc':
       return rocArr(close, Math.max(1, p));
     case 'rocema':
-      return emaArr(rocArr(close, gp.roc), Math.max(1, p));
+      return emaArr(rocArr(close, Math.max(1, pa ?? gp.roc)), Math.max(1, p));
     default:
       return close;
   }
@@ -176,19 +187,19 @@ export function buildCustomPosition(
 ): Uint8Array {
   const n = c.length;
   const cache = sharedCache ?? new Map<string, Float64Array>();
-  const ser = (ind: string, p: number) => {
-    const k = ind + ':' + p;
+  const ser = (ind: string, p: number, pa?: number) => {
+    const k = ind + ':' + p + (pa == null ? '' : ':' + pa);
     let v = cache.get(k);
     if (!v) {
-      v = computeSeries(c, ind, p, gp);
+      v = computeSeries(c, ind, p, gp, pa);
       cache.set(k, v);
     }
     return v;
   };
   const evalConds = (conds: Cond[], i: number): boolean => {
     for (const cd of conds) {
-      const a = ser(cd.ind, cd.p);
-      const bSer = cd.tgt === 'ind' ? ser(cd.ind2, cd.p2) : null;
+      const a = ser(cd.ind, cd.p, cd.pa);
+      const bSer = cd.tgt === 'ind' ? ser(cd.ind2, cd.p2, cd.pa2) : null;
       const av = a[i];
       const bv = bSer ? bSer[i] : cd.val;
       if (!Number.isFinite(av) || (bSer && !Number.isFinite(bv))) return false;
