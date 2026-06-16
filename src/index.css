@@ -2421,9 +2421,56 @@ button.ctl:disabled {
 }
 .cb-strat {
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow: auto;
   background: var(--panel);
-  padding: 4px 12px 8px;
+  padding: 0 12px 8px;
+}
+.cb-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.cb-name {
+  color: #fff;
+  font-weight: 700;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.cb-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-2);
+  white-space: nowrap;
+}
+.cb-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.cb-table tbody tr {
+  cursor: pointer;
+}
+.cb-table tbody tr:hover {
+  background: var(--hover);
+}
+.cb-table .cb-r {
+  text-align: right;
 }
 
 .panel-title {
