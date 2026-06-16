@@ -9,10 +9,15 @@ import { useEscClose } from '../useEscClose';
 // at ANY period on demand (downloads candles for the snapshot-filtered subset).
 interface LiveF {
   ind: string;
-  period: number;
+  period: number; // primary period (for %R EMA: the Williams %R lookback)
+  period2?: number; // EMA length — only for %R EMA (two-period composite)
   op: 'gt' | 'lt';
   val: number;
 }
+// Default (snapshot) periods — shown as placeholders so "boş = bu varsayılan"
+// is obvious, and so the fixed "(28)/(260)" in a column name stops looking like
+// it contradicts the editable period box. Keyed by the live-indicator key.
+const PRIMARY_DEF: Record<string, number> = { rsi: 14, wr: 260, wrema: 260, adx: 28, roc: 260, emadist: 50 };
 const LIVE_INDS: { key: string; label: string }[] = [
   { key: 'wr', label: 'Williams %R' },
   { key: 'wrema', label: '%R EMA' },
@@ -43,8 +48,9 @@ function rsiLast(close: Float64Array, len: number): number {
   }
   return al === 0 ? 100 : 100 - 100 / (1 + ag / al);
 }
-// Current value of an indicator at a given period.
-function liveValue(c: Candles, ind: string, p: number): number {
+// Current value of an indicator at a given period. For %R EMA (a two-period
+// composite) `p` is the Williams %R lookback and `p2` is the EMA length.
+function liveValue(c: Candles, ind: string, p: number, p2?: number): number {
   const n = c.length;
   const last = n - 1;
   const pp = Math.max(1, Math.round(p));
@@ -58,7 +64,7 @@ function liveValue(c: Candles, ind: string, p: number): number {
     const e = emaArr(c.close, pp);
     return e[last] ? (c.close[last] / e[last] - 1) * 100 : NaN;
   }
-  // wr / wrema
+  // wr / wrema — pp = Williams %R lookback; for wrema, p2 = EMA length (default pp).
   const hh = rollingHighest(c.high, pp);
   const ll = rollingLowest(c.low, pp);
   const pr = new Float64Array(n);
@@ -66,7 +72,7 @@ function liveValue(c: Candles, ind: string, p: number): number {
     const d = hh[i] - ll[i];
     pr[i] = d ? (100 * (c.close[i] - hh[i])) / d + 100 : NaN;
   }
-  if (ind === 'wrema') return emaArr(pr, pp)[last];
+  if (ind === 'wrema') return emaArr(pr, Math.max(1, Math.round(p2 ?? pp)))[last];
   return pr[last];
 }
 
@@ -124,6 +130,8 @@ const COL = (k: Key): ColDef => COLS.find((c) => c.key === k) as ColDef;
 
 // Snapshot columns that can ALSO be computed live at a custom period.
 const SNAP_TO_LIVE: Partial<Record<Key, string>> = { rsi: 'rsi', wr: 'wr', wre: 'wrema', wre2: 'wrema', adx: 'adx', roc: 'roc' };
+// %R EMA's EMA length per snapshot column (the %R lookback is 260 for both).
+const EMA_DEF: Partial<Record<Key, number>> = { wre: 260, wre2: 120 };
 // Live-only target (no snapshot column): price distance from EMA.
 const EMADIST_KEY = 'emadist' as Key;
 // Filter targets = snapshot columns + the live-only one (emadist).
@@ -189,6 +197,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   // Optional custom period for the filter above. Empty → use the fixed-period
   // snapshot value (instant). Filled → run "live" (download candles + compute).
   const [lp, setLp] = useState('');
+  const [lp2, setLp2] = useState(''); // %R EMA's EMA period (second box)
   const [liveFs, setLiveFs] = useState<LiveF[]>([]);
   const [liveSet, setLiveSet] = useState<Set<string> | null>(null);
   const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
@@ -219,8 +228,12 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
 
   const kind = TGT(fk).kind;
   const liveInd = liveIndFor(fk); // live indicator key, or null if snapshot-only column
+  const isWrEma = liveInd === 'wrema'; // two-period composite → two boxes (%R + EMA)
   // This filter runs live when a custom period is given (or the target is live-only).
-  const liveMode = !!liveInd && cmp === 'val' && (fk === EMADIST_KEY || lp.trim() !== '');
+  const liveMode =
+    !!liveInd &&
+    cmp === 'val' &&
+    (fk === EMADIST_KEY || (isWrEma ? lp.trim() !== '' || lp2.trim() !== '' : lp.trim() !== ''));
 
   // Columns shown = the selected view + any column we're filtering on (so the
   // values you filter by are always visible in the table).
@@ -293,7 +306,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
         if (c && c.length >= 30) {
           let ok = true;
           for (const f of liveFs) {
-            const v = liveValue(c, f.ind, f.period);
+            const v = liveValue(c, f.ind, f.period, f.period2);
             if (!Number.isFinite(v) || (f.op === 'gt' ? !(v > f.val) : !(v < f.val))) {
               ok = false;
               break;
@@ -314,11 +327,15 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   const addFilter = () => {
     // Live path: a custom period (or the live-only target) → download + compute.
     if (liveMode && liveInd) {
-      const period = Math.max(1, Math.round(Number(lp) || activePeriod(liveInd, params) || 14));
+      const period = Math.max(1, Math.round(Number(lp) || PRIMARY_DEF[liveInd] || activePeriod(liveInd, params) || 14));
+      const period2 = isWrEma ? Math.max(1, Math.round(Number(lp2) || EMA_DEF[fk] || 260)) : undefined;
       const v = parseFloat(val.replace(',', '.'));
       if (!Number.isFinite(period) || !Number.isFinite(v)) return;
       const o: 'gt' | 'lt' = op === 'lt' || op === 'lte' ? 'lt' : 'gt';
-      setLiveFs((fs) => [...fs.filter((x) => !(x.ind === liveInd && x.period === period && x.op === o)), { ind: liveInd, period, op: o, val: v }]);
+      setLiveFs((fs) => [
+        ...fs.filter((x) => !(x.ind === liveInd && x.period === period && x.period2 === period2 && x.op === o)),
+        { ind: liveInd, period, period2, op: o, val: v },
+      ]);
       setLiveSet(null); // needs re-apply
       return;
     }
@@ -389,9 +406,10 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                     setOp(TGT(k).kind === 'bool' ? 'is' : 'gt');
                     setVal(TGT(k).kind === 'bool' ? '1' : '');
                     setCmp('val');
-                    // live-only target needs a period; otherwise default to snapshot (empty).
+                    setLp2('');
+                    // live-only target needs a period; otherwise empty = snapshot default.
                     if (k === EMADIST_KEY) setLp(String(activePeriod('emadist', params) || 50));
-                    else if (!liveIndFor(k)) setLp('');
+                    else setLp('');
                   }}
                 >
                   {TARGETS.map((c) => (
@@ -407,15 +425,35 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                   </select>
                 ) : (
                   <>
-                    {liveInd && (
+                    {liveInd && !isWrEma && (
                       <input
                         className="scr-lp"
                         value={lp}
                         inputMode="numeric"
-                        placeholder="periyot"
-                        title="Periyot (gün). Doldurursan canlı hesaplanır (hisseleri indirir). Boş = hazır snapshot değeri."
+                        placeholder={String(PRIMARY_DEF[liveInd] ?? 'periyot')}
+                        title="Periyot (gün). Doldurursan canlı hesaplanır (hisseleri indirir). Boş = hazır snapshot değeri (placeholder'daki periyot)."
                         onChange={(e) => setLp(e.target.value)}
                       />
+                    )}
+                    {isWrEma && (
+                      <>
+                        <input
+                          className="scr-lp"
+                          value={lp}
+                          inputMode="numeric"
+                          placeholder={`%R ${PRIMARY_DEF.wrema}`}
+                          title="Williams %R lookback periyodu (gün). Boş = 260."
+                          onChange={(e) => setLp(e.target.value)}
+                        />
+                        <input
+                          className="scr-lp"
+                          value={lp2}
+                          inputMode="numeric"
+                          placeholder={`EMA ${EMA_DEF[fk] ?? 260}`}
+                          title="%R'nin EMA periyodu (gün). Boş = sütun varsayılanı (260/120)."
+                          onChange={(e) => setLp2(e.target.value)}
+                        />
+                      </>
                     )}
                     <select
                       value={liveMode ? (op === 'lt' || op === 'lte' ? 'lt' : 'gt') : op}
@@ -462,7 +500,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                   <span className="lg-muted">🔬 Canlı (özel periyot):</span>
                   {liveFs.map((f, i) => (
                     <span key={i} className="scr-fchip scr-fchip-live">
-                      {liveLabel(f.ind)}({f.period}) {f.op === 'gt' ? '>' : '<'} {f.val}
+                      {liveLabel(f.ind)}({f.period}{f.period2 != null ? `/${f.period2}` : ''}) {f.op === 'gt' ? '>' : '<'} {f.val}
                       <button aria-label="Filtreyi kaldır" title="Filtreyi kaldır" onClick={() => { setLiveFs((fs) => fs.filter((_, idx) => idx !== i)); setLiveSet(null); }}>×</button>
                     </span>
                   ))}
@@ -615,7 +653,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
               </div>
               <div className="bt-hint">
                 ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç. <b>Periyot</b> kutusunu
-                doldurursan o gösterge istediğin periyotla <b>canlı</b> hesaplanır (boşsa hazır snapshot değeri).
+                doldurursan o gösterge istediğin periyotla <b>canlı</b> hesaplanır (boşsa kutudaki placeholder = hazır snapshot periyodu). <b>%R EMA</b> iki periyotludur: <b>%R</b> lookback + <b>EMA</b> uzunluğu (iki ayrı kutu).
               </div>
             </>
           )}
