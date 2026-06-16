@@ -83,7 +83,8 @@ export function Trades({ strategy, candles, onSelectTrade }: Props) {
           ⤓ CSV
         </button>
       </div>
-      <table className="cb-table">
+      <div className="cb-tablewrap">
+        <table className="cb-table">
         <thead>
           <tr>
             <th>#</th>
@@ -110,7 +111,8 @@ export function Trades({ strategy, candles, onSelectTrade }: Props) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </>
   );
 }

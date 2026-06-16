@@ -3080,6 +3080,20 @@ button.ctl:disabled {
     flex: 1 1 auto;
   }
 
+  /* İşlemler tablosu (8 kolon): dar ekranda yatay kaydır, taşmayı önle */
+  .cb-tablewrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .cb-table td,
+  .cb-table thead th {
+    padding: 5px 7px;
+  }
+  .cb-head {
+    font-size: 11px;
+    gap: 6px 8px;
+  }
+
   /* Optimizer result rows wrap; keep "Kullan" reachable */
   .opt-row {
     flex-wrap: wrap;
