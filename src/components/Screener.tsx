@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
-import { emaArr, adxArr, rollingHighest, rollingLowest, activePeriod, IndicatorParams } from '../indicators/calc';
+import { emaArr, adxArr, rocArr, rollingHighest, rollingLowest, activePeriod, IndicatorParams } from '../indicators/calc';
 import { useEscClose } from '../useEscClose';
 
 // ── Live (period-aware) indicator filter ─────────────────────────────────────
@@ -17,13 +17,19 @@ interface LiveF {
 // Default (snapshot) periods — shown as placeholders so "boş = bu varsayılan"
 // is obvious, and so the fixed "(28)/(260)" in a column name stops looking like
 // it contradicts the editable period box. Keyed by the live-indicator key.
-const PRIMARY_DEF: Record<string, number> = { rsi: 14, wr: 260, wrema: 260, adx: 28, roc: 260, emadist: 50 };
+const PRIMARY_DEF: Record<string, number> = { rsi: 14, wr: 260, wrema: 260, adx: 28, adxema: 28, roc: 260, rocema: 260, emadist: 50 };
+// Live indicators that are a smoothing of a base indicator → two periods (base
+// lookback + EMA length), so they get two boxes instead of one.
+const TWO_PERIOD = new Set(['wrema', 'adxema', 'rocema']);
+const BASE_LABEL: Record<string, string> = { wrema: '%R', adxema: 'ADX', rocema: 'ROC' };
 const LIVE_INDS: { key: string; label: string }[] = [
   { key: 'wr', label: 'Williams %R' },
   { key: 'wrema', label: '%R EMA' },
   { key: 'rsi', label: 'RSI' },
   { key: 'adx', label: 'ADX' },
+  { key: 'adxema', label: 'ADX EMA' },
   { key: 'roc', label: 'Momentum / ROC %' },
+  { key: 'rocema', label: 'Momentum EMA' },
   { key: 'emadist', label: 'Fiyat/EMA farkı %' },
 ];
 const liveLabel = (k: string) => LIVE_INDS.find((i) => i.key === k)?.label ?? k;
@@ -64,6 +70,9 @@ function liveValue(c: Candles, ind: string, p: number, p2?: number): number {
     const e = emaArr(c.close, pp);
     return e[last] ? (c.close[last] / e[last] - 1) * 100 : NaN;
   }
+  // ADX EMA / Momentum EMA — pp = base lookback; p2 = EMA length (default 120).
+  if (ind === 'adxema') return emaArr(adxArr(c, Math.max(2, pp)), Math.max(1, Math.round(p2 ?? 120)))[last];
+  if (ind === 'rocema') return emaArr(rocArr(c.close, pp), Math.max(1, Math.round(p2 ?? 120)))[last];
   // wr / wrema — pp = Williams %R lookback; for wrema, p2 = EMA length (default pp).
   const hh = rollingHighest(c.high, pp);
   const ll = rollingLowest(c.low, pp);
@@ -132,12 +141,21 @@ const COL = (k: Key): ColDef => COLS.find((c) => c.key === k) as ColDef;
 const SNAP_TO_LIVE: Partial<Record<Key, string>> = { rsi: 'rsi', wr: 'wr', wre: 'wrema', wre2: 'wrema', adx: 'adx', roc: 'roc' };
 // %R EMA's EMA length per snapshot column (the %R lookback is 260 for both).
 const EMA_DEF: Partial<Record<Key, number>> = { wre: 260, wre2: 120 };
-// Live-only target (no snapshot column): price distance from EMA.
+// Live-only targets (no snapshot column): computed live on demand.
 const EMADIST_KEY = 'emadist' as Key;
-// Filter targets = snapshot columns + the live-only one (emadist).
-const TARGETS: ColDef[] = [...COLS, { key: EMADIST_KEY, label: 'Fiyat/EMA farkı % (canlı)', kind: 'num' }];
+const ADXEMA_KEY = 'adxema' as Key;
+const ROCEMA_KEY = 'rocema' as Key;
+const LIVE_ONLY_KEYS = new Set<Key>([EMADIST_KEY, ADXEMA_KEY, ROCEMA_KEY]);
+// Filter targets = snapshot columns + the live-only ones.
+const TARGETS: ColDef[] = [
+  ...COLS,
+  { key: EMADIST_KEY, label: 'Fiyat/EMA farkı % (canlı)', kind: 'num' },
+  { key: ADXEMA_KEY, label: 'ADX EMA (canlı)', kind: 'num' },
+  { key: ROCEMA_KEY, label: 'Momentum EMA (canlı)', kind: 'num' },
+];
 const TGT = (k: Key): ColDef => TARGETS.find((c) => c.key === k) ?? COL(k);
-const liveIndFor = (k: Key): string | null => (k === EMADIST_KEY ? 'emadist' : SNAP_TO_LIVE[k] ?? null);
+const liveIndFor = (k: Key): string | null =>
+  k === EMADIST_KEY ? 'emadist' : k === ADXEMA_KEY ? 'adxema' : k === ROCEMA_KEY ? 'rocema' : SNAP_TO_LIVE[k] ?? null;
 
 const VIEWS: { label: string; cols: Key[] }[] = [
   { label: 'Genel', cols: ['p', 'ch', 'rsi', 'r1y', 'vol', 'e200'] },
@@ -228,12 +246,13 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
 
   const kind = TGT(fk).kind;
   const liveInd = liveIndFor(fk); // live indicator key, or null if snapshot-only column
-  const isWrEma = liveInd === 'wrema'; // two-period composite → two boxes (%R + EMA)
+  const isTwo = !!liveInd && TWO_PERIOD.has(liveInd); // two boxes (base lookback + EMA)
+  const liveOnly = LIVE_ONLY_KEYS.has(fk); // no snapshot value → always live
   // This filter runs live when a custom period is given (or the target is live-only).
   const liveMode =
     !!liveInd &&
     cmp === 'val' &&
-    (fk === EMADIST_KEY || (isWrEma ? lp.trim() !== '' || lp2.trim() !== '' : lp.trim() !== ''));
+    (liveOnly || (isTwo ? lp.trim() !== '' || lp2.trim() !== '' : lp.trim() !== ''));
 
   // Columns shown = the selected view + any column we're filtering on (so the
   // values you filter by are always visible in the table).
@@ -328,7 +347,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     // Live path: a custom period (or the live-only target) → download + compute.
     if (liveMode && liveInd) {
       const period = Math.max(1, Math.round(Number(lp) || PRIMARY_DEF[liveInd] || activePeriod(liveInd, params) || 14));
-      const period2 = isWrEma ? Math.max(1, Math.round(Number(lp2) || EMA_DEF[fk] || 260)) : undefined;
+      const period2 = isTwo ? Math.max(1, Math.round(Number(lp2) || EMA_DEF[fk] || 120)) : undefined;
       const v = parseFloat(val.replace(',', '.'));
       if (!Number.isFinite(period) || !Number.isFinite(v)) return;
       const o: 'gt' | 'lt' = op === 'lt' || op === 'lte' ? 'lt' : 'gt';
@@ -425,32 +444,32 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                   </select>
                 ) : (
                   <>
-                    {liveInd && !isWrEma && (
+                    {liveInd && !isTwo && (
                       <input
                         className="scr-lp"
                         value={lp}
                         inputMode="numeric"
                         placeholder={String(PRIMARY_DEF[liveInd] ?? 'periyot')}
-                        title="Periyot (gün). Doldurursan canlı hesaplanır (hisseleri indirir). Boş = hazır snapshot değeri (placeholder'daki periyot)."
+                        title="Periyot (gün). Doldurursan canlı hesaplanır (hisseleri indirir). Boş = placeholder'daki hazır snapshot periyodu."
                         onChange={(e) => setLp(e.target.value)}
                       />
                     )}
-                    {isWrEma && (
+                    {isTwo && liveInd && (
                       <>
                         <input
                           className="scr-lp"
                           value={lp}
                           inputMode="numeric"
-                          placeholder={`%R ${PRIMARY_DEF.wrema}`}
-                          title="Williams %R lookback periyodu (gün). Boş = 260."
+                          placeholder={`${BASE_LABEL[liveInd]} ${PRIMARY_DEF[liveInd]}`}
+                          title={`${BASE_LABEL[liveInd]} taban periyodu (gün). Boş = ${PRIMARY_DEF[liveInd]}.`}
                           onChange={(e) => setLp(e.target.value)}
                         />
                         <input
                           className="scr-lp"
                           value={lp2}
                           inputMode="numeric"
-                          placeholder={`EMA ${EMA_DEF[fk] ?? 260}`}
-                          title="%R'nin EMA periyodu (gün). Boş = sütun varsayılanı (260/120)."
+                          placeholder={`EMA ${EMA_DEF[fk] ?? 120}`}
+                          title={`EMA periyodu (gün). Boş = ${EMA_DEF[fk] ?? 120}.`}
                           onChange={(e) => setLp2(e.target.value)}
                         />
                       </>
@@ -465,7 +484,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                       {!liveMode && <option value="lte">≤</option>}
                       {!liveMode && <option value="eq">= eşit</option>}
                     </select>
-                    {fk !== EMADIST_KEY && (
+                    {!liveOnly && (
                       <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir kolon mu?">
                         <option value="val">Değer</option>
                         <option value="field">Veri (kolon)</option>
@@ -653,7 +672,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
               </div>
               <div className="bt-hint">
                 ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç. <b>Periyot</b> kutusunu
-                doldurursan o gösterge istediğin periyotla <b>canlı</b> hesaplanır (boşsa kutudaki placeholder = hazır snapshot periyodu). <b>%R EMA</b> iki periyotludur: <b>%R</b> lookback + <b>EMA</b> uzunluğu (iki ayrı kutu).
+                doldurursan o gösterge istediğin periyotla <b>canlı</b> hesaplanır (boşsa kutudaki placeholder = hazır snapshot periyodu). <b>%R EMA / ADX EMA / Momentum EMA</b> iki periyotludur: <b>taban</b> lookback + <b>EMA</b> uzunluğu (iki kutu; canlı hesaplanır).
               </div>
             </>
           )}
