@@ -42,11 +42,12 @@ jobs:
       - name: BIST data (incremental on push; full refresh on schedule / manual run)
         continue-on-error: true
         env:
-          # Incremental on pushes (fetch only newly-added symbols / IPOs, fast);
-          # full re-fetch for fresh prices on the scheduled run OR a manual
-          # "Run workflow" (workflow_dispatch). NOTE: the schedule only fires from
-          # the default branch — keep this workflow on the default branch.
-          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '' }}
+          # Incremental on pushes (fetch only newly-added symbols / IPOs, fast).
+          # FULL re-fetch for fresh prices when: scheduled run, manual "Run
+          # workflow" (workflow_dispatch), OR a push whose commit message contains
+          # the marker "[full-data]". NOTE: the schedule only fires from the
+          # default branch — keep this workflow on the default branch.
+          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
         run: |
           python -m pip install --quiet borsapy numpy pandas
           python scripts/build_bist.py
@@ -54,13 +55,13 @@ jobs:
       - name: Market-wide strategy scan (self-gates; recomputes when stale)
         continue-on-error: true
         env:
-          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '' }}
+          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
         run: python scripts/strategies.py
 
       - name: Screener snapshot (per-symbol current indicators; refreshes on schedule)
         continue-on-error: true
         env:
-          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '' }}
+          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
         run: python scripts/screener.py
 
       - run: npm ci
