@@ -92,7 +92,14 @@ interface Props {
   params: IndicatorParams; // chart's active periods → seed the live filter
 }
 
-function readScrState(): { view?: number; filters?: Filter[]; sort?: { key: Key; dir: 1 | -1 }; q?: string } {
+function readScrState(): {
+  view?: number;
+  filters?: Filter[];
+  sort?: { key: Key; dir: 1 | -1 };
+  q?: string;
+  liveFs?: LiveF[];
+  liveSet?: string[];
+} {
   try {
     return JSON.parse(localStorage.getItem('borsaScrState') || '{}');
   } catch {
@@ -216,8 +223,16 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   // snapshot value (instant). Filled → run "live" (download candles + compute).
   const [lp, setLp] = useState('');
   const [lp2, setLp2] = useState(''); // %R EMA's EMA period (second box)
-  const [liveFs, setLiveFs] = useState<LiveF[]>([]);
-  const [liveSet, setLiveSet] = useState<Set<string> | null>(null);
+  // Live filters + results persist across open/close (just like the snapshot
+  // filters above), so leaving the screener and coming back doesn't reset them.
+  const [liveFs, setLiveFs] = useState<LiveF[]>(() => {
+    const s = readScrState();
+    return Array.isArray(s.liveFs) ? s.liveFs : [];
+  });
+  const [liveSet, setLiveSet] = useState<Set<string> | null>(() => {
+    const s = readScrState();
+    return Array.isArray(s.liveSet) ? new Set(s.liveSet) : null;
+  });
   const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
@@ -231,10 +246,14 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   useEffect(() => {
     localStorage.setItem('borsaScreens', JSON.stringify(saved));
   }, [saved]);
-  // Remember the last screen state so leaving to view a stock doesn't reset it.
+  // Remember the last screen state (incl. live filters + results) so leaving to
+  // view a stock — or closing the screener — doesn't reset it.
   useEffect(() => {
-    localStorage.setItem('borsaScrState', JSON.stringify({ view, filters, sort, q }));
-  }, [view, filters, sort, q]);
+    localStorage.setItem(
+      'borsaScrState',
+      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null }),
+    );
+  }, [view, filters, sort, q, liveFs, liveSet]);
 
   const addWatch = (mode: 'add' | 'new') => {
     const syms = rows.map((r) => r.s);
