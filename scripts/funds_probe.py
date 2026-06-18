@@ -1,7 +1,6 @@
 """
-PROBE v12 (CI) — the fonturkey Next.js 404 page is served WITHOUT the bot
-challenge and references the app's JS chunks. Fetch those chunks (static, open)
-and grep for the real /api/funds/<method> calls.
+PROBE v13 (CI) — grep fonturkey's shared JS chunks for endpoint strings around
+fund/portfolio keywords, to recover the real /api/.../<method> paths.
 """
 from __future__ import annotations
 
@@ -21,31 +20,33 @@ def p(*a):
     sys.stdout.flush()
 
 
-r = S.get(BASE + "/api/fund", timeout=20)  # -> Next.js __next_error__ shell
-p(f"shell {r.status_code} {len(r.text)}B")
+r = S.get(BASE + "/api/fund", timeout=20)
 chunks = list(dict.fromkeys(re.findall(r'/_next/static/[A-Za-z0-9_~./\-]+\.js', r.text)))
-p(f"chunks referenced: {len(chunks)}")
-p("sample:", chunks[:8])
+p(f"chunks: {len(chunks)} -> {[c.split('/')[-1] for c in chunks]}")
 
-api = set()
-funds_api = set()
-for c in chunks[:40]:
+apis = set()
+frags = set()
+KWS = ["/api/", "funds/", "fund-", "portf", "dagilim", "distribution", "holding", "varlik", "fonbilgilendirme"]
+for c in chunks:
     try:
-        t = S.get(BASE + c, timeout=15).text
+        t = S.get(BASE + c, timeout=18).text
     except Exception:  # noqa
         continue
-    for m in re.findall(r'/api/funds/[A-Za-z0-9_\-/.]{2,45}', t):
-        funds_api.add(m)
-    for m in re.findall(r'["\'`](/api/[A-Za-z0-9_\-/.]{3,55})["\'`]', t):
-        api.add(m)
-    for m in re.findall(r'["\'`/](funds/[A-Za-z0-9_\-/.]{2,45})["\'`]', t):
-        api.add("~" + m)
+    for m in re.findall(r'/api/[A-Za-z0-9_\-/.]{3,60}', t):
+        apis.add(m)
+    for kw in KWS:
+        for mt in re.finditer(re.escape(kw), t):
+            i = mt.start()
+            seg = t[max(0, i - 36):i + 44]
+            if re.search(r'[A-Za-z]', seg):
+                frags.add(f"[{c.split('/')[-1][:14]}] …{seg}…")
 
-p("\n/api/funds/* calls found:")
-for a in sorted(funds_api):
-    p("   ", a)
-p("\nother /api/* (literal) found:")
-for a in sorted(api)[:80]:
+p(f"\n=== /api/* literals ({len(apis)}) ===")
+for a in sorted(apis):
     p("   ", a)
 
-p("\n[probe12] done")
+p(f"\n=== keyword fragments ({len(frags)}, capped 120) ===")
+for f in sorted(frags)[:120]:
+    p("  ", f)
+
+p("\n[probe13] done")
