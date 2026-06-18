@@ -1,18 +1,19 @@
 """
-PROBE v8 (CI) — investigate fonturkey.com.tr (surfaced from KAP's own JS). Is it
-a clean fund-data source (ideally stock-level portfolio)? Dump homepage + hunt
-for an API / fund list / portfolio with holdings.
+PROBE v9 (CI) — fonturkey.com.tr has an open JSON API gateway at /api/<method>
+(proxies to /uga/fonbilgilendirme/portal/service/<method>). Discover the real
+method names (swagger + a broad candidate sweep); flag anything returning data.
 """
 from __future__ import annotations
 
-import re
 import sys
 
 import requests
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 S = requests.Session()
-S.headers.update({"User-Agent": UA, "Accept-Language": "tr-TR,tr;q=0.9"})
+S.headers.update({"User-Agent": UA, "Accept-Language": "tr-TR,tr;q=0.9", "Accept": "application/json,*/*"})
+
+BASE = "https://fonturkey.com.tr"
 
 
 def p(*a):
@@ -20,31 +21,45 @@ def p(*a):
     sys.stdout.flush()
 
 
-BASE = "https://fonturkey.com.tr"
-try:
-    r = S.get(BASE, timeout=25)
-except Exception as e:  # noqa
-    p("HOME err:", repr(e))
-    p("\n[probe8] done")
-    sys.exit(0)
-
-t = r.text
-p(f"##### GET / -> {r.status_code} · {len(r.content)}B · {r.headers.get('content-type','')}")
-p("head:\n", t[:1000])
-p("\napi paths:", sorted(set(re.findall(r'["\'`](/(?:api|v1|data|rest)/[A-Za-z0-9_\-/]{2,50})', t)))[:50])
-p("hosts:", sorted(set(re.findall(r'https?://[A-Za-z0-9_.\-]+\.(?:com|org|gov|io|net)(?:\.tr)?', t)))[:30])
-p("fetch:", sorted(set(re.findall(r'fetch\(\s*["\'`]([^"\'`]{4,90})', t)))[:30])
-p("nextdata:", bool(re.search(r'__NEXT_DATA__', t)), "buildId:", re.findall(r'"buildId":"([^"]+)"', t)[:1])
-p("links:", sorted(set(re.findall(r'href=["\']([^"\']{2,60})["\']', t)))[:45])
-p("kw:", {k: (k in t) for k in ["portföy", "Portföy", "hisse", "Hisse", "ISIN", "nominal", "fonKod", "fund"]})
-
-for path in ["/api/funds", "/api/fund", "/api/fon", "/api/fonlar", "/api/portfolio",
-             "/api/portfoy", "/api/v1/funds", "/api/fund/list", "/api/funds/list",
-             "/api/fundlist", "/api/allfunds", "/sitemap.xml", "/robots.txt", "/fonlar"]:
+def hit(path: str, method: str = "get", body=None):
+    url = BASE + path
     try:
-        rr = S.get(BASE + path, timeout=15)
-        p(f"  GET {path} -> {rr.status_code} {len(rr.content)}B {rr.headers.get('content-type','')[:25]} | {rr.text[:130]!r}")
+        rr = S.post(url, json=body or {}, timeout=12) if method == "post" else S.get(url, timeout=12)
+        ct = rr.headers.get("content-type", "")[:22]
+        body_preview = rr.text[:150].replace("\n", " ")
+        # interesting = JSON that is NOT a generic gateway fault
+        flag = ""
+        low = rr.text[:400].lower()
+        if rr.status_code == 200 and ("json" in ct) and ("err-00" not in low) and ("apiproxy" not in low):
+            flag = "  <<< DATA?"
+        if any(w in low for w in ["fonkod", "fund", "portf", "umv", "unvan", "hisse"]):
+            flag += "  <<< KEYWORDS"
+        p(f"  {method.upper():4} {path:48} -> {rr.status_code} {len(rr.content):>7}B {ct:22} | {body_preview!r}{flag}")
     except Exception as e:  # noqa
-        p(f"  GET {path} err {repr(e)[:45]}")
+        p(f"  {method.upper():4} {path:48} err {repr(e)[:40]}")
 
-p("\n[probe8] done")
+
+p("== discovery ==")
+for d in ["/api/swagger", "/api/swagger-ui.html", "/api/v2/api-docs", "/api/v3/api-docs",
+          "/api/openapi.json", "/uga/fonbilgilendirme/portal/service/",
+          "/uga/fonbilgilendirme/portal/service/swagger-ui.html"]:
+    hit(d)
+
+p("\n== candidate fund-list / portfolio methods (GET) ==")
+for m in ["/api/fund", "/api/funds", "/api/fon", "/api/fundList", "/api/getFundList",
+          "/api/fund/all", "/api/funds/all", "/api/fund/getFunds", "/api/fundProfile",
+          "/api/fund/getFundProfile", "/api/portfolio", "/api/portfoy", "/api/fundPortfolio",
+          "/api/fund/getFundPortfolio", "/api/portfolioDistribution", "/api/fonDagilim",
+          "/api/fund/list", "/api/fundprices", "/api/price", "/api/fundReturn",
+          "/api/fundAllocation", "/api/asset", "/api/instrument", "/api/fund/portfolio"]:
+    hit(m)
+
+p("\n== same names directly on the backend base (no /api) ==")
+for m in ["fund", "funds", "fundList", "getFundList", "portfolio", "fonDagilim"]:
+    hit("/uga/fonbilgilendirme/portal/service/" + m)
+
+p("\n== a couple POSTs ==")
+for m in ["/api/fundList", "/api/funds", "/api/fund/search", "/api/search"]:
+    hit(m, "post", {})
+
+p("\n[probe9] done")
