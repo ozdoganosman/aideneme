@@ -1,89 +1,64 @@
 """
-One-off PROBE (runs in CI, which has open internet) to discover what fund
-portfolio data TEFAS/KAP actually expose — so we can build a real fetcher for a
-"Fonlar" view (monthly holdings + buy/sell diffs). Prints truncated responses to
-the workflow log. Safe to delete once the real fetcher exists.
+PROBE v2 (runs in CI) — find KAP's internal API for investment-fund portfolio
+disclosures (stock-level monthly holdings). Dumps responses to the workflow log.
+Temporary; deleted once the real fetcher exists.
 """
 from __future__ import annotations
 
+import re
 import sys
 
 import requests
 
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 S = requests.Session()
-S.headers.update({"User-Agent": UA, "Accept-Language": "tr,en;q=0.8"})
+S.headers.update({
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+})
 
 
-def show(name: str, r: requests.Response, n: int = 1800) -> None:
-    ct = r.headers.get("content-type", "")
-    print(f"\n===== {name} -> HTTP {r.status_code} · {len(r.content)} bytes · {ct} =====")
+def show(name: str, r: requests.Response, n: int = 1600) -> None:
+    print(f"\n===== {name} -> HTTP {r.status_code} · {len(r.content)} bytes · {r.headers.get('content-type','')} =====")
     print(r.text[:n])
     sys.stdout.flush()
 
 
-API = "https://www.tefas.gov.tr/api/DB/"
-HDR = {
-    "X-Requested-With": "XMLHttpRequest",
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "Referer": "https://www.tefas.gov.tr/FonAnaliz.aspx",
-    "Origin": "https://www.tefas.gov.tr",
+# 1) KAP disclosure-query API (POST JSON). The classic backend endpoint.
+body = {
+    "fromDate": "2026-05-01", "toDate": "2026-06-18", "year": "", "prd": "", "term": "",
+    "ruleType": "", "bdkReview": "", "disclosureClass": "", "index": "", "market": "",
+    "isLate": "", "subjectList": [], "mkkMemberOidList": [], "inactiveMkkMemberOidList": [],
+    "bdkMemberOidList": [], "mainSector": "", "sector": "", "subSector": "",
+    "memberType": "", "fromSrc": "N", "srcCategory": "", "discType": "", "keywords": "",
 }
-SAMPLE = "TTE"  # placeholder; the universe call below reveals valid codes
+for path in ["/tr/api/memberDisclosureQuery", "/api/memberDisclosureQuery",
+             "/tr/api/disclosures/query", "/tr/api/disclosure/query"]:
+    for method in ("post", "get"):
+        try:
+            url = "https://www.kap.org.tr" + path
+            kw = dict(timeout=35, headers={"Content-Type": "application/json",
+                                           "Referer": "https://www.kap.org.tr/tr/bildirim-sorgu"})
+            r = S.post(url, json=body, **kw) if method == "post" else S.get(url, timeout=35)
+            show(f"{method.upper()} {path}", r, 1200)
+        except Exception as e:  # noqa
+            print(f"{method} {path} err:", repr(e))
 
-# 0) Warm up cookies on the analysis page + peek at the HTML (any embedded data?).
-try:
-    r = S.get(f"https://www.tefas.gov.tr/FonAnaliz.aspx?FonKod={SAMPLE}", timeout=40,
-              headers={"Referer": "https://www.tefas.gov.tr/"})
-    show(f"GET FonAnaliz {SAMPLE} (html head)", r, 900)
-except Exception as e:  # noqa
-    print("FonAnaliz error:", repr(e))
-
-# 1) Asset-class allocation (known endpoint) — confirms reachability + shape.
-for code in [SAMPLE, "AFA", "GAF", "TGE", "IPV"]:
+# 2) KAP pages → harvest real /api/ paths + buildId from the SPA HTML.
+for url in ["https://www.kap.org.tr/tr/bildirim-sorgu",
+            "https://www.kap.org.tr/tr/Fonlar",
+            "https://www.kap.org.tr/tr/yatirim-fonlari"]:
     try:
-        r = S.post(API + "BindHistoryAllocation",
-                   data={"fontip": "YAT", "fonkod": code, "bastarih": "01.04.2026", "bittarih": "18.06.2026"},
-                   headers=HDR, timeout=40)
-        show(f"POST BindHistoryAllocation {code}", r, 1400)
+        r = S.get(url, timeout=35)
+        print(f"\n##### GET {url} -> {r.status_code} · {len(r.content)} bytes")
+        apis = sorted(set(re.findall(r'["\'](/[a-zA-Z0-9_\-/]*[Aa]pi[a-zA-Z0-9_\-/]*)["\']', r.text)))
+        print("api-ish paths:", apis[:50])
+        ep = sorted(set(re.findall(r'(https?://[a-zA-Z0-9_.\-]*kap[a-zA-Z0-9_.\-/]*api[a-zA-Z0-9_.\-/]*)', r.text)))
+        print("kap api urls:", ep[:30])
+        print("buildId:", re.findall(r'"buildId":"([^"]+)"', r.text)[:2])
+        print("next routes:", sorted(set(re.findall(r'/tr/[a-zA-Z0-9\-]+/[a-zA-Z0-9\-]+', r.text)))[:30])
     except Exception as e:  # noqa
-        print(f"alloc {code} error:", repr(e))
+        print(url, "err:", repr(e))
 
-# 2) Fund universe (valid codes + available fields).
-try:
-    r = S.post(API + "BindComparisonFundReturns",
-               data={"calismatipi": "2", "fontip": "YAT", "sfontur": "", "kurucukod": "",
-                     "fongrup": "", "bastarih": "01.06.2026", "bittarih": "18.06.2026",
-                     "fonturkod": "", "fonunvantip": "", "strperiod": "1,1,1,1,1,1,1", "islemdurum": "1"},
-               headers=HDR, timeout=80)
-    show("POST BindComparisonFundReturns (universe)", r, 1400)
-except Exception as e:  # noqa
-    print("universe error:", repr(e))
-
-# 3) Guess detailed-portfolio endpoints (stock-level holdings is the goal).
-guesses = [
-    ("BindHistoryInfo", {"fontip": "YAT", "sfontur": "", "fonkod": SAMPLE, "fongrup": "",
-                          "bastarih": "01.06.2026", "bittarih": "18.06.2026", "fonturkod": "", "fonunvantip": ""}),
-    ("GetAllFundAnalyzeData", {"dil": "TR", "fonkod": SAMPLE}),
-    ("BindFundPortfolio", {"fonkod": SAMPLE}),
-    ("BindGetFundPortfolioDetail", {"fonkod": SAMPLE}),
-]
-for ep, payload in guesses:
-    try:
-        r = S.post(API + ep, data=payload, headers=HDR, timeout=40)
-        show(f"POST {ep} {SAMPLE}", r, 1100)
-    except Exception as e:  # noqa
-        print(f"{ep} error:", repr(e))
-
-# 4) KAP — does it expose fund portfolio disclosures programmatically?
-for url in [
-    "https://www.kap.org.tr/tr/api/memberDisclosureQuery",
-    "https://www.kap.org.tr/tr/bist-sirketler",
-]:
-    try:
-        r = S.get(url, timeout=40, headers={"Referer": "https://www.kap.org.tr/"})
-        show(f"GET {url}", r, 700)
-    except Exception as e:  # noqa
-        print(f"kap {url} error:", repr(e))
-
-print("\n[probe] done")
+print("\n[probe2] done")
