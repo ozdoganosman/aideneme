@@ -1,0 +1,21 @@
+name: funds-probe
+
+# Temporary research job: discover TEFAS/KAP fund-portfolio data shape from CI
+# (open internet). Triggered by editing the probe; also runnable manually.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/funds_probe.py'
+      - '.github/workflows/funds-probe.yml'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - run: python scripts/funds_probe.py
