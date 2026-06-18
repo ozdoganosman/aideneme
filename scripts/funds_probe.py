@@ -1,12 +1,11 @@
 """
-PROBE v16 (CI) — call the single-fund detail endpoints with corrected field
-names (fonKodu/dil/fonTipi/tarih) and check whether any returns STOCK-LEVEL
-holdings (individual BIST securities). Also dump chunk context for their bodies.
+PROBE v17 (CI) — fix the date format (ISO) and call the distribution / fund-detail
+endpoints; inspect whether the result is STOCK-LEVEL (individual BIST securities)
+or asset-CATEGORY level. This settles whether "which stocks" is obtainable.
 """
 from __future__ import annotations
 
 import json
-import re
 import sys
 
 import requests
@@ -22,42 +21,34 @@ def p(*a):
     sys.stdout.flush()
 
 
-shell = S.get(BASE + "/api/fund", timeout=20).text
-common = next(c for c in re.findall(r'/_next/static/[\w./\-]+\.js', shell) if "common" in c)
-t = S.get(BASE + common, timeout=20).text
-for needle in ["fetchFonDetay", "fonProfilDty", "fetchFonProfil", "DetayGetir", "fonBilgi/"]:
-    m = re.search(needle, t)
-    if m:
-        i = m.start()
-        p(f"\n--- {needle} --- …{t[max(0,i-40):i+360]}…".replace("\n", " "))
-
-
-def post(ep, body):
+def post(ep, body, n=900):
     try:
         rr = S.post(BASE + ep, data=json.dumps(body),
-                    headers={"Content-Type": "application/json", "Referer": BASE + "/"}, timeout=20)
+                    headers={"Content-Type": "application/json", "Referer": BASE + "/"}, timeout=25)
     except Exception as e:  # noqa
         p(f"  POST {ep} err {repr(e)[:40]}"); return
     txt = rr.text
-    flags = "".join(f" <{k}>" for k in ["ISIN", "hisseKod", "menkulKiymet", "varlik", "BIST",
-                                        "nominal", "AKBNK", "THYAO", "ASELS", "kiymetTuru", "yuzde"] if k in txt)
-    p(f"\n  POST {ep} {json.dumps(body, ensure_ascii=False)} -> {rr.status_code} {len(rr.content)}B{flags}")
-    p(f"    {txt[:600]!r}")
+    flags = "".join(f" <{k}>" for k in ["ISIN", "hisse", "Hisse", "menkul", "Menkul", "AKBNK",
+                                        "THYAO", "ASELS", "GARAN", "kiymet", "Kiymet", "BIST"] if k in txt)
+    p(f"\n  POST {ep} {json.dumps(body, ensure_ascii=False)[:90]} -> {rr.status_code} {len(rr.content)}B{flags}")
+    p(f"    {txt[:n]!r}")
 
 
-for ep in ["/api/funds/fonDetayGetir", "/api/funds/fonProfilDtyGetir", "/api/funds/fonBilgiGetir"]:
+# 1) distribution with ISO dates
+for d in ["2026-06-16", "2026-06-15"]:
+    post("/api/funds/dagilimSiraliGetirT", {
+        "dil": "TR", "fonTipi": "YAT", "kurucuKodu": None, "fonTurKod": None, "fonGrubu": None,
+        "fonTurAciklama": None, "islem": None, "fonKodu": "HFR", "ilkKayit": 0, "kayitSayisi": 50,
+        "calismaTipi": "1", "basTarih": d, "bitTarih": d})
+
+# 2) fund detail / profile with ISO date (weekday) variants
+for ep in ["/api/funds/fonDetayGetir", "/api/funds/fonProfilDtyGetir"]:
     for body in [
-        {"fonKodu": "HFR", "dil": "TR"},
-        {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT"},
-        {"fonKodu": "HFR", "dil": "TR", "tarih": "30.05.2026"},
-        {"fonKodu": "HFR", "dil": "TR", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"},
+        {"fonKodu": "HFR", "dil": "TR", "tarih": "2026-06-16"},
+        {"fonKodu": "HFR", "dil": "TR", "fonTip": "YAT", "tarih": "2026-06-16"},
+        {"fonKodu": "HFR", "dil": "TR", "basTarih": "2026-06-01", "bitTarih": "2026-06-16"},
+        {"fonKodu": "HFR", "dil": "TR", "calismaTipi": "1", "tarih": "2026-06-16"},
     ]:
-        post(ep, body)
+        post(ep, body, 700)
 
-# distribution with the schema seen in the chunk
-post("/api/funds/dagilimSiraliGetirT", {
-    "dil": "TR", "fonTipi": "YAT", "kurucuKodu": None, "fonTurKod": None, "fonGrubu": None,
-    "fonTurAciklama": None, "islem": None, "fonKodu": "HFR", "ilkKayit": 0, "kayitSayisi": 50,
-    "calismaTipi": "1", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"})
-
-p("\n[probe16] done")
+p("\n[probe17] done")
