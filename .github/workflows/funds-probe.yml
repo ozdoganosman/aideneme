@@ -1,13 +1,17 @@
 name: funds-probe
 
-# Temporary research job: discover TEFAS/KAP fund-portfolio data shape from CI
-# (open internet). Triggered by editing the probe; also runnable manually.
+# Temporary research job: probe KAP from CI (open internet) and commit the output
+# back as probe_out.txt so we can read it without huge API calls. [skip ci] on the
+# write-back avoids retriggering. Delete this workflow once the real fetcher lands.
 on:
   workflow_dispatch:
   push:
     paths:
       - 'scripts/funds_probe.py'
       - '.github/workflows/funds-probe.yml'
+
+permissions:
+  contents: write
 
 jobs:
   probe:
@@ -18,4 +22,12 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install requests
-      - run: python scripts/funds_probe.py
+      - run: python scripts/funds_probe.py > probe_out.txt 2>&1 || true
+      - name: commit output
+        run: |
+          git config user.name "probe-bot"
+          git config user.email "probe@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git add probe_out.txt
+          git commit -m "probe output [skip ci]" || echo "no change"
+          git push origin "HEAD:${GITHUB_REF_NAME}" || true
