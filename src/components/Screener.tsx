@@ -1,38 +1,21 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
-import { emaArr, adxArr, rocArr, rollingHighest, rollingLowest, activePeriod, IndicatorParams } from '../indicators/calc';
+import { emaArr, adxArr, rocArr, rollingHighest, rollingLowest, IndicatorParams } from '../indicators/calc';
 import { useEscClose } from '../useEscClose';
 
 // ── Live (period-aware) indicator filter ─────────────────────────────────────
 // The fast Screener filters a fixed-period snapshot; this computes an indicator
 // at ANY period on demand (downloads candles for the snapshot-filtered subset).
+// A live filter, param-aware: compare active indicator `a` to a value, or to
+// another active indicator `b`. Periods are NOT stored — they always come from
+// the chart's current params at evaluation time (see ACTIVE / activeValue).
 interface LiveF {
-  ind: string;
-  period: number; // primary period (for %R EMA: the Williams %R lookback)
-  period2?: number; // EMA length — only for %R EMA (two-period composite)
+  a: string; // active indicator key (left side)
   op: 'gt' | 'lt';
-  val: number;
+  b: string | null; // active indicator key (right side); null → compare to `val`
+  val: number; // used when b === null
 }
-// Default (snapshot) periods — shown as placeholders so "boş = bu varsayılan"
-// is obvious, and so the fixed "(28)/(260)" in a column name stops looking like
-// it contradicts the editable period box. Keyed by the live-indicator key.
-const PRIMARY_DEF: Record<string, number> = { rsi: 14, wr: 260, wrema: 260, adx: 28, adxema: 28, roc: 260, rocema: 260, emadist: 50 };
-// Live indicators that are a smoothing of a base indicator → two periods (base
-// lookback + EMA length), so they get two boxes instead of one.
-const TWO_PERIOD = new Set(['wrema', 'adxema', 'rocema']);
-const BASE_LABEL: Record<string, string> = { wrema: '%R', adxema: 'ADX', rocema: 'ROC' };
-const LIVE_INDS: { key: string; label: string }[] = [
-  { key: 'wr', label: 'Williams %R' },
-  { key: 'wrema', label: '%R EMA' },
-  { key: 'rsi', label: 'RSI' },
-  { key: 'adx', label: 'ADX' },
-  { key: 'adxema', label: 'ADX EMA' },
-  { key: 'roc', label: 'Momentum / ROC %' },
-  { key: 'rocema', label: 'Momentum EMA' },
-  { key: 'emadist', label: 'Fiyat/EMA farkı %' },
-];
-const liveLabel = (k: string) => LIVE_INDS.find((i) => i.key === k)?.label ?? k;
 const liveCandles = new Map<string, Candles>(); // session cache (avoid re-downloading)
 
 function rsiLast(close: Float64Array, len: number): number {
@@ -85,14 +68,54 @@ function liveValue(c: Candles, ind: string, p: number, p2?: number): number {
   return pr[last];
 }
 
+// ── Active (param-aware) live indicators ────────────────────────────────────
+// These mirror the chart's indicator lines and are ALWAYS computed at the
+// chart's CURRENT parameters (no manual period box). The exact same set is used
+// for the filter target, the "vs indicator" comparison, and as live columns —
+// so filtering and the comparison data are formed identically.
+interface ActiveInd {
+  key: string; // stable id (also the live column key)
+  ind: string; // liveValue() indicator
+  base: (p: IndicatorParams) => number; // primary period (chart param)
+  ema?: (p: IndicatorParams) => number; // EMA length, for compound indicators
+  label: (p: IndicatorParams) => string;
+}
+const ACTIVE: ActiveInd[] = [
+  { key: 'a_wr', ind: 'wr', base: (p) => p.wr, label: (p) => `Williams %R (${p.wr})` },
+  { key: 'a_wreA', ind: 'wrema', base: (p) => p.wr, ema: (p) => p.wrEmaA, label: (p) => `%R EMA (${p.wr}/${p.wrEmaA})` },
+  { key: 'a_wreB', ind: 'wrema', base: (p) => p.wr, ema: (p) => p.wrEmaB, label: (p) => `%R EMA (${p.wr}/${p.wrEmaB})` },
+  { key: 'a_adx', ind: 'adx', base: (p) => p.adx, label: (p) => `ADX (${p.adx})` },
+  { key: 'a_adxe', ind: 'adxema', base: (p) => p.adx, ema: (p) => p.adxEma, label: (p) => `ADX EMA (${p.adx}/${p.adxEma})` },
+  { key: 'a_roc', ind: 'roc', base: (p) => p.roc, label: (p) => `Momentum (${p.roc})` },
+  { key: 'a_roce', ind: 'rocema', base: (p) => p.roc, ema: (p) => p.rocEma, label: (p) => `Momentum EMA (${p.roc}/${p.rocEma})` },
+  { key: 'a_emad', ind: 'emadist', base: (p) => p.emaFast, label: (p) => `Fiyat/EMA farkı (${p.emaFast})` },
+  { key: 'a_rsi', ind: 'rsi', base: () => 14, label: () => 'RSI (14)' },
+];
+const ACT = (k: string): ActiveInd | undefined => ACTIVE.find((a) => a.key === k);
+const isActiveKey = (k: string): boolean => k.startsWith('a_');
+const activeLabel = (k: string, p: IndicatorParams): string => ACT(k)?.label(p) ?? k;
+function activeValue(c: Candles, key: string, p: IndicatorParams): number {
+  const a = ACT(key);
+  return a ? liveValue(c, a.ind, a.base(p), a.ema ? a.ema(p) : undefined) : NaN;
+}
+
 interface Props {
   onClose: () => void;
   onSelect: (s: string) => void;
   onAddToWatch: (syms: string[], mode: 'add' | 'new') => void;
-  params: IndicatorParams; // chart's active periods → seed the live filter
+  params: IndicatorParams; // chart's active periods → power the live indicators
 }
 
-function readScrState(): { view?: number; filters?: Filter[]; sort?: { key: Key; dir: 1 | -1 }; q?: string } {
+function readScrState(): {
+  view?: number;
+  filters?: Filter[];
+  sort?: { key: Key; dir: 1 | -1 };
+  q?: string;
+  liveFs?: LiveF[];
+  liveSet?: string[];
+  liveVals?: Record<string, Record<string, number>>;
+  psig?: string;
+} {
   try {
     return JSON.parse(localStorage.getItem('borsaScrState') || '{}');
   } catch {
@@ -137,25 +160,9 @@ const COLS: ColDef[] = [
 ];
 const COL = (k: Key): ColDef => COLS.find((c) => c.key === k) as ColDef;
 
-// Snapshot columns that can ALSO be computed live at a custom period.
-const SNAP_TO_LIVE: Partial<Record<Key, string>> = { rsi: 'rsi', wr: 'wr', wre: 'wrema', wre2: 'wrema', adx: 'adx', roc: 'roc' };
-// %R EMA's EMA length per snapshot column (the %R lookback is 260 for both).
-const EMA_DEF: Partial<Record<Key, number>> = { wre: 260, wre2: 120 };
-// Live-only targets (no snapshot column): computed live on demand.
-const EMADIST_KEY = 'emadist' as Key;
-const ADXEMA_KEY = 'adxema' as Key;
-const ROCEMA_KEY = 'rocema' as Key;
-const LIVE_ONLY_KEYS = new Set<Key>([EMADIST_KEY, ADXEMA_KEY, ROCEMA_KEY]);
-// Filter targets = snapshot columns + the live-only ones.
-const TARGETS: ColDef[] = [
-  ...COLS,
-  { key: EMADIST_KEY, label: 'Fiyat/EMA farkı % (canlı)', kind: 'num' },
-  { key: ADXEMA_KEY, label: 'ADX EMA (canlı)', kind: 'num' },
-  { key: ROCEMA_KEY, label: 'Momentum EMA (canlı)', kind: 'num' },
-];
-const TGT = (k: Key): ColDef => TARGETS.find((c) => c.key === k) ?? COL(k);
-const liveIndFor = (k: Key): string | null =>
-  k === EMADIST_KEY ? 'emadist' : k === ADXEMA_KEY ? 'adxema' : k === ROCEMA_KEY ? 'rocema' : SNAP_TO_LIVE[k] ?? null;
+// A filter target is either a snapshot column (instant) or an active indicator
+// key (live, param-aware). Active targets are always numeric.
+const targetKind = (k: string): Kind => (isActiveKey(k) ? 'num' : COL(k as Key).kind);
 
 const VIEWS: { label: string; cols: Key[] }[] = [
   { label: 'Genel', cols: ['p', 'ch', 'rsi', 'r1y', 'vol', 'e200'] },
@@ -198,11 +205,12 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   const [filters, setFilters] = useState<Filter[]>(() => readScrState().filters ?? []);
   const [sort, setSort] = useState<{ key: Key; dir: 1 | -1 }>(() => readScrState().sort ?? { key: 'r1y', dir: -1 });
   const [msg, setMsg] = useState('');
-  const [fk, setFk] = useState<Key>('wr');
+  const [fk, setFk] = useState<string>('wr'); // snapshot column key OR active indicator key
   const [op, setOp] = useState('gt');
   const [val, setVal] = useState('50');
-  const [cmp, setCmp] = useState<'val' | 'field'>('val');
-  const [fk2, setFk2] = useState<Key>('r3m');
+  const [cmp, setCmp] = useState<'val' | 'field'>('val'); // 'field' = compare to another column/indicator
+  const [fk2, setFk2] = useState<Key>('r3m'); // snapshot compare column
+  const [bk, setBk] = useState<string>('a_roc'); // active-indicator compare (active target)
   const [q, setQ] = useState<string>(() => readScrState().q ?? '');
   const [saved, setSaved] = useState<{ name: string; view: number; filters: Filter[] }[]>(() => {
     try {
@@ -212,12 +220,25 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     }
   });
   const [saveName, setSaveName] = useState('');
-  // Optional custom period for the filter above. Empty → use the fixed-period
-  // snapshot value (instant). Filled → run "live" (download candles + compute).
-  const [lp, setLp] = useState('');
-  const [lp2, setLp2] = useState(''); // %R EMA's EMA period (second box)
-  const [liveFs, setLiveFs] = useState<LiveF[]>([]);
-  const [liveSet, setLiveSet] = useState<Set<string> | null>(null);
+  // Signature of the chart params the live results were computed with. Results
+  // are restored only when it still matches → "params değişmediyse kalsın".
+  const psig = useMemo(() => JSON.stringify(params), [params]);
+  // Live indicator values per symbol (active key → value), filled by "Canlı
+  // uygula"; powers both the live filter AND the live columns (same data).
+  const [liveVals, setLiveVals] = useState<Record<string, Record<string, number>>>(() => {
+    const s = readScrState();
+    return s.liveVals && s.psig === JSON.stringify(params) ? s.liveVals : {};
+  });
+  // Live filters persist always (they reference indicators, not periods); live
+  // RESULTS persist only while the params they used are unchanged.
+  const [liveFs, setLiveFs] = useState<LiveF[]>(() => {
+    const s = readScrState();
+    return Array.isArray(s.liveFs) ? s.liveFs : [];
+  });
+  const [liveSet, setLiveSet] = useState<Set<string> | null>(() => {
+    const s = readScrState();
+    return Array.isArray(s.liveSet) && s.psig === JSON.stringify(params) ? new Set(s.liveSet) : null;
+  });
   const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
@@ -231,10 +252,24 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   useEffect(() => {
     localStorage.setItem('borsaScreens', JSON.stringify(saved));
   }, [saved]);
-  // Remember the last screen state so leaving to view a stock doesn't reset it.
+  // Remember the last screen state (incl. live filters + results) so leaving to
+  // view a stock — or closing the screener — doesn't reset it.
   useEffect(() => {
-    localStorage.setItem('borsaScrState', JSON.stringify({ view, filters, sort, q }));
-  }, [view, filters, sort, q]);
+    localStorage.setItem(
+      'borsaScrState',
+      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null, liveVals, psig }),
+    );
+  }, [view, filters, sort, q, liveFs, liveSet, liveVals, psig]);
+  // Chart params changed → live results are stale: drop them (keep the filters),
+  // so the next "Canlı uygula" recomputes with the new parameters.
+  const prevPsig = useRef(psig);
+  useEffect(() => {
+    if (prevPsig.current !== psig) {
+      prevPsig.current = psig;
+      setLiveSet(null);
+      setLiveVals({});
+    }
+  }, [psig]);
 
   const addWatch = (mode: 'add' | 'new') => {
     const syms = rows.map((r) => r.s);
@@ -244,15 +279,9 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     window.setTimeout(() => setMsg(''), 2500);
   };
 
-  const kind = TGT(fk).kind;
-  const liveInd = liveIndFor(fk); // live indicator key, or null if snapshot-only column
-  const isTwo = !!liveInd && TWO_PERIOD.has(liveInd); // two boxes (base lookback + EMA)
-  const liveOnly = LIVE_ONLY_KEYS.has(fk); // no snapshot value → always live
-  // This filter runs live when a custom period is given (or the target is live-only).
-  const liveMode =
-    !!liveInd &&
-    cmp === 'val' &&
-    (liveOnly || (isTwo ? lp.trim() !== '' || lp2.trim() !== '' : lp.trim() !== ''));
+  const isAct = isActiveKey(fk); // active (live, param-aware) indicator vs snapshot column
+  const kind = targetKind(fk);
+  const liveMode = isAct; // active targets always evaluate live (download + compute)
 
   // Columns shown = the selected view + any column we're filtering on (so the
   // values you filter by are always visible in the table).
@@ -276,6 +305,16 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     });
     return [...base, ...extra];
   }, [view, filterKeys]);
+  // Active indicators referenced by live filters → shown as live columns (same
+  // values the live filter used). Computed by "Canlı uygula" into liveVals.
+  const liveCols = useMemo(() => {
+    const s = new Set<string>();
+    for (const f of liveFs) {
+      s.add(f.a);
+      if (f.b) s.add(f.b);
+    }
+    return [...s];
+  }, [liveFs]);
 
   // Snapshot-filtered + searched + sorted (before any live filter).
   const base = useMemo(() => {
@@ -303,11 +342,16 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   const runLive = async () => {
     if (!liveFs.length) {
       setLiveSet(null);
+      setLiveVals({});
       return;
     }
+    // Every active indicator referenced (both sides) — computed once per symbol
+    // at the chart params; the same values feed the filter AND the live columns.
+    const usedKeys = [...new Set(liveFs.flatMap((f) => (f.b ? [f.a, f.b] : [f.a])))];
     const syms = base.map((r) => r.s);
     setLiveRun({ done: 0, total: syms.length });
     const pass = new Set<string>();
+    const vals: Record<string, Record<string, number>> = {};
     const queue = [...syms];
     let done = 0;
     const worker = async () => {
@@ -323,10 +367,14 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
           }
         }
         if (c && c.length >= 30) {
+          const row: Record<string, number> = {};
+          for (const k of usedKeys) row[k] = activeValue(c, k, params);
+          vals[sym] = row;
           let ok = true;
           for (const f of liveFs) {
-            const v = liveValue(c, f.ind, f.period, f.period2);
-            if (!Number.isFinite(v) || (f.op === 'gt' ? !(v > f.val) : !(v < f.val))) {
+            const v = row[f.a];
+            const t = f.b ? row[f.b] : f.val;
+            if (!Number.isFinite(v) || !Number.isFinite(t) || (f.op === 'gt' ? !(v > t) : !(v < t))) {
               ok = false;
               break;
             }
@@ -340,35 +388,38 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     };
     await Promise.all(Array.from({ length: 6 }, worker));
     setLiveSet(pass);
+    setLiveVals(vals);
     setLiveRun(null);
   };
 
   const addFilter = () => {
-    // Live path: a custom period (or the live-only target) → download + compute.
-    if (liveMode && liveInd) {
-      const period = Math.max(1, Math.round(Number(lp) || PRIMARY_DEF[liveInd] || activePeriod(liveInd, params) || 14));
-      const period2 = isTwo ? Math.max(1, Math.round(Number(lp2) || EMA_DEF[fk] || 120)) : undefined;
-      const v = parseFloat(val.replace(',', '.'));
-      if (!Number.isFinite(period) || !Number.isFinite(v)) return;
+    // Active (param-aware) target → live filter vs a value OR another active
+    // indicator. Periods always come from the chart params (no manual entry).
+    if (isAct) {
       const o: 'gt' | 'lt' = op === 'lt' || op === 'lte' ? 'lt' : 'gt';
-      setLiveFs((fs) => [
-        ...fs.filter((x) => !(x.ind === liveInd && x.period === period && x.period2 === period2 && x.op === o)),
-        { ind: liveInd, period, period2, op: o, val: v },
-      ]);
+      const b = cmp === 'field' ? bk : null;
+      if (b === fk) return; // indicator vs itself
+      let v = 0;
+      if (!b) {
+        v = parseFloat(val.replace(',', '.'));
+        if (!Number.isFinite(v)) return;
+      }
+      setLiveFs((fs) => [...fs.filter((x) => !(x.a === fk && x.b === b && x.op === o)), { a: fk, op: o, b, val: v }]);
       setLiveSet(null); // needs re-apply
       return;
     }
     // Snapshot path: filter the already-loaded snapshot (instant).
+    const sk = fk as Key;
     let f: Filter;
     if (kind === 'bool') {
-      f = { key: fk, op: 'is', val: Number(val) || 0 };
+      f = { key: sk, op: 'is', val: Number(val) || 0 };
     } else if (cmp === 'field') {
-      if (fk2 === fk) return;
-      f = { key: fk, op, mode: 'field', key2: fk2, val: 0 };
+      if (fk2 === sk) return;
+      f = { key: sk, op, mode: 'field', key2: fk2, val: 0 };
     } else {
       const v = parseFloat(val.replace(',', '.'));
       if (!isFinite(v)) return;
-      f = { key: fk, op, mode: 'val', val: v };
+      f = { key: sk, op, mode: 'val', val: v };
     }
     setFilters((fs) => [...fs.filter((x) => !(x.key === f.key && x.op === f.op && x.key2 === f.key2)), f]);
   };
@@ -420,22 +471,25 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                 <select
                   value={fk}
                   onChange={(e) => {
-                    const k = e.target.value as Key;
+                    const k = e.target.value;
                     setFk(k);
-                    setOp(TGT(k).kind === 'bool' ? 'is' : 'gt');
-                    setVal(TGT(k).kind === 'bool' ? '1' : '');
+                    const bool = targetKind(k) === 'bool';
+                    setOp(bool ? 'is' : 'gt');
+                    setVal(bool ? '1' : '');
                     setCmp('val');
-                    setLp2('');
-                    // live-only target needs a period; otherwise empty = snapshot default.
-                    if (k === EMADIST_KEY) setLp(String(activePeriod('emadist', params) || 50));
-                    else setLp('');
+                    if (isActiveKey(k) && bk === k) setBk(ACTIVE.find((a) => a.key !== k)!.key);
                   }}
                 >
-                  {TARGETS.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.label}
-                    </option>
-                  ))}
+                  <optgroup label="Snapshot (hızlı)">
+                    {COLS.map((c) => (
+                      <option key={c.key} value={c.key}>{c.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🔬 Aktif göstergeler (grafik · canlı)">
+                    {ACTIVE.map((a) => (
+                      <option key={a.key} value={a.key}>{a.label(params)}</option>
+                    ))}
+                  </optgroup>
                 </select>
                 {kind === 'bool' ? (
                   <select value={val} onChange={(e) => setVal(e.target.value)}>
@@ -444,52 +498,20 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                   </select>
                 ) : (
                   <>
-                    {liveInd && !isTwo && (
-                      <input
-                        className="scr-lp"
-                        value={lp}
-                        inputMode="numeric"
-                        placeholder={String(PRIMARY_DEF[liveInd] ?? 'periyot')}
-                        title="Periyot (gün). Doldurursan canlı hesaplanır (hisseleri indirir). Boş = placeholder'daki hazır snapshot periyodu."
-                        onChange={(e) => setLp(e.target.value)}
-                      />
-                    )}
-                    {isTwo && liveInd && (
-                      <>
-                        <input
-                          className="scr-lp"
-                          value={lp}
-                          inputMode="numeric"
-                          placeholder={`${BASE_LABEL[liveInd]} ${PRIMARY_DEF[liveInd]}`}
-                          title={`${BASE_LABEL[liveInd]} taban periyodu (gün). Boş = ${PRIMARY_DEF[liveInd]}.`}
-                          onChange={(e) => setLp(e.target.value)}
-                        />
-                        <input
-                          className="scr-lp"
-                          value={lp2}
-                          inputMode="numeric"
-                          placeholder={`EMA ${EMA_DEF[fk] ?? 120}`}
-                          title={`EMA periyodu (gün). Boş = ${EMA_DEF[fk] ?? 120}.`}
-                          onChange={(e) => setLp2(e.target.value)}
-                        />
-                      </>
-                    )}
                     <select
-                      value={liveMode ? (op === 'lt' || op === 'lte' ? 'lt' : 'gt') : op}
+                      value={isAct ? (op === 'lt' || op === 'lte' ? 'lt' : 'gt') : op}
                       onChange={(e) => setOp(e.target.value)}
                     >
                       <option value="gt">&gt; büyük</option>
-                      {!liveMode && <option value="gte">≥</option>}
+                      {!isAct && <option value="gte">≥</option>}
                       <option value="lt">&lt; küçük</option>
-                      {!liveMode && <option value="lte">≤</option>}
-                      {!liveMode && <option value="eq">= eşit</option>}
+                      {!isAct && <option value="lte">≤</option>}
+                      {!isAct && <option value="eq">= eşit</option>}
                     </select>
-                    {!liveOnly && (
-                      <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir kolon mu?">
-                        <option value="val">Değer</option>
-                        <option value="field">Veri (kolon)</option>
-                      </select>
-                    )}
+                    <select value={cmp} onChange={(e) => setCmp(e.target.value as 'val' | 'field')} title="Sabit değer mi başka bir gösterge/kolon mu?">
+                      <option value="val">Değer</option>
+                      <option value="field">{isAct ? 'Gösterge' : 'Veri (kolon)'}</option>
+                    </select>
                     {cmp === 'val' ? (
                       <input
                         value={val}
@@ -498,6 +520,12 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                         onChange={(e) => setVal(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && addFilter()}
                       />
+                    ) : isAct ? (
+                      <select value={bk} onChange={(e) => setBk(e.target.value)}>
+                        {ACTIVE.filter((a) => a.key !== fk).map((a) => (
+                          <option key={a.key} value={a.key}>{a.label(params)}</option>
+                        ))}
+                      </select>
                     ) : (
                       <select value={fk2} onChange={(e) => setFk2(e.target.value as Key)}>
                         {COLS.filter((c) => c.kind !== 'bool').map((c) => (
@@ -516,10 +544,10 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
               </div>
               {liveFs.length > 0 && (
                 <div className="scr-chips">
-                  <span className="lg-muted">🔬 Canlı (özel periyot):</span>
+                  <span className="lg-muted">🔬 Canlı (aktif göstergeler):</span>
                   {liveFs.map((f, i) => (
                     <span key={i} className="scr-fchip scr-fchip-live">
-                      {liveLabel(f.ind)}({f.period}{f.period2 != null ? `/${f.period2}` : ''}) {f.op === 'gt' ? '>' : '<'} {f.val}
+                      {activeLabel(f.a, params)} {f.op === 'gt' ? '>' : '<'} {f.b ? activeLabel(f.b, params) : f.val}
                       <button aria-label="Filtreyi kaldır" title="Filtreyi kaldır" onClick={() => { setLiveFs((fs) => fs.filter((_, idx) => idx !== i)); setLiveSet(null); }}>×</button>
                     </span>
                   ))}
@@ -643,6 +671,11 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                           {sort.key === k ? (sort.dir < 0 ? ' ↓' : ' ↑') : ''}
                         </th>
                       ))}
+                      {liveCols.map((k) => (
+                        <th key={k} className="scr-th-filtered cb-r" title="Canlı · grafik parametreleriyle">
+                          🔬 {activeLabel(k, params)}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -663,6 +696,14 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                         {cols.map((k) => (
                           <td key={k}>{cell(it, COL(k))}</td>
                         ))}
+                        {liveCols.map((k) => {
+                          const v = liveVals[it.s]?.[k];
+                          return (
+                            <td key={k} className="cb-r">
+                              {Number.isFinite(v) ? (v as number).toFixed(1) : '—'}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
@@ -671,8 +712,8 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                 {rows.length > 250 && <div className="bt-note">… ilk 250 gösteriliyor. Filtreyi daralt.</div>}
               </div>
               <div className="bt-hint">
-                ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç. <b>Periyot</b> kutusunu
-                doldurursan o gösterge istediğin periyotla <b>canlı</b> hesaplanır (boşsa kutudaki placeholder = hazır snapshot periyodu). <b>%R EMA / ADX EMA / Momentum EMA</b> iki periyotludur: <b>taban</b> lookback + <b>EMA</b> uzunluğu (iki kutu; canlı hesaplanır).
+                ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç. <b>🔬 Aktif göstergeler</b> grafikteki
+                parametrelerle <b>canlı</b> hesaplanır (hisseleri indirir) — aynı değerler hem filtre, hem kıyas (gösterge↔gösterge), hem de kolon olarak kullanılır. Kurduktan sonra <b>Canlı uygula</b>'ya bas. Parametreyi grafikten değiştirip yeniden uygula.
               </div>
             </>
           )}
