@@ -1,19 +1,19 @@
 """
-PROBE v14 (CI) — call fonturkey's portfolio-distribution endpoint
-(/api/funds/dagilimSiraliGetirT, POST) for one equity fund and see whether the
-response is STOCK-LEVEL (individual securities) — the make-or-break test.
+PROBE v15 (CI) — dump the common chunk around the portfolio API calls to recover
+the exact request body for dagilimSiraliGetirT, and probe single-fund detail
+("...Getir") endpoints for STOCK-LEVEL holdings.
 """
 from __future__ import annotations
 
 import json
+import re
 import sys
 
 import requests
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 S = requests.Session()
-S.headers.update({"User-Agent": UA, "Accept-Language": "tr-TR,tr;q=0.9", "Accept": "application/json,*/*",
-                  "Content-Type": "application/json", "Referer": "https://fonturkey.com.tr/"})
+S.headers.update({"User-Agent": UA, "Accept-Language": "tr-TR,tr;q=0.9", "Accept": "application/json,*/*"})
 BASE = "https://fonturkey.com.tr"
 
 
@@ -22,31 +22,43 @@ def p(*a):
     sys.stdout.flush()
 
 
-def post(path, body):
+# 1) Common chunk: context around the API client calls.
+shell = S.get(BASE + "/api/fund", timeout=20).text
+common = next(c for c in re.findall(r'/_next/static/[\w./\-]+\.js', shell) if "common" in c)
+t = S.get(BASE + common, timeout=20).text
+for needle in ["dagilimSiraliGetirT", "SB.post(", ".post(\"/", "fonGetir"]:
+    occ = list(re.finditer(re.escape(needle), t))
+    p(f"\n===== {needle} ({len(occ)} occ) =====")
+    for m in occ[:3]:
+        i = m.start()
+        p("…" + t[max(0, i - 260):i + 320].replace("\n", " ") + "…")
+
+# 2) Probe single-fund detail / holdings endpoints (POST), look for stock-level.
+def post(ep, body):
     try:
-        rr = S.post(BASE + path, data=json.dumps(body), timeout=20)
+        rr = S.post(BASE + ep, data=json.dumps(body),
+                    headers={"Content-Type": "application/json", "Referer": BASE + "/"}, timeout=20)
+        txt = rr.text
+        flag = ""
+        for k in ["ISIN", "hisseKod", "menkulKiymet", "varlikAdi", "BIST", "nominal", "AKBNK", "THYAO"]:
+            if k in txt:
+                flag += f" <{k}>"
+        p(f"\n  POST {ep} {json.dumps(body,ensure_ascii=False)} -> {rr.status_code} {len(rr.content)}B{flag}")
+        p(f"    {txt[:500]!r}")
     except Exception as e:  # noqa
-        p(f"  POST {path} {body} err {repr(e)[:40]}")
-        return
-    p(f"\n  POST {path}  body={json.dumps(body, ensure_ascii=False)}")
-    p(f"    -> {rr.status_code} {len(rr.content)}B {rr.headers.get('content-type','')[:24]}")
-    p(f"    {rr.text[:700]!r}")
+        p(f"  POST {ep} err {repr(e)[:40]}")
 
 
-bodies = [
-    {},
-    {"fonKod": "HFR", "dil": "TR"},
-    {"sFonturKod": "HFR", "fonTip": "YAT", "dil": "TR"},
-    {"fonKod": "HFR", "fonTip": "YAT", "dil": "TR", "sira": "", "yon": ""},
-    {"fonKod": "HFR"},
-    {"kurucuKod": None, "fonKod": "HFR", "fonTip": "YAT", "dil": "TR", "tarih": "2026-05-30"},
-]
-for ep in ["/api/funds/dagilimSiraliGetirT", "/api/funds/dagilimSiraliGetir"]:
-    for b in bodies:
-        post(ep, b)
+for ep in ["fonDetayGetir", "fonPortfoyGetir", "portfoyGetir", "portfoyDagilimGetir",
+           "varlikDagilimGetir", "fonDagilimGetir", "dagilimGetir", "enYuksekGetir", "fonVarlikGetir"]:
+    post("/api/funds/" + ep, {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"})
 
-# also a likely fund-list / general-info method to learn the schema
-for ep in ["/api/funds/fonGetir", "/api/funds/genelBilgiGetir", "/api/funds/B8", "/api/funds/listGetir"]:
-    post(ep, {"fonTip": "YAT", "dil": "TR"})
+# richer body for the known distribution endpoint
+for b in [
+    {"fonKodu": "HFR", "fonTip": "YAT", "dil": "TR", "ilkKayit": 0, "kayitSayisi": 100, "siraKolon": "fonKodu", "siraYon": "ASC"},
+    {"fonKodu": "HFR", "fonTip": "YAT", "dil": "TR", "baslangicTarih": "30.05.2026", "bitisTarih": "30.05.2026"},
+    {"fonKodu": ["HFR"], "fonTip": "YAT", "dil": "TR"},
+]:
+    post("/api/funds/dagilimSiraliGetirT", b)
 
-p("\n[probe14] done")
+p("\n[probe15] done")
