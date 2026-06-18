@@ -1,10 +1,36 @@
 funds parsed: 2139
 fundClass counts: {'DG': 517, 'HS': 473, 'KTF': 212, 'SF': 937}
-Traceback (most recent call last):
-  File "/home/runner/work/aideneme/aideneme/scripts/funds_probe.py", line 46, in <module>
-    perma = dict((m[4], (m[1], m[2])) for m in re.findall(
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/aideneme/aideneme/scripts/funds_probe.py", line 46, in <genexpr>
-    perma = dict((m[4], (m[1], m[2])) for m in re.findall(
-                  ~^^^
-IndexError: tuple index out of range
+permalinks parsed: 6010
+
+sample HS (equity) funds [oid,id,code,name,type,class,memberOid]:
+   HFR |  A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FO | memberOid 8acae2c494bafc93019566721bf70ddf | perma ('4028328c998ee9d50199c2d5b15b6fd9', 'hfr-a1-capital-portfoy-hisse-senedi-tl-fonu-hisse-senedi-yogun-fon')
+   BHN | A1 CAPİTAL PORTFÖY BANKACILIK SEKTÖRÜ DI | memberOid 8acae2c494bafc93019566721bf70ddf | perma ('4028328c9aaa2bf9019ab5a5525e167d', 'bhn-a1-capital-portfoy-bankacilik-sektoru-disi-sirketler-hisse-senedi-serbest-tl-fon-hisse-senedi-yogun-fon')
+   BYZ | A1 CAPİTAL PORTFÖY BIST 100 DIŞI ŞİRKETL | memberOid 8acae2c494bafc93019566721bf70ddf | perma ('4028328c9aaa2bf9019ab5a5c8471693', 'byz-a1-capital-portfoy-bist-100-disi-sirketler-hisse-senedi-serbest-tl-fon-hisse-senedi-yogun-fon')
+   CAH | A1 CAPİTAL PORTFÖY HİSSE SENEDİ SERBEST  | memberOid 8acae2c494bafc93019566721bf70ddf | perma ('4028328d98455cf6019898f223521a35', 'cah-a1-capital-portfoy-hisse-senedi-serbest-fon-hisse-senedi-yogun-fon')
+   AJ1 | A1 CAPİTAL PORTFÖY İSTATİSTİKSEL ARBİTRA | memberOid 8acae2c494bafc93019566721bf70ddf | perma ('4028328d98455cf6019898f3075d1ac0', 'aj1-a1-capital-portfoy-istatistiksel-arbitraj-hisse-senedi-serbest-fon-hisse-senedi-yogun-fon')
+   SEH | A1 CAPİTAL PORTFÖY SANAYİ SEKTÖRÜ HİSSE  | memberOid 8acae2c494bafc93019566721bf70ddf | perma ('4028328c9aaa2bf9019ab5a63d8816a6', 'seh-a1-capital-portfoy-sanayi-sektoru-hisse-senedi-serbest-tl-fon-hisse-senedi-yogun-fon')
+
+>>> probing fund HFR ( A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FO) oid=4028328c998ee9d50199c2d5b15b6fd9 memberOid=8acae2c494bafc93019566721bf70ddf perma=('4028328c998ee9d50199c2d5b15b6fd9', 'hfr-a1-capital-portfoy-hisse-senedi-tl-fonu-hisse-senedi-yogun-fon')
+
+##### https://www.kap.org.tr/tr/hfr-a1-capital-portfoy-hisse-senedi-tl-fonu-hisse-senedi-yogun-fon -> 404 · 12945B · blob 10168 · hits {'Portf': True, 'portf': True, 'Bildirim': True, 'disclosure': False, 'Hisse': False, 'hisse': True, 'ISIN': False, 'nominal': False}
+  bildirim links: []
+  'Portföy' @ 5961: 'r/YK"},{"menuName":"Portföy Yönetim Şirketleri","hasSub":false,"menuPath":"/sirketler/PYS"},{"menuName":"Bağımsız Denetim Kuruluşları","hasS'
+
+##### https://www.kap.org.tr/tr/sirket-bilgileri/ozet/4028328c998ee9d50199c2d5b15b6fd9 -> 200 · 70195B · blob 15485 · hits {'Portf': True, 'portf': False, 'Bildirim': True, 'disclosure': True, 'Hisse': False, 'hisse': False, 'ISIN': False, 'nominal': False}
+  bildirim links: []
+  'Portföy' @ 8915: 'r/YK"},{"menuName":"Portföy Yönetim Şirketleri","hasSub":false,"menuPath":"/sirketler/PYS"},{"menuName":"Bağımsız Denetim Kuruluşları","hasS'
+
+##### https://www.kap.org.tr/tr/sirket-bilgileri/genel/8acae2c494bafc93019566721bf70ddf -> 200 · 316645B · blob 148279 · hits {'Portf': True, 'portf': True, 'Bildirim': True, 'disclosure': True, 'Hisse': False, 'hisse': False, 'ISIN': False, 'nominal': True}
+  bildirim links: []
+  'Portföy' @ 8801: 'r/YK"},{"menuName":"Portföy Yönetim Şirketleri","hasSub":false,"menuPath":"/sirketler/PYS"},{"menuName":"Bağımsız Denetim Kuruluşları","hasS'
+
+##### https://www.kap.org.tr/tr/YatirimFonlari/HFR -> 404 · 12853B · blob 10074 · hits {'Portf': True, 'portf': False, 'Bildirim': True, 'disclosure': False, 'Hisse': False, 'hisse': False, 'ISIN': False, 'nominal': False}
+  bildirim links: []
+  'Portföy' @ 5867: 'r/YK"},{"menuName":"Portföy Yönetim Şirketleri","hasSub":false,"menuPath":"/sirketler/PYS"},{"menuName":"Bağımsız Denetim Kuruluşları","hasS'
+
+##### https://www.kap.org.tr/tr/bildirimler/4028328c998ee9d50199c2d5b15b6fd9 -> 404 · 12905B · blob 10126 · hits {'Portf': True, 'portf': False, 'Bildirim': True, 'disclosure': False, 'Hisse': False, 'hisse': False, 'ISIN': False, 'nominal': False}
+  bildirim links: []
+  'Portföy' @ 5919: 'r/YK"},{"menuName":"Portföy Yönetim Şirketleri","hasSub":false,"menuPath":"/sirketler/PYS"},{"menuName":"Bağımsız Denetim Kuruluşları","hasS'
+https://www.kap.org.tr/tr/api/disclosures/8acae2c494bafc93019566721bf70ddf err: ReadTimeout(ReadTimeoutError("HTTPSConnectionPool(host='www.kap.org.tr', port=443): Read timed out. (read timeout=25)"))
+
+[probe5] done
