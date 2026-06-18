@@ -1,50 +1,9 @@
-== discovery ==
-  GET  /api/swagger                                     -> 404  114093B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/swagger-ui.html                             -> 404  114109B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/v2/api-docs                                 -> 404     151B                        | '[a118f0fb-0220-49a1-a703-572b0305168c], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/api-docs )!], [404], ['
-  GET  /api/v3/api-docs                                 -> 404     151B                        | '[0f723e4e-c14b-46e2-b31f-22dc78aa2cda], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/api-docs )!], [404], ['
-  GET  /api/openapi.json                                -> 404  114103B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /uga/fonbilgilendirme/portal/service/            -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
-  GET  /uga/fonbilgilendirme/portal/service/swagger-ui.html -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
+== /api/funds/<method> (GET) ==
+  *** GET /api/funds/info -> 200 62B application/json;charset | '{"Java Version ":"v17","time":"1777560307000","version":"104"}'
+(GET non-fault: 1)
 
-== candidate fund-list / portfolio methods (GET) ==
-  GET  /api/fund                                        -> 404  114087B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/funds                                       -> 404  114089B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fon                                         -> 404  114085B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fundList                                    -> 404  114095B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/getFundList                                 -> 404  114101B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fund/all                                    -> 404     146B                        | '[b81c4ead-af72-4865-83f5-ed1857fd16fd], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/all )!], [404], []'
-  GET  /api/funds/all                                   -> 404     190B application/json;chars | '{   "correlationId": "8fd65413-f310-46e0-9fbf-db63177f28a5",   "faultCode": "ERR-006",   "faultString": "Method not found or disabled!",   "faultStatu'
-  GET  /api/fund/getFunds                               -> 404     151B                        | '[f35b4b9f-d140-4ae5-a470-bd4d7c334907], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/getFunds )!], [404], ['  <<< KEYWORDS
-  GET  /api/fundProfile                                 -> 404  114101B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fund/getFundProfile                         -> 404     157B                        | '[32a1b5cf-4e5c-4c6a-afcc-b3dc55b3c85c], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/getFundProfile )!], [4'  <<< KEYWORDS
-  GET  /api/portfolio                                   -> 404  114097B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/portfoy                                     -> 404  114093B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fundPortfolio                               -> 404  114105B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fund/getFundPortfolio                       -> 404     159B                        | '[3968dc24-2f37-4eed-bccc-e95f9c4120a7], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/getFundPortfolio )!], '  <<< KEYWORDS
-  GET  /api/portfolioDistribution                       -> 404  114121B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fonDagilim                                  -> 404  114099B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fund/list                                   -> 404     147B                        | '[416cbfda-96b7-42a9-bf4a-4f6a2aacbbce], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/list )!], [404], []'
-  GET  /api/fundprices                                  -> 404  114099B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/price                                       -> 404  114089B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fundReturn                                  -> 404  114099B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fundAllocation                              -> 404  114107B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/asset                                       -> 404  114089B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/instrument                                  -> 404  114099B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  GET  /api/fund/portfolio                              -> 404     152B                        | '[4c8502c3-4a83-4387-ac1a-d93723441dcf], [ERR-002], [ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/portfolio )!], [404], '  <<< KEYWORDS
+== /api/funds/<method> (POST) ==
 
-== same names directly on the backend base (no /api) ==
-  GET  /uga/fonbilgilendirme/portal/service/fund        -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
-  GET  /uga/fonbilgilendirme/portal/service/funds       -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
-  GET  /uga/fonbilgilendirme/portal/service/fundList    -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
-  GET  /uga/fonbilgilendirme/portal/service/getFundList -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
-  GET  /uga/fonbilgilendirme/portal/service/portfolio   -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
-  GET  /uga/fonbilgilendirme/portal/service/fonDagilim  -> 200    6728B text/html              | '<!DOCTYPE html>\r <html><head>\r <meta http-equiv="Pragma" content="no-cache"/>\r <meta http-equiv="Expires" content="-1"/>\r <meta http-equiv="CacheContr'
+== a few /api/fund/<method> + /api/fon/<method> ==
 
-== a couple POSTs ==
-  POST /api/fundList                                    -> 404  114095B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  POST /api/funds                                       -> 404  114089B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-  POST /api/fund/search                                 -> 404     213B application/json;chars | '{   "fault" :{      "correlationId":"de556330-747b-496f-8189-4c33c11a1f79",     "faultCode":"ERR-006",     "faultString":"Method not found or disabled'
-  POST /api/search                                      -> 404  114091B text/html; charset=utf | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="'
-
-[probe9] done
+[probe10] done
