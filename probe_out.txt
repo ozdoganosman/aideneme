@@ -1,43 +1,32 @@
- --- fonProfilDty --- …fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.post("/fonUnvanGetir",e),m=e=>l.SB.post("/fonDetayGetir",e),p=e=>l.SB.post("/fonGrupGetir",e),g=e=>l.SB.post("/fonGnlBlgSiraliGetir",e),h=e=>l.SB.post("/fonGnlBlgSiraliGetirDosya",e),b=e=>l.SB.post("/f…
- --- DetayGetir --- …"/fonUnvanGetir",e),m=e=>l.SB.post("/fonDetayGetir",e),p=e=>l.SB.post("/fonGrupGetir",e),g=e=>l.SB.post("/fonGnlBlgSiraliGetir",e),h=e=>l.SB.post("/fonGnlBlgSiraliGetirDosya",e),b=e=>l.SB.post("/fonYonetimBazliBilgiGetir",e),x=e=>l.SB.post("/fonBuyuklukBazliBilgiGetir",e),y=e=>l.SB.post("/fonAlSatEkranValorHesapla",e),v=e=>l.SB.post("/dagilimSiraliGetirT",e),k=e=>l.SB.post("/dagilimSiraliGetirDosy…
 
-  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR"} -> 200 54B
+  POST /api/funds/dagilimSiraliGetirT {"dil": "TR", "fonTipi": "YAT", "kurucuKodu": null, "fonTurKod": null, "fonGrubu": null, " -> 200 139B
+    '{"errorCode":null,"errorMessage":"Text \'2026-06-16\' could not be parsed at index 4","resultList":null,"toplamSayi":null,"toplamSayfa":null}'
+
+  POST /api/funds/dagilimSiraliGetirT {"dil": "TR", "fonTipi": "YAT", "kurucuKodu": null, "fonTurKod": null, "fonGrubu": null, " -> 200 139B
+    '{"errorCode":null,"errorMessage":"Text \'2026-06-15\' could not be parsed at index 4","resultList":null,"toplamSayi":null,"toplamSayfa":null}'
+
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT"} -> 200 54B
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "fonTip": "YAT", "tarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "30.05.2026"} -> 200 54B
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "2026-06-01", "bitTarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 54B
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "calismaTipi": "1", "tarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR"} -> 200 54B
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT"} -> 200 54B
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "fonTip": "YAT", "tarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "30.05.2026"} -> 200 54B
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "2026-06-01", "bitTarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 54B
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "calismaTipi": "1", "tarih": "2026-06-16"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR"} -> 200 360B
-    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
-
-  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT"} -> 200 360B
-    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
-
-  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "30.05.2026"} -> 200 360B
-    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
-
-  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 360B
-    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
-
-  POST /api/funds/dagilimSiraliGetirT {"dil": "TR", "fonTipi": "YAT", "kurucuKodu": null, "fonTurKod": null, "fonGrubu": null, "fonTurAciklama": null, "islem": null, "fonKodu": "HFR", "ilkKayit": 0, "kayitSayisi": 50, "calismaTipi": "1", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 139B
-    '{"errorCode":null,"errorMessage":"Text \'01.05.2026\' could not be parsed at index 0","resultList":null,"toplamSayi":null,"toplamSayfa":null}'
-
-[probe16] done
+[probe17] done
