@@ -1,7 +1,7 @@
 """
-PROBE v17 (CI) — fix the date format (ISO) and call the distribution / fund-detail
-endpoints; inspect whether the result is STOCK-LEVEL (individual BIST securities)
-or asset-CATEGORY level. This settles whether "which stocks" is obtainable.
+PROBE v18 (CI) — crack the date format for dagilimSiraliGetirT (portfolio
+distribution) and reveal whether resultList is STOCK-LEVEL or category-level.
+Also try the export variant + fonDetayGetir with extra fields.
 """
 from __future__ import annotations
 
@@ -21,34 +21,45 @@ def p(*a):
     sys.stdout.flush()
 
 
-def post(ep, body, n=900):
+def post(ep, body, n=500):
     try:
         rr = S.post(BASE + ep, data=json.dumps(body),
                     headers={"Content-Type": "application/json", "Referer": BASE + "/"}, timeout=25)
     except Exception as e:  # noqa
-        p(f"  POST {ep} err {repr(e)[:40]}"); return
-    txt = rr.text
-    flags = "".join(f" <{k}>" for k in ["ISIN", "hisse", "Hisse", "menkul", "Menkul", "AKBNK",
-                                        "THYAO", "ASELS", "GARAN", "kiymet", "Kiymet", "BIST"] if k in txt)
-    p(f"\n  POST {ep} {json.dumps(body, ensure_ascii=False)[:90]} -> {rr.status_code} {len(rr.content)}B{flags}")
-    p(f"    {txt[:n]!r}")
+        p(f"  err {repr(e)[:40]}"); return ""
+    return rr.text
 
 
-# 1) distribution with ISO dates
-for d in ["2026-06-16", "2026-06-15"]:
-    post("/api/funds/dagilimSiraliGetirT", {
-        "dil": "TR", "fonTipi": "YAT", "kurucuKodu": None, "fonTurKod": None, "fonGrubu": None,
-        "fonTurAciklama": None, "islem": None, "fonKodu": "HFR", "ilkKayit": 0, "kayitSayisi": 50,
-        "calismaTipi": "1", "basTarih": d, "bitTarih": d})
+def base_body(date):
+    return {"dil": "TR", "fonTipi": "YAT", "kurucuKodu": None, "fonTurKod": None, "fonGrubu": None,
+            "fonTurAciklama": None, "islem": None, "fonKodu": "HFR", "ilkKayit": 0, "kayitSayisi": 50,
+            "calismaTipi": "1", "basTarih": date, "bitTarih": date}
 
-# 2) fund detail / profile with ISO date (weekday) variants
-for ep in ["/api/funds/fonDetayGetir", "/api/funds/fonProfilDtyGetir"]:
-    for body in [
-        {"fonKodu": "HFR", "dil": "TR", "tarih": "2026-06-16"},
-        {"fonKodu": "HFR", "dil": "TR", "fonTip": "YAT", "tarih": "2026-06-16"},
-        {"fonKodu": "HFR", "dil": "TR", "basTarih": "2026-06-01", "bitTarih": "2026-06-16"},
-        {"fonKodu": "HFR", "dil": "TR", "calismaTipi": "1", "tarih": "2026-06-16"},
-    ]:
-        post(ep, body, 700)
 
-p("\n[probe17] done")
+p("== dagilimSiraliGetirT date-format sweep ==")
+for d in ["20260616", "16.06.2026", "16/06/2026", "2026/06/16", "06/16/2026",
+          "2026-06-16T00:00:00", "1750032000000", "06-16-2026", "2026.06.16", "16-06-2026"]:
+    t = post("/api/funds/dagilimSiraliGetirT", base_body(d))
+    msg = ""
+    try:
+        j = json.loads(t)
+        em = j.get("errorMessage")
+        rl = j.get("resultList")
+        msg = f"err={em!r} resultList={'[%d]' % len(rl) if isinstance(rl, list) else rl}"
+        if isinstance(rl, list) and rl:
+            msg += " | row0=" + json.dumps(rl[0], ensure_ascii=False)[:400]
+    except Exception:  # noqa
+        msg = t[:200]
+    p(f"  date {d:22} -> {msg}")
+
+p("\n== dagilimSiraliGetirDosya (export) ==")
+p("  " + post("/api/funds/dagilimSiraliGetirDosya", base_body("20260616"))[:300])
+
+p("\n== fonDetayGetir extra bodies ==")
+for b in [{"fonKodu": "HFR", "dil": "TR", "kurucuKod": "A1Y"},
+          {"fonKodu": "HFR", "dil": "TR", "tarih": "20260616"},
+          {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT", "calismaTipi": "1", "tarih": "20260616"}]:
+    t = post("/api/funds/fonDetayGetir", b)
+    p(f"  {json.dumps(b, ensure_ascii=False)[:70]} -> {t[:260]!r}")
+
+p("\n[probe18] done")
