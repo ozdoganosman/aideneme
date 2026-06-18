@@ -444,7 +444,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                   </select>
                 ) : (
                   <>
-                    {liveInd && !isTwo && (
+                    {liveInd && !isTwo && cmp === 'val' && (
                       <input
                         className="scr-lp"
                         value={lp}
@@ -454,7 +454,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                         onChange={(e) => setLp(e.target.value)}
                       />
                     )}
-                    {isTwo && liveInd && (
+                    {isTwo && liveInd && cmp === 'val' && (
                       <>
                         <input
                           className="scr-lp"
