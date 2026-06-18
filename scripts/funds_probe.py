@@ -1,7 +1,6 @@
 """
-PROBE v5 (CI) — parse the KAP fund universe from the RSC flight, then for ONE
-equity (HS) fund try candidate detail/disclosure URLs and dump what comes back,
-hunting for the monthly portfolio (stock-level holdings) disclosure.
+PROBE v6 (CI) — for one equity fund (HFR), dump the KAP summary page RSC and try
+disclosure-list subpages, to locate the monthly portfolio disclosure + its index.
 """
 from __future__ import annotations
 
@@ -32,53 +31,32 @@ def flight_blob(html: str) -> str:
     return blob
 
 
-# 1) Fund universe.
-r = S.get("https://www.kap.org.tr/tr/YatirimFonlari/YF", timeout=30)
-blob = flight_blob(r.text)
-funds = re.findall(
-    r'"fundOid":"([^"]*)","fundId":"([^"]*)","fundCode":"([^"]*)","fundName":"([^"]*)",'
-    r'"fundType":"([^"]*)","fundClass":"([^"]*)"[^}]*?"fundMemberOid":"([^"]*)"', blob)
-p(f"funds parsed: {len(funds)}")
-classes = {}
-for f in funds:
-    classes[f[5]] = classes.get(f[5], 0) + 1
-p("fundClass counts:", classes)
-perma = dict((m[3], (m[1], m[2])) for m in re.findall(
-    r'"mkkMemberOid":(?:"([^"]*)"|null),"kapMemberOid":"([^"]*)","permaLink":"([^"]*)","title":"[^"]*","fundCode":"([^"]*)"', blob))
-p("permalinks parsed:", len(perma))
+def grab(url: str):
+    r = S.get(url, timeout=25)
+    ct = r.headers.get("content-type", "")
+    b = flight_blob(r.text) if "html" in ct else r.text
+    return r.status_code, len(r.content), b
 
-hs = [f for f in funds if f[5] == "HS"][:6]
-p("\nsample HS (equity) funds [oid,id,code,name,type,class,memberOid]:")
-for f in hs:
-    p("  ", f[2], "|", f[3][:40], "| memberOid", f[6], "| perma", perma.get(f[2]))
 
-if not hs:
-    p("no HS funds; abort"); sys.exit(0)
-oid, fid, code, name, _, _, moid = hs[0]
-pl = perma.get(code)
-p(f"\n>>> probing fund {code} ({name[:40]}) oid={oid} memberOid={moid} perma={pl}")
+OID = "4028328c998ee9d50199c2d5b15b6fd9"  # HFR – A1 Capital Hisse Senedi (TL) Fonu
+MOID = "8acae2c494bafc93019566721bf70ddf"
 
-cands = [
-    f"https://www.kap.org.tr/tr/{pl[1]}" if pl else None,
-    f"https://www.kap.org.tr/tr/sirket-bilgileri/ozet/{oid}",
-    f"https://www.kap.org.tr/tr/sirket-bilgileri/genel/{moid}",
-    f"https://www.kap.org.tr/tr/YatirimFonlari/{code}",
-    f"https://www.kap.org.tr/tr/bildirimler/{oid}",
-    f"https://www.kap.org.tr/tr/api/disclosures/{moid}",
-]
-for url in [c for c in cands if c]:
+st, n, b = grab(f"https://www.kap.org.tr/tr/sirket-bilgileri/ozet/{OID}")
+p(f"OZET -> {st} · {n}B · blob {len(b)}")
+p("disclosureIndex:", re.findall(r'"disclosureIndex":\s*"?(\d+)', b)[:20])
+p("Bildirim hrefs:", sorted(set(re.findall(r'/tr/Bildirim[A-Za-z]*/\d+', b)))[:20])
+for kw in ["Portföy Dağılım", "Fon Portföy", "Portföy Dağıtım", "PORTFÖY", "Bildirim"]:
+    m = re.search(kw, b)
+    p(f"  {kw!r}: {(m.start() if m else 'yok')}")
+p("=== OZET BLOB[0:5500] ===")
+p(b[:5500])
+
+for sub in ["bildirimler", "fon-portfoy-bilgileri", "portfoy-bilgileri", "fon-bilgileri", "mali-tablolar", "genel"]:
     try:
-        rr = S.get(url, timeout=25)
-        b2 = flight_blob(rr.text) if "text/html" in rr.headers.get("content-type", "") else rr.text
-        hits = {k: (k in b2) for k in ["Portf", "portf", "Bildirim", "disclosure", "Hisse", "hisse", "ISIN", "nominal"]}
-        p(f"\n##### {url} -> {rr.status_code} · {len(rr.content)}B · blob {len(b2)} · hits {hits}")
-        idx = sorted(set(re.findall(r'/tr/Bildirim[a-z]*/\d+', b2)))[:8]
-        p("  bildirim links:", idx)
-        for kw in ["Portföy", "Portfoy", "Dağılım"]:
-            m = re.search(kw, b2)
-            if m:
-                p(f"  '{kw}' @ {m.start()}: {b2[m.start()-20:m.start()+120]!r}")
+        st, n, b = grab(f"https://www.kap.org.tr/tr/sirket-bilgileri/{sub}/{OID}")
+        idx = re.findall(r'"disclosureIndex":\s*"?(\d+)', b)[:12]
+        p(f"\n[{sub}] {st} · {n}B · blob {len(b)} · idx {idx} · 'Portföy Dağ' {'Portföy Dağ' in b} · hisse {'hisse' in b.lower()} · ISIN {'ISIN' in b}")
     except Exception as e:  # noqa
-        p(f"{url} err:", repr(e))
+        p(f"[{sub}] err:", repr(e))
 
-p("\n[probe5] done")
+p("\n[probe6] done")
