@@ -1,9 +1,20 @@
-== /api/funds/<method> (GET) ==
-  *** GET /api/funds/info -> 200 62B application/json;charset | '{"Java Version ":"v17","time":"1777560307000","version":"104"}'
-(GET non-fault: 1)
+  GET /api/funds/v3/api-docs                   -> 404      190B application/json;charset=u
+  GET /api/funds/v2/api-docs                   -> 404      190B application/json;charset=u
+  GET /api/funds/api-docs                      -> 404      190B application/json;charset=u
+  GET /api/funds/openapi.json                  -> 404      190B application/json;charset=u
+  GET /api/funds/swagger-ui/index.html         -> 404      190B application/json;charset=u
+  GET /api/funds/swagger-ui.html               -> 404      190B application/json;charset=u
+  GET /api/funds/swagger-resources             -> 404      190B application/json;charset=u
+  GET /api/funds/actuator                      -> 404      190B application/json;charset=u
+  GET /api/funds/actuator/mappings             -> 404      190B application/json;charset=u
+  GET /api/funds/mappings                      -> 404      190B application/json;charset=u
+  GET /api/funds/health                        -> 404      190B application/json;charset=u
+  GET /api/funds/actuator/health               -> 404      190B application/json;charset=u
+  GET /api/funds/actuator/info                 -> 404      190B application/json;charset=u
+  GET /api/funds/actuator/openapi              -> 404      190B application/json;charset=u
+  GET /api/funds                               -> 404   114089B text/html; charset=utf-8
+  GET /api/funds/                              -> 200        0B text/html; charset=utf-8   <<<<<<
+      ''
+  GET /api/funds/index                         -> 404      190B application/json;charset=u
 
-== /api/funds/<method> (POST) ==
-
-== a few /api/fund/<method> + /api/fon/<method> ==
-
-[probe10] done
+[probe11] done
