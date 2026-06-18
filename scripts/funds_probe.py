@@ -1,7 +1,6 @@
 """
-PROBE v10 (CI) — fonturkey API: the gateway lives at /api/funds/<method> (returns
-ERR-006 for unknown methods). Sweep a broad TR+EN method-name list to find a real
-one. Flag any response that is NOT a generic gateway fault.
+PROBE v11 (CI) — /api/funds/info works (Spring Boot, Java 17). Try OpenAPI /
+actuator discovery under /api/funds/ to dump the FULL endpoint list at once.
 """
 from __future__ import annotations
 
@@ -20,41 +19,29 @@ def p(*a):
     sys.stdout.flush()
 
 
-def hit(path, method="get", body=None):
+def hit(path, n=900):
     try:
-        rr = S.post(BASE + path, json=body or {}, timeout=10) if method == "post" else S.get(BASE + path, timeout=10)
+        rr = S.get(BASE + path, timeout=12)
     except Exception as e:  # noqa
-        p(f"  {method.upper():4} {path:34} err {repr(e)[:34]}")
+        p(f"  GET {path:40} err {repr(e)[:40]}")
         return
-    low = rr.text[:500].lower()
+    low = rr.text[:400].lower()
     fault = ("err-002" in low) or ("err-006" in low) or ("__next_error__" in low) or ("apiproxy" in low)
-    if not fault:  # only print the interesting ones (+ a small marker line)
-        p(f"  *** {method.upper()} {path} -> {rr.status_code} {len(rr.content)}B {rr.headers.get('content-type','')[:24]} | {rr.text[:240]!r}")
-    return not fault
+    tag = "" if fault else "   <<<<<<"
+    p(f"  GET {path:40} -> {rr.status_code} {len(rr.content):>8}B {rr.headers.get('content-type','')[:26]}{tag}")
+    if not fault:
+        p(f"      {rr.text[:n]!r}")
 
 
-methods = [
-    "list", "all", "getAll", "getList", "search", "query", "getFunds", "fundList", "getFundList",
-    "profile", "detail", "portfolio", "getPortfolio", "distribution", "allocation", "prices",
-    "returns", "info", "data", "summary", "overview", "getFundInfo", "fundInfo", "getFund",
-    "fonlar", "tumFonlar", "fonListesi", "fonGetir", "fonAra", "fonSorgu", "fonBilgi",
-    "fonBilgileri", "fonDetay", "fonProfil", "portfoy", "portfoyDagilimi", "portfoyGetir",
-    "varlikDagilimi", "getiriler", "fiyatlar", "ozet", "tumFonGetir", "fonKodlari", "menu",
-]
-p("== /api/funds/<method> (GET) ==")
-nonfault = 0
-for m in methods:
-    if hit(f"/api/funds/{m}"):
-        nonfault += 1
-p(f"(GET non-fault: {nonfault})")
+for d in [
+    "/api/funds/v3/api-docs", "/api/funds/v2/api-docs", "/api/funds/api-docs",
+    "/api/funds/openapi.json", "/api/funds/swagger-ui/index.html", "/api/funds/swagger-ui.html",
+    "/api/funds/swagger-resources", "/api/funds/actuator", "/api/funds/actuator/mappings",
+    "/api/funds/mappings", "/api/funds/health", "/api/funds/actuator/health",
+    "/api/funds/actuator/info", "/api/funds/actuator/openapi",
+    # maybe the docs live one level up (the "funds" segment is the service)
+    "/api/funds", "/api/funds/", "/api/funds/index",
+]:
+    hit(d)
 
-p("\n== /api/funds/<method> (POST) ==")
-for m in ["list", "search", "query", "getFunds", "fonlar", "fonListesi", "portfoyDagilimi", "all"]:
-    hit(f"/api/funds/{m}", "post", {})
-
-p("\n== a few /api/fund/<method> + /api/fon/<method> ==")
-for pre in ["fund", "fon", "portal", "service", "common"]:
-    for m in ["list", "all", "fonlar", "getList"]:
-        hit(f"/api/{pre}/{m}")
-
-p("\n[probe10] done")
+p("\n[probe11] done")
