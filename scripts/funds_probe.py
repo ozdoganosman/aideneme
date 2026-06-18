@@ -43,7 +43,7 @@ classes = {}
 for f in funds:
     classes[f[5]] = classes.get(f[5], 0) + 1
 p("fundClass counts:", classes)
-perma = dict((m[4], (m[1], m[2])) for m in re.findall(
+perma = dict((m[3], (m[1], m[2])) for m in re.findall(
     r'"mkkMemberOid":(?:"([^"]*)"|null),"kapMemberOid":"([^"]*)","permaLink":"([^"]*)","title":"[^"]*","fundCode":"([^"]*)"', blob))
 p("permalinks parsed:", len(perma))
 
