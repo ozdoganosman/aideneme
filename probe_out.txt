@@ -1,43 +1,10 @@
-
-##### https://www.kap.org.tr/tr/YatirimFonlari/YF -> 200 · html 5672320 · flight parts 9 · blob 3190902
-  fonKodu: yok
-  fonKod: yok
-  fundCode @ 16160: 'ee9d50199c2d60a6f6fef","fundId":"5758","fundCode":"BON","fundName":" A1 CAPİTAL PORTFÖY BORÇLANMA ARAÇLARI FONU","fundType":"YF","fundClass":"DG","fundState":"Y","fundExpiry":"VS","fundMemberOid":"8ac'
-  unvan @ 2891399: '"permaLink":"1055-petrol-ofisi-a-s-eski-unvan-omv-petrol-ofisi-a-s","title":"PETROL OFİSİ A.Ş. (Eski Unvanı - OMV PETROL OFİSİ A.Ş.)","fundCode":"1055","fundOid":null},{"mkkMemberOid":"4028e4a240ee866'
-  Unvan @ 2891460: 'i-a-s","title":"PETROL OFİSİ A.Ş. (Eski Unvanı - OMV PETROL OFİSİ A.Ş.)","fundCode":"1055","fundOid":null},{"mkkMemberOid":"4028e4a240ee866c0140f1f7b3990027","kapMemberOid":"33E5FED7042E00EAE0530A4A62'
-  oid: yok
-  Oid @ 16006: 'ÇLANMA ARAÇLARI ŞEMSİYE FONU","umbMemberOid":"8acae2c494bafc93019566721bf70ddf","umbMemberTitle":"A1 CAPİTAL PORTFÖY YÖNETİMİ A.Ş.","fundOid":"4028328c998ee9d50199c2d60a6f6fef","fundId":"5758","fundCo'
-  mkkMemberOid @ 1265008: 's://www.kap.org.tr","fundPermaLinks":[{"mkkMemberOid":null,"kapMemberOid":"33E5FED7EE1F00EAE0530A4A622B2AEA","permaLink":"ace-alkhair-portfoy-kira-sertifikasi-sukuk-katilim-fonu","title":"ALKHAİR PORT'
-  stockCode: yok
-  Portf @ 7816: 'menuPath":"/sirketler/YK"},{"menuName":"Portföy Yönetim Şirketleri","hasSub":false,"menuPath":"/sirketler/PYS"},{"menuName":"Bağımsız Denetim Kuruluşları","hasSub":false,"menuPath":"/sirketler/BDK"},{'
-  portf @ 1265102: '30A4A622B2AEA","permaLink":"ace-alkhair-portfoy-kira-sertifikasi-sukuk-katilim-fonu","title":"ALKHAİR PORTFÖY KİRA SERTİFİKASI (SUKUK) KATILIM FONU","fundCode":"ACE","fundOid":"33E5FED7EE1F00EAE0530A4'
-  yatirimFon: yok
-  KAYDA: yok
-  fonTur: yok
-  title @ 2906: 'cripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\\"Segoe UI\\",Roboto,Helvetica,Arial,sans-serif,'
-  name @ 5789: '"$L9",null,{"children":["$","$a",null,{"name":"Next.MetadataOutlet","children":"$@b"}]}]]}],{},null,false,null]},null,false,"$@c"]},null,false,null]},null,false,"$@c"]},null,false,null]},null,false,"$'
-
-=== blob[0:1600] ===
-1:"$Sreact.fragment"
-2:I[39756,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0l.50x6bylvek.js"],"default"]
-3:I[53536,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0l.50x6bylvek.js"],"default"]
-6:I[39756,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0l.50x6bylvek.js"],"LoadingBoundaryProvider"]
-7:I[48304,["/_next/static/chunks/06m4l3lpsltwr.js","/_next/static/chunks/0u1uj1l9nzxuc.js","/_next/static/chunks/0aa_ceeqiu8kv.js","/_next/static/chunks/0cq8wray_l69a.js","/_next/static/chunks/18a9_wlf92z68.js"],"default"]
-9:I[97367,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0l.50x6bylvek.js"],"OutletBoundary"]
-a:"$Sreact.suspense"
-d:I[97367,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0l.50x6bylvek.js"],"ViewportBoundary"]
-f:I[97367,["/_next/static/chunks/01xlw8hd842-c.js","/_next/static/chunks/0l.50x6bylvek.js"],"MetadataBoundary"]
-11:I[68027,[],"default",1]
-15:I[6331,["/_next/static/chunks/06m4l3lpsltwr.js","/_next/static/chunks/0u1uj1l9nzxuc.js","/_next/static/chunks/0aa_ceeqiu8kv.js"],"default"]
-16:I[91658,["/_next/static/chunks/06m4l3lpsltwr.js","/_next/static/chunks/0u1uj1l9nzxuc.js","/_next/static/chunks/0aa_ceeqiu8kv.js"],"default"]
-17:I[73417,["/_next/static/chunks/06m4l3lpsltwr.js","/_next/static/chunks/0u1uj1l9nzxuc.js","/_next/static/chunks/0aa_ceeqiu8kv.js","/_next/static/chunks/09uiq1tmiv4pc.js"],"default"]
-18:I[57861,["/_next/static/chunks/06m4l3lpsltwr.js","/_next/static/chunks/0u1uj1l9nzxuc.js","/_next/static/chunks/0aa_ceeqiu8kv.js","/_next/static/chunks/0i1zdl7v.calw.js"],"defa
-
-=== around first 'fon' ===
-_0sw.3g.u9mm.css","style"]
-0:{"P":null,"c":["","tr","YatirimFonlari","YF"],"q":"","i":false,"f":[[["",{"children":[["lang","tr","d",null],{"children":["(funds)",{"children":["YatirimFonlari",{"children":["YF",{"children":["__PAGE__",{}]},"$undefined","$undefined",4]},"$undefined","$undefined",8]},"$undefined","$undefined",8]},"$undefined","$undefined",24]},"$undefined","$undefined",8],[["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$"
-
-links /tr/YatirimFonlari/X: []
-short codes: ['YF', 'YF', 'ALL', 'ODA', 'FR', 'DG', 'FON', 'KAP', '5758', 'BON', 'YF', 'DG', 'VS', '6069', '5815', 'DGF', 'YF', 'DG', 'VS', '6069', '5853', 'DNF', 'YF', 'DG', 'VS', '6069', '5756', 'HFR', 'YF', 'HS', 'VS', '6069', '5753', 'CVL', 'YF', 'KTF', 'VS', '6069', '5757', 'AU1', 'YF', 'DG', 'VS', '6069', '5759', 'PAB', 'YF', 'DG', 'VS', '6069', '5852', 'BHN', 'YF', 'HS', 'VS', '6069', '5854', 'BYZ', 'YF', 'HS']
-
-[probe4] done
+funds parsed: 2139
+fundClass counts: {'DG': 517, 'HS': 473, 'KTF': 212, 'SF': 937}
+Traceback (most recent call last):
+  File "/home/runner/work/aideneme/aideneme/scripts/funds_probe.py", line 46, in <module>
+    perma = dict((m[4], (m[1], m[2])) for m in re.findall(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/aideneme/aideneme/scripts/funds_probe.py", line 46, in <genexpr>
+    perma = dict((m[4], (m[1], m[2])) for m in re.findall(
+                  ~^^^
+IndexError: tuple index out of range
