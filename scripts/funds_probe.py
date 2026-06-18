@@ -1,11 +1,10 @@
 """
-PROBE v7 (CI, final backend attempt) — grep KAP's JS chunks for the real backend
-API (paths/hosts), then call the disclosure/portfolio-looking endpoints right
-away and dump responses. Also retries memberDisclosureQuery properly.
+PROBE v8 (CI) — investigate fonturkey.com.tr (surfaced from KAP's own JS). Is it
+a clean fund-data source (ideally stock-level portfolio)? Dump homepage + hunt
+for an API / fund list / portfolio with holdings.
 """
 from __future__ import annotations
 
-import collections
 import re
 import sys
 
@@ -21,53 +20,31 @@ def p(*a):
     sys.stdout.flush()
 
 
-BASE = "https://www.kap.org.tr"
-r = S.get(BASE + "/tr/YatirimFonlari/YF", timeout=30)
-chunks = list(dict.fromkeys(re.findall(r'/_next/static/chunks/[A-Za-z0-9_~.\-]+\.js', r.text)))
-p(f"chunks referenced: {len(chunks)}")
+BASE = "https://fonturkey.com.tr"
+try:
+    r = S.get(BASE, timeout=25)
+except Exception as e:  # noqa
+    p("HOME err:", repr(e))
+    p("\n[probe8] done")
+    sys.exit(0)
 
-api, hosts, fetches, kw = set(), set(), set(), collections.Counter()
-for c in chunks[:28]:
+t = r.text
+p(f"##### GET / -> {r.status_code} · {len(r.content)}B · {r.headers.get('content-type','')}")
+p("head:\n", t[:1000])
+p("\napi paths:", sorted(set(re.findall(r'["\'`](/(?:api|v1|data|rest)/[A-Za-z0-9_\-/]{2,50})', t)))[:50])
+p("hosts:", sorted(set(re.findall(r'https?://[A-Za-z0-9_.\-]+\.(?:com|org|gov|io|net)(?:\.tr)?', t)))[:30])
+p("fetch:", sorted(set(re.findall(r'fetch\(\s*["\'`]([^"\'`]{4,90})', t)))[:30])
+p("nextdata:", bool(re.search(r'__NEXT_DATA__', t)), "buildId:", re.findall(r'"buildId":"([^"]+)"', t)[:1])
+p("links:", sorted(set(re.findall(r'href=["\']([^"\']{2,60})["\']', t)))[:45])
+p("kw:", {k: (k in t) for k in ["portföy", "Portföy", "hisse", "Hisse", "ISIN", "nominal", "fonKod", "fund"]})
+
+for path in ["/api/funds", "/api/fund", "/api/fon", "/api/fonlar", "/api/portfolio",
+             "/api/portfoy", "/api/v1/funds", "/api/fund/list", "/api/funds/list",
+             "/api/fundlist", "/api/allfunds", "/sitemap.xml", "/robots.txt", "/fonlar"]:
     try:
-        t = S.get(BASE + c, timeout=20).text
-    except Exception:  # noqa
-        continue
-    for m in re.findall(r'["\'`](/(?:tr/)?api/[A-Za-z0-9_\-/]{2,60})', t):
-        api.add(m)
-    for m in re.findall(r'https?://[A-Za-z0-9_.\-]+\.(?:gov|org|com)\.tr', t):
-        hosts.add(m)
-    for m in re.findall(r'fetch\(\s*["\'`]([^"\'`]{4,90})', t):
-        fetches.add(m)
-    for k in ["memberDisclosure", "disclosureQuery", "Portfoy", "portfoy", "Portföy", "Bildirim",
-              "fonPortfoy", "Distribution", "portfolio", "getDisclosure", "disclosureList"]:
-        if k in t:
-            kw[k] += 1
-
-p("\napi paths:", sorted(api)[:80])
-p("hosts:", sorted(hosts))
-p("fetch literals:", sorted(fetches)[:60])
-p("keywords in chunks:", dict(kw))
-
-# Call the disclosure/portfolio-looking endpoints discovered above.
-cand = [a for a in api if any(k in a.lower() for k in ["disclosure", "portfoy", "fon", "member", "bildirim", "portfolio"])]
-p("\ncandidate data endpoints:", cand)
-OID = "8acae2c494bafc93019566721bf70ddf"  # A1 Capital member oid
-for a in cand[:10]:
-    url = BASE + a
-    for method in ("get", "post"):
-        try:
-            rr = S.post(url, json={"memberOid": OID}, timeout=18) if method == "post" else S.get(url, timeout=18)
-            p(f"  {method.upper()} {a} -> {rr.status_code} {len(rr.content)}B {rr.headers.get('content-type','')[:25]} | {rr.text[:160]!r}")
-        except Exception as e:  # noqa
-            p(f"  {method.upper()} {a} err {repr(e)[:50]}")
-
-# Direct retry of the classic disclosure-query endpoint.
-for ep in ["/tr/api/memberDisclosureQuery", "/api/memberDisclosureQuery"]:
-    try:
-        rr = S.post(BASE + ep, json={"fromDate": "2026-05-01", "toDate": "2026-06-18", "memberType": "", "mkkMemberOidList": [OID]},
-                    timeout=45, headers={"Content-Type": "application/json", "Referer": BASE + "/tr/bildirim-sorgu"})
-        p(f"\nPOST {ep} -> {rr.status_code} {len(rr.content)}B | {rr.text[:300]!r}")
+        rr = S.get(BASE + path, timeout=15)
+        p(f"  GET {path} -> {rr.status_code} {len(rr.content)}B {rr.headers.get('content-type','')[:25]} | {rr.text[:130]!r}")
     except Exception as e:  # noqa
-        p(f"\nPOST {ep} err {repr(e)[:60]}")
+        p(f"  GET {path} err {repr(e)[:45]}")
 
-p("\n[probe7] done")
+p("\n[probe8] done")
