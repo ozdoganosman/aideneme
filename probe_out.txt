@@ -1,56 +1,43 @@
+ --- fonProfilDty --- …fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.post("/fonUnvanGetir",e),m=e=>l.SB.post("/fonDetayGetir",e),p=e=>l.SB.post("/fonGrupGetir",e),g=e=>l.SB.post("/fonGnlBlgSiraliGetir",e),h=e=>l.SB.post("/fonGnlBlgSiraliGetirDosya",e),b=e=>l.SB.post("/f…
+ --- DetayGetir --- …"/fonUnvanGetir",e),m=e=>l.SB.post("/fonDetayGetir",e),p=e=>l.SB.post("/fonGrupGetir",e),g=e=>l.SB.post("/fonGnlBlgSiraliGetir",e),h=e=>l.SB.post("/fonGnlBlgSiraliGetirDosya",e),b=e=>l.SB.post("/fonYonetimBazliBilgiGetir",e),x=e=>l.SB.post("/fonBuyuklukBazliBilgiGetir",e),y=e=>l.SB.post("/fonAlSatEkranValorHesapla",e),v=e=>l.SB.post("/dagilimSiraliGetirT",e),k=e=>l.SB.post("/dagilimSiraliGetirDosy…
 
-===== dagilimSiraliGetirT (1 occ) =====
-…upGetir",e),g=e=>l.SB.post("/fonGnlBlgSiraliGetir",e),h=e=>l.SB.post("/fonGnlBlgSiraliGetirDosya",e),b=e=>l.SB.post("/fonYonetimBazliBilgiGetir",e),x=e=>l.SB.post("/fonBuyuklukBazliBilgiGetir",e),y=e=>l.SB.post("/fonAlSatEkranValorHesapla",e),v=e=>l.SB.post("/dagilimSiraliGetirT",e),k=e=>l.SB.post("/dagilimSiraliGetirDosya",e),T=e=>l.SB.post("/fonTipiGetir",e)},59435:(e,t,r)=>{Promise.resolve().then(r.bind(r,99585)),Promise.resolve().then(r.bind(r,63752)),Promise.resolve().then(r.bind(r,76558)),Promise.resolve().then(r.bind(r,91930)),Promise.resolve().then(r.t.bind(r,38437,…
-
-===== SB.post( (19 occ) =====
-…se strict";r.d(t,{$M:()=>g,FJ:()=>b,Fr:()=>v,Vy:()=>n,Ym:()=>a,_G:()=>u,c_:()=>m,dagilimSiraliGetirDosya:()=>k,ej:()=>d,er:()=>c,fonGnlBlgSiraliGetirDosya:()=>h,hx:()=>p,jw:()=>f,kL:()=>o,kQ:()=>i,n:()=>T,qs:()=>x,u4:()=>y,zw:()=>s});var l=r(21375);let n=e=>l.SB.post("/fonTurDnmGetiriGetir",e),a=e=>l.SB.post("/fonUnvanAra",e),i=e=>l.SB.post("/fonBilgiGetir",e),s=e=>l.SB.post("/fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.p…
-…>v,Vy:()=>n,Ym:()=>a,_G:()=>u,c_:()=>m,dagilimSiraliGetirDosya:()=>k,ej:()=>d,er:()=>c,fonGnlBlgSiraliGetirDosya:()=>h,hx:()=>p,jw:()=>f,kL:()=>o,kQ:()=>i,n:()=>T,qs:()=>x,u4:()=>y,zw:()=>s});var l=r(21375);let n=e=>l.SB.post("/fonTurDnmGetiriGetir",e),a=e=>l.SB.post("/fonUnvanAra",e),i=e=>l.SB.post("/fonBilgiGetir",e),s=e=>l.SB.post("/fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.post("/fonUnvanGetir",e),m=e=>l.SB.post("/f…
-…()=>m,dagilimSiraliGetirDosya:()=>k,ej:()=>d,er:()=>c,fonGnlBlgSiraliGetirDosya:()=>h,hx:()=>p,jw:()=>f,kL:()=>o,kQ:()=>i,n:()=>T,qs:()=>x,u4:()=>y,zw:()=>s});var l=r(21375);let n=e=>l.SB.post("/fonTurDnmGetiriGetir",e),a=e=>l.SB.post("/fonUnvanAra",e),i=e=>l.SB.post("/fonBilgiGetir",e),s=e=>l.SB.post("/fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.post("/fonUnvanGetir",e),m=e=>l.SB.post("/fonDetayGetir",e),p=e=>l.SB.post("…
-
-===== .post("/ (31 occ) =====
-… strict";r.d(t,{$M:()=>g,FJ:()=>b,Fr:()=>v,Vy:()=>n,Ym:()=>a,_G:()=>u,c_:()=>m,dagilimSiraliGetirDosya:()=>k,ej:()=>d,er:()=>c,fonGnlBlgSiraliGetirDosya:()=>h,hx:()=>p,jw:()=>f,kL:()=>o,kQ:()=>i,n:()=>T,qs:()=>x,u4:()=>y,zw:()=>s});var l=r(21375);let n=e=>l.SB.post("/fonTurDnmGetiriGetir",e),a=e=>l.SB.post("/fonUnvanAra",e),i=e=>l.SB.post("/fonBilgiGetir",e),s=e=>l.SB.post("/fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.pos…
-…,Vy:()=>n,Ym:()=>a,_G:()=>u,c_:()=>m,dagilimSiraliGetirDosya:()=>k,ej:()=>d,er:()=>c,fonGnlBlgSiraliGetirDosya:()=>h,hx:()=>p,jw:()=>f,kL:()=>o,kQ:()=>i,n:()=>T,qs:()=>x,u4:()=>y,zw:()=>s});var l=r(21375);let n=e=>l.SB.post("/fonTurDnmGetiriGetir",e),a=e=>l.SB.post("/fonUnvanAra",e),i=e=>l.SB.post("/fonBilgiGetir",e),s=e=>l.SB.post("/fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.post("/fonUnvanGetir",e),m=e=>l.SB.post("/fon…
-…=>m,dagilimSiraliGetirDosya:()=>k,ej:()=>d,er:()=>c,fonGnlBlgSiraliGetirDosya:()=>h,hx:()=>p,jw:()=>f,kL:()=>o,kQ:()=>i,n:()=>T,qs:()=>x,u4:()=>y,zw:()=>s});var l=r(21375);let n=e=>l.SB.post("/fonTurDnmGetiriGetir",e),a=e=>l.SB.post("/fonUnvanAra",e),i=e=>l.SB.post("/fonBilgiGetir",e),s=e=>l.SB.post("/fonFiyatBilgiGetir",e),o=e=>l.SB.post("/fonProfilDtyGetir",e),u=e=>l.SB.post("/fonKurucuGetir",e),d=e=>l.SB.post("/fonTurGetir",{...e,flag:1}),c=e=>l.SB.post("/fonGetiriBazliBilgiGetir",e),f=e=>l.SB.post("/fonUnvanGetir",e),m=e=>l.SB.post("/fonDetayGetir",e),p=e=>l.SB.post("/f…
-
-===== fonGetir (14 occ) =====
-…()=>ea,jl:()=>S,nJ:()=>y,pf:()=>p,qC:()=>C,qt:()=>v,ud:()=>O,xd:()=>Z,zF:()=>B});var l=r(93769),n=r(56917),a=r(91337);let i={foundersList:[],sFonTuruList:[],fonTuruList:[],fonGrupList:[],fonUnvanList:[],fonYonetimBazliBilgiList:[],fonBuyuklukBazliBilgiList:[],fonGetiriBazliBilgiList:[],selectedFounder:null,selectedFonTuru:null,selectedSFonTuru:null,selectedFonGrup:null,selectedFonUnvan:null,selectedFonYonetimBazliBilgi:null,selectedFonBuyuklukBazliBilgi:null,selectedFonGetiriBazliBilgi:null,selectedListingTab:"return",loading:"idle",error:null,uiStartDate:null,uiEndDate:nul…
-…}}),x=(0,l.zD)("fonUnvan/fetchFonUnvan",async(e,{rejectWithValue:t})=>{try{let r=(await (0,n.jw)(e)).data;if(r?.resultList)return r.resultList;return t("No fon unvan found or API error")}catch(e){return t(e.message??"Failed to fetch fon unvan")}}),y=(0,l.zD)("fonGetiriBazliBilgi/fetchFonGetiriBazliBilgi",async(e,{rejectWithValue:t})=>{try{let r=(await (0,n.er)(e)).data;if(r?.resultList)return r.resultList;return t("No fon getiri bazli bilgi found or API error")}catch(e){return t(e.message??"Failed to fetch fon getiri bazli bilgi")}}),v=(0,l.zD)("fonYonetimBazliBilgi/fetchFo…
-…h,calismaTipi:e.calismaTipi,sfonTurKod:null},l=(await (0,n.qs)(r)).data;if(l?.resultList)return l.resultList;return t("No fon buyukluk bazli bilgi found or API error")}catch(e){return t(e.message??"Failed to fetch all fon buyukluk bazli bilgi")}}),F=(0,l.zD)("fonGetiriBazliBilgi/fetchFonGetiriBazliBilgiAll",async(e,{rejectWithValue:t})=>{try{let r={dil:e.dil,fonTipi:e.fonTipi,kurucuKodu:null,fonTurKod:null,fonGrubu:null,fonTurAciklama:null,islem:null,basTarih:e.basTarih,bitTarih:e.bitTarih,calismaTipi:e.calismaTipi,donemGetiri1a:e.donemGetiri1a,donemGetiri3a:e.donemGetiri3a…
-
-  POST /api/funds/fonDetayGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 200 54B
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR"} -> 200 54B
     '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonPortfoyGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "481ad42d-9bd8-41ae-a6e4-14eb3daab2f7",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT"} -> 200 54B
+    '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/portfoyGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "bc8b53cb-0437-4679-aee6-62c46b1a92ba",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "30.05.2026"} -> 200 54B
+    '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/portfoyDagilimGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "cd82e044-ee92-4ae9-87fc-7e46199303f5",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonDetayGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 54B
+    '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/varlikDagilimGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "339ef62c-94ed-48ce-b5cf-47baf5c3a404",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR"} -> 200 54B
+    '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonDagilimGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "f9cdc3d4-c645-4c53-af75-749608002da0",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT"} -> 200 54B
+    '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/dagilimGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "d0933183-668c-4229-b163-7b0122518e99",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "30.05.2026"} -> 200 54B
+    '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/enYuksekGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "07c341b3-8e8b-4ad5-8d0c-12fe967f9f34",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonProfilDtyGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 54B
+    '{"errorCode":null,"errorMessage":null,"resultList":[]}'
 
-  POST /api/funds/fonVarlikGetir {"fonKod": "HFR", "fonKodu": "HFR", "dil": "TR", "fonTip": "YAT"} -> 404 190B
-    '{\n  "correlationId": "5be65d10-b8cb-4d78-b260-859ef89417a9",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disabled!",\n  "faultStatusCode": "404",\n  "responseFromApi": ""\n}'
+  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR"} -> 200 360B
+    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
 
-  POST /api/funds/dagilimSiraliGetirT {"fonKodu": "HFR", "fonTip": "YAT", "dil": "TR", "ilkKayit": 0, "kayitSayisi": 100, "siraKolon": "fonKodu", "siraYon": "ASC"} -> 200 126B
-    '{"errorCode":null,"errorMessage":"Hata:java.lang.NullPointerException","resultList":null,"toplamSayi":null,"toplamSayfa":null}'
+  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR", "fonTipi": "YAT"} -> 200 360B
+    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
 
-  POST /api/funds/dagilimSiraliGetirT {"fonKodu": "HFR", "fonTip": "YAT", "dil": "TR", "baslangicTarih": "30.05.2026", "bitisTarih": "30.05.2026"} -> 200 126B
-    '{"errorCode":null,"errorMessage":"Hata:java.lang.NullPointerException","resultList":null,"toplamSayi":null,"toplamSayfa":null}'
+  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR", "tarih": "30.05.2026"} -> 200 360B
+    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
 
-  POST /api/funds/dagilimSiraliGetirT {"fonKodu": ["HFR"], "fonTip": "YAT", "dil": "TR"} -> 200 126B
-    '{"errorCode":null,"errorMessage":"Hata:java.lang.NullPointerException","resultList":null,"toplamSayi":null,"toplamSayfa":null}'
+  POST /api/funds/fonBilgiGetir {"fonKodu": "HFR", "dil": "TR", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 360B
+    '{"errorCode":null,"errorMessage":null,"resultList":[{"fonKodu":"HFR","fonUnvan":"A1 CAPİTAL PORTFÖY HİSSE SENEDİ (TL) FONU (HİSSE SENEDİ YOĞUN FON)","sonFiyat":1.536739,"gunlukGetiri":-0.7671,"payAdet":53835298,"portBuyukluk":82730799.93,"fonKategori":"Hisse Senedi Yoğun","kategoriDerece":0,"kategoriFonSay":190,"yatirimciSayi":635,"pazarPayi":0.03}]}'
 
-[probe15] done
+  POST /api/funds/dagilimSiraliGetirT {"dil": "TR", "fonTipi": "YAT", "kurucuKodu": null, "fonTurKod": null, "fonGrubu": null, "fonTurAciklama": null, "islem": null, "fonKodu": "HFR", "ilkKayit": 0, "kayitSayisi": 50, "calismaTipi": "1", "basTarih": "01.05.2026", "bitTarih": "30.05.2026"} -> 200 139B
+    '{"errorCode":null,"errorMessage":"Text \'01.05.2026\' could not be parsed at index 0","resultList":null,"toplamSayi":null,"toplamSayfa":null}'
+
+[probe16] done
