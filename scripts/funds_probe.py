@@ -1,10 +1,11 @@
 """
-PROBE v6 (CI) — for one equity fund (HFR), dump the KAP summary page RSC and try
-disclosure-list subpages, to locate the monthly portfolio disclosure + its index.
+PROBE v7 (CI, final backend attempt) — grep KAP's JS chunks for the real backend
+API (paths/hosts), then call the disclosure/portfolio-looking endpoints right
+away and dump responses. Also retries memberDisclosureQuery properly.
 """
 from __future__ import annotations
 
-import json
+import collections
 import re
 import sys
 
@@ -20,43 +21,53 @@ def p(*a):
     sys.stdout.flush()
 
 
-def flight_blob(html: str) -> str:
-    parts = re.findall(r'self\.__next_f\.push\(\[\d+,("(?:[^"\\]|\\.)*")\]\)', html)
-    blob = ""
-    for s in parts:
-        try:
-            blob += json.loads(s)
-        except Exception:  # noqa
-            pass
-    return blob
+BASE = "https://www.kap.org.tr"
+r = S.get(BASE + "/tr/YatirimFonlari/YF", timeout=30)
+chunks = list(dict.fromkeys(re.findall(r'/_next/static/chunks/[A-Za-z0-9_~.\-]+\.js', r.text)))
+p(f"chunks referenced: {len(chunks)}")
 
-
-def grab(url: str):
-    r = S.get(url, timeout=25)
-    ct = r.headers.get("content-type", "")
-    b = flight_blob(r.text) if "html" in ct else r.text
-    return r.status_code, len(r.content), b
-
-
-OID = "4028328c998ee9d50199c2d5b15b6fd9"  # HFR – A1 Capital Hisse Senedi (TL) Fonu
-MOID = "8acae2c494bafc93019566721bf70ddf"
-
-st, n, b = grab(f"https://www.kap.org.tr/tr/sirket-bilgileri/ozet/{OID}")
-p(f"OZET -> {st} · {n}B · blob {len(b)}")
-p("disclosureIndex:", re.findall(r'"disclosureIndex":\s*"?(\d+)', b)[:20])
-p("Bildirim hrefs:", sorted(set(re.findall(r'/tr/Bildirim[A-Za-z]*/\d+', b)))[:20])
-for kw in ["Portföy Dağılım", "Fon Portföy", "Portföy Dağıtım", "PORTFÖY", "Bildirim"]:
-    m = re.search(kw, b)
-    p(f"  {kw!r}: {(m.start() if m else 'yok')}")
-p("=== OZET BLOB[0:5500] ===")
-p(b[:5500])
-
-for sub in ["bildirimler", "fon-portfoy-bilgileri", "portfoy-bilgileri", "fon-bilgileri", "mali-tablolar", "genel"]:
+api, hosts, fetches, kw = set(), set(), set(), collections.Counter()
+for c in chunks[:28]:
     try:
-        st, n, b = grab(f"https://www.kap.org.tr/tr/sirket-bilgileri/{sub}/{OID}")
-        idx = re.findall(r'"disclosureIndex":\s*"?(\d+)', b)[:12]
-        p(f"\n[{sub}] {st} · {n}B · blob {len(b)} · idx {idx} · 'Portföy Dağ' {'Portföy Dağ' in b} · hisse {'hisse' in b.lower()} · ISIN {'ISIN' in b}")
-    except Exception as e:  # noqa
-        p(f"[{sub}] err:", repr(e))
+        t = S.get(BASE + c, timeout=20).text
+    except Exception:  # noqa
+        continue
+    for m in re.findall(r'["\'`](/(?:tr/)?api/[A-Za-z0-9_\-/]{2,60})', t):
+        api.add(m)
+    for m in re.findall(r'https?://[A-Za-z0-9_.\-]+\.(?:gov|org|com)\.tr', t):
+        hosts.add(m)
+    for m in re.findall(r'fetch\(\s*["\'`]([^"\'`]{4,90})', t):
+        fetches.add(m)
+    for k in ["memberDisclosure", "disclosureQuery", "Portfoy", "portfoy", "Portföy", "Bildirim",
+              "fonPortfoy", "Distribution", "portfolio", "getDisclosure", "disclosureList"]:
+        if k in t:
+            kw[k] += 1
 
-p("\n[probe6] done")
+p("\napi paths:", sorted(api)[:80])
+p("hosts:", sorted(hosts))
+p("fetch literals:", sorted(fetches)[:60])
+p("keywords in chunks:", dict(kw))
+
+# Call the disclosure/portfolio-looking endpoints discovered above.
+cand = [a for a in api if any(k in a.lower() for k in ["disclosure", "portfoy", "fon", "member", "bildirim", "portfolio"])]
+p("\ncandidate data endpoints:", cand)
+OID = "8acae2c494bafc93019566721bf70ddf"  # A1 Capital member oid
+for a in cand[:10]:
+    url = BASE + a
+    for method in ("get", "post"):
+        try:
+            rr = S.post(url, json={"memberOid": OID}, timeout=18) if method == "post" else S.get(url, timeout=18)
+            p(f"  {method.upper()} {a} -> {rr.status_code} {len(rr.content)}B {rr.headers.get('content-type','')[:25]} | {rr.text[:160]!r}")
+        except Exception as e:  # noqa
+            p(f"  {method.upper()} {a} err {repr(e)[:50]}")
+
+# Direct retry of the classic disclosure-query endpoint.
+for ep in ["/tr/api/memberDisclosureQuery", "/api/memberDisclosureQuery"]:
+    try:
+        rr = S.post(BASE + ep, json={"fromDate": "2026-05-01", "toDate": "2026-06-18", "memberType": "", "mkkMemberOidList": [OID]},
+                    timeout=45, headers={"Content-Type": "application/json", "Referer": BASE + "/tr/bildirim-sorgu"})
+        p(f"\nPOST {ep} -> {rr.status_code} {len(rr.content)}B | {rr.text[:300]!r}")
+    except Exception as e:  # noqa
+        p(f"\nPOST {ep} err {repr(e)[:60]}")
+
+p("\n[probe7] done")
