@@ -1,14 +1,38 @@
-chunks referenced: 16
+##### GET / -> 200 · 7365B · text/html
+head:
+ <!DOCTYPE html>
+<html><head>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="-1"/>
+<meta http-equiv="CacheControl" content="no-cache"/>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<link rel="shortcut icon" href="data:;base64,iVBORw0KGgo="/>
+
+<script type="text/javascript">
+(function(){
+window["bobcmn"] = "101111111110112000000052000000052000000062000000012cbb509a2200000096200000000200000002300000000300000000300000006/TSPD/300000003zid300000007zid_DID300000005https3000000b008ce165641ab20009aa7d83f381e86afde723a1290dc6ebde126b23a66e006674ea37c6548d309fd084f65c0690a2800c4f92b4f26a365915a6c5fd7aeae453e9c81027e350ec65d3771b73f7fb63387d5e5a28f95f50f32300000003wid200000000200000000";
+
+window["failureConfig"] = "524f6f70732e2e2e2e736f6d657468696e672077656e742077726f6e672e2e2e2e20796f757220737570706f72742069642069733a2025444f534c372e6368616c6c656e67652e737570706f72745f6964252e1339303531353837303033343539393339323630062f5453
 
 api paths: []
-hosts: ['https://eyatirimci.mkk.com.tr', 'https://fonturkey.com.tr', 'https://www.mkk.com.tr']
-fetch literals: ['${a}/${e}/${t.GET_PARAMETERS_BY_KEY}/${r}', '${a}/${r}/${t.POST_SEARCH_COMBINED}', '${a}/${r}/${t.POST_SEARCH_MARKET}', '${a}/${r}/${t.POST_SEARCH_SMART}', '${r}/${e}/${t.GET_ABOUT_PDP_MENUS_BY_API_ROUTE}', '${r}/${e}/${t.GET_FOOTER_MENUS_BY_API_ROUTE}']
-keywords in chunks: {'Bildirim': 1}
+hosts: []
+fetch: []
+nextdata: False buildId: []
+links: ['data:;base64,iVBORw0KGgo=']
+kw: {'portföy': False, 'Portföy': False, 'hisse': False, 'Hisse': False, 'ISIN': False, 'nominal': False, 'fonKod': False, 'fund': False}
+  GET /api/funds -> 404 114089B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /api/fund -> 404 114087B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /api/fon -> 404 114085B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /api/fonlar -> 404 114091B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /api/portfolio -> 404 114097B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /api/portfoy -> 404 114093B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /api/v1/funds -> 404 148B  | '[448485b7-29f8-4b30-9218-c35bf98fb78e],\n[ERR-002],\n[ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/fu'
+  GET /api/fund/list -> 404 147B  | '[60299edf-f1f9-498f-aca7-a5b6d7a4726c],\n[ERR-002],\n[ApiProxy is not found for related URL( /uga/fonbilgilendirme/portal/service/li'
+  GET /api/funds/list -> 404 190B application/json;charset= | '{\n  "correlationId": "862b85e2-dc59-4875-876c-9d315705593c",\n  "faultCode": "ERR-006",\n  "faultString": "Method not found or disab'
+  GET /api/fundlist -> 404 114095B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /api/allfunds -> 404 114095B text/html; charset=utf-8 | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-s'
+  GET /sitemap.xml -> 200 7365B text/html | '<!DOCTYPE html>\r\n<html><head>\r\n<meta http-equiv="Pragma" content="no-cache"/>\r\n<meta http-equiv="Expires" content="-1"/>\r\n<meta ht'
+  GET /robots.txt -> 200 7365B text/html | '<!DOCTYPE html>\r\n<html><head>\r\n<meta http-equiv="Pragma" content="no-cache"/>\r\n<meta http-equiv="Expires" content="-1"/>\r\n<meta ht'
+  GET /fonlar -> 200 7365B text/html | '<!DOCTYPE html>\r\n<html><head>\r\n<meta http-equiv="Pragma" content="no-cache"/>\r\n<meta http-equiv="Expires" content="-1"/>\r\n<meta ht'
 
-candidate data endpoints: []
-
-POST /tr/api/memberDisclosureQuery err ReadTimeout(ReadTimeoutError("HTTPSConnectionPool(host='www.
-
-POST /api/memberDisclosureQuery -> 404 12857B | '<!DOCTYPE html><html id="__next_error__"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/01li3ytxorw1e.js"/><script src="/_next/static/chunks/0pqt~8bl3ukh4.js" async=""></'
-
-[probe7] done
+[probe8] done
