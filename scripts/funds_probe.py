@@ -1,7 +1,7 @@
 """
-PROBE v4 (CI) — KAP fund list via the RSC flight payload (fixed extractor).
-Goal: discover the fund-record shape (code, name, KAP oid/route) so we can then
-walk each fund -> monthly portfolio disclosure -> stock-level holdings.
+PROBE v5 (CI) — parse the KAP fund universe from the RSC flight, then for ONE
+equity (HS) fund try candidate detail/disclosure URLs and dump what comes back,
+hunting for the monthly portfolio (stock-level holdings) disclosure.
 """
 from __future__ import annotations
 
@@ -22,7 +22,6 @@ def p(*a):
 
 
 def flight_blob(html: str) -> str:
-    # App-Router flight: many <script>self.__next_f.push([N,"<json-string>"])</script>
     parts = re.findall(r'self\.__next_f\.push\(\[\d+,("(?:[^"\\]|\\.)*")\]\)', html)
     blob = ""
     for s in parts:
@@ -30,28 +29,56 @@ def flight_blob(html: str) -> str:
             blob += json.loads(s)
         except Exception:  # noqa
             pass
-    return blob, len(parts)
+    return blob
 
 
-URL = "https://www.kap.org.tr/tr/YatirimFonlari/YF"
-r = S.get(URL, timeout=30)
-blob, nparts = flight_blob(r.text)
-p(f"\n##### {URL} -> {r.status_code} · html {len(r.text)} · flight parts {nparts} · blob {len(blob)}")
+# 1) Fund universe.
+r = S.get("https://www.kap.org.tr/tr/YatirimFonlari/YF", timeout=30)
+blob = flight_blob(r.text)
+funds = re.findall(
+    r'"fundOid":"([^"]*)","fundId":"([^"]*)","fundCode":"([^"]*)","fundName":"([^"]*)",'
+    r'"fundType":"([^"]*)","fundClass":"([^"]*)"[^}]*?"fundMemberOid":"([^"]*)"', blob)
+p(f"funds parsed: {len(funds)}")
+classes = {}
+for f in funds:
+    classes[f[5]] = classes.get(f[5], 0) + 1
+p("fundClass counts:", classes)
+perma = dict((m[4], (m[1], m[2])) for m in re.findall(
+    r'"mkkMemberOid":(?:"([^"]*)"|null),"kapMemberOid":"([^"]*)","permaLink":"([^"]*)","title":"[^"]*","fundCode":"([^"]*)"', blob))
+p("permalinks parsed:", len(perma))
 
-for kw in ["fonKodu", "fonKod", "fundCode", "unvan", "Unvan", "oid", "Oid", "mkkMemberOid",
-           "stockCode", "Portf", "portf", "yatirimFon", "KAYDA", "fonTur", "title", "name"]:
-    m = re.search(re.escape(kw), blob)
-    if m:
-        i = m.start()
-        p(f"  {kw} @ {i}: {blob[max(0,i-40):i+160]!r}")
-    else:
-        p(f"  {kw}: yok")
+hs = [f for f in funds if f[5] == "HS"][:6]
+p("\nsample HS (equity) funds [oid,id,code,name,type,class,memberOid]:")
+for f in hs:
+    p("  ", f[2], "|", f[3][:40], "| memberOid", f[6], "| perma", perma.get(f[2]))
 
-p("\n=== blob[0:1600] ===")
-p(blob[:1600])
-j = blob.lower().find("fon")
-p("\n=== around first 'fon' ===")
-p(blob[max(0, j - 60):j + 500] if j >= 0 else "no 'fon'")
-p("\nlinks /tr/YatirimFonlari/X:", sorted(set(re.findall(r'/tr/YatirimFonlari/[A-Za-z0-9_\-]+', blob)))[:50])
-p("short codes:", re.findall(r'"([A-Z0-9]{2,6})"', blob)[:60])
-p("\n[probe4] done")
+if not hs:
+    p("no HS funds; abort"); sys.exit(0)
+oid, fid, code, name, _, _, moid = hs[0]
+pl = perma.get(code)
+p(f"\n>>> probing fund {code} ({name[:40]}) oid={oid} memberOid={moid} perma={pl}")
+
+cands = [
+    f"https://www.kap.org.tr/tr/{pl[1]}" if pl else None,
+    f"https://www.kap.org.tr/tr/sirket-bilgileri/ozet/{oid}",
+    f"https://www.kap.org.tr/tr/sirket-bilgileri/genel/{moid}",
+    f"https://www.kap.org.tr/tr/YatirimFonlari/{code}",
+    f"https://www.kap.org.tr/tr/bildirimler/{oid}",
+    f"https://www.kap.org.tr/tr/api/disclosures/{moid}",
+]
+for url in [c for c in cands if c]:
+    try:
+        rr = S.get(url, timeout=25)
+        b2 = flight_blob(rr.text) if "text/html" in rr.headers.get("content-type", "") else rr.text
+        hits = {k: (k in b2) for k in ["Portf", "portf", "Bildirim", "disclosure", "Hisse", "hisse", "ISIN", "nominal"]}
+        p(f"\n##### {url} -> {rr.status_code} · {len(rr.content)}B · blob {len(b2)} · hits {hits}")
+        idx = sorted(set(re.findall(r'/tr/Bildirim[a-z]*/\d+', b2)))[:8]
+        p("  bildirim links:", idx)
+        for kw in ["Portföy", "Portfoy", "Dağılım"]:
+            m = re.search(kw, b2)
+            if m:
+                p(f"  '{kw}' @ {m.start()}: {b2[m.start()-20:m.start()+120]!r}")
+    except Exception as e:  # noqa
+        p(f"{url} err:", repr(e))
+
+p("\n[probe5] done")
