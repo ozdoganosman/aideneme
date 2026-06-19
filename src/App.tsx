@@ -832,7 +832,7 @@ export default function App() {
 
       {showScreener && (
         <Suspense fallback={modalLoader}>
-          <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} params={indParams} />
+          <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} params={indParams} strats={customStrats} activeStrategy={strategy} />
         </Suspense>
       )}
 

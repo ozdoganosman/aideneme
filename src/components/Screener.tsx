@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
 import { emaArr, adxArr, rocArr, rollingHighest, rollingLowest, IndicatorParams } from '../indicators/calc';
+import { CustomStrategy, buildCustomPosition } from '../indicators/customStrategy';
 import { useEscClose } from '../useEscClose';
 
 // ── Live (period-aware) indicator filter ─────────────────────────────────────
@@ -104,6 +105,8 @@ interface Props {
   onSelect: (s: string) => void;
   onAddToWatch: (syms: string[], mode: 'add' | 'new') => void;
   params: IndicatorParams; // chart's active periods → power the live indicators
+  strats: CustomStrategy[]; // user's saved strategies → "filter by the one we like"
+  activeStrategy?: string | null; // currently-applied strategy name (preselected)
 }
 
 function readScrState(): {
@@ -114,6 +117,7 @@ function readScrState(): {
   liveFs?: LiveF[];
   liveSet?: string[];
   liveVals?: Record<string, Record<string, number>>;
+  stratF?: string | null;
   psig?: string;
 } {
   try {
@@ -196,7 +200,7 @@ const PRESETS: { label: string; fs: Filter[] }[] = [
 
 const PAL = ['#3b82f6', '#26a69a', '#f59e0b', '#a855f7', '#ef5350', '#14b8a6', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
 
-export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
+export function Screener({ onClose, onSelect, onAddToWatch, params, strats, activeStrategy }: Props) {
   useEscClose(onClose);
   const [data, setData] = useState<ScreenerFile | null>(null);
   const [spark, setSpark] = useState<Record<string, number[]>>({});
@@ -240,6 +244,17 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
     return Array.isArray(s.liveSet) && s.psig === JSON.stringify(params) ? new Set(s.liveSet) : null;
   });
   const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
+  // Strategy filter: keep only stocks where this saved strategy is currently
+  // in a BUY position (last bar == 1). Param-independent name persists; the live
+  // RESULTS (liveSet) invalidate on param change like the indicator filters.
+  const [stratFilter, setStratFilter] = useState<string | null>(() => {
+    const s = readScrState();
+    return typeof s.stratF === 'string' ? s.stratF : null;
+  });
+  const [stratPick, setStratPick] = useState<string>(() => {
+    const names = strats.map((s) => s.name);
+    return activeStrategy && names.includes(activeStrategy) ? activeStrategy : names[0] ?? '';
+  });
 
   useEffect(() => {
     // Drop indices (XU100, XBANK, …) — this is a stock screener, not an index list.
@@ -257,9 +272,9 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   useEffect(() => {
     localStorage.setItem(
       'borsaScrState',
-      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null, liveVals, psig }),
+      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null, liveVals, stratF: stratFilter, psig }),
     );
-  }, [view, filters, sort, q, liveFs, liveSet, liveVals, psig]);
+  }, [view, filters, sort, q, liveFs, liveSet, liveVals, stratFilter, psig]);
   // Chart params changed → live results are stale: drop them (keep the filters),
   // so the next "Canlı uygula" recomputes with the new parameters.
   const prevPsig = useRef(psig);
@@ -339,8 +354,11 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
   }, [data, filters, sort, q]);
   const rows = useMemo(() => (liveSet ? base.filter((r) => liveSet.has(r.s)) : base), [base, liveSet]);
 
-  const runLive = async () => {
-    if (!liveFs.length) {
+  const runLive = async (stratOverride?: string | null) => {
+    // Strategy criterion: keep stocks whose position == 1 on the last bar.
+    const stratName = stratOverride === undefined ? stratFilter : stratOverride;
+    const strat = stratName ? strats.find((s) => s.name === stratName) ?? null : null;
+    if (!liveFs.length && !strat) {
       setLiveSet(null);
       setLiveVals({});
       return;
@@ -369,7 +387,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
         if (c && c.length >= 30) {
           const row: Record<string, number> = {};
           for (const k of usedKeys) row[k] = activeValue(c, k, params);
-          vals[sym] = row;
+          if (usedKeys.length) vals[sym] = row;
           let ok = true;
           for (const f of liveFs) {
             const v = row[f.a];
@@ -378,6 +396,11 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
               ok = false;
               break;
             }
+          }
+          // …and the strategy must currently be in a BUY position.
+          if (ok && strat) {
+            const posArr = buildCustomPosition(c, strat, undefined, params);
+            ok = posArr[posArr.length - 1] === 1;
           }
           if (ok) pass.add(sym);
         }
@@ -422,6 +445,13 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
       f = { key: sk, op, mode: 'val', val: v };
     }
     setFilters((fs) => [...fs.filter((x) => !(x.key === f.key && x.op === f.op && x.key2 === f.key2)), f]);
+  };
+  // Filter by the selected saved strategy in one click: select it AND run the
+  // live scan (downloads candles, keeps stocks in a BUY position now).
+  const filterByStrat = () => {
+    if (!stratPick || liveRun) return;
+    setStratFilter(stratPick);
+    void runLive(stratPick);
   };
   const toggleSort = (k: Key) =>
     setSort((s) => (s.key === k ? { key: k, dir: (s.dir * -1) as 1 | -1 } : { key: k, dir: -1 }));
@@ -542,19 +572,43 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
                 </button>
                 {liveMode && <span className="scr-livehint" title="Bu filtre canlı çalışır: + Ekle'den sonra aşağıdan 'Canlı uygula'ya bas">🔬 canlı</span>}
               </div>
-              {liveFs.length > 0 && (
+              <div className="scr-stratrow">
+                <span className="lg-muted">📐 Stratejiye göre:</span>
+                {strats.length === 0 ? (
+                  <span className="lg-muted">Önce <b>Backtest</b>'te bir strateji kaydet → o stratejide şu an <b>AL sinyali</b> olan hisseleri süzersin.</span>
+                ) : (
+                  <>
+                    <select value={stratPick} onChange={(e) => setStratPick(e.target.value)} title="Beğendiğin / kayıtlı strateji">
+                      {strats.map((s) => (
+                        <option key={s.id || s.name} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                    <button className="scr-add" onClick={filterByStrat} disabled={!!liveRun} title="Bu stratejide şu an AL sinyali / pozisyonda olan hisseleri canlı süz">
+                      {liveRun ? `Taranıyor… ${liveRun.done}/${liveRun.total}` : '📐 Stratejiye göre filtrele'}
+                    </button>
+                    <span className="scr-livehint">🔬 canlı · AL sinyali olanlar</span>
+                  </>
+                )}
+              </div>
+              {(liveFs.length > 0 || stratFilter) && (
                 <div className="scr-chips">
-                  <span className="lg-muted">🔬 Canlı (aktif göstergeler):</span>
+                  <span className="lg-muted">🔬 Canlı:</span>
                   {liveFs.map((f, i) => (
                     <span key={i} className="scr-fchip scr-fchip-live">
                       {activeLabel(f.a, params)} {f.op === 'gt' ? '>' : '<'} {f.b ? activeLabel(f.b, params) : f.val}
                       <button aria-label="Filtreyi kaldır" title="Filtreyi kaldır" onClick={() => { setLiveFs((fs) => fs.filter((_, idx) => idx !== i)); setLiveSet(null); }}>×</button>
                     </span>
                   ))}
-                  <button className="scr-add" onClick={runLive} disabled={!!liveRun} title="Snapshot ile süzülen hisseleri indirip canlı hesaplar">
+                  {stratFilter && (
+                    <span className="scr-fchip scr-fchip-live" title="Bu stratejide şu an pozisyonda (AL sinyali) olan hisseler">
+                      📐 {stratFilter} · AL
+                      <button aria-label="Strateji filtresini kaldır" title="Kaldır" onClick={() => { setStratFilter(null); setLiveSet(null); }}>×</button>
+                    </span>
+                  )}
+                  <button className="scr-add" onClick={() => runLive()} disabled={!!liveRun} title="Snapshot ile süzülen hisseleri indirip canlı hesaplar">
                     {liveRun ? `Taranıyor… ${liveRun.done}/${liveRun.total}` : liveSet ? '↻ Canlı uygula' : '🔬 Canlı uygula'}
                   </button>
-                  <button className="scr-preset scr-clear" onClick={() => { setLiveFs([]); setLiveSet(null); }}>✕ canlı temizle</button>
+                  <button className="scr-preset scr-clear" onClick={() => { setLiveFs([]); setStratFilter(null); setLiveSet(null); }}>✕ canlı temizle</button>
                   {liveSet && <span className="lg-muted">canlı: {liveSet.size} eşleşti</span>}
                   {!liveSet && <span className="scan-stale">↻ "Canlı uygula"ya bas</span>}
                 </div>
@@ -713,7 +767,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params }: Props) {
               </div>
               <div className="bt-hint">
                 ⚠️ Anlık gösterge taraması; yatırım tavsiyesi değildir. Başlığa tıkla → sırala, satıra tıkla → grafikte aç. <b>🔬 Aktif göstergeler</b> grafikteki
-                parametrelerle <b>canlı</b> hesaplanır (hisseleri indirir) — aynı değerler hem filtre, hem kıyas (gösterge↔gösterge), hem de kolon olarak kullanılır. Kurduktan sonra <b>Canlı uygula</b>'ya bas. Parametreyi grafikten değiştirip yeniden uygula.
+                parametrelerle <b>canlı</b> hesaplanır (hisseleri indirir) — aynı değerler hem filtre, hem kıyas (gösterge↔gösterge), hem de kolon olarak kullanılır. Kurduktan sonra <b>Canlı uygula</b>'ya bas. Parametreyi grafikten değiştirip yeniden uygula. <b>📐 Stratejiye göre filtrele</b>: kayıtlı bir stratejide <b>şu an AL sinyali / pozisyonda</b> olan hisseleri süzer.
               </div>
             </>
           )}
