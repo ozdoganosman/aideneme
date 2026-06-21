@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
+import { fetchScreenerFor, fetchSparkFor, fetchStatic, isIndexSymbol, ScreenerFile, ScreenerItem, Market } from '../data/bistStatic';
 import { Candles } from '../data/types';
 import { emaArr, adxArr, rocArr, rollingHighest, rollingLowest, IndicatorParams } from '../indicators/calc';
 import { CustomStrategy, buildCustomPosition } from '../indicators/customStrategy';
@@ -107,6 +107,7 @@ interface Props {
   params: IndicatorParams; // chart's active periods → power the live indicators
   strats: CustomStrategy[]; // user's saved strategies → "filter by the one we like"
   activeStrategy?: string | null; // currently-applied strategy name (preselected)
+  market: Market; // which market's snapshot/candles to screen (bist | us | crypto)
 }
 
 function readScrState(): {
@@ -200,7 +201,7 @@ const PRESETS: { label: string; fs: Filter[] }[] = [
 
 const PAL = ['#3b82f6', '#26a69a', '#f59e0b', '#a855f7', '#ef5350', '#14b8a6', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
 
-export function Screener({ onClose, onSelect, onAddToWatch, params, strats, activeStrategy }: Props) {
+export function Screener({ onClose, onSelect, onAddToWatch, params, strats, activeStrategy, market }: Props) {
   useEscClose(onClose);
   const [data, setData] = useState<ScreenerFile | null>(null);
   const [spark, setSpark] = useState<Record<string, number[]>>({});
@@ -257,13 +258,15 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   });
 
   useEffect(() => {
-    // Drop indices (XU100, XBANK, …) — this is a stock screener, not an index list.
-    fetchScreener()
-      .then((d) => setData(d ? { ...d, items: d.items.filter((it) => !isIndexSymbol(it.s)) } : null))
+    setLoaded(false);
+    // Drop BIST indices (XU100, XBANK, …) — but NOT for US/crypto, where tickers
+    // like X (US Steel) or XRP/XLM/XMR legitimately start with "X".
+    fetchScreenerFor(market)
+      .then((d) => setData(d ? { ...d, items: market === 'bist' ? d.items.filter((it) => !isIndexSymbol(it.s)) : d.items } : null))
       .catch(() => setData(null))
       .finally(() => setLoaded(true));
-    fetchBistSpark().then(setSpark).catch(() => {});
-  }, []);
+    fetchSparkFor(market).then(setSpark).catch(() => {});
+  }, [market]);
   useEffect(() => {
     localStorage.setItem('borsaScreens', JSON.stringify(saved));
   }, [saved]);
@@ -375,11 +378,12 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
     const worker = async () => {
       while (queue.length) {
         const sym = queue.shift()!;
-        let c = liveCandles.get(sym);
+        const ck = `${market}:${sym}`;
+        let c = liveCandles.get(ck);
         if (!c) {
           try {
-            c = await fetchBistStatic(sym);
-            liveCandles.set(sym, c);
+            c = await fetchStatic(market, sym);
+            liveCandles.set(ck, c);
           } catch {
             c = undefined;
           }
@@ -471,7 +475,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <span className="scr-head-title">
-            <b>🔍 Hisse Tarama{data ? ` · ${data.items.length} hisse` : ''}</b>
+            <b>🔍 {market === 'crypto' ? 'Kripto' : market === 'us' ? 'ABD' : 'Hisse'} Tarama{data ? ` · ${data.items.length} ${market === 'crypto' ? 'coin' : 'hisse'}` : ''}</b>
             {data?.asof && (
               <span className="scr-asof" title="Verinin ait olduğu son işlem günü (snapshot)">📅 veri: {trDate(data.asof)}</span>
             )}
@@ -683,22 +687,26 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
                   {msg && <span className="scr-msg">✓ {msg}</span>}
                 </span>
                 <span className="scr-actions">
-                  <button
-                    className="scr-act"
-                    onClick={() => addWatch('add')}
-                    disabled={!rows.length}
-                    title="Eşleşen tüm hisseleri aktif izleme listesine ekle"
-                  >
-                    ★ Aktif listeye ekle
-                  </button>
-                  <button
-                    className="scr-act"
-                    onClick={() => addWatch('new')}
-                    disabled={!rows.length}
-                    title="Eşleşenlerden yeni bir izleme listesi oluştur"
-                  >
-                    🆕 Yeni liste oluştur
-                  </button>
+                  {market === 'bist' && (
+                    <>
+                      <button
+                        className="scr-act"
+                        onClick={() => addWatch('add')}
+                        disabled={!rows.length}
+                        title="Eşleşen tüm hisseleri aktif izleme listesine ekle"
+                      >
+                        ★ Aktif listeye ekle
+                      </button>
+                      <button
+                        className="scr-act"
+                        onClick={() => addWatch('new')}
+                        disabled={!rows.length}
+                        title="Eşleşenlerden yeni bir izleme listesi oluştur"
+                      >
+                        🆕 Yeni liste oluştur
+                      </button>
+                    </>
+                  )}
                   <input
                     className="scr-search"
                     placeholder="🔎 Sembol / şirket ara"

@@ -15,10 +15,17 @@ interface Rec {
 
 const base = import.meta.env.BASE_URL; // './' (works under /aideneme/ on Pages)
 
-export async function fetchBistStatic(symbol: string, signal?: AbortSignal): Promise<Candles> {
-  const res = await fetch(`${base}data/bist/${symbol}.json`, { signal });
+// Markets share one static-JSON layout: public/data/<market>/{<sym>.json,
+// symbols.json, quotes.json, names.json, spark.json, screener.json}.
+export type Market = 'bist' | 'us' | 'crypto';
+export const MARKETS: Market[] = ['bist', 'us', 'crypto'];
+export const MARKET_LABEL: Record<Market, string> = { bist: 'BIST', us: 'ABD (NYSE/NASDAQ)', crypto: 'Kripto' };
+
+// Per-symbol OHLCV for any market.
+export async function fetchStatic(market: Market, symbol: string, signal?: AbortSignal): Promise<Candles> {
+  const res = await fetch(`${base}data/${market}/${symbol}.json`, { signal });
   if (!res.ok) {
-    throw new Error(`"${symbol}" için statik BIST verisi yok (CI henüz üretmemiş olabilir)`);
+    throw new Error(`"${symbol}" için statik veri yok (CI henüz üretmemiş olabilir)`);
   }
   const j = (await res.json()) as { data: Rec[] };
   const d = j.data ?? [];
@@ -33,6 +40,48 @@ export async function fetchBistStatic(symbol: string, signal?: AbortSignal): Pro
     c.volume[i] = r.v;
   }
   return c;
+}
+
+export const fetchBistStatic = (symbol: string, signal?: AbortSignal) => fetchStatic('bist', symbol, signal);
+
+export async function fetchSymbolsFor(market: Market, signal?: AbortSignal): Promise<string[]> {
+  try {
+    const res = await fetch(`${base}data/${market}/symbols.json`, { signal });
+    if (!res.ok) return [];
+    return ((await res.json()) as { symbols: string[] }).symbols ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchQuotesFor(market: Market, signal?: AbortSignal): Promise<Quotes> {
+  try {
+    const res = await fetch(`${base}data/${market}/quotes.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Quotes;
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchNamesFor(market: Market, signal?: AbortSignal): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${base}data/${market}/names.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchSparkFor(market: Market, signal?: AbortSignal): Promise<Record<string, number[]>> {
+  try {
+    const res = await fetch(`${base}data/${market}/spark.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, number[]>;
+  } catch {
+    return {};
+  }
 }
 
 export async function fetchBistSymbols(signal?: AbortSignal): Promise<string[]> {
@@ -160,8 +209,12 @@ export interface ScreenerFile {
 }
 
 export async function fetchScreener(signal?: AbortSignal): Promise<ScreenerFile | null> {
+  return fetchScreenerFor('bist', signal);
+}
+
+export async function fetchScreenerFor(market: Market, signal?: AbortSignal): Promise<ScreenerFile | null> {
   try {
-    const res = await fetch(`${base}data/bist/screener.json`, { signal });
+    const res = await fetch(`${base}data/${market}/screener.json`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as ScreenerFile;
   } catch {

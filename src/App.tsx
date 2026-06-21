@@ -16,17 +16,20 @@ import { registerCustomStrategy, type Trade } from './indicators/backtest';
 import { CustomStrategy, buildCustomPosition } from './indicators/customStrategy';
 import { Candles, BIST_SYMBOLS } from './data/types';
 import {
-  fetchBistStatic,
-  fetchBistSymbols,
-  fetchBistQuotes,
-  fetchBistNames,
-  fetchBistSpark,
+  fetchStatic,
+  fetchSymbolsFor,
+  fetchQuotesFor,
+  fetchNamesFor,
+  fetchSparkFor,
   Quotes,
+  Market,
+  MARKET_LABEL,
 } from './data/bistStatic';
 import { generateSynthetic } from './data/synthetic';
 import { resample, TF } from './data/resample';
 
-type Provider = 'bist' | 'synthetic';
+// Real data markets (chart + search + screener) + the synthetic stress mode.
+type Provider = Market | 'synthetic';
 
 const SYNTH_BARS = 4_000_000;
 const TF_LABEL: Record<TF, string> = { D: 'Günlük', W: 'Haftalık', M: 'Aylık' };
@@ -193,6 +196,10 @@ export default function App() {
   const tfRef = useRef(tf); // latest timeframe, read at load-resolve time (avoids stale capture)
   tfRef.current = tf;
   const lastKeyRef = useRef<string | null>(null);
+  // Remember the last symbol per market so switching markets restores it.
+  const lastSymRef = useRef<Record<Market, string>>({ bist: 'THYAO', us: 'AAPL', crypto: 'BTC' });
+  // Current data market (null in synthetic mode → no market data/panels).
+  const dataMarket: Market | null = provider === 'synthetic' ? null : provider;
 
   useEffect(() => localStorage.setItem('borsaWatchLists', JSON.stringify(lists)), [lists]);
   useEffect(() => localStorage.setItem('borsaActiveList', activeListId), [activeListId]);
@@ -237,7 +244,8 @@ export default function App() {
     async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
       const prov = opts?.provider ?? provider;
       const sym = (opts?.symbol ?? symbol).toUpperCase().trim();
-      if (prov === 'bist' && !sym) return;
+      if (prov !== 'synthetic' && !sym) return;
+      if (prov !== 'synthetic') lastSymRef.current[prov] = sym;
 
       setLoading(true);
       loadingRef.current = true;
@@ -257,12 +265,12 @@ export default function App() {
           dailyRef.current = null;
           key = 'synthetic';
         } else {
-          const daily = await fetchBistStatic(sym, ac.signal);
+          const daily = await fetchStatic(prov, sym, ac.signal);
           if (ac.signal.aborted) return;
           dailyRef.current = daily;
           const tframe = opts?.tf ?? tfRef.current; // latest tf at resolve time
           c = resample(daily, tframe);
-          key = `bist|${tframe}`;
+          key = `${prov}|${tframe}`;
         }
         setFitOnLoad(firstRef.current || key !== lastKeyRef.current);
         firstRef.current = false;
@@ -288,22 +296,23 @@ export default function App() {
   const changeTf = (newTf: TF) => {
     setTf(newTf);
     setFocusTrade(null);
-    if (provider !== 'bist' || !dailyRef.current) return;
+    if (provider === 'synthetic' || !dailyRef.current) return;
     // A symbol load is in flight → don't resample the PREVIOUS symbol's daily;
     // the in-flight load resolves with the new symbol at the latest tf (tfRef).
     if (loadingRef.current) return;
     const c = resample(dailyRef.current, newTf);
     setFitOnLoad(true);
-    lastKeyRef.current = `bist|${newTf}`;
+    lastKeyRef.current = `${provider}|${newTf}`;
     setCandles(c);
     setStatus(`${c.length.toLocaleString()} mum`);
   };
 
-  // Select a symbol from the sidebar → always BIST.
+  // Select a symbol (panel / screener) → stay in the current market.
   const selectSymbol = (s: string) => {
-    setProvider('bist');
+    const mk: Provider = provider === 'synthetic' ? 'bist' : provider;
+    if (mk !== provider) setProvider(mk);
     setSymbol(s);
-    void load({ provider: 'bist', symbol: s });
+    void load({ provider: mk, symbol: s });
     // On mobile the sidebars are slide-over drawers — close them after picking.
     if (isNarrow()) {
       setShowLeft(false);
@@ -379,14 +388,19 @@ export default function App() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Load the current market's symbol list + quotes/names/spark; re-runs when the
+  // market changes (BIST ⇄ ABD ⇄ Kripto). Synthetic mode uses no market data.
   useEffect(() => {
-    fetchBistSymbols()
-      .then((s) => setSymbols(s.length ? s : BIST_SYMBOLS))
-      .catch(() => setSymbols(BIST_SYMBOLS));
-    fetchBistQuotes().then(setQuotes).catch(() => setQuotes({}));
-    fetchBistNames().then(setNames).catch(() => setNames({}));
-    fetchBistSpark().then(setSpark).catch(() => setSpark({}));
-  }, []);
+    if (!dataMarket) return;
+    const mk = dataMarket;
+    const fb = mk === 'bist' ? BIST_SYMBOLS : [];
+    fetchSymbolsFor(mk)
+      .then((s) => setSymbols(s.length ? s : fb))
+      .catch(() => setSymbols(fb));
+    fetchQuotesFor(mk).then(setQuotes).catch(() => setQuotes({}));
+    fetchNamesFor(mk).then(setNames).catch(() => setNames({}));
+    fetchSparkFor(mk).then(setSpark).catch(() => setSpark({}));
+  }, [dataMarket]);
 
   // Keyboard shortcuts: / search, L log, 1/2/3 timeframe, [ ] panels, F backtest.
   useEffect(() => {
@@ -403,7 +417,7 @@ export default function App() {
       else if (e.key === '[') setShowLeft((v) => !v);
       else if (e.key === ']') setShowRight((v) => !v);
       else if (e.key === 'f' || e.key === 'F') {
-        if (candles) setShowBt(true);
+        if (candles && provider === 'bist') setShowBt(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -447,7 +461,7 @@ export default function App() {
   const lastC = candles && candles.length ? candles.close[candles.length - 1] : NaN;
   const prevC = candles && candles.length > 1 ? candles.close[candles.length - 2] : NaN;
   const dChg = isFinite(lastC) && isFinite(prevC) && prevC ? ((lastC - prevC) / prevC) * 100 : 0;
-  const company = provider === 'bist' ? names[symbol] || '' : 'Sentetik veri';
+  const company = provider === 'synthetic' ? 'Sentetik veri' : names[symbol] || '';
 
   // Fallback shown while a lazy-loaded modal chunk downloads.
   const modalLoader = (
@@ -474,23 +488,33 @@ export default function App() {
           onChange={(e) => {
             const p = e.target.value as Provider;
             setProvider(p);
-            void load({ provider: p });
+            if (p === 'synthetic') {
+              void load({ provider: p });
+            } else {
+              const def = lastSymRef.current[p];
+              setSymbol(def);
+              void load({ provider: p, symbol: def });
+            }
           }}
         >
           <option value="bist">BIST</option>
+          <option value="us">ABD (NYSE/NASDAQ)</option>
+          <option value="crypto">Kripto</option>
           <option value="synthetic">Sentetik (stres)</option>
         </select>
 
-        {provider === 'bist' && (
+        {provider !== 'synthetic' && (
           <>
             <SymbolSearch value={symbol} symbols={symbols} onChange={setSymbol} onSubmit={(s) => load({ symbol: s })} />
-            <button
-              className={'ctl star' + (starred ? ' on' : '')}
-              title={starred ? 'İzlemeden çıkar' : 'İzlemeye ekle'}
-              onClick={() => toggleWatch(symbol)}
-            >
-              {starred ? '★' : '☆'}
-            </button>
+            {provider === 'bist' && (
+              <button
+                className={'ctl star' + (starred ? ' on' : '')}
+                title={starred ? 'İzlemeden çıkar' : 'İzlemeye ekle'}
+                onClick={() => toggleWatch(symbol)}
+              >
+                {starred ? '★' : '☆'}
+              </button>
+            )}
             {isFinite(lastC) && (
               <span className="tb-quote" title={company}>
                 <span className="tb-price">{fp(lastC)}</span>
@@ -503,7 +527,7 @@ export default function App() {
         )}
 
         <div className={'tb-menu' + (tbMenu ? ' open' : '')}>
-          {provider === 'bist' ? (
+          {provider !== 'synthetic' ? (
             <div className="seg">
               {(['D', 'W', 'M'] as TF[]).map((t) => (
                 <button key={t} className={t === tf ? 'active' : ''} onClick={() => changeTf(t)}>
@@ -520,15 +544,21 @@ export default function App() {
           <button className={'ctl' + (log ? ' on' : '')} onClick={() => setLog((v) => !v)} title="Logaritmik fiyat ölçeği">
             Log
           </button>
-          <button className="ctl primary" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
-            Strateji
-          </button>
-          <button className="ctl" onClick={() => setShowScreener(true)} title="Hisse tarama (filtreler)">
-            Tara
-          </button>
-          <button className="ctl" onClick={() => setShowHeat(true)} title="Piyasa ısı haritası (treemap)">
-            Isı
-          </button>
+          {provider === 'bist' && (
+            <button className="ctl primary" onClick={() => setShowBt(true)} disabled={!candles} title="Strateji taraması (backtest)">
+              Strateji
+            </button>
+          )}
+          {provider !== 'synthetic' && (
+            <button className="ctl" onClick={() => setShowScreener(true)} title="Hisse/coin tarama (filtreler)">
+              Tara
+            </button>
+          )}
+          {provider === 'bist' && (
+            <button className="ctl" onClick={() => setShowHeat(true)} title="Piyasa ısı haritası (treemap)">
+              Isı
+            </button>
+          )}
           <button className="ctl" onClick={() => load()} disabled={loading} title="Yeniden yükle">
             <span className={loading ? 'spinning' : ''}>⟳</span>
           </button>
@@ -541,28 +571,30 @@ export default function App() {
         </div>
 
         <span className="spacer" />
-        <div className="tb-group">
-          <button
-            className={'ctl tgl' + (showLeft ? ' on' : '')}
-            onClick={toggleLeft}
-            title="Sol panel (Portföy / İşlemler) — kısayol ["
-          >
-            ◧
-          </button>
-          <button
-            className={'ctl tgl' + (showRight ? ' on' : '')}
-            onClick={toggleRight}
-            title="Sağ panel (İzleme Listesi) — kısayol ]"
-          >
-            ◨
-          </button>
-        </div>
+        {provider === 'bist' && (
+          <div className="tb-group">
+            <button
+              className={'ctl tgl' + (showLeft ? ' on' : '')}
+              onClick={toggleLeft}
+              title="Sol panel (Portföy / İşlemler) — kısayol ["
+            >
+              ◧
+            </button>
+            <button
+              className={'ctl tgl' + (showRight ? ' on' : '')}
+              onClick={toggleRight}
+              title="Sağ panel (İzleme Listesi) — kısayol ]"
+            >
+              ◨
+            </button>
+          </div>
+        )}
       </header>
 
       {tbMenu && <div className="tb-menu-backdrop" onClick={() => setTbMenu(false)} />}
 
       <div className="body">
-        {showLeft ? (
+        {provider === 'bist' && (showLeft ? (
           <aside className="sidebar">
             <div className="sheet-grab" onPointerDown={(e) => dragSheet(e, () => setShowLeft(false))} />
             <div className="panel">
@@ -606,7 +638,7 @@ export default function App() {
             <span className="edge-ic">›</span>
             <span className="edge-label">Portföy · İşlemler</span>
           </button>
-        )}
+        ))}
 
         <main className="main">
           {stats && (
@@ -711,7 +743,7 @@ export default function App() {
           )}
         </main>
 
-        {showRight ? (
+        {provider === 'bist' && (showRight ? (
           <aside className="sidebar right">
             <div className="sheet-grab" onPointerDown={(e) => dragSheet(e, () => setShowRight(false))} />
             <div className="wl-tabs" role="tablist">
@@ -759,9 +791,9 @@ export default function App() {
             <span className="edge-ic">‹</span>
             <span className="edge-label">İzleme Listesi</span>
           </button>
-        )}
+        ))}
 
-        {(showLeft || showRight) && (
+        {provider === 'bist' && (showLeft || showRight) && (
           <div
             className="drawer-backdrop"
             onClick={() => {
@@ -773,20 +805,22 @@ export default function App() {
       </div>
 
       <footer className="status">
-        <span>{provider === 'bist' ? `BIST · ${TF_LABEL[tf]}` : 'Sentetik · stres testi'}</span>
+        <span>{provider === 'synthetic' ? 'Sentetik · stres testi' : `${MARKET_LABEL[provider]} · ${TF_LABEL[tf]}`}</span>
         <span>Mum: {candles ? candles.length.toLocaleString() : 0}</span>
         <span className="lg-muted">sürükle · tekerlek: zoom · çift tık: sığdır</span>
         <span className={error ? 'down' : ''}>{error ? `Hata: ${error}` : status}</span>
       </footer>
 
-      <nav className="mobilebar">
-        <button className={showLeft ? 'active' : ''} onClick={toggleLeft}>
-          📊 Portföy / İşlemler
-        </button>
-        <button className={showRight ? 'active' : ''} onClick={toggleRight}>
-          ⭐ Favoriler
-        </button>
-      </nav>
+      {provider === 'bist' && (
+        <nav className="mobilebar">
+          <button className={showLeft ? 'active' : ''} onClick={toggleLeft}>
+            📊 Portföy / İşlemler
+          </button>
+          <button className={showRight ? 'active' : ''} onClick={toggleRight}>
+            ⭐ Favoriler
+          </button>
+        </nav>
+      )}
 
       {showBt && candles && (
         <Suspense fallback={modalLoader}>
@@ -832,7 +866,7 @@ export default function App() {
 
       {showScreener && (
         <Suspense fallback={modalLoader}>
-          <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} params={indParams} strats={customStrats} activeStrategy={strategy} />
+          <Screener onClose={() => setShowScreener(false)} onSelect={selectSymbol} onAddToWatch={addToWatch} params={indParams} strats={customStrats} activeStrategy={strategy} market={dataMarket ?? 'bist'} />
         </Suspense>
       )}
 
