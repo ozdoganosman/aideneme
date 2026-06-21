@@ -1102,6 +1102,27 @@ button.ctl:disabled {
 .scr-build .scr-lp {
   width: 72px;
 }
+.scr-stratrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.scr-stratrow select {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: none;
+}
+.scr-stratrow select:focus {
+  border-color: var(--accent);
+}
 .scr-livehint {
   font-size: 11px;
   color: #d6c7ef;
