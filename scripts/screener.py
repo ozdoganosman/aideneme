@@ -22,7 +22,8 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from strategies import ema, rsi_arr, supertrend_pos  # noqa: E402
 
-OUT = Path(__file__).resolve().parent.parent / "public" / "data" / "bist"
+MARKET = os.environ.get("MARKET", "bist")
+OUT = Path(__file__).resolve().parent.parent / "public" / "data" / MARKET
 SKIP = {"symbols.json", "quotes.json", "strategies.json", "names.json", "spark.json", "screener.json"}
 SCHEMA_VERSION = 5  # bump when item/file fields change to force a recompute
 

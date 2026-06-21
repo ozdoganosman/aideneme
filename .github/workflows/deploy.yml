@@ -32,11 +32,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Reuse already-published BIST data (avoid slow re-fetch)
+      - name: Reuse already-published market data (avoid slow re-fetch)
         run: |
           git clone --depth 1 -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" _site 2>/dev/null || true
           mkdir -p public/data
-          if [ -d _site/data/bist ]; then cp -r _site/data/bist public/data/; fi
+          for m in bist us crypto; do
+            if [ -d "_site/data/$m" ]; then cp -r "_site/data/$m" public/data/; fi
+          done
           rm -rf _site
 
       - name: BIST data (incremental on push; full refresh on schedule / manual run)
@@ -52,17 +54,35 @@ jobs:
           python -m pip install --quiet borsapy numpy pandas
           python scripts/build_bist.py
 
+      - name: US data — S&P 500 + Nasdaq-100 (yfinance; incremental on push)
+        continue-on-error: true
+        env:
+          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
+        run: |
+          python -m pip install --quiet yfinance pandas requests
+          python scripts/build_us.py
+
+      - name: Crypto data — top 100 by market cap (CoinGecko + yfinance)
+        continue-on-error: true
+        env:
+          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
+          CRYPTO_N: '100'
+        run: python scripts/build_crypto.py
+
       - name: Market-wide strategy scan (self-gates; recomputes when stale)
         continue-on-error: true
         env:
           FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
         run: python scripts/strategies.py
 
-      - name: Screener snapshot (per-symbol current indicators; refreshes on schedule)
+      - name: Screener snapshots — bist + us + crypto
         continue-on-error: true
         env:
           FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
-        run: python scripts/screener.py
+        run: |
+          python scripts/screener.py
+          MARKET=us python scripts/screener.py
+          MARKET=crypto python scripts/screener.py
 
       - run: npm ci
       - run: npm run build
