@@ -24,8 +24,10 @@ from strategies import ema, rsi_arr, supertrend_pos  # noqa: E402
 
 MARKET = os.environ.get("MARKET", "bist")
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / MARKET
+# Crypto trades ~365 gün/yıl; hisse ~252 işlem günü. Oynaklık penceresi + yıllıklama.
+BARS_PER_YEAR = 365 if MARKET == "crypto" else 252
 SKIP = {"symbols.json", "quotes.json", "strategies.json", "names.json", "spark.json", "screener.json"}
-SCHEMA_VERSION = 5  # bump when item/file fields change to force a recompute
+SCHEMA_VERSION = 6  # bump when item/file fields change to force a recompute
 
 
 def adx_wilder(high, low, close, length: int):
@@ -170,10 +172,10 @@ def main() -> int:
         hi52 = float(high[i1y:].max())
         fh = (last / hi52 - 1) * 100 if hi52 > 0 else 0.0
 
-        start = max(1, n - 252)
+        start = max(1, n - BARS_PER_YEAR)
         rs = close[start:] / close[start - 1:-1] - 1
         rs = rs[np.isfinite(rs)]
-        vol = float(np.std(rs, ddof=1) * np.sqrt(252) * 100) if rs.size > 1 else 0.0
+        vol = float(np.std(rs, ddof=1) * np.sqrt(BARS_PER_YEAR) * 100) if rs.size > 1 else 0.0
 
         peak = np.maximum.accumulate(close)
         dd = float(((peak - close) / peak).max() * 100)

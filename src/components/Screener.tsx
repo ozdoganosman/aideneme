@@ -120,6 +120,7 @@ function readScrState(): {
   liveVals?: Record<string, Record<string, number>>;
   stratF?: string | null;
   psig?: string;
+  mkt?: string;
 } {
   try {
     return JSON.parse(localStorage.getItem('borsaScrState') || '{}');
@@ -232,7 +233,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   // uygula"; powers both the live filter AND the live columns (same data).
   const [liveVals, setLiveVals] = useState<Record<string, Record<string, number>>>(() => {
     const s = readScrState();
-    return s.liveVals && s.psig === JSON.stringify(params) ? s.liveVals : {};
+    return s.liveVals && s.mkt === market && s.psig === JSON.stringify(params) ? s.liveVals : {};
   });
   // Live filters persist always (they reference indicators, not periods); live
   // RESULTS persist only while the params they used are unchanged.
@@ -242,7 +243,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   });
   const [liveSet, setLiveSet] = useState<Set<string> | null>(() => {
     const s = readScrState();
-    return Array.isArray(s.liveSet) && s.psig === JSON.stringify(params) ? new Set(s.liveSet) : null;
+    return Array.isArray(s.liveSet) && s.mkt === market && s.psig === JSON.stringify(params) ? new Set(s.liveSet) : null;
   });
   const [liveRun, setLiveRun] = useState<{ done: number; total: number } | null>(null);
   // Strategy filter: keep only stocks where this saved strategy is currently
@@ -275,9 +276,9 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   useEffect(() => {
     localStorage.setItem(
       'borsaScrState',
-      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null, liveVals, stratF: stratFilter, psig }),
+      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null, liveVals, stratF: stratFilter, psig, mkt: market }),
     );
-  }, [view, filters, sort, q, liveFs, liveSet, liveVals, stratFilter, psig]);
+  }, [view, filters, sort, q, liveFs, liveSet, liveVals, stratFilter, psig, market]);
   // Chart params changed → live results are stale: drop them (keep the filters),
   // so the next "Canlı uygula" recomputes with the new parameters.
   const prevPsig = useRef(psig);

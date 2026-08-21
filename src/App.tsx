@@ -394,12 +394,14 @@ export default function App() {
     if (!dataMarket) return;
     const mk = dataMarket;
     const fb = mk === 'bist' ? BIST_SYMBOLS : [];
+    let ignore = false; // a slow prior-market response must not clobber the new one
     fetchSymbolsFor(mk)
-      .then((s) => setSymbols(s.length ? s : fb))
-      .catch(() => setSymbols(fb));
-    fetchQuotesFor(mk).then(setQuotes).catch(() => setQuotes({}));
-    fetchNamesFor(mk).then(setNames).catch(() => setNames({}));
-    fetchSparkFor(mk).then(setSpark).catch(() => setSpark({}));
+      .then((s) => { if (!ignore) setSymbols(s.length ? s : fb); })
+      .catch(() => { if (!ignore) setSymbols(fb); });
+    fetchQuotesFor(mk).then((q) => { if (!ignore) setQuotes(q); }).catch(() => { if (!ignore) setQuotes({}); });
+    fetchNamesFor(mk).then((n) => { if (!ignore) setNames(n); }).catch(() => { if (!ignore) setNames({}); });
+    fetchSparkFor(mk).then((s) => { if (!ignore) setSpark(s); }).catch(() => { if (!ignore) setSpark({}); });
+    return () => { ignore = true; };
   }, [dataMarket]);
 
   // Keyboard shortcuts: / search, L log, 1/2/3 timeframe, [ ] panels, F backtest.
@@ -714,7 +716,7 @@ export default function App() {
               fitOnLoad={fitOnLoad}
               settings={settings}
               params={indParams}
-              symbol={provider === 'bist' ? symbol : 'SENTETİK'}
+              symbol={provider === 'synthetic' ? 'SENTETİK' : symbol}
               tfLabel={tfLabel}
               strategy={reflectTrades ? strategy : null}
               costLine={costLine}

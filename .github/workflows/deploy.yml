@@ -67,7 +67,9 @@ jobs:
         env:
           FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
           CRYPTO_N: '100'
-        run: python scripts/build_crypto.py
+        run: |
+          python -m pip install --quiet yfinance requests
+          python scripts/build_crypto.py
 
       - name: Market-wide strategy scan (self-gates; recomputes when stale)
         continue-on-error: true
@@ -80,9 +82,9 @@ jobs:
         env:
           FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
         run: |
-          python scripts/screener.py
-          MARKET=us python scripts/screener.py
-          MARKET=crypto python scripts/screener.py
+          python scripts/screener.py || true
+          MARKET=us python scripts/screener.py || true
+          MARKET=crypto python scripts/screener.py || true
 
       - run: npm ci
       - run: npm run build
