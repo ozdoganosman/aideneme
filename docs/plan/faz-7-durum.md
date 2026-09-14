@@ -981,6 +981,24 @@ yüzdeler (`-3.0%`) ve oranlar (`3.43`) da görüldü; onlar da Türkçe biçime
 Uçtan uca teste bağlandı: koyu tema açıkken yazdırma ortamında sayfa zemini
 beyaz, metin koyu ve gezinti öğeleri gizli olmalı.
 
+## Koyu temaya gözle bakmak
+
+Kontrast ölçüldü ama ekranlara koyu temada **bakılmamıştı.** Ekran
+görüntüleriyle bakınca iki görsel kusur çıktı — ikisi de ölçümle değil, gözle
+görülür:
+
+1. **"Ulaştırma Tara"** — sektör satırındaki tarama eylemi ghost düğme olarak
+   sektör adının yanına düz metin gibi oturuyordu; iki kelime gibi okunuyordu.
+   Çerçeveli küçük bir çip oldu: tıklanabilir olduğunu kendi başına söylüyor.
+2. **Akış sütunu satır yüksekliğini bozuyordu.** Çubuğun genişliği hücreye
+   göreydi; %70'i geçen sektörlerde sayı alt satıra kayıyor ve o satır
+   ötekilerden yüksek duruyordu. Çubuk artık sabit genişlikte bir rayın
+   içinde; on bir satırın yüksekliği de 35 px.
+
+Grafik renkleri de ölçüldü (WCAG 1.4.11 metin dışı öğelerde 3:1 ister):
+EMA 50 açık temada 4,54 · koyu temada 6,16; EMA 200 6,15 · 8,71. Hepsi
+geçiyor, değişiklik gerekmedi.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

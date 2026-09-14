@@ -739,14 +739,46 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.pulse__flowbar {
-  display: inline-block;
+/* Sektör satırındaki "Tara" eylemi: ghost düğme olarak sektör adının yanına
+   düz metin gibi oturuyordu ("Ulaştırma Tara" diye okunuyordu). Çerçeveli
+   küçük bir çip, tıklanabilir olduğunu kendi başına söylüyor. */
+.pulse__scan {
+  margin-left: var(--sp-2);
+  padding: 2px var(--sp-2);
+  min-height: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.pulse__scan:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.pulse__flowcell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+.pulse__flowtrack {
+  flex: 0 0 60px;
   height: 6px;
-  max-width: 60px;
-  margin-right: var(--sp-2);
   border-radius: var(--radius-pill);
-  vertical-align: middle;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.pulse__flowbar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
   opacity: 0.7;
+}
+.pulse__flowval {
+  white-space: nowrap;
 }
 
 /* ── Strateji Laboratuvarı ────────────────────────────────────────────── */

@@ -363,14 +363,14 @@ export default function Pulse({ state, push }: Props) {
                       {bySector ? flow.key : `${flow.label} grubu`}
                     </Button>
                     {bySector && flow.key !== UNCLASSIFIED && isShareableSector(flow.key) ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                      <button
+                        type="button"
+                        className="pulse__scan"
                         aria-label={`${flow.key} sektörünü tarayıcıda aç`}
                         onClick={() => push({ v: 'tarayici', f: screenLink(flow.key) })}
                       >
                         Tara
-                      </Button>
+                      </button>
                     ) : null}
                   </th>
                   <td className="num">{flow.symbols}</td>
@@ -387,15 +387,21 @@ export default function Pulse({ state, push }: Props) {
                     {fmtPct(flow.weightedChangePct, 2)}
                   </td>
                   <td className="num">
-                    <span
-                      className="pulse__flowbar"
-                      style={{
-                        width: `${Math.min(100, Math.abs(flow.flowPct))}%`,
-                        background: flow.flowPct >= 0 ? 'var(--up)' : 'var(--down)',
-                      }}
-                      aria-hidden="true"
-                    />
-                    {fmtPct(flow.flowPct, 0)}
+                    {/* Çubuk SABİT genişlikte bir rayın içinde: eskiden genişliği
+                        hücreye göreydi ve %70'i geçince sayı alt satıra kayıyordu,
+                        satır yüksekliği değişiyordu. */}
+                    <span className="pulse__flowcell">
+                      <span className="pulse__flowtrack" aria-hidden="true">
+                        <span
+                          className="pulse__flowbar"
+                          style={{
+                            width: `${Math.min(100, Math.abs(flow.flowPct))}%`,
+                            background: flow.flowPct >= 0 ? 'var(--up)' : 'var(--down)',
+                          }}
+                        />
+                      </span>
+                      <span className="pulse__flowval">{fmtPct(flow.flowPct, 0)}</span>
+                    </span>
                   </td>
                   <td className="num">
                     {flow.advancing}/{flow.declining}
