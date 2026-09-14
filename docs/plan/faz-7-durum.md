@@ -664,6 +664,26 @@ olduğunu düşündürürdü.
 Geri kalan çakışan metrikler (fiyat, 1 gün, F/K, PD/DD, özkaynak kârlılığı,
 net marj) tarayıcı ile finansallar panelinde birebir aynı çıktı.
 
+### Üçüncü tur: Stratejiler ↔ Laboratuvar
+
+Aynı stratejiyi iki ekrandan okudum (X001, "55 bar kırılımı"):
+
+```
+Stratejiler : al-tut farkı +8,5% · yıllık +0,4% · maks. düşüş 45,6% · 35 işlem
+Laboratuvar : al-tut farkı +8,5% · yıllık +0,4% · maks. düşüş -45,6% · 35 işlem
+```
+
+Sayılar birebir aynı — iki ekran arasındaki köprü ("Laboratuvarda aç")
+gerçekten aynı hesabı açıyor. Tek fark işaretteydi: Laboratuvar düşüşü
+işaretli, sıralama tablosu büyüklük olarak yazıyordu. Aynı sayının iki
+ekranda iki farklı işaretle çıkması gereksiz bir tereddüt üretiyor;
+sıralama tablosu da işaretli oldu.
+
+Nabız'ın satır metrikleri de kontrol edildi: günlük değişim tarayıcıyla aynı
+tanımda (bir önceki kapanış). Nabız'ın kendi `fromHigh` alanı KAPANIŞ
+zirvesine bakıyor ama hiçbir yerde gösterilmiyor — üçüncü bir "zirveden"
+tanımı ekrana sızmıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

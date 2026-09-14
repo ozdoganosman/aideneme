@@ -40,6 +40,12 @@ const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const pct = (v: number, digits = 1): string =>
   Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
 const plain = (v: number, digits = 1): string => (Number.isFinite(v) ? v.toFixed(digits) : '—');
+/**
+ * Maks. düşüş işaretli gösteriliyor: Laboratuvar aynı sayıyı "-45,6%" diye
+ * yazıyordu, burada "45,6%" görünüyordu. Aynı sayının iki ekranda iki farklı
+ * işaretle çıkması gereksiz bir tereddüt üretiyor.
+ */
+const drawdown = (v: number): string => (Number.isFinite(v) ? `-${v.toFixed(1)}%` : '—');
 const pval = (v: number): string =>
   !Number.isFinite(v) ? '—' : v < 0.001 ? '< 0,001' : v.toFixed(3).replace('.', ',');
 
@@ -458,7 +464,7 @@ export default function Strategies({ state, push }: Props) {
                   </th>
                   <td className="num">{pct(row.medianExcessPct)}</td>
                   <td className="num">{pct(row.medianCagrPct)}</td>
-                  <td className="num">{plain(row.medianMaxDDPct)}%</td>
+                  <td className="num">{drawdown(row.medianMaxDDPct)}</td>
                   <td className="num">{plain(row.medianTrades, 0)}</td>
                   {scope !== 'symbol' ? (
                     <>

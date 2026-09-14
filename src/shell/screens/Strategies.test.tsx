@@ -144,6 +144,15 @@ describe('Stratejiler', () => {
     expect(screen.getByText(/200 sembolde ısınma barlarına sığmıyor/)).toBeInTheDocument();
   });
 
+  it('maks. düşüşü Laboratuvar ile aynı işaretle yazar', async () => {
+    render(<Strategies state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText(/Al-tut farkı/)).toBeInTheDocument());
+    // Maks. düşüş sütunu (satırın 3. sayısal hücresi); sahte veride %12.
+    const row = document.querySelector('tbody tr')!;
+    const nums = [...row.querySelectorAll('td.num')].map((c) => c.textContent ?? '');
+    expect(nums[2]).toBe('-12.0%');
+  });
+
   it('bağımsızlık uyarısını tablodan ayırmaz', async () => {
     render(<Strategies state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
