@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DataClient } from './client';
 import { memoryCache } from './cache';
 import { encodeSeries } from '../core/data/pack';
@@ -112,6 +114,52 @@ describe('DataClient', () => {
     const { impl } = stubFetch({});
     const client = new DataClient({ fetchImpl: impl, cache: memoryCache() });
     await expect(client.manifest('bist')).rejects.toThrow(/HTTP 404/);
+  });
+
+  it('paket ikinci ziyarette ağa ÇIKMADAN önbellekten gelir', async () => {
+    // Kabuk kendi fetch'ini yazdığı sürece 1 MB'lık paket her ziyarette
+    // yeniden iniyordu; ölçüldü ve öyleydi (yavaş 3G'de 24 sn → 3 sn).
+    const bin = readFileSync(join(__dirname, '../core/data/__fixtures__/bundle-6.bin'));
+    // DİKKAT: Node'un Buffer'ı kendi realm'ındaki ArrayBuffer'ı taşır; jsdom
+    // altında `instanceof ArrayBuffer` YANLIŞ döner ve kurgu onu JSON sanar.
+    // Test realm'ında yeniden kurmak gerekiyor.
+    const buf = new Uint8Array(bin).buffer;
+    const manifest = {
+      ...manifestFor('aaaa1111', buf.byteLength),
+      bundle: { file: 'latest-250.bin', bars: 6, bytes: buf.byteLength, hash: 'bbbb2222' },
+    };
+    const { impl, calls } = stubFetch({ 'manifest.json': manifest, 'latest-250.bin': buf });
+    const cache = memoryCache();
+
+    const first = await new DataClient({ fetchImpl: impl, cache }).bundleBuffer('bist');
+    expect(first.fromCache).toBe(false);
+    expect(first.buffer.byteLength).toBe(buf.byteLength);
+
+    // Yeni istemci, AYNI önbellek: tarayıcının yeniden açılmasına karşılık gelir.
+    const before = calls.filter((u) => u.includes('latest-250.bin')).length;
+    const second = await new DataClient({ fetchImpl: impl, cache }).bundleBuffer('bist');
+    expect(second.fromCache).toBe(true);
+    expect(calls.filter((u) => u.includes('latest-250.bin')).length).toBe(before);
+  });
+
+  it('ilerleme geri çağrısı akış yoksa da çalışır', async () => {
+    const bin = readFileSync(join(__dirname, '../core/data/__fixtures__/bundle-6.bin'));
+    // DİKKAT: Node'un Buffer'ı kendi realm'ındaki ArrayBuffer'ı taşır; jsdom
+    // altında `instanceof ArrayBuffer` YANLIŞ döner ve kurgu onu JSON sanar.
+    // Test realm'ında yeniden kurmak gerekiyor.
+    const buf = new Uint8Array(bin).buffer;
+    const manifest = {
+      ...manifestFor('aaaa1111', buf.byteLength),
+      bundle: { file: 'latest-250.bin', bars: 6, bytes: buf.byteLength, hash: 'bbbb2222' },
+    };
+    const { impl } = stubFetch({ 'manifest.json': manifest, 'latest-250.bin': buf });
+    const client = new DataClient({ fetchImpl: impl, cache: memoryCache() });
+
+    const seen: number[] = [];
+    const out = await client.bundleBuffer('bist', undefined, (loaded) => seen.push(loaded));
+    // Akış varsa ilerleme gelir, yoksa hiç gelmez; İKİ DURUMDA DA veri bütün.
+    expect(out.buffer.byteLength).toBe(buf.byteLength);
+    expect(seen.every((v) => v <= buf.byteLength)).toBe(true);
   });
 
   it('paket dosyası yoksa açıkça söyler', async () => {

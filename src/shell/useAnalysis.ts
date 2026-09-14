@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { dataClient } from '../data-client/client';
-import { packPath, type Market } from '../data-client/markets';
+import { type Market } from '../data-client/markets';
 import { AnalysisClient } from '../workers/analysisClient';
 
 /**
@@ -32,50 +32,6 @@ export interface UseAnalysisOptions {
    * boşuna ~1 MB indirmek zayıf bağlantıda ilk açılışı uzatır.
    */
   bundle?: boolean;
-}
-
-/**
- * Paketi gövdeyi AKITARAK indirir ve her 64 KB'de ilerlemeyi bildirir.
- *
- * `res.arrayBuffer()` tek seferde bitmiş gövdeyi verir; yavaş bağlantıda bu
- * "hiçbir şey olmuyor" gibi görünen uzun bir sessizlik demek. Akış yoksa
- * (eski tarayıcı ya da test ortamı) tek parça okumaya düşüyor: ilerleme
- * gösterilmez ama indirme çalışır.
- */
-async function download(
-  url: string,
-  signal: AbortSignal,
-  onProgress: (loaded: number) => void,
-): Promise<ArrayBuffer> {
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Paket indirilemedi (HTTP ${res.status})`);
-  if (!res.body?.getReader) return res.arrayBuffer();
-
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let loaded = 0;
-  let reported = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    chunks.push(value);
-    loaded += value.length;
-    // Her parçada durum güncellemek render fırtınası olurdu.
-    if (loaded - reported >= 65536) {
-      reported = loaded;
-      onProgress(loaded);
-    }
-  }
-  onProgress(loaded);
-
-  const out = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out.buffer;
 }
 
 export function useAnalysis(market: Market, options: UseAnalysisOptions = {}): AnalysisState {
@@ -118,11 +74,15 @@ export function useAnalysis(market: Market, options: UseAnalysisOptions = {}): A
 
         if (!manifest.bundle) throw new Error(`${market}: paket dosyası üretilmemiş`);
 
-        const url = packPath(market, `${manifest.bundle.file}?h=${manifest.bundle.hash}`);
-        const total = manifest.bundle.bytes;
-        const buffer = await download(url, controller.signal, (loaded) => {
-          if (!cancelled) setState((s) => ({ ...s, progress: { loaded, total } }));
-        });
+        // İndirme ve ÖNBELLEK veri istemcisinde: kabuk kendi fetch'ini
+        // yazdığı sürece aynı paket her ziyarette yeniden iniyordu (ölçüldü).
+        const { buffer } = await dataClient.bundleBuffer(
+          market,
+          controller.signal,
+          (loaded, total) => {
+            if (!cancelled) setState((s) => ({ ...s, progress: { loaded, total } }));
+          },
+        );
         if (cancelled) return;
 
         clientRef.current?.terminate();

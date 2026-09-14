@@ -217,6 +217,26 @@ iniyor. Kullanıcı ne beklediğini de ne kadar bekleyeceğini de bilmiyor.
 Aynı ölçüm sonrası: 10. saniyede %26, 20. saniyede %79 — kullanıcı ilerlediğini
 görüyor.
 
+### İkinci ziyaret: 1 MB her seferinde iniyordu
+
+Ölçüm bir kusur daha gösterdi: **paket her ziyarette yeniden iniyordu.** Veri
+istemcisinde hash anahtarlı IndexedDB önbelleği zaten vardı ve tek sembol
+serileri onu kullanıyordu — ama kabuk paketi kendi `fetch`'iyle indiriyor,
+önbelleğe hiç uğramıyordu. Aynı işin iki yerde yazılmış olması, birinin
+eksik kalmasıydı.
+
+İndirme (ve ilerleme bildirimi) veri istemcisine taşındı; kabuk artık
+`dataClient.bundleBuffer` çağırıyor. Yavaş 3G ölçümü:
+
+```
+1. ziyaret : veri ekranda 23,9 sn
+2. ziyaret : veri ekranda  2,8 sn   (paket için ağa çıkılmıyor)
+```
+
+Önbellek anahtarı manifest'teki hash; paket değişirse eski sürüm siliniyor,
+yani "bayat veriyi gösterme" riski yok. Test bunu kalıcı kıldı: aynı
+önbellekle kurulan İKİNCİ istemci ağa hiç çıkmıyor.
+
 ## Tekrar üretmek için
 
 ```bash
