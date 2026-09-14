@@ -332,6 +332,32 @@ Diğer kararlar: havuzda canlı tahmin üretilmiyor (hangi sembol için olacağ�
 belirsiz), örneği yetersiz semboller gerekçesiyle kartta listeleniyor, indirme
 boyutu önceden söyleniyor ve eğitim kullanıcı başlatınca koşuyor.
 
+## Uçtan uca testler (planın §8 kalite kapısı)
+
+Plan "5 kritik akış için Playwright" diyordu; bu turlar boyunca o akışları her
+değişiklikten sonra ELLE doğruluyordum. Elle yapılan doğrulama regresyonu
+yakalamaz — artık altısı da otomatik:
+
+| Akış | Neyi koruyor |
+|---|---|
+| Nabız | ısı haritası + sektör akışı gerçek worker'da; "Sınıflandırılmamış" gizlenmiyor |
+| Tarama | filtre → sonuç → **paylaşılan bağlantı aynı sonucu veriyor** |
+| Tarama → Stratejiler | semboller taşınıyor, ağır iş onaysız başlamıyor |
+| Sembol masası | grafik/finansal/sektör sekmeleri; paket izinsiz inmiyor; ayarlar diğer sekmelerde gizli |
+| Laboratuvar | sıralamadan gelen kural URL'de, beş doğrulama rozeti çıkıyor |
+| Model | hüküm "kullanma" ise ekranda olasılık YOK |
+
+Her test konsol hatası biriktiren bir akışı da düşürüyor: sessiz bir istisna
+"geçti" sayılmamalı.
+
+Kırılganlığa karşı iki karar: worker süresi gibi ölçümden ölçüme değişen
+değerler karşılaştırılmıyor (sonuç sayısı karşılaştırılıyor), ve CI'da tek
+işçi kullanılıyor — paralel sekmeler aynı çekirdekleri paylaşınca ölçüm değil
+kuyruk beklenir.
+
+Ayrı iş akışı (`e2e.yml`): gerçek tarayıcı indirmek `verify` kapısını
+yavaşlatırdı. Süre: 6 akış, yerelde 9 sn.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "budget": "node scripts/check-budget.mjs",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build && npm run budget",
-    "perf": "node scripts/measure-perf.mjs"
+    "perf": "node scripts/measure-perf.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

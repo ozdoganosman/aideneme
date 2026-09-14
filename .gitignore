@@ -28,3 +28,7 @@ Thumbs.db
 public/data/
 __pycache__/
 *.pyc
+
+# Playwright çıktıları
+/test-results/
+/playwright-report/

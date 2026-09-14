@@ -1,0 +1,45 @@
+name: e2e
+
+# Uçtan uca testler ayrı bir iş akışında: gerçek tarayıcı indirmek `verify`'ı
+# yavaşlatır ve o kapının hızlı kalması geliştirme döngüsü için önemli.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: npm ci
+
+      # Depoda veri yok; sabit tohumlu sentetik set burada üretiliyor.
+      - name: Örnek veri seti
+        run: python scripts/make_sample_data.py --symbols 200 --bars 3400
+
+      - run: npm run build
+
+      - name: Chromium indir
+        run: npx playwright install --with-deps chromium
+
+      - name: Akış testleri
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-raporu
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

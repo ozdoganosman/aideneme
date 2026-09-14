@@ -124,6 +124,13 @@ export default tseslint.config(
   // geçici blok KALDIRILDI. Borç kapandı (46 uyarı → 0); kurallar artık her
   // yerde hata, yani eski ekranlarda da geri gidiş derlemeyi kırar.
 
+  // Uçtan uca testler tarayıcıyı sürer: Node globalleri + Playwright API.
+  {
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    languageOptions: { globals: { process: 'readonly', console: 'readonly' } },
+    rules: { 'no-restricted-globals': 'off', 'no-restricted-imports': 'off' },
+  },
+
   // Test files may reach for anything.
   {
     files: ['**/*.test.{ts,tsx}', 'src/test/**/*.{ts,tsx}'],
