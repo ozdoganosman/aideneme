@@ -44,6 +44,22 @@ Model ve Stratejiler en ağır hesabı yaptıkları hâlde en düşük blokları
 Modelin 926 ms'lik "hazır" süresi eğitimin kendisidir; o sırada arayüz
 donmuyor, iskelet gösteriliyor.
 
+### Sektör akranları: ölçüm tahmini düzeltti
+
+Tabloda bu ekranın 6× kısmada 342 ms'lik bir bloğu görünüyordu ve ilk tahmin
+"paketi Candles'a çevirmek pahalı" oldu. Panel yalnızca aynı sektördeki
+sembolleri çevirecek biçimde daraltıldı (200 yerine 10–25) — doğru bir
+iyileştirme, ama süre 787 → 753 ms'de kaldı; demek ki darboğaz orası değildi.
+
+Süreyi parçalara ayırınca gerçek tablo çıktı: akran yükleme adımı, sayfa
+ısınmışken **315 ms sürüyor ve HİÇ uzun görev üretmiyor**; 1 MB'lık paketin
+indirilmesi yerelde 13 ms. Ekranın 342 ms'lik bloğu sembol masasınınkiyle aynı
+kaynaktan geliyor: grafik kütüphanesinin ilk kurulumu.
+
+Ders: bloğu ölçmeden "pahalı olan şu olmalı" demek, yanlış yeri optimize
+ettirir. Daraltma kodda kaldı (daha az iş, daha az çöp) ama performans kazancı
+olarak sayılmıyor.
+
 ## Yapılan iyileştirmeler (ve etkileri)
 
 1. **Sembol analizi worker'a taşındı.** Periyot dönüşümü, EMA'lar, özet

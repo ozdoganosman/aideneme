@@ -36,6 +36,8 @@ export function SectorPanel({ market, symbol, onSelect }: Props) {
   const [map, setMap] = useState<SectorMap | null>(null);
   const [rows, setRows] = useState<PeerRow[] | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  // Sembolün sektörü; haritada yoksa undefined (panel o durumda akran aramaz).
+  const sector = map?.of[symbol];
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,14 +62,19 @@ export function SectorPanel({ market, symbol, onSelect }: Props) {
         const bundle = await dataClient.bundle(market);
         if (cancelled) return;
         const out: PeerRow[] = [];
-        for (let i = 0; i < bundle.names.length; i++) {
-          const candles = bundle.seriesOf(bundle.names[i]);
+        // YALNIZCA aynı sektördeki semboller için seri kuruluyor. Paketin
+        // tamamını Candles'a çevirmek (200 sembol × 5 tipli dizi) ana iş
+        // parçacığında ölçülebilir bir blok yaratıyordu; oysa akran listesi
+        // için 10–25 sembol yetiyor.
+        const wanted = bundle.names.filter((name) => map!.of[name] === sector);
+        for (const name of wanted) {
+          const candles = bundle.seriesOf(name);
           if (!candles || candles.length < 2) continue;
           const n = candles.length;
           const close = candles.close[n - 1];
           const prev = candles.close[n - 2];
           out.push({
-            symbol: bundle.names[i],
+            symbol: name,
             value: close * candles.volume[n - 1],
             changePct: prev > 0 ? (close / prev - 1) * 100 : NaN,
           });
@@ -85,7 +92,9 @@ export function SectorPanel({ market, symbol, onSelect }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [status, market]);
+    // map/sector efektin girdisi: sektör bilinmeden hangi serilerin gerektiği
+    // bilinemez (zaten panel o durumda yükleme düğmesi göstermiyor).
+  }, [status, market, map, sector]);
 
   const peers = useMemo(() => (rows ? sectorPeers(rows, map, symbol) : null), [rows, map, symbol]);
 
@@ -99,7 +108,6 @@ export function SectorPanel({ market, symbol, onSelect }: Props) {
     );
   }
 
-  const sector = map.of[symbol];
   if (!sector) {
     return (
       <EmptyState
