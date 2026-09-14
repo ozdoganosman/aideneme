@@ -1,7 +1,10 @@
 # Yeni Nesil Finans Analiz Platformu — Plan
 
-**Tarih:** 2026-09-13
-**Durum:** Taslak / onay bekliyor
+**Tarih:** 2026-09-13 (durum notu: 2026-09-14)
+**Durum:** **Uygulandı** — Faz 0–6 tamamlandı, üstüne dört iş parçası eklendi.
+Faz durumları ve sapmalar: [`faz-0-1-durum.md`](./faz-0-1-durum.md) …
+[`faz-7-durum.md`](./faz-7-durum.md), [`performans.md`](./performans.md).
+Aşağıdaki metin **plandır**; gerçekleşenle farkları §7'nin sonundaki tabloda.
 **Referans sistem:** [`ozdoganosman/borsa`](https://github.com/ozdoganosman/borsa) (BIST Borsa Analiz)
 **Uygulanacak yer:** bu repo (`ozdoganosman/aideneme`) — mevcut yüksek performanslı grafik çekirdeği üzerine
 
@@ -358,6 +361,37 @@ Her faz **kendi başına kullanılabilir bir ürün** bırakır; hiçbir faz "ya
 - **Kabul:** model kartı olmadan tahmin render edilmiyor; baseline karşılaştırması görünür.
 
 **Toplam:** ~12 hafta tam kapsam; ilk kullanılabilir sürüm (Faz 0-2) ~4.5 hafta.
+
+### Gerçekleşen (2026-09-14)
+
+Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
+
+| Faz | Durum | Plandan fark |
+|---|---|---|
+| 0 — Temel | ✅ | Lighthouse yerine kendi bütçe betiğimiz (gzip eşiği, CI'da kapı) |
+| 1 — Tasarım sistemi + kabuk | ✅ | Storybook yerine uygulama içi canlı galeri (ayrı derleme yok) |
+| 2 — Veri hattı | ✅ | Plandaki hedef 3×; ölçülen **3,7×** (bar başına 24 bayt) |
+| 3 — Tarayıcı + Karşılaştır | ✅ | Bütçe 1000 ms, ölçüm ~60 ms |
+| 4 — Laboratuvar | ✅ | Beş doğrulama rozeti planlandığı gibi |
+| 5 — Portföy + temel analiz | ✅ | USD bazlı getiri ertelendi (kur serisi veri hattında yok) |
+| 6 — ML + Rapor | ✅ | SHAP yerine katsayı + katmanlar arası **kararlılık** (model lineer olduğu için katsayı zaten yorumlanabilir); PNG yerine yazdırma/PDF |
+
+**Fazlardan sonra eklenenler** (planda yoktu, kullanıcı isteğinden doğdu):
+
+1. **Stratejiler ekranı** — piyasa geneli sıralama, üç kapsam, Holm düzeltmesi.
+2. **Sektör bazlı para akışı** — davranış kümelerinin yanına resmî sınıflandırma.
+3. **Paylaşılabilirlik** — tarama filtreleri ve laboratuvar kuralı URL'de.
+4. **Erişilebilirlik borcunun kapatılması** — devralınan ekranlarda 46 uyarı → 0.
+
+**Kalan boşluklar** (kapanmadı, gizlenmedi):
+
+- `scripts/build_sectors.py`'nin kaynağı geliştirme ortamından erişilemediği için
+  canlı yanıt formatı doğrulanamadı; ayrıştırıcı çevrimdışı test altında, CI adımı
+  `continue-on-error` ve dosya yazılmazsa arayüz davranış kümelerine düşüyor.
+- Kayıtlı taramalar yalnızca tarayıcıda; paylaşılan bağlantı filtreyi taşıyor ama
+  kayıt listesini taşımıyor.
+- USD bazlı portföy getirisi (kur serisi yok).
+- Kesitsel (çoklu sembol) model: kart "tek sembolde, tek dönemde ölçüldü" diyor.
 
 ---
 
