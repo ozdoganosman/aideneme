@@ -17,6 +17,7 @@ const Compare = lazy(() => import('./screens/Compare'));
 const Pulse = lazy(() => import('./screens/Pulse'));
 const Lab = lazy(() => import('./screens/Lab'));
 const Portfolio = lazy(() => import('./screens/Portfolio'));
+const Report = lazy(() => import('./screens/Report'));
 
 /**
  * URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa>&cmp=<sembol,sembol>
@@ -153,6 +154,8 @@ export function App() {
                   <Lab state={state} push={push} />
                 ) : screen.id === 'portfoy' ? (
                   <Portfolio state={state} push={push} />
+                ) : screen.id === 'rapor' ? (
+                  <Report state={state} push={push} />
                 ) : (
                   <Placeholder screen={screen} />
                 )}

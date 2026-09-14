@@ -35,8 +35,4 @@ export const SCREEN_PLAN: Record<string, string[]> = {
     'Risk: VaR/CVaR, Calmar, Ulcer, korelasyon limitleri',
     'Reel ve USD bazlı performans, tarihsel stres senaryoları',
   ],
-  rapor: [
-    'Bir sembol veya strateji için tek sayfa paylaşılabilir özet',
-    'PNG/PDF çıktı; her sayının kaynağı raporda da açık',
-  ],
 };
