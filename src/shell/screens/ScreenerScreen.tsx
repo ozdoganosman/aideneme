@@ -14,15 +14,17 @@ import {
 import { Icon } from '../../ui/icons';
 import {
   DEFAULT_SCREEN_PARAMS,
-  METRIC_BY_ID,
   METRIC_DEFS,
   applyScreen,
-  type MetricId,
+  type MetricDef,
   type Operator,
   type Rule,
   type ScreenParams,
   type ScreenRow,
 } from '../../core/screen/metrics';
+import { FUNDAMENTAL_METRIC_DEFS, withFundamentals } from '../../core/screen/fundamentalMetrics';
+import type { FundamentalsSnapshot } from '../../core/fundamentals/types';
+import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
 import type { UrlState } from '../urlState';
@@ -45,6 +47,10 @@ const DEFAULT_RULES: Rule[] = [
 
 const SAVED_KEY = 'screener.saved';
 
+/** Teknik + temel metrikler tek listede: filtre motoru ikisini ayırt etmiyor. */
+const ALL_METRIC_DEFS: MetricDef[] = [...METRIC_DEFS, ...FUNDAMENTAL_METRIC_DEFS];
+const METRIC_BY_ID = new Map(ALL_METRIC_DEFS.map((d) => [d.id, d]));
+
 interface SavedScreen {
   name: string;
   rules: Rule[];
@@ -61,12 +67,13 @@ function loadSaved(): SavedScreen[] {
   }
 }
 
-function fmtValue(id: MetricId, v: number): string {
+function fmtValue(id: string, v: number): string {
   if (!Number.isFinite(v)) return '—';
   const def = METRIC_BY_ID.get(id);
   if (def?.unit === 'pct') return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
   if (def?.unit === 'ratio') return `${v.toFixed(2)}×`;
-  if (def?.unit === 'price') return v.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+  if (def?.unit === 'price')
+    return v.toLocaleString('tr-TR', { maximumFractionDigits: def.decimals ?? 2 });
   return v.toFixed(1);
 }
 
@@ -85,6 +92,29 @@ export default function ScreenerScreen({ state, push }: Props) {
     dir: 'desc',
   });
   const [saved, setSaved] = useState<SavedScreen[]>(loadSaved);
+  const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
+  const [snapshotChecked, setSnapshotChecked] = useState(false);
+
+  // Temel veri (finansal tablo anlık görüntüsü) — yoksa ekran teknik metriklerle
+  // çalışmaya devam eder, boş sayı uydurmaz.
+  useEffect(() => {
+    let cancelled = false;
+    setSnapshot(null);
+    setSnapshotChecked(false);
+    fundamentalsClient
+      .snapshot(market)
+      .then((result) => {
+        if (cancelled) return;
+        setSnapshot(result);
+        setSnapshotChecked(true);
+      })
+      .catch(() => {
+        if (!cancelled) setSnapshotChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [market]);
 
   // İstemci REFERANSI efekt bağımlılığı değil: kimliği beklenmedik biçimde
   // değişirse (ör. hook yeniden yazılırsa) tarama döngüye girerdi.
@@ -116,28 +146,27 @@ export default function ScreenerScreen({ state, push }: Props) {
     };
   }, [analysis.status, market, params]);
 
+  /** Teknik satırlara temel metrikleri ekle (fiyat teknik satırdan gelir). */
+  const enriched = useMemo(
+    () => (snapshot ? withFundamentals(rows, { snapshot }) : rows),
+    [rows, snapshot],
+  );
+
   const filtered = useMemo(
     () =>
-      applyScreen(rows, {
+      applyScreen(enriched, {
         rules,
-        sort: { metric: sort.key as MetricId, dir: sort.dir },
+        sort: { metric: sort.key, dir: sort.dir },
         minBars: 30,
       }),
-    [rows, rules, sort],
+    [enriched, rules, sort],
   );
 
   const columns: Column<ScreenRow>[] = useMemo(() => {
-    const shown: MetricId[] = [
-      'last',
-      'chg1',
-      'chg5',
-      'chg21',
-      'rsi',
-      'adx',
-      'emaSlowGap',
-      'volRatio',
-      'fromHigh',
-    ];
+    const technical = ['last', 'chg1', 'chg21', 'rsi', 'adx', 'volRatio', 'fromHigh'];
+    // Temel veri varsa çarpanlar da sütun olarak gelir.
+    const fundamental = snapshot ? ['pe', 'pb', 'roe', 'netMargin'] : [];
+    const shown: string[] = [...technical, ...fundamental];
     return [
       {
         key: 'symbol',
@@ -148,13 +177,13 @@ export default function ScreenerScreen({ state, push }: Props) {
       },
       ...shown.map<Column<ScreenRow>>((id) => ({
         key: id,
-        header: METRIC_BY_ID.get(id)!.label,
+        header: METRIC_BY_ID.get(id)?.label ?? id,
         numeric: true,
         render: (r) => fmtValue(id, r.values[id]),
         sortValue: (r) => r.values[id],
       })),
     ];
-  }, []);
+  }, [snapshot]);
 
   const updateRule = useCallback((index: number, patch: Partial<Rule>) => {
     setRules((prev) => prev.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
@@ -232,8 +261,8 @@ export default function ScreenerScreen({ state, push }: Props) {
               <Select
                 label="Metrik"
                 value={rule.metric}
-                onChange={(value) => updateRule(i, { metric: value as MetricId })}
-                options={METRIC_DEFS.map((d) => ({ value: d.id, label: d.label }))}
+                onChange={(value) => updateRule(i, { metric: value })}
+                options={ALL_METRIC_DEFS.map((d) => ({ value: d.id, label: d.label }))}
               />
               <Select
                 label="Koşul"
@@ -324,6 +353,16 @@ export default function ScreenerScreen({ state, push }: Props) {
               <span className="desk__muted">
                 {timing.count} sembol × {analysis.bars} bar · worker {timing.ms.toFixed(0)} ms ·{' '}
                 {analysis.client?.size ?? 1} iş parçacığı
+              </span>
+            ) : null}
+            {snapshot ? (
+              <Badge tone="accent" title={snapshot.note}>
+                Temel veri: {Object.keys(snapshot.symbols).length} sembol
+              </Badge>
+            ) : snapshotChecked ? (
+              <span className="desk__muted">
+                Temel veri yok — çarpan filtreleri için <code>scripts/build_fundamentals.py</code>{' '}
+                CI'da çalışmalı.
               </span>
             ) : null}
           </>

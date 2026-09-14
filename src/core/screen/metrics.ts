@@ -47,7 +47,7 @@ export const DEFAULT_SCREEN_PARAMS: ScreenParams = {
 };
 
 export interface MetricDef {
-  id: MetricId;
+  id: string;
   label: string;
   unit: 'pct' | 'price' | 'ratio' | 'level';
   /** Provenance: metrik nasıl hesaplanıyor (parametreler yerine konur). */
@@ -142,7 +142,12 @@ export const METRIC_DEFS: MetricDef[] = [
 
 export const METRIC_BY_ID = new Map(METRIC_DEFS.map((d) => [d.id, d]));
 
-export type MetricValues = Record<MetricId, number>;
+/**
+ * Metrik değerleri string anahtarlı: teknik metrikler (bu dosya) ve temel
+ * metrikler (fundamentalMetrics.ts) aynı satırda yaşar, filtre/sıralama
+ * makinesi ikisini ayırt etmek zorunda kalmaz.
+ */
+export type MetricValues = Record<string, number>;
 
 export interface ScreenRow {
   symbol: string;
@@ -212,7 +217,8 @@ export function metricsFor(
 export type Operator = 'gt' | 'lt' | 'between';
 
 export interface Rule {
-  metric: MetricId;
+  /** Teknik ya da temel metrik kimliği. */
+  metric: string;
   op: Operator;
   a: number;
   b?: number;
@@ -220,7 +226,7 @@ export interface Rule {
 
 export interface ScreenSpec {
   rules: Rule[];
-  sort?: { metric: MetricId; dir: 'asc' | 'desc' };
+  sort?: { metric: string; dir: 'asc' | 'desc' };
   /** Bu kadar bardan az veriye sahip semboller elenir. */
   minBars?: number;
 }

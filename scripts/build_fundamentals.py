@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""
+BIST finansal tablo üreticisi.
+
+isyatirimhisse ile gelir tablosu / bilanço / nakit akışını çeker, ihtiyaç
+duyulan ~15 kalemi ayıklayıp sembol başına KOMPAKT bir dosya yazar:
+
+    public/data/bist/fundamentals/<SEMBOL>.json   (dönem × alan matrisi)
+    public/data/bist/fundamentals/snapshot.json   (tüm semboller, son TTM)
+
+Neden tüm kalemler değil: referans projede ham tablolar sembol başına ~125 KB,
+603 sembolde 75 MB tutuyor ve tarayıcı bunların %95'ini hiç kullanmıyor.
+Burada yalnızca oran hesabına giren kalemler saklanıyor.
+
+ÖNEMLİ — point-in-time sınırı: kaynak veride "bu tablo hangi tarihte
+yayımlandı" bilgisi yok. Bu yüzden geçmişe dönük tarama yaparken o gün
+bilinmeyen bir bilançoyu kullanmadığımızı garanti EDEMİYORUZ; snapshot yalnızca
+GÜNCEL tarama için kullanılmalı, backtest'e girdi yapılmamalı.
+
+Çalıştırma:
+    pip install isyatirimhisse pandas
+    python scripts/build_fundamentals.py [--limit 20] [--self-test]
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "public" / "data" / "bist" / "fundamentals"
+SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
+
+BANK_SYMBOLS = {
+    "GARAN", "AKBNK", "YKBNK", "HALKB", "VAKBN", "ISCTR", "TSKB", "ALBRK",
+    "SKBNK", "ICBCT", "QNBFK", "QNBTR", "KLNMA", "ISATR", "ISBTR", "ISKUR",
+    "ISFIN", "SEKFK", "VAKFN",
+}
+
+# Alan → kabul edilen kalem adları (İş Yatırım Türkçe adları; ilk eşleşen alınır).
+# Birden çok ad var çünkü tablo şablonu sektöre ve yıla göre değişiyor.
+FIELD_ITEMS: dict[str, list[str]] = {
+    "revenue": ["Satış Gelirleri", "Hasılat", "Satış Gelirleri (net)", "FAALİYET GELİRLERİ"],
+    "grossProfit": ["BRÜT KAR (ZARAR)", "Brüt Kar (Zarar)"],
+    "operatingProfit": ["FAALİYET KARI (ZARARI)", "ESAS FAALİYET KARI (ZARARI)"],
+    "netIncome": ["Ana Ortaklık Payları", "DÖNEM NET KARI (ZARARI)", "Net Dönem Karı (Zararı)"],
+    "assets": ["TOPLAM VARLIKLAR", "AKTİF TOPLAMI"],
+    "equity": ["Özkaynaklar", "ÖZKAYNAKLAR", "Ana Ortaklığa Ait Özkaynaklar"],
+    "paidCapital": ["Ödenmiş Sermaye", "ÖDENMİŞ SERMAYE"],
+    "currentAssets": ["DÖNEN VARLIKLAR"],
+    "currentLiabilities": ["KISA VADELİ YÜKÜMLÜLÜKLER", "Kısa Vadeli Yükümlülükler"],
+    "longLiabilities": ["UZUN VADELİ YÜKÜMLÜLÜKLER", "Uzun Vadeli Yükümlülükler"],
+    "inventory": ["Stoklar"],
+    "cash": ["Nakit ve Nakit Benzerleri", "Nakit ve Nakit Benzerleri (net)"],
+    "operatingCashFlow": [
+        "İŞLETME FAALİYETLERİNDEN NAKİT AKIŞLARI",
+        "A. İŞLETME FAALİYETLERİNDEN NAKİT AKIŞLARI",
+    ],
+    "capex": [
+        "Maddi ve maddi olmayan duran varlıkların alımından kaynaklanan nakit çıkışları",
+        "Maddi Duran Varlık Alımından Kaynaklanan Nakit Çıkışları",
+    ],
+}
+
+FIELDS = list(FIELD_ITEMS)
+
+
+def load_symbols(limit: int | None) -> list[str]:
+    try:
+        data = json.loads(SYMBOLS_FILE.read_text(encoding="utf-8"))
+        syms = [s["name"] for s in data.get("stocks", [])]
+    except Exception as e:  # noqa: BLE001
+        print(f"[fund] sembol listesi okunamadı: {e}", file=sys.stderr)
+        syms = ["THYAO", "GARAN", "ASELS", "EREGL", "BIMAS"]
+    return syms[:limit] if limit else syms
+
+
+def normalize(name: str) -> str:
+    return " ".join(str(name).split()).strip().lower()
+
+
+def extract(df, symbol: str) -> dict | None:
+    """DataFrame → {periods, fields} (yalnızca ihtiyaç duyulan kalemler)."""
+    if df is None or getattr(df, "empty", True):
+        return None
+
+    period_cols = [c for c in df.columns if "/" in str(c)]
+    if not period_cols:
+        return None
+    period_cols.sort(key=lambda c: tuple(int(p) for p in str(c).split("/")[:2]))
+
+    wanted = {}
+    for field, names in FIELD_ITEMS.items():
+        for name in names:
+            wanted[normalize(name)] = wanted.get(normalize(name), field)
+
+    fields: dict[str, list[float | None]] = {f: [None] * len(period_cols) for f in FIELDS}
+    seen: set[str] = set()
+
+    name_col = "FINANCIAL_ITEM_NAME_TR" if "FINANCIAL_ITEM_NAME_TR" in df.columns else None
+    if name_col is None:
+        return None
+
+    for _, row in df.iterrows():
+        field = wanted.get(normalize(row.get(name_col, "")))
+        if not field or field in seen:
+            continue
+        seen.add(field)
+        for i, col in enumerate(period_cols):
+            value = row.get(col)
+            try:
+                if value is None or value != value:  # NaN
+                    continue
+                fields[field][i] = round(float(value), 2)
+            except (TypeError, ValueError):
+                continue
+
+    if "revenue" not in seen and "netIncome" not in seen:
+        return None  # tanınan hiçbir kalem yok → şablon uyuşmuyor
+
+    return {
+        "symbol": symbol,
+        "periods": [str(c) for c in period_cols],
+        "fields": fields,
+        "missing": sorted(set(FIELDS) - seen),
+    }
+
+
+def fetch_one(symbol: str, start_year: int, end_year: int) -> dict | None:
+    from isyatirimhisse import fetch_financials as isy_fetch
+
+    group = "2" if symbol in BANK_SYMBOLS else "1"
+    try:
+        df = isy_fetch(
+            symbols=symbol,
+            start_year=start_year,
+            end_year=end_year,
+            exchange="TRY",
+            financial_group=group,
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[fund] {symbol}: çekilemedi ({e})", file=sys.stderr)
+        return None
+
+    record = extract(df, symbol)
+    if record:
+        record["group"] = group
+    return record
+
+
+def ttm(periods: list[str], values: list[float | None], index: int) -> float | None:
+    """
+    Son 12 ay (TTM). İş Yatırım'da çeyrekler KÜMÜLATİFTİR (2024/9 = yılın ilk
+    9 ayı), bu yüzden TTM = geçen yıl sonu + bu yıl kümülatif − geçen yıl aynı
+    kümülatif. Yıl sonu (/12) dönemlerinde değer doğrudan yıllıktır.
+    """
+    if index < 0 or index >= len(periods):
+        return None
+    current = values[index]
+    if current is None:
+        return None
+
+    year, month = (int(p) for p in periods[index].split("/")[:2])
+    if month == 12:
+        return current
+
+    def find(y: int, m: int) -> float | None:
+        target = f"{y}/{m}"
+        return values[periods.index(target)] if target in periods else None
+
+    prev_year_end = find(year - 1, 12)
+    prev_same = find(year - 1, month)
+    if prev_year_end is None or prev_same is None:
+        return None
+    return prev_year_end + current - prev_same
+
+
+def build_snapshot(records: list[dict]) -> dict:
+    """Tüm sembollerin son TTM/bilanço değerleri — tarama bunu kullanır."""
+    rows = {}
+    for record in records:
+        periods = record["periods"]
+        if not periods:
+            continue
+        last = len(periods) - 1
+        fields = record["fields"]
+
+        def stock(field: str) -> float | None:
+            values = fields[field]
+            for i in range(last, -1, -1):
+                if values[i] is not None:
+                    return values[i]
+            return None
+
+        rows[record["symbol"]] = {
+            "period": periods[last],
+            "revenueTtm": ttm(periods, fields["revenue"], last),
+            "grossProfitTtm": ttm(periods, fields["grossProfit"], last),
+            "operatingProfitTtm": ttm(periods, fields["operatingProfit"], last),
+            "netIncomeTtm": ttm(periods, fields["netIncome"], last),
+            "operatingCashFlowTtm": ttm(periods, fields["operatingCashFlow"], last),
+            "equity": stock("equity"),
+            "assets": stock("assets"),
+            "paidCapital": stock("paidCapital"),
+            "currentAssets": stock("currentAssets"),
+            "currentLiabilities": stock("currentLiabilities"),
+            "longLiabilities": stock("longLiabilities"),
+            "inventory": stock("inventory"),
+            "cash": stock("cash"),
+        }
+    return {
+        "version": 1,
+        "generated": int(__import__("time").time()),
+        "note": (
+            "Yayım tarihi bilgisi kaynakta yok; bu anlık görüntü yalnızca GÜNCEL "
+            "tarama içindir, geçmişe dönük backtest'e girdi yapılmamalıdır."
+        ),
+        "symbols": rows,
+    }
+
+
+def self_test() -> None:
+    """TTM mantığını sentetik dönemlerle sına (ağ gerektirmez)."""
+    periods = ["2022/12", "2023/3", "2023/6", "2023/9", "2023/12", "2024/3", "2024/6"]
+    # Kümülatif gelir: 2023 yılı 400, 2024 ilk yarı 250 (2023 ilk yarı 180 idi).
+    values = [300.0, 80.0, 180.0, 290.0, 400.0, 100.0, 250.0]
+    assert ttm(periods, values, 4) == 400.0, "yıl sonu doğrudan yıllıktır"
+    got = ttm(periods, values, 6)
+    assert got == 400.0 + 250.0 - 180.0, f"TTM yanlış: {got}"
+    assert ttm(periods, [None] * 7, 3) is None
+    assert ttm(["2024/6"], [100.0], 0) is None, "önceki yıl yoksa TTM üretilmez"
+    print("[fund] self-test tamam")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--limit", type=int, default=None, help="ilk N sembol (deneme için)")
+    ap.add_argument("--start-year", type=int, default=2015)
+    ap.add_argument("--end-year", type=int, default=2026)
+    ap.add_argument("--self-test", action="store_true")
+    args = ap.parse_args()
+
+    if args.self_test:
+        self_test()
+        return
+
+    symbols = load_symbols(args.limit)
+    OUT.mkdir(parents=True, exist_ok=True)
+
+    records: list[dict] = []
+    failed = 0
+    for i, symbol in enumerate(symbols, 1):
+        record = fetch_one(symbol, args.start_year, args.end_year)
+        if not record:
+            failed += 1
+            continue
+        (OUT / f"{symbol}.json").write_text(
+            json.dumps(record, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
+        records.append(record)
+        if i % 25 == 0:
+            print(f"[fund] {i}/{len(symbols)} · başarılı {len(records)} · başarısız {failed}")
+
+    if not records:
+        print("[fund] hiçbir sembol için finansal tablo alınamadı")
+        return
+
+    snapshot = build_snapshot(records)
+    (OUT / "snapshot.json").write_text(
+        json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
+
+    total = sum((OUT / f"{r['symbol']}.json").stat().st_size for r in records)
+    print(
+        f"[fund] {len(records)} sembol yazıldı ({failed} başarısız) · "
+        f"{total / 1e6:.1f} MB + anlık görüntü {(OUT / 'snapshot.json').stat().st_size / 1e3:.0f} KB"
+    )
+
+
+if __name__ == "__main__":
+    main()

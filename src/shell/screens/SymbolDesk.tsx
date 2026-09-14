@@ -27,6 +27,16 @@ const LazyPriceChart = lazy(() =>
   import('../chart/PriceChart').then((m) => ({ default: m.PriceChart })),
 );
 
+/** Finansal panel de ayrı chunk: grafiğe gelen kullanıcı bunu indirmesin. */
+const LazyFinancials = lazy(() =>
+  import('./FinancialsPanel').then((m) => ({ default: m.FinancialsPanel })),
+);
+
+const VIEW_TABS = [
+  { id: 'grafik', label: 'Grafik' },
+  { id: 'finansal', label: 'Finansallar' },
+];
+
 const TF_ITEMS = [
   { id: 'D', label: 'Günlük' },
   { id: 'W', label: 'Haftalık' },
@@ -73,6 +83,7 @@ export default function SymbolDesk({ state, push }: Props) {
 
   const [symbols, setSymbols] = useState<string[]>([]);
   const [load, setLoad] = useState<LoadState>({ status: 'idle' });
+  const [tab, setTab] = useState('grafik');
   const [showVolume, setShowVolume] = useState(true);
   const [enabled, setEnabled] = useState<Record<string, boolean>>({ ema50: true, ema200: false });
   const requestId = useRef(0);
@@ -175,9 +186,14 @@ export default function SymbolDesk({ state, push }: Props) {
           emptyText={symbols.length ? 'Eşleşme yok' : 'Sembol listesi yüklenemedi'}
         />
         <div className="desk__tf">
-          <Tabs label="Periyot" items={TF_ITEMS} value={tf} onChange={(id) => push({ tf: id })} />
+          <Tabs label="Görünüm" items={VIEW_TABS} value={tab} onChange={setTab} />
         </div>
-        <div className="desk__toggles">
+        {tab === 'grafik' ? (
+          <div className="desk__tf">
+            <Tabs label="Periyot" items={TF_ITEMS} value={tf} onChange={(id) => push({ tf: id })} />
+          </div>
+        ) : null}
+        <div className="desk__toggles" hidden={tab !== 'grafik'}>
           {OVERLAY_DEFS.map((def) => (
             <Toggle
               key={def.key}
@@ -221,7 +237,17 @@ export default function SymbolDesk({ state, push }: Props) {
         </div>
       ) : null}
 
-      {load.status === 'ready' && candles ? (
+      {load.status === 'ready' && candles && tab === 'finansal' ? (
+        <Suspense fallback={<Skeleton count={4} height="60px" />}>
+          <LazyFinancials
+            market={market}
+            symbol={symbol}
+            price={candles.close[candles.length - 1]}
+          />
+        </Suspense>
+      ) : null}
+
+      {load.status === 'ready' && candles && tab === 'grafik' ? (
         <>
           <section className="desk__chart" aria-label={`${symbol} fiyat grafiği`}>
             <ChartPanel

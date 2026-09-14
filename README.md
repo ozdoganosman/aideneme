@@ -66,6 +66,11 @@ planına göre yeniden kuruluyor. İlk iki faz yayında:
   yoğunlaşma ve gerçekten yaşanmış stres pencereleri (2018 kur şoku, Mart 2020,
   Şubat 2023). İşlemler yalnızca tarayıcıda saklanır.
 
+- **Temel analiz** (Faz 5): kompakt finansal tablo hattı (sembol başına ~14
+  kalem + tüm piyasa için tek anlık görüntü), TTM çarpanlar (kümülatif çeyrek
+  tuzağı kapalı), Piotroski benzeri kalite skoru ve **teknik + temel karışık
+  filtreler** ("RSI 40–70 VE F/K < 10 VE ciro büyümesi %20+").
+
 Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
 (`index.html`) tüm ekranlar taşınana kadar yayında kalıyor.
 Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),

@@ -33,6 +33,10 @@ jobs:
       - name: Veri paketleyici kendi kendine testi
         run: python scripts/pack_data.py --self-test
 
+      # TTM mantığı (kümülatif çeyrek tuzağı) ağ olmadan sınanır.
+      - name: Finansal üretici kendi kendine testi
+        run: python scripts/build_fundamentals.py --self-test
+
       - run: npm ci
 
       - name: Tip kontrolü

@@ -1,8 +1,8 @@
-# Faz 5 (1/2) — Portföy
+# Faz 5 — Portföy ve Temel Analiz
 
 **Tarih:** 2026-09-14
 **Plan:** [`next-gen-finans-platformu.md`](./next-gen-finans-platformu.md) §6 (L6), §7 (Faz 5)
-**Durum:** Portföy tarafı tamamlandı — temel analiz (finansallar) sırada
+**Durum:** Tamamlandı — `npm run verify` yeşil (264 → 296 test)
 
 ---
 
@@ -62,8 +62,52 @@ var (`scripts/build_bist.py`), çoklu market üreticileri açık olan #6'da. Kur
 gerçek seriyle hesaplanacak. Reel (TÜFE) getiri şu an mevcut ve TL yatırımcısı
 için asıl ölçü odur.
 
+---
+
+## Temel analiz (finansallar)
+
+| Madde | Durum | Nerede |
+|---|---|---|
+| Finansal tablo veri hattı | ✅ | `scripts/build_fundamentals.py` (İş Yatırım) |
+| TTM çarpanlar, marjlar, borçluluk | ✅ | `src/core/fundamentals/metrics.ts` |
+| Kalite skoru (Piotroski benzeri) | ✅ | `qualityScore` — 9 ölçüt, her biri etiketli |
+| Büyüme (TTM bazlı yıllık) | ✅ | `growth` |
+| Kesitsel yüzdelik | ✅ | `percentileRank` |
+| Sembol Masası finansal sekmesi | ✅ | `src/shell/screens/FinancialsPanel.tsx` |
+| Tarayıcı'da temel + teknik karışık filtre | ✅ | `src/core/screen/fundamentalMetrics.ts` |
+
+### Kompakt veri hattı
+
+Referans projede ham tablolar sembol başına ~125 KB, 603 sembolde **75 MB** ve
+tarayıcı bunların %95'ini hiç kullanmıyor. Burada yalnızca orana giren ~14 kalem
+saklanıyor; ayrıca tüm sembollerin son TTM değerlerini taşıyan tek bir
+`snapshot.json` üretiliyor — tarama bunu kullanıyor, sembol başına dosya
+indirmiyor.
+
+### İki tuzak bilinçli olarak kapatıldı
+
+1. **Kümülatif çeyrekler.** İş Yatırım'da `2024/9`, yılın ilk DOKUZ AYIDIR.
+   Bunu çeyrek sanıp toplamak ciroyu üçe katlar. TTM = geçen yıl sonu + bu yıl
+   kümülatif − geçen yıl aynı kümülatif. Hem Python üreticisinde hem TypeScript
+   tarafında aynı mantık, ikisi de testli.
+2. **Zarar eden şirkette F/K.** Negatif F/K sıralamada "ucuz" gibi görünür;
+   bu yüzden zarar edende F/K boş bırakılıyor, marjlar yine gösteriliyor.
+
+### Point-in-time sınırı (dürüstlük notu)
+
+Kaynak veride "bu tablo hangi tarihte yayımlandı" bilgisi yok. Bu yüzden
+geçmişe dönük tarama yaparken o gün bilinmeyen bir bilançoyu kullanmadığımızı
+**garanti edemiyoruz**. Anlık görüntü bu uyarıyı kendi içinde taşıyor ve arayüz
+onu gösteriyor: yalnızca güncel tarama için, backtest girdisi değil.
+
+### Filtre birleşimi
+
+Temel metrikler tarama satırlarına ekleniyor, ayrı bir makine kurulmuyor:
+"RSI 40–70 arası VE F/K < 10 VE ciro büyümesi %20+" gibi karışık filtreler
+mevcut kural motoruyla çalışıyor. Fiyat teknik satırdan alınıyor ki iki kaynak
+arasında fiyat tutarsızlığı olmasın.
+
 ## Sıradaki
 
-- Temel analiz: finansal tablolar veri hattı (`scripts/build_fundamentals.py`),
-  TTM çarpanlar, sektör medyanına göre yüzdelik, kalite skoru; Sembol Masası'na
-  finansal sekmesi ve Tarayıcı'ya temel filtreler.
+- Faz 6: rapor ekranı (paylaşılabilir tek sayfa özet) ve ML (dürüst çerçeve).
+- Zayıf makine performansı: düşük güçlü cihaz profiliyle ölçüm ve iyileştirme.

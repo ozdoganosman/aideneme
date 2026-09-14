@@ -16,8 +16,8 @@ export interface LineChartProps {
   /** true → tüm seriler ortak başlangıçta %0'a eşitlenir. */
   normalize?: boolean;
   height?: number;
-  /** Y ekseni biçimi. */
-  unit?: 'pct' | 'raw';
+  /** Y ekseni biçimi: yüzde, ham sayı ya da kısaltılmış (1,2 mlr). */
+  unit?: 'pct' | 'raw' | 'compact';
   ariaLabel?: string;
 }
 
@@ -100,10 +100,18 @@ export function LineChart({
 
       const toX = (x: number) => padL + x * plotW;
       const toY = (y: number) => padT + (1 - (y - min) / (max - min)) * plotH;
-      const fmt = (v: number) =>
-        unit === 'pct'
-          ? `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`
-          : v.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+      const fmt = (v: number) => {
+        if (unit === 'pct') return `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`;
+        if (unit === 'compact') {
+          // Milyar/milyon ölçeğindeki finansal kalemler eksende okunur kalsın.
+          const abs = Math.abs(v);
+          if (abs >= 1e9) return `${(v / 1e9).toFixed(1)} mlr`;
+          if (abs >= 1e6) return `${(v / 1e6).toFixed(1)} mn`;
+          if (abs >= 1e3) return `${(v / 1e3).toFixed(0)} b`;
+          return v.toFixed(0);
+        }
+        return v.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+      };
 
       ctx.strokeStyle = colors.grid;
       ctx.fillStyle = colors.muted;
