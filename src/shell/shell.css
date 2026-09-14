@@ -1009,6 +1009,105 @@
   font-size: var(--fs-xs);
 }
 
+/* Strateji sıralaması. */
+.rank {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.rank__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.rank__lead {
+  margin: 0;
+  max-width: 92ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+.rank__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.rank__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.rank__table th,
+.rank__table td {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+.rank__table th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.rank__table th[scope='row'] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 32ch;
+  font-weight: 600;
+}
+.rank__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rank__name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rank__name:hover {
+  text-decoration: underline;
+}
+.rank__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised, var(--bg));
+  font-weight: 400;
+}
+.rank__detail p {
+  margin: 0;
+}
+.rank__best {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rank__best button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
 /* Model ekranı — kart, ölçüm ızgarası ve uyarı listesi. */
 .model {
   display: flex;

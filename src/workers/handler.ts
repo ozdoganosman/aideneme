@@ -5,6 +5,8 @@ import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
 import { runBacktest } from '../core/backtest/engine';
 import { computeMetrics } from '../core/backtest/metrics';
 import { validateStrategy } from '../core/backtest/validate';
+import { warmupBars } from '../core/strategy/dsl';
+import type { SymbolResult } from '../core/strategy/rank';
 import { inspect } from '../core/data/health';
 import { resample } from '../core/data/resample';
 import { emaArr } from '../core/indicators/calc';
@@ -128,6 +130,40 @@ export function createHandler() {
           // buna asla kilitlenmemeli.
           const { card, latest } = trainModel(req.candles, req.options);
           return { id: req.id, ok: true, type: 'model', card, latest, ms: now() - started };
+        }
+
+        case 'rank': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const to = Math.min(req.to, bundle.names.length);
+          const results: Record<string, SymbolResult[]> = {};
+          const skipped: Record<string, number> = {};
+
+          for (const entry of req.strategies) {
+            results[entry.id] = [];
+            skipped[entry.id] = 0;
+          }
+
+          for (let i = req.from; i < to; i++) {
+            const symbol = bundle.names[i];
+            const candles = bundle.seriesOf(symbol);
+            if (!candles) continue;
+            for (const entry of req.strategies) {
+              // Isınma pencereye sığmıyorsa sonuç ÜRETİLMEZ. Yarım ısınmış bir
+              // EMA200 ile çıkan sayı, olmayan bir sonucu varmış gibi gösterir.
+              if (candles.length - warmupBars(entry.strategy) < req.minUsableBars) {
+                skipped[entry.id]++;
+                continue;
+              }
+              const result = runBacktest(candles, entry.strategy, req.options);
+              results[entry.id].push({
+                symbol,
+                metrics: computeMetrics(result, candles),
+              });
+            }
+          }
+
+          return { id: req.id, ok: true, type: 'rank', results, skipped, ms: now() - started };
         }
 
         case 'correlate': {

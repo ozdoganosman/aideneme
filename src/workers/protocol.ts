@@ -9,6 +9,7 @@ import type { HealthReport } from '../core/data/health';
 import type { Metric } from '../core/stats/summary';
 import type { TF } from '../core/data/resample';
 import type { ModelCard, TrainRequest } from '../core/ml/model';
+import type { SymbolResult } from '../core/strategy/rank';
 
 /**
  * Ana thread ↔ Worker sözleşmesi. Tek dosyada tutuluyor ki iki uç tip düzeyinde
@@ -89,6 +90,20 @@ export interface ModelRequest {
   options: TrainRequest;
 }
 
+export interface RankRequest {
+  id: number;
+  type: 'rank';
+  market: string;
+  /** Denenecek stratejiler; kimlik sonuçları eşlemek için. */
+  strategies: { id: string; strategy: Strategy }[];
+  options: BacktestOptions;
+  /** Bu worker'ın hesaplayacağı sembol aralığı [from, to). */
+  from: number;
+  to: number;
+  /** Isınma sonrası en az kaç bar kalmalı; altına düşen sembol ÖLÇÜLMEZ. */
+  minUsableBars: number;
+}
+
 export type WorkerRequest =
   | InitRequest
   | ScreenRequest
@@ -96,7 +111,8 @@ export type WorkerRequest =
   | PulseRequest
   | BacktestRequest
   | SymbolRequest
-  | ModelRequest;
+  | ModelRequest
+  | RankRequest;
 
 export interface InitResponse {
   id: number;
@@ -181,6 +197,17 @@ export interface ModelResponse {
   ms: number;
 }
 
+export interface RankResponse {
+  id: number;
+  ok: true;
+  type: 'rank';
+  /** Strateji kimliği → bu aralıktaki sembol sonuçları. */
+  results: Record<string, SymbolResult[]>;
+  /** Isınma sığmadığı için ölçülemeyen sembol sayısı (strateji kimliğine göre). */
+  skipped: Record<string, number>;
+  ms: number;
+}
+
 export type WorkerResponse =
   | InitResponse
   | SymbolResponse
@@ -189,4 +216,5 @@ export type WorkerResponse =
   | PulseResponse
   | BacktestResponse
   | ModelResponse
+  | RankResponse
   | ErrorResponse;

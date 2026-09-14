@@ -21,6 +21,7 @@ export type IconName =
   | 'refresh'
   | 'close'
   | 'model'
+  | 'rank'
   | 'alert';
 
 const PATHS: Record<IconName, string> = {
@@ -41,6 +42,7 @@ const PATHS: Record<IconName, string> = {
   close: 'M6 6l12 12M18 6 6 18',
   model:
     'M6 5.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6 14.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 8.5l8 2.5M8 15.5l8-2.5',
+  rank: 'M4 20h16M7 20V9M12 20V4M17 20v-7',
   alert: 'M12 4 2.5 20h19L12 4zM12 10v4m0 3h.01',
 };
 

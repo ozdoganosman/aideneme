@@ -13,6 +13,7 @@ import type { Candles } from '../core/data/types';
 import type { Strategy } from '../core/strategy/dsl';
 import type { BacktestOptions } from '../core/backtest/engine';
 import type { ValidationOptions } from '../core/backtest/validate';
+import type { SymbolResult } from '../core/strategy/rank';
 
 /**
  * Uygulamanın analiz servisi: paketi bir kez indirir, worker'lara dağıtır,
@@ -150,6 +151,60 @@ export class AnalysisClient {
     if (response.type !== 'symbol') throw new Error('beklenmeyen yanıt');
     const { id: _id, ok: _ok, type: _type, ...rest } = response;
     return rest;
+  }
+
+  /**
+   * Piyasa geneli strateji sıralaması: her sembolde her strateji, worker'lara
+   * sembol aralığına göre bölünerek. Sonuçlar strateji kimliğinde birleşir.
+   */
+  async rank(
+    market: Market,
+    strategies: { id: string; strategy: Strategy }[],
+    options: BacktestOptions = {},
+    minUsableBars = 60,
+  ): Promise<{
+    results: Record<string, SymbolResult[]>;
+    skipped: Record<string, number>;
+    symbols: number;
+    ms: number;
+  }> {
+    const info = this.loaded.get(market);
+    if (!info) throw new Error(`${market}: paket yüklenmedi`);
+
+    const total = info.symbols.length;
+    const chunks = Math.min(this.pool.size, Math.max(1, Math.ceil(total / 25)));
+    const per = Math.ceil(total / chunks);
+
+    const responses = await Promise.all(
+      Array.from({ length: chunks }, (_, i) =>
+        this.pool.run((id) => ({
+          id,
+          type: 'rank',
+          market,
+          strategies,
+          options,
+          minUsableBars,
+          from: i * per,
+          to: Math.min(total, (i + 1) * per),
+        })),
+      ),
+    );
+
+    const results: Record<string, SymbolResult[]> = {};
+    const skipped: Record<string, number> = {};
+    let ms = 0;
+    for (const response of responses) {
+      const ok = unwrap(response);
+      if (ok.type !== 'rank') continue;
+      for (const [key, rows] of Object.entries(ok.results)) {
+        (results[key] ??= []).push(...rows);
+      }
+      for (const [key, count] of Object.entries(ok.skipped)) {
+        skipped[key] = (skipped[key] ?? 0) + count;
+      }
+      ms = Math.max(ms, ok.ms);
+    }
+    return { results, skipped, symbols: total, ms };
   }
 
   /** Model kartı: üçlü bariyer etiketleme + purged CV + kalibrasyon. */
