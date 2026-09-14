@@ -47,21 +47,34 @@ jobs:
 
       # Kaynaklara erişilemezse dosyalar yazılmaz; arayüz "veri yok" der,
       # derleme kırılmaz (deploy.yml ile aynı sözleşme).
-      - name: Finansal tablolar ve sektör sınıflandırması
+      #
+      # HER ADIMIN KENDİ ZAMAN SINIRI VAR. İlk çalıştırmada finansal tablo
+      # çekimi ~660 sembolü tek tek indiriyor ve 13 dakikada bitmedi; işin
+      # 30 dakikalık üst sınırına dayansa HİÇBİR ŞEY yayımlanmazdı. Önizleme
+      # isteğe bağlı veriye bağımlı olamaz: yetişen veri girer, yetişmeyen
+      # bir sonraki çalıştırmaya kalır (betikler kaldıkları yerden devam eder).
+      - name: Finansal tablolar (İş Yatırım)
         continue-on-error: true
+        timeout-minutes: 8
         run: |
           python -m pip install --quiet isyatirimhisse pandas
           python scripts/build_fundamentals.py
-          python scripts/build_sectors.py
+
+      - name: Sektör sınıflandırması
+        continue-on-error: true
+        timeout-minutes: 3
+        run: python scripts/build_sectors.py
 
       - name: Kur serisi (TCMB)
         continue-on-error: true
+        timeout-minutes: 3
         env:
           EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
         run: python scripts/build_fx.py
 
       # Verbose JSON → kolonsal .bin + manifest + latest-250 paketi.
       - name: Kolonsal veri paketi
+        timeout-minutes: 10
         run: |
           python -m pip install --quiet numpy
           python scripts/pack_data.py --market all --bundle-bars 250 --verify
