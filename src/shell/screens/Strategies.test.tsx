@@ -138,6 +138,13 @@ describe('Stratejiler', () => {
     expect(within(rows[0]).getByText('anlamlı')).toBeInTheDocument();
   });
 
+  it('ölçülemeyen satırda "—%" gibi yarım bir işaret bırakmaz', async () => {
+    render(<Strategies state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText(/Al-tut farkı/)).toBeInTheDocument());
+    // Yüzde işareti şablonda sabitti; sayı yokken "—%" çıkıyordu.
+    expect(document.body.textContent).not.toContain('—%');
+  });
+
   it('ölçülemeyen stratejiyi "zayıf" saymaz, gerekçesini yazar', async () => {
     render(<Strategies state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('ölçülemedi')).toBeInTheDocument());

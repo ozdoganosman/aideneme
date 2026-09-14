@@ -503,7 +503,9 @@ export default function Strategies({ state, push }: Props) {
                   <td className="num">{plain(row.medianTrades, 0)}</td>
                   {scope !== 'symbol' ? (
                     <>
-                      <td className="num">{plain(row.beatPct, 0)}%</td>
+                      {/* Ölçülemeyen satırda "—%" çıkıyordu: yüzde işareti
+                          şablonda sabitti. trPct tanımsızda yalnızca "—" verir. */}
+                      <td className="num">{trPct(row.beatPct, 0)}</td>
                       <td className="num">{pval(row.adjustedP)}</td>
                     </>
                   ) : null}

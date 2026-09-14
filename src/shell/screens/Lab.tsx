@@ -526,7 +526,9 @@ export default function Lab({ state, push, replace }: Props) {
             />
             <Stat
               label="Maliyet yükü"
-              value={fmt(metrics.costDragPct, 1, '%')}
+              // İŞARETSİZ: "yük" bir kazanç değil. `+%6,2` yazmak maliyeti
+              // getiriye katkı gibi gösteriyordu.
+              value={plainPct(metrics.costDragPct, 1)}
               hint={`piyasada %${metrics.exposurePct.toFixed(0)} kalındı`}
               provenance={
                 <Prov label="Maliyet yükü">
