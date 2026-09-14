@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 447 test; lint 50 uyarı → **0**)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 459 test; lint 50 uyarı → **0**)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -294,6 +294,43 @@ boyutu yine önceden söyleniyor ve liste URL'e sığsın diye ilk 60 sembolle
 sınırlı.
 
 Ölçüm: 10 sembol · 0,8 MB · 80 backtest, worker 367 ms.
+
+## Kesitsel (havuzlanmış) model
+
+Model kartı tek sembolde haklı olarak "tek sembolde, tek dönemde ölçüldü"
+diyordu. Havuz bu uyarının ilk yarısını gerçekten kapatıyor: Model ekranında
+**Kapsam = Havuz (kesitsel)** seçilince en uzun geçmişe sahip N sembolün
+örnekleri tek havuzda eğitiliyor.
+
+İki yapısal değişiklik gerekti:
+
+1. `model.ts` ikiye ayrıldı — `buildSamples` (örnek üretimi) ve
+   `evaluateSamples` (purged CV + kart). Tek sembol de havuz da AYNI
+   çekirdekten geçiyor, yani ölçüm yöntemi ikisinde birebir aynı.
+2. Sızıntı ekseni bar indeksinden **takvim gününe** taşındı. Havuzda bar
+   indeksleri semboller arasında kıyaslanamaz; sembollere göre bölmek
+   (yarısı eğitim, yarısı test) aynı güne ait bilgiyi iki tarafta bırakırdı —
+   piyasa genelinde güçlü bir gün, eğitimdeki A hissesinden testteki B
+   hissesine sızardı. Katmanlar artık zaman blokları.
+
+Bunun yan etkisi: **embargo birimi de gün oldu.** 10 işlem günü ≈ 14 takvim
+günü; bar sayısı olduğu gibi kullanılsaydı embargo olması gerekenden kısa
+kalırdı. Varsayılan ufku 1,4 ile ölçekliyor.
+
+**Havuzun ölçülen değeri.** 400 barlık sekiz sentetik sembolde gömülü bir
+momentum rejimi varken tek sembol modellerinin HEPSİ "kullanma" diyor
+(AUC ort. 0,428 — gürültü). Aynı kural havuzlandığında örnek 330 → 2.640,
+AUC 0,617, Brier becerisi +0,042, hüküm "kullanılabilir". Bu ayrım kalıcı
+test altında.
+
+**Havuz kendiliğinden bir üstünlük üretmiyor.** Yerel sentetik BIST verisinde
+(rastgele yürüyüşe yakın) 15 sembol · 49.950 örnek havuzlandığında hüküm yine
+**kullanma** (AUC 0,506). Örnek sayısını artırmak olmayan bir ayrımı var
+etmiyor ve tablo bunu gizlemiyor.
+
+Diğer kararlar: havuzda canlı tahmin üretilmiyor (hangi sembol için olacağı
+belirsiz), örneği yetersiz semboller gerekçesiyle kartta listeleniyor, indirme
+boyutu önceden söyleniyor ve eğitim kullanıcı başlatınca koşuyor.
 
 ## Sırada
 

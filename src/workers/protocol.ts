@@ -9,6 +9,7 @@ import type { HealthReport } from '../core/data/health';
 import type { Metric } from '../core/stats/summary';
 import type { TF } from '../core/data/resample';
 import type { ModelCard, TrainRequest } from '../core/ml/model';
+import type { PooledRequest } from '../core/ml/pooled';
 import type { SymbolResult } from '../core/strategy/rank';
 
 /**
@@ -115,6 +116,14 @@ export interface RankSeriesRequest {
   minUsableBars: number;
 }
 
+export interface PooledModelRequest {
+  id: number;
+  type: 'pooledModel';
+  /** Havuza girecek semboller ve tam geçmişleri. */
+  series: { symbol: string; candles: Candles }[];
+  options: PooledRequest;
+}
+
 export type WorkerRequest =
   | InitRequest
   | ScreenRequest
@@ -124,7 +133,8 @@ export type WorkerRequest =
   | SymbolRequest
   | ModelRequest
   | RankRequest
-  | RankSeriesRequest;
+  | RankSeriesRequest
+  | PooledModelRequest;
 
 export interface InitResponse {
   id: number;
@@ -232,6 +242,16 @@ export interface RankSeriesResponse {
   ms: number;
 }
 
+export interface PooledModelResponse {
+  id: number;
+  ok: true;
+  type: 'pooledModel';
+  card: ModelCard;
+  used: string[];
+  skipped: { symbol: string; reason: string }[];
+  ms: number;
+}
+
 export type WorkerResponse =
   | InitResponse
   | SymbolResponse
@@ -242,4 +262,5 @@ export type WorkerResponse =
   | ModelResponse
   | RankResponse
   | RankSeriesResponse
+  | PooledModelResponse
   | ErrorResponse;

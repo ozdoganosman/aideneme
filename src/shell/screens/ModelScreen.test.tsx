@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { emptyCandles, type Candles } from '../../core/data/types';
 import type { ModelCard } from '../../core/ml/model';
 
 const modelFn = vi.fn();
+const pooledFn = vi.fn();
 const FAKE_ANALYSIS = {
-  client: { size: 2, model: (...a: unknown[]) => modelFn(...a) },
+  client: {
+    size: 2,
+    model: (...a: unknown[]) => modelFn(...a),
+    pooledModel: (...a: unknown[]) => pooledFn(...a),
+  },
   symbols: ['THYAO', 'GARAN'],
   bars: 250,
   status: 'ready' as const,
@@ -14,8 +20,12 @@ const FAKE_ANALYSIS = {
 vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
 const seriesFn = vi.fn();
+const manifestFn = vi.fn();
 vi.mock('../../data-client/client', () => ({
-  dataClient: { series: (...a: unknown[]) => seriesFn(...a) },
+  dataClient: {
+    series: (...a: unknown[]) => seriesFn(...a),
+    manifest: (...a: unknown[]) => manifestFn(...a),
+  },
 }));
 
 import ModelScreen from './ModelScreen';
@@ -85,6 +95,21 @@ beforeEach(() => {
   vi.clearAllMocks();
   seriesFn.mockResolvedValue({ candles: candles(400) });
   modelFn.mockResolvedValue({ card: card(), latest: { day: 19900, probability: 0.63 }, ms: 820 });
+  manifestFn.mockResolvedValue({
+    version: 1,
+    market: 'bist',
+    generated: 1,
+    symbols: {
+      AAA: { f: 'AAA.bin', n: 3000, d0: 1, d1: 2, b: 1_048_576, h: 'a' },
+      BBB: { f: 'BBB.bin', n: 2000, d0: 1, d1: 2, b: 524_288, h: 'b' },
+    },
+  });
+  pooledFn.mockResolvedValue({
+    card: card({ symbols: 2, samples: 2600, verdict: 'kullanılabilir' }),
+    used: ['AAA', 'BBB'],
+    skipped: [{ symbol: 'CCC', reason: 'yalnızca 12 örnek (en az 30)' }],
+    ms: 1400,
+  });
 });
 
 describe('Model ekranı', () => {
@@ -149,5 +174,47 @@ describe('Model ekranı', () => {
       embargoDays: 14,
       barriers: { horizon: 10, upMult: 1.5, downMult: 1.5 },
     });
+  });
+});
+
+describe('Model ekranı — havuz kapsamı', () => {
+  it('havuz kendiliğinden eğitilmez; önce boyutu söyleyip izin ister', async () => {
+    const user = userEvent.setup();
+    render(<ModelScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('Hüküm: kullanılabilir')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Kapsam'), 'pool');
+    // 1 MB + 0,5 MB = 1,5 MB, manifestten okunuyor.
+    await waitFor(() => expect(screen.getByText('1.5 MB')).toBeInTheDocument());
+    expect(pooledFn).not.toHaveBeenCalled();
+  });
+
+  it('eğitim başlatılınca serileri indirip havuzu eğitir', async () => {
+    const user = userEvent.setup();
+    render(<ModelScreen state={STATE} push={push} />);
+    await user.selectOptions(await screen.findByLabelText('Kapsam'), 'pool');
+    await user.click(await screen.findByRole('button', { name: 'Havuzu eğit' }));
+
+    await waitFor(() => expect(pooledFn).toHaveBeenCalledTimes(1));
+    expect(seriesFn).toHaveBeenCalledWith('bist', 'AAA');
+    expect(pooledFn.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it('havuza alınmayan sembolü gerekçesiyle listeler', async () => {
+    const user = userEvent.setup();
+    render(<ModelScreen state={STATE} push={push} />);
+    await user.selectOptions(await screen.findByLabelText('Kapsam'), 'pool');
+    await user.click(await screen.findByRole('button', { name: 'Havuzu eğit' }));
+    await waitFor(() => expect(screen.getByText(/CCC \(yalnızca 12 örnek/)).toBeInTheDocument());
+  });
+
+  it('havuzda canlı tahmin gösterilmez', async () => {
+    const user = userEvent.setup();
+    render(<ModelScreen state={STATE} push={push} />);
+    await user.selectOptions(await screen.findByLabelText('Kapsam'), 'pool');
+    await user.click(await screen.findByRole('button', { name: 'Havuzu eğit' }));
+    await waitFor(() => expect(screen.getByText('Hüküm: kullanılabilir')).toBeInTheDocument());
+    // Tek sembol kapsamındaki %63'lük olasılık kartı burada olmamalı.
+    expect(screen.queryByText('63%')).toBeNull();
   });
 });

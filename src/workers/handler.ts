@@ -12,6 +12,7 @@ import { resample } from '../core/data/resample';
 import { emaArr } from '../core/indicators/calc';
 import { summarize } from '../core/stats/summary';
 import { trainModel } from '../core/ml/model';
+import { trainPooled } from '../core/ml/pooled';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 /**
@@ -186,6 +187,21 @@ export function createHandler() {
             metrics,
             skipped,
             bars: req.candles.length,
+            ms: now() - started,
+          };
+        }
+
+        case 'pooledModel': {
+          const started = now();
+          // Çok sembollü eğitim: en ağır iş. Ana iş parçacığı görmeyecek.
+          const { card, used, skipped } = trainPooled(req.series, req.options);
+          return {
+            id: req.id,
+            ok: true,
+            type: 'pooledModel',
+            card,
+            used,
+            skipped,
             ms: now() - started,
           };
         }

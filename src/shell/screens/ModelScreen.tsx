@@ -15,6 +15,8 @@ interface Props {
 const pct = (v: number, digits = 1): string =>
   Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : '—';
 const num = (v: number, digits = 3): string => (Number.isFinite(v) ? v.toFixed(digits) : '—');
+const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
 const day = (d: number) =>
   Number.isFinite(d) ? new Date(d * 86400_000).toISOString().slice(0, 10) : '—';
 
@@ -38,6 +40,17 @@ export default function ModelScreen({ state, push }: Props) {
 
   const [horizon, setHorizon] = useState(10);
   const [mult, setMult] = useState(1.5);
+  const [scope, setScope] = useState<'symbol' | 'pool'>('symbol');
+  const [poolCount, setPoolCount] = useState(15);
+  const [plan, setPlan] = useState<{ symbols: string[]; bytes: number } | null>(null);
+  const [pool, setPool] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  const [poolInfo, setPoolInfo] = useState<{
+    used: string[];
+    skipped: { symbol: string; reason: string }[];
+  } | null>(null);
   const [result, setResult] = useState<{
     card: ModelCard;
     latest: { day: number; probability: number } | null;
@@ -49,9 +62,38 @@ export default function ModelScreen({ state, push }: Props) {
   const clientRef = useRef(analysis.client);
   clientRef.current = analysis.client;
 
+  // Havuz kapsamı: ne indirileceği ÖNCE hesaplanır, eğitim kullanıcı
+  // başlatınca koşar (derin taramayla aynı sözleşme).
   useEffect(() => {
     const client = clientRef.current;
-    if (!symbol || !client || analysis.status !== 'ready') return;
+    if (scope !== 'pool' || !client || analysis.status !== 'ready') return;
+    let cancelled = false;
+    setResult(null);
+    setPoolInfo(null);
+    setError(null);
+
+    (async () => {
+      try {
+        const manifest = await dataClient.manifest(market);
+        if (cancelled) return;
+        const symbols = Object.keys(manifest.symbols)
+          .sort((a, b) => (manifest.symbols[b]?.n ?? 0) - (manifest.symbols[a]?.n ?? 0))
+          .slice(0, poolCount);
+        const bytes = symbols.reduce((sum, s) => sum + (manifest.symbols[s]?.b ?? 0), 0);
+        setPlan({ symbols, bytes });
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scope, market, poolCount, analysis.status]);
+
+  useEffect(() => {
+    const client = clientRef.current;
+    if (scope !== 'symbol' || !symbol || !client || analysis.status !== 'ready') return;
     let cancelled = false;
     setBusy(true);
     setError(null);
@@ -76,7 +118,39 @@ export default function ModelScreen({ state, push }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [market, symbol, analysis.status, horizon, mult]);
+  }, [market, symbol, scope, analysis.status, horizon, mult]);
+
+  /** Havuz eğitimi: seriler indirilir, sonra tek worker isteğinde eğitilir. */
+  async function runPool() {
+    const client = clientRef.current;
+    if (!client || !plan) return;
+    setResult(null);
+    setError(null);
+    setPool({ done: 0, total: plan.symbols.length });
+
+    try {
+      const series: {
+        symbol: string;
+        candles: Awaited<ReturnType<typeof dataClient.series>>['candles'];
+      }[] = [];
+      for (const next of plan.symbols) {
+        const { candles } = await dataClient.series(market, next);
+        series.push({ symbol: next, candles });
+        setPool({ done: series.length, total: plan.symbols.length });
+      }
+      const outcome = await client.pooledModel(series, {
+        barriers: { horizon, upMult: mult, downMult: mult, volLength: 20 },
+        folds: 5,
+        embargoDays: Math.ceil(horizon * 1.4),
+      });
+      setResult({ card: outcome.card, latest: null, ms: outcome.ms });
+      setPoolInfo({ used: outcome.used, skipped: outcome.skipped });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPool(null);
+    }
+  }
 
   const card = result?.card ?? null;
 
@@ -100,13 +174,39 @@ export default function ModelScreen({ state, push }: Props) {
           onChange={(value) => push({ m: value, s: '' })}
           options={MARKETS.map((m) => ({ value: m, label: MARKET_LABEL[m] }))}
         />
-        <Combobox
-          label="Sembol"
-          value={symbol}
-          onChange={(value) => push({ s: value })}
-          options={analysis.symbols.map((s) => ({ value: s, label: s }))}
-          placeholder={symbol || 'Sembol ara…'}
+        <Select
+          label="Kapsam"
+          value={scope}
+          onChange={(value) => {
+            setScope(value as 'symbol' | 'pool');
+            setResult(null);
+            setPlan(null);
+          }}
+          options={[
+            { value: 'symbol', label: 'Tek sembol' },
+            { value: 'pool', label: 'Havuz (kesitsel)' },
+          ]}
         />
+        {scope === 'pool' ? (
+          <NumberField
+            label="Sembol sayısı"
+            value={poolCount}
+            min={3}
+            max={60}
+            step={1}
+            onChange={setPoolCount}
+            hint="en uzun geçmişe sahip semboller"
+          />
+        ) : null}
+        {scope === 'symbol' ? (
+          <Combobox
+            label="Sembol"
+            value={symbol}
+            onChange={(value) => push({ s: value })}
+            options={analysis.symbols.map((s) => ({ value: s, label: s }))}
+            placeholder={symbol || 'Sembol ara…'}
+          />
+        ) : null}
         <NumberField
           label="Ufuk (bar)"
           value={horizon}
@@ -124,12 +224,44 @@ export default function ModelScreen({ state, push }: Props) {
           step={0.5}
         />
         <span className="desk__muted">
-          Etiket: üçlü bariyer · Doğrulama: purged 5-fold + {horizon} bar embargo
+          Etiket: üçlü bariyer · Doğrulama: purged 5-fold + {Math.ceil(horizon * 1.4)} takvim günü
+          embargo
         </span>
       </section>
 
+      {scope === 'pool' ? (
+        <section className="rank__deep" aria-label="Havuz eğitimi">
+          {pool ? (
+            <>
+              <p>
+                {pool.done} / {pool.total} sembol indirildi
+                {pool.done === pool.total ? ' · eğitim koşuyor…' : ''}
+              </p>
+              <progress value={pool.done} max={pool.total} />
+            </>
+          ) : plan ? (
+            <>
+              <p>
+                {plan.symbols.length} sembol · <strong>{mb(plan.bytes)}</strong> indirilecek. Havuz
+                örnek sayısını artırır ama semboller bağımsız olmadığı için bağımsız bilgiyi aynı
+                oranda artırmaz.
+              </p>
+              <Button variant="primary" onClick={runPool}>
+                Havuzu eğit
+              </Button>
+            </>
+          ) : (
+            <p className="desk__muted">İndirme boyutu hesaplanıyor…</p>
+          )}
+        </section>
+      ) : null}
+
       {busy || !card ? (
-        <Skeleton count={5} height="64px" />
+        // Havuzda kullanıcı eğitimi başlatana kadar iskelet göstermenin anlamı
+        // yok: bekleyen bir iş yok, karar kullanıcıda.
+        scope === 'pool' && !pool ? null : (
+          <Skeleton count={5} height="64px" />
+        )
       ) : (
         <>
           <section className="model__verdict" aria-label="Hüküm">
@@ -315,6 +447,12 @@ export default function ModelScreen({ state, push }: Props) {
               {card.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
+              {poolInfo && poolInfo.skipped.length > 0 ? (
+                <li>
+                  Havuza alınmayanlar:{' '}
+                  {poolInfo.skipped.map((s) => `${s.symbol} (${s.reason})`).join(', ')}
+                </li>
+              ) : null}
             </ul>
             <p className="desk__muted">
               Yöntem: üçlü bariyer etiketleme (ufuk {card.barriers.horizon} bar, bariyerler ±

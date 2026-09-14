@@ -248,6 +248,24 @@ export class AnalysisClient {
     return rest;
   }
 
+  /** Havuzlanmış (kesitsel) model: çok sembolün örnekleri tek havuzda. */
+  async pooledModel(
+    series: { symbol: string; candles: import('../core/data/types').Candles }[],
+    options: import('../core/ml/pooled').PooledRequest = {},
+  ): Promise<{
+    card: import('../core/ml/model').ModelCard;
+    used: string[];
+    skipped: { symbol: string; reason: string }[];
+    ms: number;
+  }> {
+    const response = unwrap(
+      await this.pool.run((id) => ({ id, type: 'pooledModel', series, options })),
+    );
+    if (response.type !== 'pooledModel') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = response;
+    return rest;
+  }
+
   /** Piyasa nabzı: genişlik + para akışı (tek worker). */
   async pulse(
     market: Market,
