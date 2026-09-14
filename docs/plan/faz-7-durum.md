@@ -452,7 +452,46 @@ görmek gerekiyordu.
 
 `e2e/klavye.spec.ts` bunları kalıcı hale getirdi (6 akış).
 
+## Dar ekran denetimi (390 px)
+
+Tasarım sistemi tek bir responsive ağaç üzerine kurulu ama dar ekranda hiç
+denetim yapılmamıştı. Sekiz ekran 390 px genişlikte gezildi ve ilk ölçüm
+sorunu gösterdi: **her ekran 481 px'lik bir yerleşim genişliğiyle
+çiziliyordu.** Neden dokuz maddelik gezinti rayıydı — dar ekranda yatay
+dizilen raf 390 px'e sığmıyor, tarayıcı da sayfayı küçültüp sığdırıyordu.
+Sonuç: kullanıcı 390 px'lik telefonda 481 px'lik bir sayfayı uzaktan
+görüyordu, her yazı orantılı olarak küçülmüştü.
+
+Çözüm rafı **yatay kaydırılabilir** yapmak oldu (`overflow-x: auto`,
+öğeler `flex: 0 0 auto`, kaydırma çubuğu gizli). Yeniden ölçümde sekiz
+ekranın da `scrollWidth` değeri 390 ve yatay taşma yok.
+
+### Dokunma hedefleri
+
+WCAG 2.5.8 en az 24×24 px istiyor. Ölçüm üç kusur buldu:
+
+| Öğe | Önce | Sonra |
+|---|---|---|
+| Tablo satır düğmesi (×97) | 86×20 | satırın tamamı, en az 32 px |
+| Tablo sıralama başlığı | 24×33 | en az 32 px yükseklik |
+| Veri kaynağı rozeti | 16×16 | 24×24 |
+
+Rozet görsel olarak hâlâ 16 px'lik bir daire: büyüme saydam kenarlıkla
+(`border: 4px solid transparent; background-clip: content-box`) yapıldı,
+yani tıklama alanı büyüdü ama tasarım değişmedi.
+
+### Yol boyunca: adsız bir bağlantı
+
+Yeniden ölçümde geriye iki şey kaldı. Biri yanlış alarm (sektör rozetlerinin
+onay kutuları; gerçek hedef 98×26'lık `<label>`). Diğeri gerçekti: grafik
+kütüphanesinin eklediği **atıf bağlantısının erişilebilir adı yoktu** —
+ekran okuyucu "boş bağlantı" diye okuyordu. Atfı kaldırmak doğru olmazdı;
+bağlantıya `aria-label` verildi.
+
+`e2e/erisilebilirlik.spec.ts` artık adsız bağlantıyı da eliyor, yeni
+`e2e/mobil.spec.ts` ise altı ekranda 390 px genişlik ve yatay taşma
+olmadığını doğruluyor (toplam 27 uçtan uca akış).
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
-- Tarama kurallarını paylaşılabilir kılmak (sıkıştırılmış URL serileştirmesi).

@@ -143,6 +143,15 @@ export function PriceChart({
       Math.min(4000, Math.max(600, host.clientWidth * (window.devicePixelRatio || 1) * density)),
     );
     lodRef.current = new LodController(chart, candleSeries, volumeSeries, specs, [], buckets);
+
+    // Grafik kütüphanesi bir atıf bağlantısı ekliyor; metni logo olduğu için
+    // erişilebilir adı YOK (adsız bağlantı: WCAG 2.4.4/4.1.2). Atfı kaldırmak
+    // yerine adlandırıyoruz — ekran okuyucu "boş bağlantı" okumasın.
+    for (const link of host.querySelectorAll('a')) {
+      if (!link.textContent?.trim() && !link.getAttribute('aria-label')) {
+        link.setAttribute('aria-label', 'Grafik kütüphanesi hakkında (TradingView)');
+      }
+    }
     lastFitKey.current = undefined;
 
     return () => {

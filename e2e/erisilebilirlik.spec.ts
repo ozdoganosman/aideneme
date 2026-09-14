@@ -42,6 +42,11 @@ for (const [name, query, ready] of SCREENS) {
         adsizDugme: buttons.filter(
           (b) => !(b.textContent || '').trim() && !b.getAttribute('aria-label'),
         ).length,
+        // Adsız BAĞLANTI da aynı kusur; ilk denetimde yalnızca düğmelere
+        // bakmıştım ve grafik kütüphanesinin atıf bağlantısını kaçırmıştım.
+        adsizBaglanti: (all('a') as HTMLAnchorElement[])
+          .filter(visible)
+          .filter((a) => !(a.textContent || '').trim() && !a.getAttribute('aria-label')).length,
         adsizGiris: all('input, select, textarea').filter((el) => {
           if (!visible(el)) return false;
           const labelled =
@@ -57,6 +62,7 @@ for (const [name, query, ready] of SCREENS) {
     // Her ekranın tek ve doğru bir h1'i olmalı.
     expect(audit.h1).toEqual([name]);
     expect(audit.adsizDugme, 'adsız düğme').toBe(0);
+    expect(audit.adsizBaglanti, 'adsız bağlantı').toBe(0);
     expect(audit.adsizGiris, 'etiketsiz giriş alanı').toBe(0);
     expect(audit.tekrar, 'aynı ada sahip düğmeler ayırt edilemez').toEqual([]);
   });
