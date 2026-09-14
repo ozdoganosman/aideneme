@@ -24,6 +24,7 @@ import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
+import { LoadNote } from '../LoadNote';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -359,7 +360,10 @@ export default function Strategies({ state, push }: Props) {
         <DataError title="Strateji verisi yüklenemedi" detail={analysis.error} />
       ) : !sorted ? (
         scope === 'deep' && !deep ? null : (
-          <Skeleton count={6} height="52px" />
+          <>
+            <LoadNote progress={analysis.progress} />
+            <Skeleton count={6} height="52px" />
+          </>
         )
       ) : (
         <>

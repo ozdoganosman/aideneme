@@ -189,6 +189,34 @@ blokları açılışın uzun görev sayacına karışıyordu; artık açılış 
 etkileşimden ÖNCE alınıyor, yoksa "açılışta kaç blok var" sorusunun cevabı
 ölçümün kendisine göre değişirdi.
 
+## Yavaş bağlantı: 20 saniyelik sessizlik
+
+Şimdiye kadar hep CPU ölçüldü; AĞ hiç ölçülmemişti. Yavaş 3G (400 kbit/sn,
+400 ms gecikme) taklidiyle ilk açılış:
+
+| Süre | Kullanıcının gördüğü (önce) |
+|---|---|
+| 2 sn | boş |
+| 5 sn | araç çubuğu + iskelet, "hesaplanıyor…" |
+| 20 sn | hâlâ iskelet, hâlâ "hesaplanıyor…" |
+
+1 MB'lık paket bu hızda ~20 saniye sürüyor ve ekran bu sürenin tamamında
+**yanlış** bir şey söylüyordu: "hesaplanıyor". Hesaplanan bir şey yok, veri
+iniyor. Kullanıcı ne beklediğini de ne kadar bekleyeceğini de bilmiyor.
+
+İki düzeltme:
+
+1. Paket artık **gövdesi akıtılarak** iniyor (`res.arrayBuffer()` yerine
+   okuyucu döngüsü) ve her 64 KB'de ilerleme bildiriliyor. Ekranlarda:
+   *"Veri paketi indiriliyor — 259 KB / 979 KB (%26)"*. Toplam boyut
+   manifest'ten geliyor, tahmin değil. Akış yoksa tek parça okumaya düşüyor:
+   ilerleme gösterilmez ama indirme çalışır — **sahte çubuk çizilmiyor.**
+2. Nabız'daki "hesaplanıyor…" yazısı, veri beklenirken "veri bekleniyor"
+   diyor.
+
+Aynı ölçüm sonrası: 10. saniyede %26, 20. saniyede %79 — kullanıcı ilerlediğini
+görüyor.
+
 ## Tekrar üretmek için
 
 ```bash

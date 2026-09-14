@@ -10,6 +10,7 @@ const FAKE_ANALYSIS = {
   bars: 250,
   status: 'ready' as const,
   error: null,
+  progress: null,
 };
 vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
@@ -220,6 +221,24 @@ describe('Nabız — sektör bazlı para akışı', () => {
     );
     expect(screen.getByText(/Sektör dosyası bu piyasada yok/)).toBeInTheDocument();
     expect(screen.queryByLabelText('Gruplama')).toBeNull();
+  });
+});
+
+describe('Pulse — paket inerken', () => {
+  it('"hesaplanıyor" demez, ne kadar indiğini yazar', async () => {
+    const prev = { status: FAKE_ANALYSIS.status, progress: FAKE_ANALYSIS.progress };
+    Object.assign(FAKE_ANALYSIS, {
+      status: 'loading',
+      progress: { loaded: 259 * 1024, total: 979 * 1024 },
+    });
+    try {
+      render(<Pulse state={STATE} push={push} />);
+      expect(await screen.findByText(/Veri paketi indiriliyor/)).toBeInTheDocument();
+      // İndirme sırasında "hesaplanıyor" yanlış bilgiydi.
+      expect(screen.queryByText('hesaplanıyor…')).toBeNull();
+    } finally {
+      Object.assign(FAKE_ANALYSIS, prev);
+    }
   });
 });
 

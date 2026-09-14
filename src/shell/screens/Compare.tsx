@@ -15,6 +15,7 @@ import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { NormalizedChart } from '../chart/NormalizedChart';
 import { useAnalysis } from '../useAnalysis';
+import { LoadNote } from '../LoadNote';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -244,7 +245,10 @@ export default function Compare({ state, push }: Props) {
           </span>
         </header>
         {loadingSeries && chartSeries.length === 0 ? (
-          <Skeleton height="280px" />
+          <>
+            <LoadNote progress={analysis.progress} />
+            <Skeleton height="280px" />
+          </>
         ) : chartSeries.length === 0 ? (
           <EmptyState title="Karşılaştırmak için sembol ekle" />
         ) : (

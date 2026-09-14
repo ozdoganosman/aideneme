@@ -14,6 +14,7 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { HeatMap } from '../chart/HeatMap';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
+import { LoadNote } from '../LoadNote';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -153,9 +154,18 @@ export default function Pulse({ state, push }: Props) {
           label="Kümeleme sırası"
           checked={clusterOrder}
           onChange={setClusterOrder}
-          description={clusters ? `${clusters.count} küme` : 'hesaplanıyor…'}
+          // "Hesaplanıyor" yanlıştı: paket inerken henüz hesaplanacak bir şey
+          // yok. Kullanıcıya beklediği şeyin ne olduğunu söylüyoruz.
+          description={
+            clusters
+              ? `${clusters.count} küme`
+              : analysis.status === 'loading'
+                ? 'veri bekleniyor'
+                : 'hesaplanıyor…'
+          }
         />
         <div className="pulse__status">
+          <LoadNote progress={analysis.progress} />
           {busy ? (
             <Badge tone="warn">Hesaplanıyor…</Badge>
           ) : pulse ? (
