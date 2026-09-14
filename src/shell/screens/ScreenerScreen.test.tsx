@@ -253,6 +253,22 @@ describe('Tarayıcı — paylaşılabilir filtre', () => {
     expect(screen.queryByText('AAA')).toBeNull();
   });
 
+  it('sektör haritası inmeden "eşleşme yok" demez', async () => {
+    // Nabız'dan gelen bağlantı sektör seçili açılır; harita inene kadar sonuç
+    // zorunlu olarak boştur — bunu "kriterlere uyan yok" diye sunmak yanıltır.
+    sectorsFn.mockReturnValue(new Promise(() => {})); // hiç çözülmüyor
+    render(
+      <ScreenerScreen
+        state={{ ...STATE, f: '1||14.14.20.50.14.20.250|Bankacılık|chg21~d' }}
+        push={push}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Sektör sınıflandırması yükleniyor')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Kriterlere uyan sembol yok')).toBeNull();
+  });
+
   it('filtre değişince URL replace ile güncellenir (geçmiş kirlenmesin)', async () => {
     const user = userEvent.setup();
     const replace = vi.fn();

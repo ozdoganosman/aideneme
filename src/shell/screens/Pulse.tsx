@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, EmptyState, Popover, Select, Skeleton, Stat, Toggle } from '../../ui';
 import { Icon } from '../../ui/icons';
 import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
-import { flowBySector, sectorCoverage, type SectorMap } from '../../core/screen/sectors';
+import {
+  flowBySector,
+  sectorCoverage,
+  UNCLASSIFIED,
+  type SectorMap,
+} from '../../core/screen/sectors';
+import { encodeScreen, isShareableSector } from '../../core/screen/share';
+import { DEFAULT_SCREEN_PARAMS } from '../../core/screen/metrics';
 import { sectorsClient } from '../../data-client/sectors';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { HeatMap } from '../chart/HeatMap';
@@ -24,6 +31,19 @@ const fmtValue = (v: number): string => {
 
 const fmtPct = (v: number, digits = 1): string =>
   Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
+
+/**
+ * "Bu sektöre para giriyor" cümlesinin devamı "hangi hisseye?" sorusudur.
+ * Sektör satırından tarayıcıya, o sektör seçili ve KURALSIZ olarak geçiliyor:
+ * filtreyi kullanıcı kuracak, biz onun adına bir kural varsaymıyoruz.
+ */
+const screenLink = (sector: string): string =>
+  encodeScreen({
+    rules: [],
+    params: DEFAULT_SCREEN_PARAMS,
+    sectors: [sector],
+    sort: { metric: 'chg21', dir: 'desc' },
+  });
 
 /** Nabız — "piyasada bugün ne oluyor?" */
 export default function Pulse({ state, push }: Props) {
@@ -303,10 +323,27 @@ export default function Pulse({ state, push }: Props) {
                     <Button
                       size="sm"
                       variant="ghost"
+                      aria-label={
+                        !bySector
+                          ? undefined
+                          : flow.key === UNCLASSIFIED
+                            ? `Sektörü bilinmeyen sembollerin en çok işlem göreni ${flow.target}`
+                            : `${flow.key} sektörünün en çok işlem göreni ${flow.target}`
+                      }
                       onClick={() => push({ v: 'sembol', s: flow.target })}
                     >
                       {bySector ? flow.key : `${flow.label} grubu`}
                     </Button>
+                    {bySector && flow.key !== UNCLASSIFIED && isShareableSector(flow.key) ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`${flow.key} sektörünü tarayıcıda aç`}
+                        onClick={() => push({ v: 'tarayici', f: screenLink(flow.key) })}
+                      >
+                        Tara
+                      </Button>
+                    ) : null}
                   </th>
                   <td className="num">{flow.symbols}</td>
                   <td className="num">{fmtValue(flow.value)}</td>

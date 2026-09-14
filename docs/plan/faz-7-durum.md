@@ -492,6 +492,41 @@ bağlantıya `aria-label` verildi.
 `e2e/mobil.spec.ts` ise altı ekranda 390 px genişlik ve yatay taşma
 olmadığını doğruluyor (toplam 27 uçtan uca akış).
 
+## Para akışından hisseye: Nabız → Tarayıcı
+
+Sektör akış tablosu "Bankacılık'a para giriyor" diyordu ama cümlenin devamı
+yoktu. Kullanıcı hangi bankaya bakacağını bulmak için tarayıcıya gidip
+sektörü elle seçmek zorundaydı.
+
+Artık her sektör satırında iki geçiş var:
+
+| Tıklanan | Gidilen |
+|---|---|
+| Sektör adı | O sektörün en çok işlem gören sembolü |
+| **Tara** | Tarayıcı, o sektör seçili |
+
+Tarayıcıya **kuralsız** geçiliyor. Kullanıcı adına bir filtre varsaymak
+(ör. "RSI 40–70") sektörün hisselerinin bir kısmını daha ilk ekranda
+gizlerdi; filtreyi kuran kullanıcıdır, biz yalnızca kapsamı taşıyoruz.
+
+İki durumda düğme **hiç çıkmıyor**, çünkü karşılığı dürüstçe kurulamaz:
+
+- **Sınıflandırılmamış** satırı bir sektör değil, bir eksiktir; tarayıcının
+  sektör filtresinde karşılığı yok.
+- Adında virgül ya da `|` olan sektör bağlantı biçiminde taşınamaz
+  (`isShareableSector`). Taşınamaz adı yine de gönderseydik tarayıcı
+  **sessizce tüm piyasayı** gösterirdi — kullanıcının istediğinden başka bir
+  şey. Kodlamadaki eleme ile arayüzdeki düğme artık aynı ölçütü kullanıyor.
+
+Yol boyunca bir yanıltıcı boş durum düzeltildi: sektör seçili gelen bir
+bağlantıda sınıflandırma dosyası inene kadar sonuç zorunlu olarak boştur ve
+ekran "Kriterlere uyan sembol yok" diyordu — kullanıcı filtresini gevşetmeye
+çalışırdı. Artık "Sektör sınıflandırması yükleniyor" diyor.
+
+Akış uçtan uca teste bağlandı (`e2e/akislar.spec.ts`): Nabız'daki ilk sektör
+satırından geçiliyor, tarayıcıda tam olarak o rozet seçili çıkıyor ve URL
+paylaşılabilir kalıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

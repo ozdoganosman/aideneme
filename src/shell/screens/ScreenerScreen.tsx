@@ -607,15 +607,24 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
             height="100%"
             onRowClick={(r) => push({ v: 'sembol', s: r.symbol })}
             empty={
-              <EmptyState
-                title="Kriterlere uyan sembol yok"
-                description="Kuralları gevşetmeyi veya parametreleri değiştirmeyi dene."
-                action={
-                  <Button size="sm" onClick={() => setRules([])}>
-                    Kuralları temizle
-                  </Button>
-                }
-              />
+              // Sektör seçiliyken harita henüz inmediyse sonuç ZORUNLU olarak
+              // boştur; "kriterlere uyan yok" demek yanıltıcı olurdu.
+              pickedSectors.length > 0 && !sectors ? (
+                <EmptyState
+                  title="Sektör sınıflandırması yükleniyor"
+                  description="Seçili sektör filtresi, sınıflandırma dosyası indikten sonra uygulanacak."
+                />
+              ) : (
+                <EmptyState
+                  title="Kriterlere uyan sembol yok"
+                  description="Kuralları gevşetmeyi veya parametreleri değiştirmeyi dene."
+                  action={
+                    <Button size="sm" onClick={() => setRules([])}>
+                      Kuralları temizle
+                    </Button>
+                  }
+                />
+              )
             }
           />
         </div>

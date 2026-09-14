@@ -27,6 +27,10 @@ vi.mock('../chart/HeatMap', () => ({
   ),
 }));
 
+import userEvent from '@testing-library/user-event';
+import { decodeScreen } from '../../core/screen/share';
+import { METRIC_DEFS } from '../../core/screen/metrics';
+
 import Pulse from './Pulse';
 
 function row(symbol: string, changePct: number, value: number): PulseRow {
@@ -160,6 +164,52 @@ describe('Nabız — sektör bazlı para akışı', () => {
     await waitFor(() => expect(screen.getByText('39.7%')).toBeInTheDocument());
     // Sınıflandırılmamış = DDD 100 / 15100 = %0,7 — gizlenmiş olsaydı paylar şişerdi.
     expect(screen.getByText('0.7%')).toBeInTheDocument();
+  });
+
+  it('sektör satırından o sektör seçili tarayıcıya geçilir', async () => {
+    sectorsFn.mockResolvedValue(SECTORS);
+    const user = userEvent.setup();
+    render(<Pulse state={STATE} push={push} />);
+    await user.click(
+      await screen.findByRole('button', { name: 'Bankacılık sektörünü tarayıcıda aç' }),
+    );
+
+    expect(push).toHaveBeenCalledWith(expect.objectContaining({ v: 'tarayici' }));
+    const link = push.mock.calls.at(-1)![0].f as string;
+    const known = new Set(METRIC_DEFS.map((m) => m.id));
+    const decoded = decodeScreen(link, known);
+    expect(decoded.dropped).toEqual([]);
+    // Sektör seçili ama KURAL yok: filtreyi kullanıcı kuracak.
+    expect(decoded.state!.sectors).toEqual(['Bankacılık']);
+    expect(decoded.state!.rules).toEqual([]);
+  });
+
+  it('sınıflandırılmamış satır tarayıcıya geçiş sunmaz', async () => {
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('Sınıflandırılmamış')).toBeInTheDocument());
+    // "Sektörü bilinmiyor" bir sektör değil; tarayıcıda karşılığı yok.
+    expect(
+      screen.queryByRole('button', { name: 'Sınıflandırılmamış sektörünü tarayıcıda aç' }),
+    ).toBeNull();
+  });
+
+  it('adı bağlantıda taşınamayan sektör geçiş sunmaz', async () => {
+    // Virgül, bağlantıdaki sektör ayırıcısı: ad bölünürse tarayıcı SESSİZCE
+    // tüm piyasayı gösterirdi. Böyle bir sektörde düğme hiç çıkmıyor.
+    sectorsFn.mockResolvedValue({
+      ...SECTORS,
+      of: { AAA: 'Gıda, İçecek', BBB: 'Gıda, İçecek', CCC: 'Demir Çelik' },
+    });
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('Gıda, İçecek')).toBeInTheDocument());
+    expect(
+      screen.queryByRole('button', { name: /Gıda, İçecek sektörünü tarayıcıda aç/ }),
+    ).toBeNull();
+    // Taşınabilir ad etkilenmiyor.
+    expect(
+      screen.getByRole('button', { name: 'Demir Çelik sektörünü tarayıcıda aç' }),
+    ).toBeInTheDocument();
   });
 
   it('sınıflandırma yoksa davranış gruplarına düşer ve nedenini söyler', async () => {

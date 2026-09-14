@@ -32,10 +32,33 @@ test('nabız: ısı haritası ve sektör akışı gerçek worker ile hesaplanıy
   // Sınıflandırma varsa varsayılan görünüm sektör olmalı.
   await expect(page.getByText(/Para akışı — sektörler/)).toBeVisible();
   // Sınıflandırılmamış semboller gizlenmiyor (üretici %10'unu boş bırakıyor).
-  await expect(page.getByRole('button', { name: 'Sınıflandırılmamış' })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Sektörü bilinmeyen sembollerin en çok işlem göreni/ }),
+  ).toBeVisible();
 
   const rows = await page.locator('.pulse__flows tbody tr').count();
   expect(rows).toBeGreaterThan(2);
+});
+
+test('nabız → tarayıcı: sektör satırı o sektör seçili taramayı açıyor', async ({ page }) => {
+  await open(page, 'v=nabiz');
+  const row = page.locator('.pulse__flows tbody tr').first();
+  await expect(row).toBeVisible();
+
+  const tara = row.getByRole('button', { name: /sektörünü tarayıcıda aç$/ });
+  const sector = (await tara.getAttribute('aria-label'))!.replace(
+    ' sektörünü tarayıcıda aç',
+    '',
+  );
+  await tara.click();
+
+  await expect(page.locator('.ui-vtable')).toBeVisible();
+  // Tek bir rozet seçili ve o rozet Nabız'da tıklanan sektör.
+  await expect(page.locator('.screener__chip.is-on')).toHaveCount(1);
+  await expect(page.locator('.screener__chip.is-on')).toHaveText(sector);
+  // Kural eklenmedi: kullanıcının kurmadığı bir filtre varsayılmıyor.
+  await expect(page.getByRole('button', { name: /^Giriş kuralları/ })).toHaveCount(0);
+  expect(decodeURIComponent(page.url())).toContain(`|${sector}|`);
 });
 
 test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor', async ({ page }) => {

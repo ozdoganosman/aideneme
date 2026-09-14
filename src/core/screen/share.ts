@@ -39,6 +39,14 @@ const PARAM_KEYS: (keyof ScreenParams)[] = [
 
 const num = (v: number): string => (Number.isInteger(v) ? String(v) : String(+v.toFixed(4)));
 
+/**
+ * Sektör adı bağlantıda taşınabilir mi? Ayırıcılarla çakışan ad kodlamaya
+ * giremez; bunu ÇAĞIRAN tarafın bilmesi gerekir, yoksa "bu sektörü tara"
+ * bağlantısı sessizce sektörsüz (tüm piyasa) bir tarama açardı.
+ */
+export const isShareableSector = (name: string): boolean =>
+  !name.includes(',') && !name.includes('|');
+
 export function encodeScreen(state: ShareState): string {
   const rules = state.rules
     .map((rule) => {
@@ -55,7 +63,7 @@ export function encodeScreen(state: ShareState): string {
   ).join('.');
   // Sektör adlarında virgül olmadığı varsayılmıyor: ayırıcı çakışırsa ad
   // bölünür ve tanınmaz; bu yüzden virgül içeren ad kodlamaya girmez.
-  const sectors = state.sectors.filter((s) => !s.includes(',') && !s.includes('|')).join(',');
+  const sectors = state.sectors.filter(isShareableSector).join(',');
   const sort = `${state.sort.metric}~${state.sort.dir === 'asc' ? 'a' : 'd'}`;
 
   return [VERSION, rules, params, sectors, sort].join('|');
