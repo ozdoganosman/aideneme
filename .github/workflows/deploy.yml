@@ -70,6 +70,14 @@ jobs:
           python -m pip install --quiet isyatirimhisse pandas
           python scripts/build_fundamentals.py
 
+      # USD/TRY kuru (TCMB EVDS). Anahtar yoksa ya da kaynak erişilemezse dosya
+      # yazılmaz; portföy ekranı "kur serisi yok" der, derleme kırılmaz.
+      - name: Kur serisi (TCMB)
+        continue-on-error: true
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: python scripts/build_fx.py
+
       # Sektör sınıflandırması. Kaynağa erişilemezse dosya yazılmaz ve arayüz
       # davranış kümelerine düşer; derleme kırılmaz.
       - name: Sektör sınıflandırması (İş Yatırım)

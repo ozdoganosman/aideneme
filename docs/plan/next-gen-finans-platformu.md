@@ -390,7 +390,6 @@ Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
   `continue-on-error` ve dosya yazılmazsa arayüz davranış kümelerine düşüyor.
 - Kayıtlı taramalar yalnızca tarayıcıda; paylaşılan bağlantı filtreyi taşıyor ama
   kayıt listesini taşımıyor.
-- USD bazlı portföy getirisi (kur serisi yok).
 - Kesitsel (çoklu sembol) model: kart "tek sembolde, tek dönemde ölçüldü" diyor.
 
 ---

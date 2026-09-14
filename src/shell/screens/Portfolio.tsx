@@ -22,6 +22,8 @@ import {
   type Txn,
 } from '../../core/portfolio/ledger';
 import { realReturnPct } from '../../core/portfolio/real';
+import { returnInCurrency, type FxSeries } from '../../core/portfolio/fx';
+import { fxClient } from '../../data-client/fx';
 import {
   BIST_SCENARIOS,
   concentration,
@@ -160,6 +162,18 @@ export default function Portfolio({ state, push }: Props) {
     return last || Math.floor(Date.now() / 1000);
   }, [valuation.rows, series]);
 
+  const [fx, setFx] = useState<FxSeries | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setFx(null);
+    fxClient.series(market).then((series) => {
+      if (!cancelled) setFx(series);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [market]);
+
   const irr = useMemo(
     () =>
       txns.length && valuation.totalValue > 0
@@ -174,6 +188,26 @@ export default function Portfolio({ state, push }: Props) {
     Number.isFinite(nominalPct) && firstDate
       ? realReturnPct(nominalPct, firstDate, valuationDate)
       : NaN;
+
+  /**
+   * Döviz bazlı getiri: maliyet ilk işlem GÜNÜNÜN kuruyla, güncel değer
+   * DEĞERLEME GÜNÜNÜN kuruyla çevrilir. Kur serisi yoksa ya da ilk işlem
+   * serinin başlangıcından eskiyse sonuç üretilmez — eksik kuru "en eski kur"
+   * ile doldurmak getiriyi çarpıtırdı.
+   */
+  const fxReturn = useMemo(
+    () =>
+      firstDate && valuation.totalCost > 0
+        ? returnInCurrency(
+            fx,
+            Math.floor(firstDate / 86400),
+            Math.floor(valuationDate / 86400),
+            valuation.totalCost,
+            valuation.totalValue,
+          )
+        : null,
+    [fx, firstDate, valuationDate, valuation.totalCost, valuation.totalValue],
+  );
 
   function addTxn() {
     if (!draft.symbol || !(draft.shares > 0) || !(draft.price > 0)) return;
@@ -378,6 +412,17 @@ export default function Portfolio({ state, push }: Props) {
               label="Açık K/Z"
               value={money(valuation.unrealizedPnl)}
               delta={Number.isFinite(nominalPct) ? nominalPct : undefined}
+            />
+            <Stat
+              label={fx ? `${fx.currency} bazında` : 'Döviz bazında'}
+              value={fxReturn ? pct(fxReturn.returnPct, 1) : '—'}
+              hint={
+                !fx
+                  ? 'kur serisi yok'
+                  : fxReturn
+                    ? `${fxReturn.rateFrom.toFixed(2)} → ${fxReturn.rateTo.toFixed(2)} · ${fx.source}`
+                    : 'ilk işlem kur serisinden eski'
+              }
             />
             <Stat
               label="Reel K/Z"

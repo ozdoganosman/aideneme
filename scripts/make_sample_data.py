@@ -195,6 +195,34 @@ def main() -> int:
         }
     (fund / "snapshot.json").write_text(json.dumps(snapshot, separators=(",", ":")), encoding="utf-8")
 
+    # Kur serisi: döviz bazlı getiri ekranının sınanabilmesi için. Gerçek kur
+    # DEĞİL — kaynağı "Sentetik (yerel)" yazar ve seri, fiyat serisiyle aynı
+    # takvimi kullanır ki "kur o gün bilinmiyor" durumu da oluşabilsin.
+    fx_rnd = random.Random(11)
+    fx_days: list[int] = []
+    fx_rates: list[float] = []
+    rate = 18.0
+    # Fiyat serisinin ikinci yarısı: bilerek kısa tutuluyor ki "kur bu tarihten
+    # önce bilinmiyor" durumu arayüzde gerçekten görülebilsin.
+    axis = [d for d, *_ in series[symbols[0]]]
+    for day in axis[len(axis) // 2:]:
+        rate *= math.exp(0.0009 + 0.006 * fx_rnd.gauss(0, 1))
+        fx_days.append(day)
+        fx_rates.append(round(rate, 4))
+    (base / "fx.json").write_text(
+        json.dumps(
+            {
+                "source": "Sentetik (yerel)",
+                "generated": int(time.time()),
+                "currency": "USD",
+                "days": fx_days,
+                "rates": fx_rates,
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+
     # Sektörler: birkaç sembol KASITLI olarak sınıflandırılmamış bırakılır ki
     # "Sınıflandırılmamış" satırı ve kapsama oranı gerçekten sınanabilsin.
     rnd = random.Random(7)
@@ -207,7 +235,8 @@ def main() -> int:
 
     print(
         f"{len(symbols)} sembol × {args.bars} bar → {pack.relative_to(ROOT)} "
-        f"(paket {len(bundle) // 1024} KB) · {len(mapping)} sektör eşleşmesi"
+        f"(paket {len(bundle) // 1024} KB) · {len(mapping)} sektör eşleşmesi "
+        f"· {len(fx_days)} gün kur"
     )
     return 0
 

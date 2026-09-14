@@ -13,6 +13,11 @@ const FAKE_ANALYSIS = {
 };
 vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
+const fxFn = vi.fn();
+vi.mock('../../data-client/fx', () => ({
+  fxClient: { series: (...a: unknown[]) => fxFn(...a) },
+}));
+
 const seriesFn = vi.fn();
 vi.mock('../../data-client/client', () => ({
   dataClient: { series: (...a: unknown[]) => seriesFn(...a) },
@@ -42,6 +47,7 @@ const STATE = { v: 'portfoy', m: 'bist', s: '', tf: 'D', cmp: '' };
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  fxFn.mockResolvedValue(null); // varsayılan: kur serisi yok
   seriesFn.mockImplementation((_market: string, symbol: string) =>
     Promise.resolve({ candles: series(symbol === 'THYAO' ? 30 : 20), entry: {}, fromCache: true }),
   );
@@ -52,6 +58,7 @@ async function addPosition(
   symbol: string,
   shares: number,
   price: number,
+  date?: string,
 ) {
   const combo = screen.getByRole('combobox', { name: 'Sembol' });
   await user.click(combo);
@@ -68,6 +75,12 @@ async function addPosition(
   const priceInput = screen.getByLabelText('Fiyat');
   await user.clear(priceInput);
   await user.type(priceInput, String(price));
+
+  if (date) {
+    const dateInput = screen.getByLabelText('Tarih');
+    await user.clear(dateInput);
+    await user.type(dateInput, date);
+  }
 
   await user.click(screen.getByRole('button', { name: 'Ekle' }));
 }
@@ -130,5 +143,54 @@ describe('Portföy', () => {
     render(<Portfolio state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('Portföy değeri')).toBeInTheDocument());
     expect(screen.queryByText('Henüz işlem yok')).toBeNull();
+  });
+});
+
+describe('Portföy — döviz bazlı getiri', () => {
+  const startDay = Math.floor(Date.UTC(2021, 0, 4) / 1000 / DAY_SECONDS);
+
+  it('kur serisi yoksa sayı uydurmaz, nedenini yazar', async () => {
+    const user = userEvent.setup();
+    render(<Portfolio state={STATE} push={push} />);
+    await addPosition(user, 'THYAO', 100, 10);
+
+    await waitFor(() => expect(screen.getByText('Döviz bazında')).toBeInTheDocument());
+    expect(screen.getByText('kur serisi yok')).toBeInTheDocument();
+  });
+
+  it('kur serisi varsa TL kazancını dövize çevirir ve kurları gösterir', async () => {
+    // Maliyet 100×10 = 1000 TL @10 = 100 USD; değer 100×30 = 3000 TL @20 = 150 USD → +%50.
+    fxFn.mockResolvedValue({
+      source: 'Test kaynağı',
+      generated: 1,
+      currency: 'USD',
+      days: [startDay, startDay + 399],
+      rates: [10, 20],
+    });
+    const user = userEvent.setup();
+    render(<Portfolio state={STATE} push={push} />);
+    await addPosition(user, 'THYAO', 100, 10, '2021-01-04');
+
+    await waitFor(() => expect(screen.getByText('USD bazında')).toBeInTheDocument());
+    expect(screen.getByText('+50.0%')).toBeInTheDocument();
+    expect(screen.getByText(/10.00 → 20.00 · Test kaynağı/)).toBeInTheDocument();
+  });
+
+  it('ilk işlem kur serisinden eskiyse hesap yapmaz', async () => {
+    fxFn.mockResolvedValue({
+      source: 'Test kaynağı',
+      generated: 1,
+      currency: 'USD',
+      // Seri işlem tarihinden SONRA başlıyor: o gün kuru bilmiyoruz.
+      days: [startDay + 300, startDay + 399],
+      rates: [18, 20],
+    });
+    const user = userEvent.setup();
+    render(<Portfolio state={STATE} push={push} />);
+    await addPosition(user, 'THYAO', 100, 10, '2021-01-04');
+
+    await waitFor(() =>
+      expect(screen.getByText('ilk işlem kur serisinden eski')).toBeInTheDocument(),
+    );
   });
 });

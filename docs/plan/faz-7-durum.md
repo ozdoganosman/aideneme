@@ -363,6 +363,32 @@ Bağlantı paylaşımı da tamamlandı: tarayıcı, laboratuvar ve raporda ortak
 "kopyala" düğmesi var. Pano erişilemezse düğme sessizce "kopyalandı" demiyor,
 hata durumunu gösteriyor.
 
+## Döviz bazlı getiri
+
+"TL'de %16 kaybettim" tek başına eksik bir cümle: aynı dönemde kur %46
+arttıysa dolar bazında kayıp %43'tür. Portföy ekranı artık üç bazı yan yana
+gösteriyor — nominal TL, **USD bazında** ve reel (TÜFE).
+
+**Kur tablosu koda gömülmedi.** Hafızadan yazılmış bir kur tablosu yanlış
+olduğunda sessizce yanlış bir getiri gösterirdi; seri veri hattından geliyor
+(`public/data/<piyasa>/fx.json`, `scripts/build_fx.py` ile TCMB EVDS'ten).
+Dosya yoksa kart "kur serisi yok" diyor.
+
+İki hesap kararı:
+
+- **Enterpolasyon yok.** Ara günlerde son bilinen kur taşınıyor; iki gün
+  arasında düz çizgi varsaymak olmayan bir fiyat üretir.
+- **Serinin başlangıcından önce hesap yok.** "En eski kuru kullan" demek
+  geçmişi çarpıtır; kart "ilk işlem kur serisinden eski" diyor.
+
+### Yol boyunca yakalanan kusur
+
+Testi yazarken işlem tarihini varsayılan (bugün) bırakınca ortaya çıktı: fiyat
+verisi bayatsa işlem tarihi değerleme gününden SONRA olabiliyor ve iki uçta da
+son bilinen kur kullanılıyordu — kur etkisi sıfırlanıp TL getirisi "döviz
+getirisi" diye gösteriliyordu. Artık `dayFrom > dayTo` durumunda sonuç
+üretilmiyor. Test altında.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
