@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -48,10 +49,24 @@ BANK_SYMBOLS = {
 # Alan → kabul edilen kalem adları (İş Yatırım Türkçe adları; ilk eşleşen alınır).
 # Birden çok ad var çünkü tablo şablonu sektöre ve yıla göre değişiyor.
 FIELD_ITEMS: dict[str, list[str]] = {
-    "revenue": ["Satış Gelirleri", "Hasılat", "Satış Gelirleri (net)", "FAALİYET GELİRLERİ"],
+    "revenue": [
+        "Satış Gelirleri",
+        "Hasılat",
+        "Satış Gelirleri (net)",
+        "FAALİYET GELİRLERİ",
+        # Banka: ciro yerine faiz geliri.
+        "FAİZ GELİRLERİ",
+    ],
     "grossProfit": ["BRÜT KAR (ZARAR)", "Brüt Kar (Zarar)"],
     "operatingProfit": ["FAALİYET KARI (ZARARI)", "ESAS FAALİYET KARI (ZARARI)"],
-    "netIncome": ["Ana Ortaklık Payları", "DÖNEM NET KARI (ZARARI)", "Net Dönem Karı (Zararı)"],
+    "netIncome": [
+        "Ana Ortaklık Payları",
+        "DÖNEM NET KARI (ZARARI)",
+        "Net Dönem Karı (Zararı)",
+        # Banka tablosu aynı kalemi başka sırayla ve eğik çizgiyle yazıyor.
+        "Dönem Net Kar/Zararı",
+        "Net Dönem Kar/Zararı",
+    ],
     "assets": ["TOPLAM VARLIKLAR", "AKTİF TOPLAMI"],
     "equity": ["Özkaynaklar", "ÖZKAYNAKLAR", "Ana Ortaklığa Ait Özkaynaklar"],
     "paidCapital": ["Ödenmiş Sermaye", "ÖDENMİŞ SERMAYE"],
@@ -104,8 +119,27 @@ def load_symbols(limit: int | None) -> list[str]:
     return syms[:limit] if limit else syms
 
 
+# Madde numarası ön eki: "XVI. ÖZKAYNAKLAR", "16.4.2 Dönem Net Kar/Zararı",
+# "I. FAİZ GELİRLERİ". Banka ve sigorta tabloları her satırı böyle numaralar;
+# sanayi tabloları numaralamaz.
+_MADDE_NO = re.compile(r"^(?:[IVXLCDM]+\.|\d+(?:\.\d+)*\.?)\s+")
+
+
 def normalize(name: str) -> str:
-    return " ".join(str(name).split()).strip().lower()
+    """
+    Kalem adını eşleştirmeye hazırlar: boşlukları sadeleştirir, MADDE
+    NUMARASINI soyar, küçük harfe çevirir.
+
+    Numara soyma olmadan banka bilançosu hiç eşleşmiyordu. Ölçüldü: aranan
+    satırlar veride VARDI — 'AKTİF TOPLAMI' zaten listede, 'XVI. ÖZKAYNAKLAR'
+    listedeki 'ÖZKAYNAKLAR' ile aynı kalem, '16.4.2 Dönem Net Kar/Zararı' ise
+    net kâr. Eksik olan ad değil, ön ekti. Kırk banka adını tek tek listeye
+    eklemek yanlış çözüm olurdu: aynı tablo sigortada ve yatırım ortaklığında
+    başka numaralarla geliyor.
+    """
+    text = " ".join(str(name).split()).strip()
+    text = _MADDE_NO.sub("", text)
+    return text.lower()
 
 
 def extract(df, symbol: str) -> dict | None:
@@ -475,7 +509,9 @@ def self_test() -> None:
     # geldiğini görmeden FIELD_ITEMS'a ne ekleneceği tahmin olurdu.
     import io
 
-    tanimsiz = SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "FAİZ GELİRLERİ", "2024/6": 1.0}])
+    # NOT: burada "FAİZ GELİRLERİ" kullanılamaz — artık TANINIYOR (banka
+    # cirosu). Teşhisin sınandığı şey, hiçbir kalemin eşleşmediği durum.
+    tanimsiz = SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "12.1 Genel Karşılıklar", "2024/6": 1.0}])
     yakala = io.StringIO()
     gercek_stderr, sys.stderr = sys.stderr, yakala
     try:
@@ -483,12 +519,12 @@ def self_test() -> None:
     finally:
         sys.stderr = gercek_stderr
     assert bos is None, "tanınan kalem yokken kayıt üretilmemeli"
-    assert "FAİZ GELİRLERİ" in yakala.getvalue(), yakala.getvalue()
+    assert "Genel Karşılıklar" in yakala.getvalue(), yakala.getvalue()
     # Süzgeç ilgisiz satırı elemeli: banka tablosunun ilk on beş satırı
     # bilanço aktif tarafı ve aradığımız kâr satırları aşağıda kalıyordu.
     elenen = SahteTablo(
         [
-            {"FINANCIAL_ITEM_NAME_TR": "III. BANKALAR", "2024/6": 1.0},
+            {"FINANCIAL_ITEM_NAME_TR": "I. NAKİT DEĞERLER VE MERKEZ BANKASI", "2024/6": 1.0},
             {"FINANCIAL_ITEM_NAME_TR": "NET DÖNEM KARI", "2024/6": 2.0},
         ]
     )
@@ -499,7 +535,33 @@ def self_test() -> None:
     finally:
         sys.stderr = gercek_stderr
     assert "NET DÖNEM KARI" in yakala2.getvalue(), yakala2.getvalue()
-    assert "BANKALAR" not in yakala2.getvalue(), yakala2.getvalue()
+    assert "MERKEZ BANKASI" not in yakala2.getvalue(), yakala2.getvalue()
+
+    # BANKA TABLOSU. Aranan satırlar veride vardı ama hiç eşleşmiyordu:
+    # banka bilançosu her satırı madde numarasıyla başlatıyor ve
+    # 'XVI. ÖZKAYNAKLAR' listedeki 'ÖZKAYNAKLAR' ile eşleşmiyordu.
+    assert normalize("XVI. ÖZKAYNAKLAR") == normalize("ÖZKAYNAKLAR")
+    assert normalize("16.4.2 Dönem Net Kar/Zararı") == normalize("Dönem Net Kar/Zararı")
+    assert normalize("I. FAİZ GELİRLERİ") == normalize("FAİZ GELİRLERİ")
+    # Numarasız adlar bozulmamalı.
+    assert normalize("Satış Gelirleri") == "satış gelirleri"
+
+    banka = SahteTablo(
+        [
+            {"FINANCIAL_ITEM_NAME_TR": "I. NAKİT DEĞERLER VE MERKEZ BANKASI", "2026/6": 1.0},
+            {"FINANCIAL_ITEM_NAME_TR": "AKTİF TOPLAMI", "2026/6": 900.0},
+            {"FINANCIAL_ITEM_NAME_TR": "XVI. ÖZKAYNAKLAR", "2026/6": 300.0},
+            {"FINANCIAL_ITEM_NAME_TR": "16.4.2 Dönem Net Kar/Zararı", "2026/6": 45.0},
+            {"FINANCIAL_ITEM_NAME_TR": "I. FAİZ GELİRLERİ", "2026/6": 210.0},
+        ]
+    )
+    kayit = extract(banka, "AKBNK")
+    assert kayit is not None, "banka tablosu artık tanınmalı"
+    assert kayit["fields"]["netIncome"] == [45.0], kayit["fields"]["netIncome"]
+    assert kayit["fields"]["revenue"] == [210.0], kayit["fields"]["revenue"]
+    assert kayit["fields"]["equity"] == [300.0], kayit["fields"]["equity"]
+    assert kayit["fields"]["assets"] == [900.0], kayit["fields"]["assets"]
+
 
     print("[fund] self-test tamam")
 
