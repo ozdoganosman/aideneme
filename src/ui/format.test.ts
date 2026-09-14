@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { trNum, trPct, trAmount } from './format';
+import { trNum, trPct, trAmount, trCompact } from './format';
 
 describe('Türkçe sayı biçimi', () => {
   it('ondalık virgül, binlik nokta', () => {
@@ -24,5 +24,35 @@ describe('Türkçe sayı biçimi', () => {
 
   it('sıfır işaretsiz yazılır', () => {
     expect(trPct(0, 1, true)).toBe('%0,0');
+  });
+});
+
+describe('trCompact', () => {
+  it('milyar, milyon ve bin eşiklerini Türkçe kısaltır', () => {
+    expect(trCompact(16_600_000_000)).toBe('16,6 mlr');
+    expect(trCompact(2_450_000)).toBe('2,5 mn');
+    expect(trCompact(48_300)).toBe('48,3 b');
+  });
+
+  it('eşiğin altında kısaltmaz', () => {
+    expect(trCompact(999)).toBe('999');
+    expect(trCompact(0)).toBe('0');
+  });
+
+  it('negatifi de kısaltır', () => {
+    // Nabız ekranındaki yerel kopya burada kısaltmayı atlayıp tam sayıya
+    // düşüyordu: aynı sütunda iki ayrı biçim görünürdü.
+    expect(trCompact(-2_450_000)).toBe('-2,5 mn');
+    expect(trCompact(-48_300)).toBe('-48,3 b');
+  });
+
+  it('ölçülemeyende sayı uydurmaz', () => {
+    expect(trCompact(NaN)).toBe('—');
+    expect(trCompact(Infinity)).toBe('∞');
+  });
+
+  it('ondalık ayırıcı virgül kalır', () => {
+    expect(trCompact(1_234_500_000)).toMatch(/^1,2 mlr$/);
+    expect(trCompact(1_234_500_000)).not.toContain('.');
   });
 });

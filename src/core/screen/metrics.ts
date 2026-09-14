@@ -22,6 +22,7 @@ export type MetricId =
   | 'emaFastGap'
   | 'emaSlowGap'
   | 'volRatio'
+  | 'turnover'
   | 'atrPct'
   | 'fromHigh';
 
@@ -50,7 +51,7 @@ export const DEFAULT_SCREEN_PARAMS: ScreenParams = {
 export interface MetricDef {
   id: string;
   label: string;
-  unit: 'pct' | 'price' | 'ratio' | 'level';
+  unit: 'pct' | 'price' | 'ratio' | 'level' | 'money';
   /** Provenance: metrik nasıl hesaplanıyor (parametreler yerine konur). */
   formula: (p: ScreenParams) => string;
   /** Değer işaretine göre renklensin mi. */
@@ -137,6 +138,14 @@ export const METRIC_DEFS: MetricDef[] = [
     formula: (p) => `Son bar hacmi ÷ son ${p.volLookback} barın ortalama hacmi`,
   },
   {
+    id: 'turnover',
+    label: 'İşlem değeri',
+    unit: 'money',
+    windowLabel: (p) => `${p.volLookback} bar ort.`,
+    formula: (p) =>
+      `Son ${p.volLookback} barın (kapanış × hacim) ortalaması — günlük ortalama işlem değeri`,
+  },
+  {
     id: 'atrPct',
     label: 'ATR %',
     unit: 'pct',
@@ -194,12 +203,19 @@ export function metricsFor(
   const slow = emaArr(c.close, params.emaSlow);
 
   let volSum = 0;
+  let turnoverSum = 0;
   let volCount = 0;
   for (let i = Math.max(0, n - params.volLookback); i < n; i++) {
     volSum += c.volume[i];
+    // İşlem DEĞERİ, adet değil: "hacim oranı" göreli bir ölçü (bugün normale
+    // göre ne kadar), likidite ise mutlak bir eşiktir. 1,40× hacim oranı,
+    // günde 50 bin TL dönen bir sembolde de görülür — o sembolde bulunan
+    // strateji gerçekte uygulanamaz.
+    turnoverSum += c.close[i] * c.volume[i];
     volCount++;
   }
   const avgVol = volCount ? volSum / volCount : NaN;
+  const turnover = volCount ? turnoverSum / volCount : NaN;
 
   let high = -Infinity;
   for (let i = Math.max(0, n - params.highLookback); i < n; i++) {
@@ -223,6 +239,7 @@ export function metricsFor(
       emaFastGap: fast[n - 1] > 0 ? (last / fast[n - 1] - 1) * 100 : NaN,
       emaSlowGap: slow[n - 1] > 0 ? (last / slow[n - 1] - 1) * 100 : NaN,
       volRatio: avgVol > 0 ? c.volume[n - 1] / avgVol : NaN,
+      turnover,
       atrPct: last > 0 ? (atr[n - 1] / last) * 100 : NaN,
       fromHigh: high > 0 ? (last / high - 1) * 100 : NaN,
     },

@@ -13,6 +13,7 @@ import {
   type Column,
   trPct,
   trNum,
+  trCompact,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import {
@@ -115,6 +116,7 @@ function fmtValue(id: string, v: number): string {
   if (def?.unit === 'pct') return trPct(v, 2, true);
   if (def?.unit === 'ratio') return `${trNum(v, 2)}×`;
   if (def?.unit === 'price') return trNum(v, def.decimals ?? 2);
+  if (def?.unit === 'money') return trCompact(v);
   return trNum(v, 1);
 }
 
@@ -346,7 +348,10 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
   }
 
   const columns: Column<ScreenRow>[] = useMemo(() => {
-    const technical = ['last', 'chg1', 'chg21', 'rsi', 'adx', 'volRatio', 'fromHigh'];
+    // İşlem değeri varsayılan sütun: likidite, sonucun UYGULANABİLİR olup
+    // olmadığını söyleyen tek sayı. Hacim oranı bunun yerine geçmiyor —
+    // o göreli, bu mutlak.
+    const technical = ['last', 'turnover', 'chg1', 'chg21', 'rsi', 'adx', 'volRatio', 'fromHigh'];
     // Temel veri varsa çarpanlar da sütun olarak gelir.
     const fundamental = snapshot ? ['pe', 'pb', 'roe', 'netMargin'] : [];
     const shown: string[] = [...technical, ...fundamental];

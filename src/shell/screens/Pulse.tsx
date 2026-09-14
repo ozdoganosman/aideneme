@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct, trNum } from '../../ui';
+import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct, trCompact } from '../../ui';
 import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
 import {
   flowBySector,
@@ -24,13 +24,7 @@ interface Props {
   push: (patch: UrlState) => void;
 }
 
-const fmtValue = (v: number): string => {
-  if (!Number.isFinite(v)) return '—';
-  if (v >= 1e9) return `${trNum(v / 1e9, 1)} mlr`;
-  if (v >= 1e6) return `${trNum(v / 1e6, 1)} mn`;
-  if (v >= 1e3) return `${trNum(v / 1e3, 1)} b`;
-  return trNum(v, 0);
-};
+const fmtValue = (v: number): string => trCompact(v);
 
 const fmtPct = (v: number, digits = 1): string => trPct(v, digits, true);
 

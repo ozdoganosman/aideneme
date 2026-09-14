@@ -206,3 +206,79 @@ describe('Ekranlar arası tutarlılık', () => {
     expect(Number.isFinite(row.values.chg5)).toBe(true);
   });
 });
+
+/**
+ * İşlem değeri (likidite) — "hacim oranı" bunun yerine geçmiyordu.
+ *
+ * Hacim oranı GÖRELİ bir ölçü: "bugün normale göre ne kadar". Günde 50 bin TL
+ * dönen bir sembolde de 1,40× görülebilir. Taramada bulunan strateji o
+ * sembolde gerçekte uygulanamaz; mutlak bir likidite eşiği gerekiyordu.
+ */
+describe('işlem değeri metriği', () => {
+  it('pencere ortalamasını kapanış × hacim üzerinden hesaplar', () => {
+    const closes = Array.from({ length: 40 }, () => 10);
+    const volumes = Array.from({ length: 40 }, () => 1000);
+    const row = metricsFor('T', series(closes, volumes))!;
+    // Son 20 barın hepsi 10 × 1000 = 10.000
+    expect(row.values.turnover).toBeCloseTo(10_000, 6);
+  });
+
+  it('yalnızca son `volLookback` barı sayar', () => {
+    const closes = Array.from({ length: 40 }, () => 10);
+    // İlk 20 bar çok yüksek hacimli, son 20 bar düşük: geçmişteki likidite
+    // bugünkü uygulanabilirliği anlatmaz.
+    const volumes = closes.map((_, i) => (i < 20 ? 1_000_000 : 1000));
+    const row = metricsFor('T', series(closes, volumes))!;
+    expect(row.values.turnover).toBeCloseTo(10_000, 6);
+  });
+
+  it('hacim oranı aynıyken işlem değeri ayrışır', () => {
+    // İki sembolde de son bar ortalamanın 2 katı → aynı volRatio.
+    const closes20 = Array.from({ length: 40 }, () => 20);
+    const mk = (base: number) =>
+      metricsFor(
+        'T',
+        series(
+          closes20,
+          closes20.map((_, i) => (i === 39 ? base * 2 : base)),
+        ),
+      )!;
+    const likit = mk(1_000_000);
+    const ince = mk(100);
+
+    expect(likit.values.volRatio).toBeCloseTo(ince.values.volRatio, 6);
+    // Ama likidite arasında dört büyüklük mertebesi var.
+    expect(likit.values.turnover / ince.values.turnover).toBeCloseTo(10_000, 3);
+  });
+
+  it('metrik tanımı listede ve penceresi başlıkta', () => {
+    const def = METRIC_DEFS.find((d) => d.id === 'turnover')!;
+    expect(def).toBeDefined();
+    expect(def.unit).toBe('money');
+    expect(def.windowLabel!(DEFAULT_SCREEN_PARAMS)).toBe('20 bar ort.');
+    expect(def.formula(DEFAULT_SCREEN_PARAMS)).toMatch(/kapanış × hacim/);
+  });
+
+  it('filtre makinesi işlem değeriyle eleyebiliyor', () => {
+    const closes = Array.from({ length: 40 }, () => 10);
+    const likit = metricsFor(
+      'LIKIT',
+      series(
+        closes,
+        closes.map(() => 1_000_000),
+      ),
+    )!;
+    const ince = metricsFor(
+      'INCE',
+      series(
+        closes,
+        closes.map(() => 10),
+      ),
+    )!;
+    const out = applyScreen([likit, ince], {
+      rules: [{ metric: 'turnover', op: 'gt', a: 1_000_000 }],
+      minBars: 0,
+    });
+    expect(out.map((r) => r.symbol)).toEqual(['LIKIT']);
+  });
+});

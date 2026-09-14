@@ -1215,6 +1215,39 @@ getirmiyor. Dokuz ekranın dokuzu da artık aynı gerçek yaşı gösteriyor;
 uçtan uca test hem sabit metnin geri gelmesini hem de ekrandan ekrana
 değişen bir cevabı kırıyor.
 
+## Likidite: "hacim oranı" bunun yerine geçmiyordu
+
+Tarayıcıda 26 filtrelenebilir metrik var (12 teknik + 14 temel) ve bunlardan
+biri "hacim oranı". Ama o **göreli** bir ölçü: son bar hacmi ÷ son 20 barın
+ortalaması, yani "bugün normale göre ne kadar". Günde 50 bin TL dönen bir
+sembolde de 1,40× görülebilir.
+
+Eksik olan **mutlak** eşikti. Kullanıcının işi "kriterlerime uyan hisseleri
+bul" değil, "uygulayabileceğim bir şey bul": taramanın ilk sırasındaki
+sembolde emir geçemiyorsan orada bulunan strateji de bir şey ifade etmiyor.
+Backtest aynı sembolde çalışıp güzel sayılar üretir — likidite varsayımı
+sessizce yanlıştır.
+
+`turnover` eklendi: son `volLookback` barın **kapanış × hacim** ortalaması,
+yani günlük ortalama işlem değeri. Varsayılan sütun oldu, çünkü sonucun
+uygulanabilir olup olmadığını söyleyen tek sayı bu.
+
+Test, iki ölçünün ayrıştığını gösteriyor: aynı hacim oranına (2,00×) sahip
+iki sembolün işlem değerleri arasında **dört büyüklük mertebesi** olabiliyor.
+
+### Yol boyunca: ikinci bir biçim kopyası doğmak üzereydi
+
+Nabız ekranının içinde yerel bir kısaltma fonksiyonu vardı (`16,6 mlr`).
+Tarayıcıya işlem değeri sütunu gelince ikincisi gerekecekti — iki kopya iki
+farklı eşik demektir ve bu dosyada daha önce Türkçe biçim tam da bu yüzden
+tek kaynağa toplanmıştı. `trCompact` `ui/format.ts`'e taşındı.
+
+Taşırken yerel kopyada bir kusur çıktı: **negatif değerde kısaltmayı
+atlıyordu** (`-2.450.000` → "-2.450.000", oysa pozitifi "2,5 mn"). Para akışı
+farkı gibi işaretli bir değer o sütuna girdiğinde aynı sütunda iki ayrı biçim
+görünürdü. Ortak sürümde işaret ayrılıp mutlak değer kısaltılıyor; test
+negatif eşikleri de kapsıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

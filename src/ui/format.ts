@@ -34,3 +34,24 @@ export function trAmount(value: number, digits = 0): string {
   if (!Number.isFinite(value)) return '—';
   return nf(digits).format(value);
 }
+
+/**
+ * Kısaltılmış para/hacim: 16.600.000.000 → "16,6 mlr".
+ *
+ * Nabız ekranının içinde yerel bir kopyası vardı; tarayıcıya işlem değeri
+ * sütunu gelince ikinci bir kopya gerekecekti. İki kopya iki farklı eşik
+ * demektir — biçim kurallarının tek kaynakta durması gerekiyor.
+ *
+ * Negatifi de doğru kısaltıyor: yerel kopya negatif değerde kısaltmayı
+ * atlayıp tam sayıya düşüyordu (para akışı farkı gibi işaretli bir değer
+ * geldiğinde aynı sütunda iki ayrı biçim görünürdü).
+ */
+export function trCompact(value: number, digits = 1): string {
+  if (!Number.isFinite(value)) return value === Infinity ? '∞' : '—';
+  const sign = value < 0 ? '-' : '';
+  const v = Math.abs(value);
+  if (v >= 1e9) return `${sign}${nf(digits).format(v / 1e9)} mlr`;
+  if (v >= 1e6) return `${sign}${nf(digits).format(v / 1e6)} mn`;
+  if (v >= 1e3) return `${sign}${nf(digits).format(v / 1e3)} b`;
+  return `${sign}${nf(0).format(v)}`;
+}
