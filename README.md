@@ -50,10 +50,16 @@ planına göre yeniden kuruluyor. İlk iki faz yayında:
   hacim + EMA, her metriğin formülünü/penceresini açan provenance katmanı ve
   veri sağlık paneli (eksik bar, bölünme benzeri sıçrama, bayatlık).
 
+- **Tarayıcı ve Karşılaştır** (Faz 3): Worker havuzunda canlı parametreli tarama
+  (200 sembol × 250 bar → 40 ms), NaN'ı "uygun" saymayan kural motoru, kayıtlı
+  taramalar; korelasyon matrisi + ortalama bağlantılı hiyerarşik kümeleme ve
+  bağımlılıksız canvas ile normalize getiri karşılaştırması.
+
 Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
 (`index.html`) tüm ekranlar taşınana kadar yayında kalıyor.
 Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),
-[`docs/plan/faz-2-durum.md`](docs/plan/faz-2-durum.md).
+[`docs/plan/faz-2-durum.md`](docs/plan/faz-2-durum.md),
+[`docs/plan/faz-3-durum.md`](docs/plan/faz-3-durum.md).
 
 ## Çalıştırma
 

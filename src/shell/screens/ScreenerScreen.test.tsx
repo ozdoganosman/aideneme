@@ -1,0 +1,114 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { ScreenRow } from '../../core/screen/metrics';
+
+const screenFn = vi.fn();
+// Sahte sonuç SABİT referans döndürür: useAnalysis'in sözleşmesi de budur
+// (yüklenene kadar null, sonra aynı nesne).
+const FAKE_ANALYSIS = {
+  client: { screen: screenFn, size: 3 },
+  symbols: ['AAA', 'BBB', 'CCC'],
+  bars: 250,
+  status: 'ready' as const,
+  error: null,
+};
+vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
+
+import ScreenerScreen from './ScreenerScreen';
+
+function row(symbol: string, rsi: number, chg21: number): ScreenRow {
+  return {
+    symbol,
+    bars: 250,
+    values: {
+      last: 100,
+      chg1: 1,
+      chg5: 2,
+      chg21,
+      chg63: 4,
+      rsi,
+      adx: 25,
+      emaFastGap: 1,
+      emaSlowGap: 2,
+      volRatio: 1.2,
+      atrPct: 2,
+      fromHigh: -5,
+    },
+  };
+}
+
+const push = vi.fn();
+const STATE = { v: 'tarayici', m: 'bist', s: '', tf: 'D', cmp: '' };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
+  screenFn.mockResolvedValue({
+    rows: [row('AAA', 55, 10), row('BBB', 80, -5), row('CCC', 45, 3)],
+    ms: 42,
+  });
+});
+
+describe('Tarayıcı', () => {
+  it('varsayılan kurallara uyan sembolleri listeler', async () => {
+    render(<ScreenerScreen state={STATE} push={push} />);
+
+    // Varsayılan: RSI 40–70 arası VE 1 aylık getiri > 0 → AAA ve CCC.
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(screen.getByText('CCC')).toBeInTheDocument();
+    expect(screen.queryByText('BBB')).toBeNull(); // RSI 80 → elendi
+  });
+
+  it('worker süresini ve iş parçacığı sayısını gösterir', async () => {
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText(/worker 42 ms/)).toBeInTheDocument());
+    expect(screen.getByText(/3 iş parçacığı/)).toBeInTheDocument();
+    expect(screen.getByText('2 / 3 sembol')).toBeInTheDocument();
+  });
+
+  it('parametre değişince worker yeniden çağrılır (canlı parametre)', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screenFn).toHaveBeenCalledTimes(1));
+
+    const rsiLength = screen.getByLabelText('RSI uzunluk');
+    await user.clear(rsiLength);
+    await user.type(rsiLength, '21');
+
+    await waitFor(() => expect(screenFn.mock.calls.length).toBeGreaterThan(1));
+    const lastCall = screenFn.mock.calls[screenFn.mock.calls.length - 1];
+    expect(lastCall[1].rsiLength).toBe(21);
+  });
+
+  it('kural eklemek sonucu daraltır, hiç eşleşme yoksa boş durum çıkar', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    // İlk kuralın alt sınırını 90'a çek → hiçbir sembol geçemez.
+    const value = screen.getAllByLabelText('Değer')[0];
+    await user.clear(value);
+    await user.type(value, '90');
+
+    await waitFor(() => expect(screen.getByText('Kriterlere uyan sembol yok')).toBeInTheDocument());
+  });
+
+  it('satıra tıklamak sembol masasına götürür', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'AAA' }));
+    expect(push).toHaveBeenCalledWith({ v: 'sembol', s: 'AAA' });
+  });
+
+  it('her kuralın metriği için formül katmanı var', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getAllByRole('button', { name: 'Bu metrik nasıl hesaplanıyor?' })[0]);
+    expect(screen.getByRole('dialog', { name: 'RSI' })).toHaveTextContent(/Wilder RSI/);
+  });
+});

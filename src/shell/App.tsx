@@ -12,9 +12,14 @@ import './shell.css';
 
 const Gallery = lazy(() => import('./screens/Gallery'));
 const SymbolDesk = lazy(() => import('./screens/SymbolDesk'));
+const ScreenerScreen = lazy(() => import('./screens/ScreenerScreen'));
+const Compare = lazy(() => import('./screens/Compare'));
 
-/** URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa> — varsayılanlar yazılmaz. */
-const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist' };
+/**
+ * URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa>&cmp=<sembol,sembol>
+ * Varsayılan değerler yazılmaz — link kısa kalır.
+ */
+const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist', cmp: '' };
 
 const THEME_ICON: Record<ThemePreference, IconName> = {
   system: 'auto',
@@ -135,6 +140,10 @@ export function App() {
                   <Gallery />
                 ) : screen.id === 'sembol' ? (
                   <SymbolDesk state={state} push={push} />
+                ) : screen.id === 'tarayici' ? (
+                  <ScreenerScreen state={state} push={push} />
+                ) : screen.id === 'karsilastir' ? (
+                  <Compare state={state} push={push} />
                 ) : (
                   <Placeholder screen={screen} />
                 )}

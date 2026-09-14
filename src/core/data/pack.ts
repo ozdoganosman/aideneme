@@ -150,6 +150,59 @@ export function decodeBundle(buf: ArrayBuffer): Bundle {
   };
 }
 
+export interface BundleInput {
+  symbols: string[];
+  /** Ortak gün ekseni (epoch gün). */
+  days: Int32Array | number[];
+  /** Her biri symbols.length × days.length; veri yoksa NaN. */
+  columns: {
+    open: ArrayLike<number>;
+    high: ArrayLike<number>;
+    low: ArrayLike<number>;
+    close: ArrayLike<number>;
+    volume: ArrayLike<number>;
+  };
+}
+
+/**
+ * Paket kodlayıcı — Python üreticisiyle aynı bayt düzeni.
+ * Testlerde kullanılıyor; aynı zamanda formatın simetrik (yazılabilir) olduğunu
+ * kanıtlıyor: fixture'ı çözüp yeniden kodlamak birebir aynı baytları vermeli.
+ */
+export function encodeBundle(input: BundleInput): ArrayBuffer {
+  const count = input.symbols.length;
+  const bars = input.days.length;
+  const nameBytes = new TextEncoder().encode(input.symbols.join('\n'));
+  const namesLen = nameBytes.length + (((-nameBytes.length % 4) + 4) % 4);
+  const cells = count * bars;
+
+  const buf = new ArrayBuffer(BUNDLE_HEADER + namesLen + bars * 4 + COLUMNS * cells * 4);
+  const head = new DataView(buf);
+  head.setUint32(0, BUNDLE_MAGIC, true);
+  head.setUint16(4, PACK_VERSION, true);
+  head.setUint16(6, bars, true);
+  head.setUint32(8, count, true);
+  head.setUint32(12, namesLen, true);
+
+  new Uint8Array(buf, BUNDLE_HEADER, nameBytes.length).set(nameBytes);
+
+  let offset = BUNDLE_HEADER + namesLen;
+  new Int32Array(buf, offset, bars).set(input.days as ArrayLike<number> as number[]);
+  offset += bars * 4;
+
+  for (const column of [
+    input.columns.open,
+    input.columns.high,
+    input.columns.low,
+    input.columns.close,
+    input.columns.volume,
+  ]) {
+    new Float32Array(buf, offset, cells).set(column as ArrayLike<number> as number[]);
+    offset += cells * 4;
+  }
+  return buf;
+}
+
 export interface ManifestEntry {
   /** Dosya adı. */
   f: string;

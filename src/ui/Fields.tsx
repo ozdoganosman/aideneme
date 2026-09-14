@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useAutoId } from './hooks';
 
 interface FieldShellProps {
@@ -78,7 +78,15 @@ export interface NumberFieldProps {
   error?: string;
 }
 
-/** Sayı alanı: aralık dışına çıkmayı engeller, sayılar tabular hizalanır. */
+/**
+ * Sayı alanı.
+ *
+ * Yazarken kutuyu boşaltabilmek gerekir: değeri doğrudan prop'tan okuyan bir
+ * kontrollü input'ta "sil ve yeniden yaz" akışı, silinen değerin anında geri
+ * gelmesine ve ardından yazılan rakamın eskisine EKLENMESİNE yol açıyor
+ * (14 → "142" → sınıra kırpılıyor). Bu yüzden yazım sırasında yerel bir taslak
+ * tutuluyor; sınır kırpması odak çıkışında uygulanıyor.
+ */
 export function NumberField({
   label,
   value,
@@ -91,6 +99,11 @@ export function NumberField({
   error,
 }: NumberFieldProps) {
   const id = useAutoId('num');
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = draft ?? (Number.isFinite(value) ? String(value) : '');
+
+  const clamp = (n: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+
   return (
     <FieldShell id={id} label={label} hint={hint} error={error}>
       <div className="ui-input-wrap">
@@ -98,17 +111,28 @@ export function NumberField({
           id={id}
           type="number"
           className="ui-input num"
-          value={Number.isFinite(value) ? value : ''}
+          value={shown}
           min={min}
           max={max}
           step={step}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-err` : hint ? `${id}-hint` : undefined}
           onChange={(e) => {
+            setDraft(e.target.value);
             const next = e.target.valueAsNumber;
-            if (!Number.isFinite(next)) return;
-            const clamped = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, next));
-            onChange(clamped);
+            // Boş ya da yarım girdi ("-", "1e") üst katmana gitmez; kutu boş kalır.
+            if (Number.isFinite(next)) onChange(next);
+          }}
+          onBlur={() => {
+            setDraft(null);
+            // Number('') === 0 olduğu için boş girdi ayrıca elenir; yoksa
+            // kutuyu boşaltıp odağı kaybetmek değeri sessizce sıfırlardı.
+            const trimmed = shown.trim();
+            if (trimmed === '') return; // boş bırakıldıysa eski değer geri gelir
+            const parsed = Number(trimmed);
+            if (!Number.isFinite(parsed)) return;
+            const clamped = clamp(parsed);
+            if (clamped !== value) onChange(clamped);
           }}
         />
         {suffix ? (

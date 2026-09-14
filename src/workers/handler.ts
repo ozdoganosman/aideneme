@@ -1,0 +1,84 @@
+import { decodeBundle, type Bundle } from '../core/data/pack';
+import { metricsFor, type ScreenRow } from '../core/screen/metrics';
+import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
+import type { WorkerRequest, WorkerResponse } from './protocol';
+
+/**
+ * Worker'ın beyni — DOM'suz, `self`'siz saf fonksiyon fabrikası.
+ * Böylece aynı kod hem gerçek Worker'da hem de testte (Worker olmadan) koşar.
+ */
+export function createHandler() {
+  const bundles = new Map<string, Bundle>();
+
+  return function handle(req: WorkerRequest): WorkerResponse {
+    try {
+      switch (req.type) {
+        case 'init': {
+          const bundle = decodeBundle(req.buffer);
+          bundles.set(req.market, bundle);
+          return { id: req.id, ok: true, type: 'init', symbols: bundle.names, bars: bundle.bars };
+        }
+
+        case 'screen': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const rows: ScreenRow[] = [];
+          const to = Math.min(req.to, bundle.names.length);
+          for (let i = req.from; i < to; i++) {
+            const symbol = bundle.names[i];
+            const candles = bundle.seriesOf(symbol);
+            if (!candles) continue;
+            const row = metricsFor(symbol, candles, req.params);
+            if (row) rows.push(row);
+          }
+          return { id: req.id, ok: true, type: 'screen', rows, ms: now() - started };
+        }
+
+        case 'correlate': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const wanted = req.symbols?.length ? req.symbols : bundle.names;
+          const symbols = wanted.filter((s) => bundle.names.includes(s));
+
+          // Paketin ortak gün eksenindeki kapanışları, istenen sembol sırasıyla.
+          const bars = bundle.bars;
+          const close = new Float64Array(symbols.length * bars);
+          symbols.forEach((symbol, s) => {
+            const si = bundle.names.indexOf(symbol);
+            for (let i = 0; i < bars; i++) close[s * bars + i] = bundle.closeAt(si, i);
+          });
+
+          const { matrix } = correlationMatrix(
+            { symbols, bars, close },
+            { lookback: req.lookback, minPairs: req.minPairs },
+          );
+          const clustered = clusterSymbols(matrix, symbols.length, req.threshold ?? 0.6);
+
+          return {
+            id: req.id,
+            ok: true,
+            type: 'correlate',
+            symbols,
+            matrix,
+            order: clustered.order,
+            clusterOf: clustered.clusterOf,
+            clusters: clustered.count,
+            ms: now() - started,
+          };
+        }
+      }
+    } catch (err) {
+      return { id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  };
+}
+
+function need(bundles: Map<string, Bundle>, market: string): Bundle {
+  const bundle = bundles.get(market);
+  if (!bundle) throw new Error(`${market}: worker'a paket yüklenmedi (önce init)`);
+  return bundle;
+}
+
+function now(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}

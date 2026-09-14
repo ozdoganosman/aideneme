@@ -1,7 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DAY_SECONDS, decodeBundle, decodeSeries, encodeSeries, isManifest } from './pack';
+import {
+  DAY_SECONDS,
+  decodeBundle,
+  decodeSeries,
+  encodeBundle,
+  encodeSeries,
+  isManifest,
+} from './pack';
 import { emptyCandles, type Candles } from './types';
 
 const FIXTURES = join(__dirname, '__fixtures__');
@@ -138,5 +145,47 @@ describe('bozuk girdi', () => {
     expect(isManifest({ version: 99, market: 'bist', generated: 1, symbols: {} })).toBe(false);
     expect(isManifest(null)).toBe(false);
     expect(isManifest({ version: 1, market: 'bist', generated: 1 })).toBe(false);
+  });
+});
+
+describe('encodeBundle', () => {
+  it('Python üretimi paketi çözüp yeniden kodlamak BİREBİR aynı baytları verir', () => {
+    const original = load('bundle-6.bin');
+    const bundle = decodeBundle(original);
+
+    const cells = bundle.names.length * bundle.bars;
+    const columns = {
+      open: new Float32Array(cells),
+      high: new Float32Array(cells),
+      low: new Float32Array(cells),
+      close: new Float32Array(cells),
+      volume: new Float32Array(cells),
+    };
+    // Çözücü yalnızca kapanışı tek tek veriyor; diğer kolonları seriden kur.
+    bundle.names.forEach((symbol, s) => {
+      const series = bundle.seriesOf(symbol)!;
+      const dayIndex = new Map(Array.from(bundle.days, (d, i) => [d, i]));
+      for (let i = 0; i < cells / bundle.names.length; i++) {
+        const cell = s * bundle.bars + i;
+        columns.open[cell] = NaN;
+        columns.high[cell] = NaN;
+        columns.low[cell] = NaN;
+        columns.close[cell] = NaN;
+        columns.volume[cell] = NaN;
+      }
+      for (let i = 0; i < series.length; i++) {
+        const di = dayIndex.get(Math.floor(series.time[i] / DAY_SECONDS));
+        if (di === undefined) continue;
+        const cell = s * bundle.bars + di;
+        columns.open[cell] = series.open[i];
+        columns.high[cell] = series.high[i];
+        columns.low[cell] = series.low[i];
+        columns.close[cell] = series.close[i];
+        columns.volume[cell] = series.volume[i];
+      }
+    });
+
+    const reencoded = encodeBundle({ symbols: bundle.names, days: bundle.days, columns });
+    expect(new Uint8Array(reencoded)).toEqual(new Uint8Array(original));
   });
 });
