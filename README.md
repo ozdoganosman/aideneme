@@ -61,12 +61,18 @@ planına göre yeniden kuruluyor. İlk iki faz yayında:
   rozeti**: maliyet · OOS (walk-forward) · parametre platosu · permütasyon
   p-değeri · deflated Sharpe. Her rozet tıklanınca gerekçesini gösterir.
 
+- **Portföy** (Faz 5): ağırlıklı ortalama maliyetli defter, reel (TÜFE
+  düzeltmeli) getiri, para ağırlıklı getiri (IRR), tarihsel VaR/CVaR,
+  yoğunlaşma ve gerçekten yaşanmış stres pencereleri (2018 kur şoku, Mart 2020,
+  Şubat 2023). İşlemler yalnızca tarayıcıda saklanır.
+
 Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
 (`index.html`) tüm ekranlar taşınana kadar yayında kalıyor.
 Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),
 [`docs/plan/faz-2-durum.md`](docs/plan/faz-2-durum.md),
 [`docs/plan/faz-3-durum.md`](docs/plan/faz-3-durum.md),
-[`docs/plan/faz-4-durum.md`](docs/plan/faz-4-durum.md).
+[`docs/plan/faz-4-durum.md`](docs/plan/faz-4-durum.md),
+[`docs/plan/faz-5-durum.md`](docs/plan/faz-5-durum.md).
 
 ## Çalıştırma
 
