@@ -151,14 +151,23 @@ def extract(df, symbol: str) -> dict | None:
         # şablonu değil banka bilançosunun satır adları. Kaydı okuyup
         # FIELD_ITEMS'a doğru adı eklemek, ada körlemesine tahmin etmekten
         # iyidir.
+        # İlk 15 adı basmak yetmedi: banka tablosunun ilk satırları bilanço
+        # AKTİF tarafı (I. NAKİT DEĞERLER, III. BANKALAR…), aradığımız
+        # kâr/özkaynak satırları çok daha aşağıda. İLGİLİ olanları süzüyoruz.
+        ilgi = ("KAR", "ZARAR", "GELİR", "ÖZKAYNAK", "AKTİF", "TOPLAM", "VARLIK", "NET")
         gelen = []
         for _, row in df.iterrows():
             ad = str(row.get(name_col, "")).strip()
-            if ad and ad not in gelen:
+            if not ad or ad in gelen:
+                continue
+            if any(k in ad.upper() for k in ilgi):
                 gelen.append(ad)
-            if len(gelen) >= 15:
+            if len(gelen) >= 40:
                 break
-        print(f"[fund] {symbol}: tanınan kalem yok · gelen adlar: {gelen}", file=sys.stderr)
+        print(
+            f"[fund] {symbol}: tanınan kalem yok · ilgili adlar ({len(gelen)}): {gelen}",
+            file=sys.stderr,
+        )
         return None
 
     return {
@@ -475,6 +484,22 @@ def self_test() -> None:
         sys.stderr = gercek_stderr
     assert bos is None, "tanınan kalem yokken kayıt üretilmemeli"
     assert "FAİZ GELİRLERİ" in yakala.getvalue(), yakala.getvalue()
+    # Süzgeç ilgisiz satırı elemeli: banka tablosunun ilk on beş satırı
+    # bilanço aktif tarafı ve aradığımız kâr satırları aşağıda kalıyordu.
+    elenen = SahteTablo(
+        [
+            {"FINANCIAL_ITEM_NAME_TR": "III. BANKALAR", "2024/6": 1.0},
+            {"FINANCIAL_ITEM_NAME_TR": "NET DÖNEM KARI", "2024/6": 2.0},
+        ]
+    )
+    yakala2 = io.StringIO()
+    gercek_stderr, sys.stderr = sys.stderr, yakala2
+    try:
+        extract(elenen, "GARAN")
+    finally:
+        sys.stderr = gercek_stderr
+    assert "NET DÖNEM KARI" in yakala2.getvalue(), yakala2.getvalue()
+    assert "BANKALAR" not in yakala2.getvalue(), yakala2.getvalue()
 
     print("[fund] self-test tamam")
 
