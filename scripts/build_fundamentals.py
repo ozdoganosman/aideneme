@@ -365,21 +365,36 @@ def self_test() -> None:
     for sym in ("AKBNK", "AGESA"):
         assert sorted(group_order(sym)) == ["1", "2", "3"], "üç şablon da denenmeli"
 
-    import pandas as pd
+    # Öz test ÜÇÜNCÜ PARTİ PAKET İSTEMEZ: CI'daki `verify` işi yalnızca saf
+    # Python veriyor (pandas orada kurulu değil). İlk yazdığımda `import
+    # pandas` koymuştum, yerelde geçti CI'da kırıldı — testin değeri tam da
+    # bağımlılıksız çalışmasında. `extract` bir DataFrame'den yalnızca
+    # `empty`, `columns`, `iterrows` ve satırın `get`'ini kullanıyor.
+    class SahteSatir:
+        def __init__(self, veri: dict):
+            self._veri = veri
+
+        def get(self, key, default=None):
+            return self._veri.get(key, default)
+
+    class SahteTablo:
+        def __init__(self, satirlar: list[dict]):
+            self._satirlar = satirlar
+            self.columns = list(satirlar[0]) if satirlar else []
+            self.empty = not satirlar
+
+        def iterrows(self):
+            for i, satir in enumerate(self._satirlar):
+                yield i, SahteSatir(satir)
 
     denenen: list[str] = []
 
     def sahte_kaynak(symbols, start_year, end_year, exchange, financial_group):
         denenen.append(financial_group)
         if financial_group != "3":
-            # İlk iki şablon boş tablo döndürüyor (kalem adları tutmuyor).
-            return pd.DataFrame({"FINANCIAL_ITEM_NAME_TR": ["Boş"], "2024/6": [1.0]})
-        return pd.DataFrame(
-            {
-                "FINANCIAL_ITEM_NAME_TR": ["Ana Ortaklık Payları"],
-                "2024/6": [42.0],
-            }
-        )
+            # İlk iki şablon tanınmayan kalem adı döndürüyor → şablon uymuyor.
+            return SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "Boş", "2024/6": 1.0}])
+        return SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "Ana Ortaklık Payları", "2024/6": 42.0}])
 
     record = fetch_one("AGESA", 2024, 2024, fetch=sahte_kaynak)
     assert record is not None, "üçüncü şablonda bulunmalıydı"
