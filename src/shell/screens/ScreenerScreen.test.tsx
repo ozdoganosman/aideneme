@@ -438,6 +438,27 @@ describe('Tarayıcı — kayıtlı taramada ne değişti', () => {
     ).toBeInTheDocument();
   });
 
+  it('yeni girenleri strateji testine taşır', async () => {
+    seed({
+      'bist|Tarama 1': {
+        name: 'Tarama 1',
+        market: 'bist',
+        code: CODE,
+        data: 'hash-a',
+        generated: 1_757_800_000,
+        symbols: ['AAA', 'ZZZ'],
+      },
+    });
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await user.click(await screen.findByRole('button', { name: /^Tarama 1/ }));
+    await user.click(
+      await screen.findByRole('button', { name: /Girenleri stratejilerde test et/ }),
+    );
+    // Yalnızca YENİ GİRENLER gidiyor; listenin tamamı değil.
+    expect(push).toHaveBeenCalledWith({ v: 'stratejiler', sy: 'BBB' });
+  });
+
   it('kaydı açmadan da rozet değişimi duyurur', async () => {
     // "Alarm" burada: kullanıcı kaydı tıklamadan, listede ne değiştiğini görüyor.
     seed({

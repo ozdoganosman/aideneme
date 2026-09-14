@@ -34,12 +34,30 @@ function fmtDay(t: number): string {
   return new Date(t * 1000).toISOString().slice(0, 10);
 }
 
-/** `days` gün öncesine denk gelen ilk bar indeksi (zaman tabanlı, periyottan bağımsız). */
-function indexSince(c: Candles, days: number): number {
+/**
+ * Son bardan `days` TAKVİM GÜNÜ geriye bakan pencerenin ilk barı.
+ *
+ * Bar sayısı değil takvim günü: tatiller ve yarım günler yüzünden "21 bar
+ * önce" her sembolde aynı tarihe denk gelmez, "30 gün önce" gelir.
+ */
+export function indexSince(c: Candles, days: number): number {
   const cut = c.time[c.length - 1] - days * DAY;
   let i = c.length - 1;
   while (i > 0 && c.time[i - 1] >= cut) i--;
   return i;
+}
+
+/**
+ * Takvim penceresi getirisi (%). Seri pencerenin TAMAMINI kapsamıyorsa NaN —
+ * kısa geçmişli bir sembol için daha dar bir pencereyi aynı ada koyup
+ * ötekilerle yan yana sıralamak, farklı şeyleri karşılaştırmak olurdu.
+ */
+export function changeSince(c: Candles, days: number): number {
+  const n = c.length;
+  if (n < 2) return NaN;
+  if (c.time[0] > c.time[n - 1] - days * DAY) return NaN;
+  const base = c.close[indexSince(c, days)];
+  return base > 0 ? (c.close[n - 1] / base - 1) * 100 : NaN;
 }
 
 /** Günlük logaritmik getirilerden yıllıklandırılmış volatilite (%). */

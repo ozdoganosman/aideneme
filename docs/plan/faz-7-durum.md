@@ -608,6 +608,36 @@ Hesap worker'da: sınıflandırma barları bir kez tarıyor (5000 barda ~3,7 ms,
 ölçüldü) ve ana iş parçacığı yalnızca dört satırlık özeti alıyor — rejim
 dizilerini aktarsaydık her kural değişikliğinde onlarca kilobayt taşınırdı.
 
+## Ekranlar arası tutarlılık denetimi
+
+Ekranlar tek tek doğruydu ama hiç YAN YANA koyulmamıştı. X140 sembolüyle
+aynı sayıyı üç ekrandan okudum:
+
+| Ekran | "1 ay" |
+|---|---|
+| Tarayıcı | **+17,53%** |
+| Sembol Masası | **+18,67%** |
+| Rapor | +18,67% |
+
+Kusur gerçekti: tarayıcı **21 bar**, masa ve rapor **30 takvim günü** geriye
+bakıyordu. Her ikisinin de formül katmanı doğruyu yazıyordu, yani hiçbiri
+yalan söylemiyordu — ama aynı adı taşıyan iki sayıdan hangisine güveneceğini
+kullanıcı bilemezdi.
+
+Takvim penceresi kazandı ve tek kaynağa taşındı (`changeSince`, `core/stats/
+summary.ts`): tatiller ve yarım günler yüzünden "21 bar önce" her sembolde
+farklı bir tarihe denk gelir, "30 gün önce" gelmez. Tarayıcının 1 hafta /
+1 ay / 3 ay sütunları artık 7 / 30 / 90 takvim gününe bakıyor; "1 gün" bar
+tabanlı kaldı (günlük değişim zaten bir önceki kapanış demektir).
+
+Yanında bir dürüstlük kuralı: **pencere tam kapsanmıyorsa sayı üretilmiyor.**
+Kısa geçmişli bir sembol için daha dar bir pencereyi "1 aylık getiri" diye
+sunup ötekilerle aynı sütunda sıralamak, farklı şeyleri karşılaştırmak
+olurdu. Eskiden 21 bar yoksa NaN'dı; şimdi 30 gün yoksa NaN.
+
+Tutarlılık kalıcı teste bağlandı: aynı seride tarayıcının `chg21` değeri ile
+Sembol Masası'nın `r1m` metriği birbirinden ayrılırsa test kırılıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

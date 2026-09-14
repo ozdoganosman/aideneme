@@ -1,5 +1,6 @@
 import { adxArr, emaArr } from '../indicators/calc';
 import { atrArr, rsiArr } from '../indicators/rsi';
+import { changeSince } from '../stats/summary';
 import type { Candles } from '../data/types';
 
 /**
@@ -77,21 +78,21 @@ export const METRIC_DEFS: MetricDef[] = [
     label: '1 hafta',
     unit: 'pct',
     signed: true,
-    formula: () => '(kapanış ÷ 5 bar önceki kapanış − 1) × 100',
+    formula: () => '(kapanış ÷ 7 takvim günü öncesinin ilk kapanışı − 1) × 100',
   },
   {
     id: 'chg21',
     label: '1 ay',
     unit: 'pct',
     signed: true,
-    formula: () => '(kapanış ÷ 21 bar önceki kapanış − 1) × 100',
+    formula: () => '(kapanış ÷ 30 takvim günü öncesinin ilk kapanışı − 1) × 100',
   },
   {
     id: 'chg63',
     label: '3 ay',
     unit: 'pct',
     signed: true,
-    formula: () => '(kapanış ÷ 63 bar önceki kapanış − 1) × 100',
+    formula: () => '(kapanış ÷ 90 takvim günü öncesinin ilk kapanışı − 1) × 100',
   },
   {
     id: 'rsi',
@@ -200,9 +201,12 @@ export function metricsFor(
     values: {
       last,
       chg1: pctChange(c, 1),
-      chg5: pctChange(c, 5),
-      chg21: pctChange(c, 21),
-      chg63: pctChange(c, 63),
+      // Dönem getirileri TAKVİM penceresi: Sembol Masası ve Rapor da aynı
+      // pencereyi kullanıyor. Burada "21 bar", orada "30 gün" olsaydı aynı
+      // sembol iki ekranda iki farklı "1 aylık getiri" gösterirdi.
+      chg5: changeSince(c, 7),
+      chg21: changeSince(c, 30),
+      chg63: changeSince(c, 90),
       rsi: rsi[n - 1],
       adx: adx[n - 1],
       emaFastGap: fast[n - 1] > 0 ? (last / fast[n - 1] - 1) * 100 : NaN,

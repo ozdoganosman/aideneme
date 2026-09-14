@@ -9,6 +9,7 @@ import {
 } from './metrics';
 import { DAY_SECONDS } from '../data/pack';
 import { emptyCandles, type Candles } from '../data/types';
+import { summarize } from '../stats/summary';
 
 function series(closes: number[], volumes?: number[]): Candles {
   const c = emptyCandles(closes.length);
@@ -181,5 +182,27 @@ describe('sektör filtresi', () => {
       sectors: ['Bankacılık'],
     });
     expect(out.map((r) => r.symbol)).toEqual(['AKBNK']);
+  });
+});
+
+describe('Ekranlar arası tutarlılık', () => {
+  it('1 aylık getiri Sembol Masası ile AYNI sayıyı verir', () => {
+    // Aynı ada sahip iki metriğin iki ekranda iki farklı sayı göstermesi,
+    // kullanıcının hangisine güveneceğini bilememesi demekti (gerçek kusurdu:
+    // tarayıcı 21 BAR, masa 30 GÜN geriye bakıyordu).
+    const row = metricsFor('AAA', rising)!;
+    const masa = summarize(rising).find((m) => m.key === 'r1m')!;
+    expect(row.values.chg21).toBeCloseTo(masa.value, 10);
+  });
+
+  it('1 yıllık pencere gibi kapsanmayan dönemde sayı ÜRETMEZ', () => {
+    // 20 barlık seri 30 günü kapsamaz: daha dar bir pencereyi "1 aylık getiri"
+    // diye sunmak, farklı şeyleri yan yana sıralamak olurdu.
+    const kisa = series(Array.from({ length: 20 }, (_, i) => 100 + i));
+    const row = metricsFor('BBB', kisa)!;
+    expect(Number.isNaN(row.values.chg21)).toBe(true);
+    expect(Number.isNaN(row.values.chg63)).toBe(true);
+    // 7 günlük pencere kapsanıyor.
+    expect(Number.isFinite(row.values.chg5)).toBe(true);
   });
 });

@@ -732,6 +732,15 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
               )}
             </>
           ) : null}
+          {diff.entered.length > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => push({ v: 'stratejiler', sy: diff.entered.slice(0, 60).join(',') })}
+            >
+              Girenleri stratejilerde test et ({Math.min(diff.entered.length, 60)})
+            </Button>
+          ) : null}
           {diff.status !== 'ayni-veri' ? (
             <Button size="sm" variant="secondary" onClick={() => markSnapshot(activeSaved)}>
               {diff.status === 'degisti' ? 'Yeni durumu işaretle' : 'Şimdiki durumu işaretle'}
