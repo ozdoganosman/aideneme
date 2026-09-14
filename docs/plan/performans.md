@@ -81,6 +81,29 @@ olarak sayılmıyor.
 
 ## Kalan tek blok: grafik kütüphanesinin ilk kurulumu
 
+**CPU profiliyle ayrıştırıldı (6× kısma, gezinme anından itibaren):**
+
+| Kalem | Süre |
+|---|---|
+| `(program)` — betik ayrıştırma/derleme | 1119 ms |
+| `lod` yığınının modül değerlendirmesi | 152 ms |
+| Sembol Masası bileşen kodu | 142 ms |
+| `useBitmapCoordinateSpace` (canvas çizimi) | 48 ms |
+
+Tek uzun blok (372 ms) grafiğin KURULMASI; ayrıştırma ondan önce, ayrı
+görevlerde oluyor. İki azaltma denendi ve **ikisi de ölçülebilir kazanç
+vermedi**:
+
+1. Modül indirmesini erkene almak (ayrıştırma ağ boşluğuna denk gelsin diye) —
+   blok 370 → 372 ms. Ayrıştırma zaten erken yapılıyormuş. Değişiklik geri
+   alındı: ölçülmemiş bir kazanç için kod eklemek, sonraki okuyucuyu yanıltır.
+2. Paketin tamamını Candles'a çevirmeyi daraltmak (yukarıda) — o blok zaten
+   grafikten geliyormuş.
+
+Karar değişmedi: kütüphane değiştirilmiyor. Gerekçe artık tahmin değil ölçüm —
+maliyet kurulumun kendisinde ve onu azaltmanın yolu kütüphaneyi değiştirmekten
+geçiyor; kazanç (zayıf makinede tek seferlik ~370 ms) riski karşılamıyor.
+
 Zayıf makinede `lightweight-charts` ilk kurulumu ~370 ms CPU istiyor (profil:
 sayfanın en pahalı tek işi, 617 ms toplam CPU). Bu **sayfa başına bir kez**
 oluyor ve boş zamana ertelendiği için o sırada metrikler, veri sağlığı ve
