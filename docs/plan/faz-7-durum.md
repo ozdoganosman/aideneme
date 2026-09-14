@@ -432,6 +432,26 @@ Denetim kalıcı bir teste bağlandı (`e2e/erisilebilirlik.spec.ts`): dokuz ekr
 her biri için h1 sayısı, adsız düğme, etiketsiz giriş ve **tekrar eden düğme
 adı** sıfır olmalı. Bu kusur artık sessizce geri gelemez.
 
+## Klavye gezintisi denetimi
+
+Altı ekran klavyeyle gezildi: her birinde ilk sekme durağı **"İçeriğe atla"**
+(kullanıcı her sayfada menüyü baştan geçmek zorunda kalmıyor), 40 sekme boyunca
+odak ilerliyor, tuzak yok ve odak halkası her durakta görünür.
+
+Tek iyileştirme sektör rozetlerinde: odak halkası yalnızca küçük onay kutusunda
+çıkıyordu, artık `:focus-within` ile **rozetin tamamı** vurgulanıyor — klavyeyle
+gezen kullanıcı nerede olduğunu bir bakışta görüyor.
+
+### Yol boyunca: ölçütün kendisi yanlıştı
+
+İlk yazdığım tuzak ölçütü "art arda on kez aynı METİN" diye bakıyordu ve
+Tarayıcı ekranında yanlış alarm verdi: dokuz sektör rozetinin onay kutusu da
+metinsiz (adları sarmalayan `<label>`'dan gelir). Ölçüt öğe kimliğine çevrildi.
+Bir denetim aracının kendisi de yanılabilir; alarmı düzeltmeden önce nedenini
+görmek gerekiyordu.
+
+`e2e/klavye.spec.ts` bunları kalıcı hale getirdi (6 akış).
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
