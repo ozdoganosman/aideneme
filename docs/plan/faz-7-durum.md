@@ -783,6 +783,25 @@ vazgeçiliyor, okuma başarısızsa varsayılan dönüyor.
 Uçtan uca teste bağlandı ve testin gerçekten koruduğu doğrulandı: düzeltme
 geri alındığında test kırılıyor, geri konduğunda geçiyor.
 
+### Worker yoksa, IndexedDB yoksa
+
+İki ortam daha denendi:
+
+- **IndexedDB yok** (özel sekme, eski tarayıcı): üç ekran da sorunsuz açıldı.
+  Önbellek katmanı zaten sessizce devre dışı kalıyor; tek fark her ziyarette
+  yeniden indirmek.
+- **Worker kurulamıyor** (katı içerik güvenliği politikası, eklenti): ekranlar
+  hata veriyordu ama mesaj tarayıcının ham istisnasıydı — *"Worker blocked"*.
+  Kullanıcıya hiçbir şey anlatmıyor. Artık alan diliyle: *"Bu tarayıcıda arka
+  plan işçisi (Web Worker) başlatılamadı; analiz çalıştırılamıyor. Katı bir
+  içerik güvenliği politikası ya da bir tarayıcı eklentisi engelliyor
+  olabilir."* Ham istisna parantez içinde duruyor — teşhis için gerekli.
+
+Aynı denemede **dördüncü bir sessiz başarısızlık** çıktı: Sembol Masası'nda
+analiz hatası `catch(() => setAnalysisResult(null))` ile yutuluyordu. Ekranda
+araç çubuğu ve sekmeler duruyor, altında hiçbir şey yok — grafik yok, metrik
+yok, hata da yok. Artık nedenini yazıyor ve teste bağlı.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

@@ -45,9 +45,20 @@ function defaultSize(): number {
 }
 
 function defaultSpawn(): WorkerLike {
-  return new Worker(new URL('./analysis.worker.ts', import.meta.url), {
-    type: 'module',
-  }) as unknown as WorkerLike;
+  try {
+    return new Worker(new URL('./analysis.worker.ts', import.meta.url), {
+      type: 'module',
+    }) as unknown as WorkerLike;
+  } catch (err) {
+    // Ham istisna ("Worker blocked", "SecurityError") kullanıcıya hiçbir şey
+    // anlatmıyor. Analiz worker OLMADAN yapılamıyor; bunu alan diliyle
+    // söylüyoruz ki kullanıcı nedenini arayabilsin.
+    throw new Error(
+      'Bu tarayıcıda arka plan işçisi (Web Worker) başlatılamadı; analiz çalıştırılamıyor. ' +
+        'Katı bir içerik güvenliği politikası ya da bir tarayıcı eklentisi engelliyor olabilir. ' +
+        `(${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
 }
 
 export class AnalysisClient {

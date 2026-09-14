@@ -43,6 +43,7 @@ const FAKE_ANALYSIS = {
   bars: 0,
   status: 'ready' as const,
   error: null,
+  progress: null,
 };
 vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
@@ -171,5 +172,23 @@ describe('Sembol Masası — sekmeler', () => {
     await user.click(screen.getByRole('tab', { name: 'Sektör' }));
     // hidden özniteliği: CSS'te display kuralı bunu ezmemeli (shell.css).
     await waitFor(() => expect(toggles).toHaveAttribute('hidden'));
+  });
+});
+
+describe('Sembol Masası — analiz çalışmazsa', () => {
+  it('boş ekran bırakmaz, nedenini yazar', async () => {
+    // Worker kurulamayan tarayıcıda (katı CSP, eklenti) ekran sessizce BOŞ
+    // kalıyordu: grafik yok, metrik yok, hata da yok.
+    const gercek = FAKE_ANALYSIS.client.symbol;
+    FAKE_ANALYSIS.client.symbol = (async () => {
+      throw new Error('Bu tarayıcıda arka plan işçisi (Web Worker) başlatılamadı');
+    }) as typeof gercek;
+    try {
+      render(<SymbolDesk state={STATE} push={push} />);
+      expect(await screen.findByText('Analiz çalıştırılamadı')).toBeInTheDocument();
+      expect(screen.getByText(/Web Worker/)).toBeInTheDocument();
+    } finally {
+      FAKE_ANALYSIS.client.symbol = gercek;
+    }
   });
 });

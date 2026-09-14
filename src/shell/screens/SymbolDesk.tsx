@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useAnalysis } from '../useAnalysis';
+import { DataError } from '../DataError';
 import {
   Badge,
   Button,
@@ -181,6 +182,8 @@ export default function SymbolDesk({ state, push }: Props) {
     health: HealthReport;
     overlayValues: Float64Array[];
   } | null>(null);
+  /** Analiz (worker) hatası — seri indi ama hesap yapılamadı. */
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const clientRef = useRef(analysis.client);
   clientRef.current = analysis.client;
@@ -189,6 +192,7 @@ export default function SymbolDesk({ state, push }: Props) {
     const client = clientRef.current;
     if (!daily || !client) return;
     let cancelled = false;
+    setAnalysisError(null);
     client
       .symbol(daily, {
         tf,
@@ -199,8 +203,12 @@ export default function SymbolDesk({ state, push }: Props) {
       .then((result) => {
         if (!cancelled) setAnalysisResult(result);
       })
-      .catch(() => {
-        if (!cancelled) setAnalysisResult(null);
+      .catch((err: unknown) => {
+        // Sessizce null'a düşmek ekranı BOŞ bırakıyordu: grafik yok, metrik
+        // yok, hata da yok. Kullanıcı neyin eksik olduğunu göremiyordu.
+        if (cancelled) return;
+        setAnalysisResult(null);
+        setAnalysisError(err instanceof Error ? err.message : String(err));
       });
     return () => {
       cancelled = true;
@@ -260,6 +268,10 @@ export default function SymbolDesk({ state, push }: Props) {
           <Toggle label="Hacim" checked={showVolume} onChange={setShowVolume} />
         </div>
       </div>
+
+      {load.status !== 'error' && (analysisError || analysis.status === 'error') ? (
+        <DataError title="Analiz çalıştırılamadı" detail={analysisError ?? analysis.error} />
+      ) : null}
 
       {load.status === 'error' ? (
         <EmptyState
