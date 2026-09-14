@@ -72,8 +72,8 @@ describe('Finansallar paneli', () => {
   it('çarpanları fiyattan hesaplar', async () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
     await waitFor(() => expect(screen.getByText('F/K')).toBeInTheDocument());
-    expect(screen.getByText('20.0')).toBeInTheDocument(); // 100 pay × 40 / 200
-    expect(screen.getByText('5.00')).toBeInTheDocument(); // PD/DD
+    expect(screen.getByText('20,0')).toBeInTheDocument(); // 100 pay × 40 / 200
+    expect(screen.getByText('5,00')).toBeInTheDocument(); // PD/DD
   });
 
   it('kalite ölçütlerini tek tek listeler', async () => {

@@ -146,7 +146,7 @@ describe('Rapor', () => {
     );
     const fundamentals = screen.getByRole('region', { name: 'Temel göstergeler' });
     // Son kapanış 130.4 → PD = 100 pay × 130.4 = 13 040; F/K = 13 040 / 200 = 65.2
-    expect(fundamentals).toHaveTextContent('65.2');
+    expect(fundamentals).toHaveTextContent('65,2');
     expect(fundamentals).toHaveTextContent('2024/12');
   });
 

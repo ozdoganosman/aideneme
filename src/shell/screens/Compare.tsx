@@ -8,6 +8,7 @@ import {
   Select,
   Skeleton,
   Tooltip,
+  trNum,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { Candles } from '../../core/data/types';
@@ -303,7 +304,7 @@ export default function Compare({ state, push }: Props) {
                         : corr.matrix[a * corr.symbols.length + b];
                     return (
                       <td key={col} className="num" style={{ background: corrTone(r) }}>
-                        {Number.isFinite(r) ? r.toFixed(2) : '—'}
+                        {trNum(r, 2)}
                       </td>
                     );
                   })}
@@ -346,7 +347,7 @@ export default function Compare({ state, push }: Props) {
                         variant="ghost"
                         onClick={() => push({ v: 'sembol', s: m.symbol })}
                       >
-                        {m.symbol} <span className="desk__muted">{m.r.toFixed(2)}</span>
+                        {m.symbol} <span className="desk__muted">{trNum(m.r, 2)}</span>
                       </Button>
                     ))}
                   </span>

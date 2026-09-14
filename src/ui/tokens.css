@@ -188,3 +188,52 @@
 
   color-scheme: dark;
 }
+
+/**
+ * Yazdırma: kâğıt beyazdır.
+ *
+ * Koyu temada "Yazdır / PDF" koyu zeminli, açık metinli bir rapor üretiyordu:
+ * arka planlar kapalıysa beyaz kâğıtta AÇIK GRİ METİN (okunmaz), açıksa
+ * sayfa dolusu siyah mürekkep. Ekranın teması kâğıdın işi değil; yazdırmada
+ * açık palet zorlanıyor. Seçici koyu tema kuralıyla aynı özgüllükte ve
+ * dosyada ondan SONRA geldiği için kazanıyor.
+ */
+@media print {
+  /* DİKKAT: sistem koyu teması `:root:not([data-theme='light'])` ile
+     tanımlanıyor (özgüllük 0,2,0). Burada yalnızca `:root` yazmak (0,1,0)
+     yetmiyordu — ilk denemede koyu tema yazdırmada aynen kalmıştı. Aynı
+     şekli tekrarlamak özgüllüğü eşitliyor, sıra da bizde. */
+  :root:not([data-theme='light']),
+  :root[data-theme='light'],
+  :root[data-theme='dark'] {
+    --surface-0: #ffffff;
+    --surface-1: #ffffff;
+    --surface-2: #ffffff;
+    --surface-inset: #ffffff;
+    --surface-overlay: rgba(0, 0, 0, 0.1);
+
+    --text-primary: #0f1420;
+    --text-secondary: #3a4256;
+    --text-muted: #565e70;
+    --text-inverse: #ffffff;
+
+    --border-subtle: #c9ced7;
+    --border-strong: #9aa1ad;
+
+    --accent: #1b4bc4;
+    --accent-text: #1b4bc4;
+    --accent-weak: #ffffff;
+    --accent-on: #ffffff;
+
+    --up: #0a7a53;
+    --up-weak: #ffffff;
+    --down: #c22a24;
+    --down-weak: #ffffff;
+    --warn: #8a5605;
+    --warn-weak: #ffffff;
+  }
+
+  body {
+    background: #ffffff;
+  }
+}

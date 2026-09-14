@@ -68,7 +68,7 @@ describe('Karşılaştır', () => {
 
     await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
     const table = screen.getByRole('table');
-    expect(table).toHaveTextContent('0.90'); // AAA–BBB
+    expect(table).toHaveTextContent('0,90'); // AAA–BBB
     expect(screen.getByText(/2 küme/)).toBeInTheDocument();
     expect(screen.getByText(/worker 91 ms/)).toBeInTheDocument();
   });

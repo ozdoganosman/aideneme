@@ -108,6 +108,34 @@ test('depolama kapalıyken iki arayüz de açılıyor', async ({ page }) => {
   await expect(page.locator('.ui-vtable')).toBeVisible();
 });
 
+test('rapor yazdırmada beyaz kâğıda uygun çıkıyor', async ({ page }) => {
+  // Koyu tema açıkken "Yazdır / PDF" koyu zeminli, açık metinli bir rapor
+  // üretiyordu: kâğıtta ya okunmaz ya da sayfa dolusu mürekkep.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await open(page, 'v=rapor&s=X001');
+  await expect(page.locator('.report__sheet')).toBeVisible();
+
+  await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
+  const durum = await page.evaluate(() => {
+    const sheet = document.querySelector('.report__sheet')!;
+    const hidden = (sel: string) =>
+      getComputedStyle(document.querySelector(sel)!).display === 'none';
+    return {
+      zemin: getComputedStyle(sheet).backgroundColor,
+      metin: getComputedStyle(sheet).color,
+      rayGizli: hidden('.shell-rail'),
+      ustCubukGizli: hidden('.shell-topbar'),
+      araclarGizli: hidden('.report__toolbar'),
+    };
+  });
+
+  expect(durum.zemin).toBe('rgb(255, 255, 255)');
+  expect(durum.metin).toBe('rgb(15, 20, 32)');
+  expect(durum.rayGizli).toBe(true);
+  expect(durum.ustCubukGizli).toBe(true);
+  expect(durum.araclarGizli).toBe(true);
+});
+
 test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor', async ({ page }) => {
   await open(page, 'v=tarayici');
   await expect(page.locator('.ui-vtable')).toBeVisible();

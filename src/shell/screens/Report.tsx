@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, Combobox, EmptyState, Select, Skeleton, trPct } from '../../ui';
+import { Badge, Button, Combobox, EmptyState, Select, Skeleton, trPct, trNum } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { HealthReport } from '../../core/data/health';
 import { DAY_SECONDS } from '../../core/data/pack';
@@ -30,14 +30,18 @@ const fmtMetric = (metric: Metric): string => {
     case 'price':
       return v.toLocaleString('tr-TR', { maximumFractionDigits: v < 10 ? 4 : 2 });
     case 'years':
-      return `${v.toFixed(1)} yıl`;
+      return `${trNum(v, 1)} yıl`;
     default:
-      return v.toFixed(2);
+      return trNum(v, 2);
   }
 };
 
 const fmtRatio = (v: number | null | undefined, digits = 2): string =>
-  v === null || v === undefined || !Number.isFinite(v) ? '—' : v.toFixed(digits);
+  v === null || v === undefined ? '—' : trNum(v, digits);
+
+/** Temel göstergelerdeki yüzdeler: işaretli, Türkçe biçimde. */
+const fmtRatioPct = (v: number | null | undefined, digits = 1): string =>
+  v === null || v === undefined ? '—' : trPct(v, digits, true);
 
 const day = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
 
@@ -243,9 +247,9 @@ export default function Report({ state, push }: Props) {
                   </tr>
                   <tr>
                     <th scope="row">Özkaynak kârlılığı</th>
-                    <td className="num">{fmtRatio(ratios.roePct, 1)}%</td>
+                    <td className="num">{fmtRatioPct(ratios.roePct)}</td>
                     <th scope="row">Net marj</th>
-                    <td className="num">{fmtRatio(ratios.netMarginPct, 1)}%</td>
+                    <td className="num">{fmtRatioPct(ratios.netMarginPct)}</td>
                   </tr>
                   <tr>
                     <th scope="row">Borç/Özkaynak</th>

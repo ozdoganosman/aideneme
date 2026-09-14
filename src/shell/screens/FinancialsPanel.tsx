@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, EmptyState, Popover, Skeleton, Stat, trPct } from '../../ui';
+import { Badge, EmptyState, Popover, Skeleton, Stat, trPct, trNum } from '../../ui';
 import { Icon } from '../../ui/icons';
 import {
   annualSeries,
@@ -20,8 +20,7 @@ interface Props {
   price: number;
 }
 
-const fmtRatio = (v: number | null, digits = 2): string =>
-  v === null || !Number.isFinite(v) ? '—' : v.toFixed(digits);
+const fmtRatio = (v: number | null, digits = 2): string => (v === null ? '—' : trNum(v, digits));
 
 const fmtPct = (v: number | null, digits = 1): string =>
   v === null || !Number.isFinite(v) ? '—' : trPct(v, digits, true);
@@ -29,9 +28,9 @@ const fmtPct = (v: number | null, digits = 1): string =>
 const fmtMoney = (v: number | null): string => {
   if (v === null || !Number.isFinite(v)) return '—';
   const abs = Math.abs(v);
-  if (abs >= 1e9) return `${(v / 1e9).toFixed(1)} mlr`;
-  if (abs >= 1e6) return `${(v / 1e6).toFixed(1)} mn`;
-  if (abs >= 1e3) return `${(v / 1e3).toFixed(1)} b`;
+  if (abs >= 1e9) return `${trNum(v / 1e9, 1)} mlr`;
+  if (abs >= 1e6) return `${trNum(v / 1e6, 1)} mn`;
+  if (abs >= 1e3) return `${trNum(v / 1e3, 1)} b`;
   return v.toFixed(0);
 };
 

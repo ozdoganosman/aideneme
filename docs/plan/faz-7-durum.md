@@ -952,6 +952,35 @@ Düzeltmeler ölçüyle seçildi, göz kararıyla değil:
 Ölçüm kalıcı: `e2e/kontrast.spec.ts` dokuz ekranı **iki temada** da denetliyor
 (18 test). Eşiğin altına düşen tek bir metin CI'yı kırıyor.
 
+## Yazdırma: koyu tema kâğıda taşıyordu
+
+Rapor ekranının "Yazdır / PDF" düğmesi Faz 6'dan beri duruyordu ama **çıktıya
+hiç bakılmamıştı.** Bakılınca açık temada iş görüyordu: gezinti rayı, üst
+çubuk ve araç çubuğu gizli, tek sayfa, tablolar bölünmüyor.
+
+**Koyu temada ise rapor koyu çıkıyordu** — zemin `#0b0e14`, metin açık gri.
+Yazıcı arka planları basmıyorsa beyaz kâğıtta açık gri metin (okunmaz);
+basıyorsa sayfa dolusu mürekkep. Ekranın teması kâğıdın işi değil.
+
+`@media print` içinde **açık palet zorlanıyor**: yüzeyler beyaz, metin koyu,
+anlam renkleri kâğıtta okunur tonlarda.
+
+### Yol boyunca: özgüllük tuzağı
+
+İlk deneme işe yaramadı ve nedeni öğreticiydi: sistem koyu teması
+`:root:not([data-theme='light'])` ile tanımlı (özgüllük 0,2,0); yazdırma
+bloğunda yalnızca `:root` yazmak (0,1,0) yetmiyor, kural sessizce eziliyordu.
+Aynı şekli tekrarlayınca (`:root:not([data-theme='light'])`) özgüllük eşitlendi
+ve sıra bizde olduğu için kazandı. Ölçmeden "düzeltildi" demek burada kolay
+olurdu — tarayıcıda bakınca hâlâ koyuydu.
+
+Bu arada raporun temel göstergeler tablosunda İngilizce biçimde kalmış
+yüzdeler (`-3.0%`) ve oranlar (`3.43`) da görüldü; onlar da Türkçe biçime
+çevrildi.
+
+Uçtan uca teste bağlandı: koyu tema açıkken yazdırma ortamında sayfa zemini
+beyaz, metin koyu ve gezinti öğeleri gizli olmalı.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
