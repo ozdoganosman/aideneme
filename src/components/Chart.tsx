@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { lsWrite, lsReadRaw } from '../storage';
 import {
   createChart,
   createSeriesMarkers,
@@ -144,7 +145,7 @@ interface FView {
 const drawKey = (sym: string) => 'borsaDraw:' + sym;
 function loadDraws(sym: string): Draw[] {
   try {
-    const v = JSON.parse(localStorage.getItem(drawKey(sym)) || 'null');
+    const v = JSON.parse(lsReadRaw(drawKey(sym)) || 'null');
     return Array.isArray(v) ? v : [];
   } catch {
     return [];
@@ -452,7 +453,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
   const persistDraws = useCallback(() => {
     try {
-      localStorage.setItem(drawKey(symRef.current), JSON.stringify(drawingsRef.current));
+      lsWrite(drawKey(symRef.current), drawingsRef.current);
     } catch {
       /* quota */
     }

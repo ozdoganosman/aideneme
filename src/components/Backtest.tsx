@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { lsWrite, lsRemove, lsReadRaw } from '../storage';
 import { clickable } from './clickable';
 import { ModalShell } from './ModalShell';
 import { Candles } from '../data/types';
@@ -97,8 +98,8 @@ function hydrateScanCache(): void {
   if (memHydrated) return;
   memHydrated = true;
   try {
-    memDataVer = Number(localStorage.getItem(DATAVER_KEY)) || 0;
-    const obj = JSON.parse(localStorage.getItem(METRICS_KEY) || '{}') as Record<string, Record<string, ScanMetrics | null>>;
+    memDataVer = Number(lsReadRaw(DATAVER_KEY)) || 0;
+    const obj = JSON.parse(lsReadRaw(METRICS_KEY) || '{}') as Record<string, Record<string, ScanMetrics | null>>;
     for (const [sym, cell] of Object.entries(obj)) metricsMem.set(sym, new Map(Object.entries(cell)));
   } catch {
     /* ignore corrupt cache */
@@ -111,8 +112,8 @@ function invalidateIfStale(gen: number): void {
   metricsMem.clear();
   memDataVer = gen;
   try {
-    localStorage.setItem(DATAVER_KEY, String(gen));
-    localStorage.removeItem(METRICS_KEY);
+    lsWrite(DATAVER_KEY, String(gen));
+    lsRemove(METRICS_KEY);
   } catch {
     /* ignore */
   }
@@ -132,7 +133,7 @@ function persistScanCache(keepHashes: Set<string>, keepSyms: Set<string>): void 
     if (Object.keys(o).length) obj[sym] = o;
   }
   try {
-    localStorage.setItem(METRICS_KEY, JSON.stringify(obj));
+    lsWrite(METRICS_KEY, obj);
   } catch {
     /* quota — keep the in-memory cache, skip persisting */
   }
@@ -146,7 +147,7 @@ interface SavedScan {
 }
 function loadSavedScan(): SavedScan | null {
   try {
-    const raw = localStorage.getItem(ROWS_KEY);
+    const raw = lsReadRaw(ROWS_KEY);
     return raw ? (JSON.parse(raw) as SavedScan) : null;
   } catch {
     return null;
@@ -154,7 +155,7 @@ function loadSavedScan(): SavedScan | null {
 }
 function saveScan(s: SavedScan): void {
   try {
-    localStorage.setItem(ROWS_KEY, JSON.stringify(s));
+    lsWrite(ROWS_KEY, s);
   } catch {
     /* skip */
   }

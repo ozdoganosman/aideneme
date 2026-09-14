@@ -80,6 +80,34 @@ test('eski arayüz ile yeni kabuk birbirine bağlı', async ({ page }) => {
   await expect(page.locator('.toolbar')).toBeVisible();
 });
 
+test('depolama kapalıyken iki arayüz de açılıyor', async ({ page }) => {
+  // Safari özel sekmesi taklidi: localStorage hem okumada hem yazmada istisna
+  // fırlatıyor. Yayındaki uygulama bu durumda BOŞ SAYFA açıyordu.
+  await page.addInitScript(() => {
+    const boom = () => {
+      throw new DOMException('QuotaExceededError', 'QuotaExceededError');
+    };
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get: () => ({
+        getItem: boom,
+        setItem: boom,
+        removeItem: boom,
+        clear: boom,
+        key: boom,
+        length: 0,
+      }),
+    });
+  });
+
+  await page.goto('/index.html', { waitUntil: 'networkidle' });
+  await expect(page.locator('.toolbar')).toBeVisible();
+  expect(await page.locator('canvas').count()).toBeGreaterThan(0);
+
+  await open(page, 'v=tarayici');
+  await expect(page.locator('.ui-vtable')).toBeVisible();
+});
+
 test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor', async ({ page }) => {
   await open(page, 'v=tarayici');
   await expect(page.locator('.ui-vtable')).toBeVisible();

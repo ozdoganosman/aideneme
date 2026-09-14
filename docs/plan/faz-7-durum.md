@@ -761,6 +761,28 @@ Sektör dosyası bozuk gelirse filtre hiç görünmüyor (şema doğrulaması za
 vardı), temel veri bozuksa tarama teknik metriklerle çalışmaya devam
 ediyor — ikisi de sessizce yanlış sayı üretmiyor.
 
+## Depolama kapalıyken: yayındaki uygulama boş sayfa açıyordu
+
+Üçüncü dayanıklılık senaryosu: `localStorage` hem okumada hem yazmada istisna
+fırlatıyor (Safari özel sekmesi, dolu kota, gizlilik eklentisi).
+
+Yeni kabuğun dokuz ekranı da sorunsuz açıldı — okuma/yazmaların hepsi zaten
+`try/catch` içindeydi. **Yayındaki uygulama (`index.html`) hiç açılmadı:**
+0 canvas, 0 araç çubuğu, konsolda `QuotaExceededError`.
+
+Sebep asimetrikti: OKUMALAR korunuyordu (`lsGet` sarmalayıcısı), YAZMALAR
+korunmuyordu. On dört ayrı `useEffect` doğrudan `localStorage.setItem`
+çağırıyordu; ilki patlayınca React ağacı çöküyor ve kullanıcı bembeyaz bir
+sayfa görüyordu.
+
+Tek bir sarmalayıcıya toplandı (`src/storage.ts`): `lsRead`, `lsReadRaw`,
+`lsWrite`, `lsRemove`. Kural açıkça yazılı — **tercih saklamak bir
+kolaylıktır, uygulamanın çalışma şartı değil.** Yazma başarısızsa sessizce
+vazgeçiliyor, okuma başarısızsa varsayılan dönüyor.
+
+Uçtan uca teste bağlandı ve testin gerçekten koruduğu doğrulandı: düzeltme
+geri alındığında test kırılıyor, geri konduğunda geçiyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

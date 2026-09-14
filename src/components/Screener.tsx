@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { lsWrite, lsReadRaw } from '../storage';
 import { ModalShell } from './ModalShell';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
@@ -122,7 +123,7 @@ function readScrState(): {
   psig?: string;
 } {
   try {
-    return JSON.parse(localStorage.getItem('borsaScrState') || '{}');
+    return JSON.parse(lsReadRaw('borsaScrState') || '{}');
   } catch {
     return {};
   }
@@ -219,7 +220,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   const [q, setQ] = useState<string>(() => readScrState().q ?? '');
   const [saved, setSaved] = useState<{ name: string; view: number; filters: Filter[] }[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('borsaScreens') || '[]');
+      return JSON.parse(lsReadRaw('borsaScreens') || '[]');
     } catch {
       return [];
     }
@@ -266,15 +267,22 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
     fetchBistSpark().then(setSpark).catch(() => {});
   }, []);
   useEffect(() => {
-    localStorage.setItem('borsaScreens', JSON.stringify(saved));
+    lsWrite('borsaScreens', saved);
   }, [saved]);
   // Remember the last screen state (incl. live filters + results) so leaving to
   // view a stock — or closing the screener — doesn't reset it.
   useEffect(() => {
-    localStorage.setItem(
-      'borsaScrState',
-      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null, liveVals, stratF: stratFilter, psig }),
-    );
+    lsWrite('borsaScrState', {
+      view,
+      filters,
+      sort,
+      q,
+      liveFs,
+      liveSet: liveSet ? [...liveSet] : null,
+      liveVals,
+      stratF: stratFilter,
+      psig,
+    });
   }, [view, filters, sort, q, liveFs, liveSet, liveVals, stratFilter, psig]);
   // Chart params changed → live results are stale: drop them (keep the filters),
   // so the next "Canlı uygula" recomputes with the new parameters.
