@@ -1309,6 +1309,30 @@ kullanıcıya ulaştığını görmek gerekiyor.** Sırasıyla yanlış olan şe
 kaldığı yerden devam etmemek, yazmayı döngüden sonraya koymak, ve sürecin
 gerçekten durduğunu varsaymak. Üçü de "mantıken doğru" görünüyordu.
 
+Bu turda "düzeltildi" demeden önce yayındaki dosyaya bakıldı:
+
+```
+data/bist/fundamentals/snapshot.json → 50 sembol, 14 Eyl 2026 13:20 üretim
+```
+
+### Kapsam neden yavaş ilerliyor
+
+Mekanizma çalışıyor ama 655 sembolün yalnızca %7,6'sı var. Sebep kaynağın
+istek deseni: kütüphane sembol başına **yıl yıl** istek atıyor
+(`year1=2015…`, `year2=2016…`), yani 2015–2026 için sembol başına 12 istek,
+~15–30 saniye. Sembol listesi vermek istek sayısını azaltmıyor — döngüyü
+yalnızca kütüphanenin içine taşıyor (kaynağın uç noktası tek sembol alıyor).
+
+Çözüm hız değil, bütçe ayrımı: her push'ta 7 dakika (ucuz, artımlı),
+**elle tetiklenen** çalıştırmada 25 dakika. Betik kaldığı yerden devam
+ettiği için ikisi aynı listeyi ilerletiyor; birikmiş liste birkaç elle
+çalıştırmayla kapanıyor.
+
+Ölçülmemiş bir alternatif olarak duruyor: yıl aralığını daraltmak istek
+sayısını doğrudan düşürür (2015 yerine 2021'den başlamak %50 kazanç), ama
+finansal panelin gösterdiği geçmiş kısalır. Kullanıcıya görünen bir şeyi
+ölçmeden kısaltmıyorum.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

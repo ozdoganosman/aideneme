@@ -25,7 +25,7 @@ concurrency:
 jobs:
   onizleme:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -58,11 +58,16 @@ jobs:
       # yarışıyor (ölçüldü: iş sonunda runner "Terminate orphan process:
       # (python)" diye topladı, anlık görüntü yayına yetişmedi). Adımdaki
       # sınır artık yalnızca emniyet freni.
+      #
+      # Bütçe olaya göre: kaynak sembol başına YIL YIL istek atıyor (2015–2026
+      # için 12 istek), yani sembol başına ~15–30 sn. Her push'ta uzun sürmesi
+      # anlamsız; birikeni elle tetiklenen çalıştırma toplu olarak çekiyor.
+      # Betik kaldığı yerden devam ettiği için ikisi aynı listeyi ilerletiyor.
       - name: Finansal tablolar (İş Yatırım)
         continue-on-error: true
-        timeout-minutes: 9
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 28 || 9 }}
         env:
-          FUND_MAX_SECONDS: '420'
+          FUND_MAX_SECONDS: ${{ github.event_name == 'workflow_dispatch' && '1500' || '420' }}
         run: |
           python -m pip install --quiet isyatirimhisse pandas
           python scripts/build_fundamentals.py
