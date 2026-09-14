@@ -1091,6 +1091,22 @@
 .rank__detail p {
   margin: 0;
 }
+.rank__open {
+  display: block;
+  margin-top: var(--sp-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.lab__warn {
+  margin: 0;
+  color: var(--warn-text, var(--text-secondary));
+  font-size: var(--fs-sm);
+}
 .rank__best {
   display: flex;
   flex-wrap: wrap;

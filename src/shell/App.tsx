@@ -25,7 +25,7 @@ const Strategies = lazy(() => import('./screens/Strategies'));
  * URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa>&cmp=<sembol,sembol>
  * Varsayılan değerler yazılmaz — link kısa kalır.
  */
-const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist', cmp: '' };
+const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist', cmp: '', st: '' };
 
 const THEME_ICON: Record<ThemePreference, IconName> = {
   system: 'auto',

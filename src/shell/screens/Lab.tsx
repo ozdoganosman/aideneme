@@ -17,12 +17,17 @@ import { Icon } from '../../ui/icons';
 import type { Candles } from '../../core/data/types';
 import { DEFAULT_COSTS, type Trade } from '../../core/backtest/engine';
 import type { Badge as ValidationBadge } from '../../core/backtest/validate';
+import { describeCondition, type Operand, type Strategy } from '../../core/strategy/dsl';
+import { STRATEGY_PRESETS } from '../../core/strategy/presets';
 import {
-  describeCondition,
-  type Condition,
-  type Operand,
-  type Strategy,
-} from '../../core/strategy/dsl';
+  baseOf,
+  factorOf,
+  fromForm,
+  toForm,
+  withFactor,
+  type SimpleOp,
+  type SimpleRule,
+} from './labRules';
 import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import type { BacktestOutcome } from '../../workers/analysisClient';
@@ -35,17 +40,11 @@ interface Props {
   push: (patch: UrlState) => void;
 }
 
-type SimpleOp = 'gt' | 'lt' | 'crossAbove' | 'crossBelow';
-
-interface SimpleRule {
-  left: Operand;
-  op: SimpleOp;
-  right: Operand;
-}
-
 const OP_LABEL: Record<SimpleOp, string> = {
   gt: '>',
+  gte: '≥',
   lt: '<',
+  lte: '≤',
   crossAbove: 'yukarı keser',
   crossBelow: 'aşağı keser',
 };
@@ -65,50 +64,6 @@ const OPERAND_KINDS = [
   { value: 'lowest', label: 'En düşük' },
 ];
 
-interface Preset {
-  id: string;
-  label: string;
-  entry: SimpleRule[];
-  exit: SimpleRule[];
-  stopLossPct?: number;
-  takeProfitPct?: number;
-}
-
-const PRESETS: Preset[] = [
-  {
-    id: 'ema',
-    label: 'EMA kesişimi (20/50)',
-    entry: [
-      { left: { kind: 'ema', length: 20 }, op: 'crossAbove', right: { kind: 'ema', length: 50 } },
-    ],
-    exit: [
-      { left: { kind: 'ema', length: 20 }, op: 'crossBelow', right: { kind: 'ema', length: 50 } },
-    ],
-  },
-  {
-    id: 'rsi',
-    label: 'RSI aşırı satım dönüşü',
-    entry: [
-      { left: { kind: 'rsi', length: 14 }, op: 'crossAbove', right: { kind: 'const', value: 30 } },
-    ],
-    exit: [
-      { left: { kind: 'rsi', length: 14 }, op: 'crossBelow', right: { kind: 'const', value: 65 } },
-    ],
-    stopLossPct: 8,
-  },
-  {
-    id: 'trend',
-    label: 'Trend filtreli momentum',
-    entry: [
-      { left: { kind: 'close' }, op: 'gt', right: { kind: 'ema', length: 200 } },
-      { left: { kind: 'roc', length: 20 }, op: 'gt', right: { kind: 'const', value: 5 } },
-    ],
-    exit: [{ left: { kind: 'close' }, op: 'crossBelow', right: { kind: 'ema', length: 50 } }],
-    stopLossPct: 10,
-    takeProfitPct: 25,
-  },
-];
-
 const BADGE_TONE: Record<ValidationBadge['level'], 'up' | 'warn' | 'down' | 'neutral'> = {
   pass: 'up',
   warn: 'warn',
@@ -123,10 +78,6 @@ const BADGE_ICON: Record<ValidationBadge['level'], string> = {
   unknown: '?',
 };
 
-function toCondition(rules: SimpleRule[]): Condition {
-  return { op: 'all', of: rules.map((r) => ({ op: r.op, left: r.left, right: r.right })) };
-}
-
 function fmt(v: number, digits = 2, suffix = ''): string {
   if (!Number.isFinite(v)) return v === Infinity ? '∞' : '—';
   return `${v > 0 && suffix === '%' ? '+' : ''}${v.toFixed(digits)}${suffix}`;
@@ -138,11 +89,20 @@ export default function Lab({ state, push }: Props) {
   const analysis = useAnalysis(market);
   const symbol = state.s || analysis.symbols[0] || '';
 
-  const [preset, setPreset] = useState('ema');
-  const [entryRules, setEntryRules] = useState<SimpleRule[]>(PRESETS[0].entry);
-  const [exitRules, setExitRules] = useState<SimpleRule[]>(PRESETS[0].exit);
-  const [stopLossPct, setStopLossPct] = useState(0);
-  const [takeProfitPct, setTakeProfitPct] = useState(0);
+  // URL'den gelen strateji kimliği (sıralama ekranından "laboratuvarda aç").
+  const initial = useMemo(() => {
+    const wanted = STRATEGY_PRESETS.find((p) => p.id === state.st) ?? STRATEGY_PRESETS[0];
+    return { id: wanted.id, form: toForm(wanted.strategy).form! };
+  }, [state.st]);
+
+  const [preset, setPreset] = useState(initial.id);
+  const [entryRules, setEntryRules] = useState<SimpleRule[]>(initial.form.entry);
+  const [exitRules, setExitRules] = useState<SimpleRule[]>(initial.form.exit);
+  const [stopLossPct, setStopLossPct] = useState(initial.form.stopLossPct);
+  const [takeProfitPct, setTakeProfitPct] = useState(initial.form.takeProfitPct);
+  const [atrStopLength, setAtrStopLength] = useState(initial.form.atrStopLength);
+  const [atrStopMult, setAtrStopMult] = useState(initial.form.atrStopMult);
+  const [unsupported, setUnsupported] = useState<string[]>([]);
   const [commissionBps, setCommissionBps] = useState(DEFAULT_COSTS.commissionBps);
   const [slippageBps, setSlippageBps] = useState(DEFAULT_COSTS.slippageBps);
   const [cashAnnualPct, setCashAnnualPct] = useState(0);
@@ -157,13 +117,16 @@ export default function Lab({ state, push }: Props) {
   clientRef.current = analysis.client;
 
   const strategy: Strategy = useMemo(
-    () => ({
-      entry: toCondition(entryRules),
-      exit: exitRules.length ? toCondition(exitRules) : undefined,
-      stopLossPct: stopLossPct > 0 ? stopLossPct : undefined,
-      takeProfitPct: takeProfitPct > 0 ? takeProfitPct : undefined,
-    }),
-    [entryRules, exitRules, stopLossPct, takeProfitPct],
+    () =>
+      fromForm({
+        entry: entryRules,
+        exit: exitRules,
+        stopLossPct,
+        takeProfitPct,
+        atrStopLength,
+        atrStopMult,
+      }),
+    [entryRules, exitRules, stopLossPct, takeProfitPct, atrStopLength, atrStopMult],
   );
 
   const options = useMemo(
@@ -236,13 +199,20 @@ export default function Lab({ state, push }: Props) {
   }
 
   function applyPreset(id: string) {
-    const found = PRESETS.find((p) => p.id === id);
+    const found = STRATEGY_PRESETS.find((p) => p.id === id);
     if (!found) return;
+    const { form, unsupported: missing } = toForm(found.strategy);
     setPreset(id);
-    setEntryRules(found.entry);
-    setExitRules(found.exit);
-    setStopLossPct(found.stopLossPct ?? 0);
-    setTakeProfitPct(found.takeProfitPct ?? 0);
+    // Editöre sığmayan bir kural sessizce KIRPILMAZ: kurallar olduğu gibi
+    // kalır ve neyin sığmadığı ekranda yazar (bkz. labRules.ts).
+    setUnsupported(missing);
+    if (!form) return;
+    setEntryRules(form.entry);
+    setExitRules(form.exit);
+    setStopLossPct(form.stopLossPct);
+    setTakeProfitPct(form.takeProfitPct);
+    setAtrStopLength(form.atrStopLength);
+    setAtrStopMult(form.atrStopMult);
   }
 
   const metrics = outcome?.metrics;
@@ -323,9 +293,16 @@ export default function Lab({ state, push }: Props) {
             label="Hazır strateji"
             value={preset}
             onChange={applyPreset}
-            options={PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+            options={STRATEGY_PRESETS.map((p) => ({ value: p.id, label: p.name }))}
           />
         </div>
+
+        <p className="desk__muted">{STRATEGY_PRESETS.find((p) => p.id === preset)?.detail}</p>
+        {unsupported.length > 0 ? (
+          <p className="lab__warn">
+            Bu strateji editöre tam sığmıyor ({unsupported.join(', ')}); kurallar değiştirilmedi.
+          </p>
+        ) : null}
 
         <RuleList title="Giriş kuralları" rules={entryRules} onChange={setEntryRules} />
         <RuleList title="Çıkış kuralları" rules={exitRules} onChange={setExitRules} />
@@ -348,6 +325,22 @@ export default function Lab({ state, push }: Props) {
             step={0.5}
             onChange={setTakeProfitPct}
             hint="0 = yok"
+          />
+          <NumberField
+            label="ATR stop katı"
+            value={atrStopMult}
+            min={0}
+            max={10}
+            step={0.5}
+            onChange={setAtrStopMult}
+            hint="0 = yok"
+          />
+          <NumberField
+            label="ATR uzunluk"
+            value={atrStopLength}
+            min={2}
+            max={100}
+            onChange={setAtrStopLength}
           />
           <NumberField
             label="Komisyon (bps)"
@@ -565,9 +558,16 @@ function RuleList({
 }
 
 function OperandEditor({ value, onChange }: { value: Operand; onChange: (o: Operand) => void }) {
-  const kind = value.kind;
-  const hasLength = 'length' in value;
+  // Ölçek (ör. "EMA(50)'nin %97'si") operandın DIŞINDA bir sarmalayıcı; editör
+  // onu ayırıp ayrı bir katsayı alanı olarak gösteriyor, tür seçimi sadelensin.
+  const base = baseOf(value);
+  const factor = factorOf(value);
+  const kind = base.kind;
+  const hasLength = 'length' in base;
   const isConst = kind === 'const';
+  // Katsayı alanı yalnızca anlamlı olduğu yerde: göstergelerde ve zaten
+  // ölçeklenmiş operandlarda. Ham fiyat satırlarında gürültü olurdu.
+  const showFactor = !isConst && (hasLength || factor !== 1);
 
   return (
     <div className="lab__operand">
@@ -577,26 +577,39 @@ function OperandEditor({ value, onChange }: { value: Operand; onChange: (o: Oper
         onChange={(next) => {
           if (next === 'const') onChange({ kind: 'const', value: 50 });
           else if (['close', 'open', 'high', 'low', 'volume'].includes(next))
-            onChange({ kind: next as 'close' });
-          else onChange({ kind: next as 'ema', length: 20 });
+            onChange(withFactor({ kind: next as 'close' }, factor));
+          else onChange(withFactor({ kind: next as 'ema', length: 20 }, factor));
         }}
         options={OPERAND_KINDS}
       />
       {hasLength ? (
         <NumberField
           label="Uzunluk"
-          value={(value as { length: number }).length}
+          value={(base as { length: number }).length}
           min={2}
           max={1000}
-          onChange={(length) => onChange({ ...(value as { kind: 'ema'; length: number }), length })}
+          onChange={(length) =>
+            onChange(withFactor({ ...(base as { kind: 'ema'; length: number }), length }, factor))
+          }
         />
       ) : null}
       {isConst ? (
         <NumberField
           label="Değer"
-          value={(value as { value: number }).value}
+          value={(base as { value: number }).value}
           step={0.5}
           onChange={(v) => onChange({ kind: 'const', value: v })}
+        />
+      ) : null}
+      {showFactor ? (
+        <NumberField
+          label="× katsayı"
+          value={factor}
+          min={0.1}
+          max={3}
+          step={0.01}
+          onChange={(next) => onChange(withFactor(base, next))}
+          hint="1 = olduğu gibi"
         />
       ) : null}
     </div>

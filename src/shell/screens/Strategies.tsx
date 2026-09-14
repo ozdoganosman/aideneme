@@ -287,6 +287,13 @@ export default function Strategies({ state, push }: Props) {
                   ) : null}
                   <td>
                     <Badge tone={VERDICT_TONE[row.verdict]}>{row.verdict}</Badge>
+                    <button
+                      type="button"
+                      className="rank__open"
+                      onClick={() => push({ v: 'laboratuvar', s: symbol, st: row.id })}
+                    >
+                      Laboratuvarda aç
+                    </button>
                   </td>
                 </tr>
               ))}

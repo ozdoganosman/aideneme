@@ -158,12 +158,21 @@ describe('Strateji Laboratuvarı', () => {
     render(<Lab state={STATE} push={push} />);
     await waitFor(() => expect(backtestFn).toHaveBeenCalledTimes(1));
 
-    await user.selectOptions(screen.getByLabelText('Hazır strateji'), 'rsi');
+    await user.selectOptions(screen.getByLabelText('Hazır strateji'), 'rsi-reversion');
     await waitFor(() => expect(backtestFn.mock.calls.length).toBeGreaterThan(1));
 
     const strategy = backtestFn.mock.calls[backtestFn.mock.calls.length - 1][1];
     expect(JSON.stringify(strategy)).toContain('rsi');
-    expect(strategy.stopLossPct).toBe(8);
+    expect(strategy.stopLossPct).toBe(10);
+  });
+
+  it("URL'den gelen strateji kimliğiyle açılır (sıralamadan gelen bağlantı)", async () => {
+    render(<Lab state={{ ...STATE, st: 'breakout-55' }} push={push} />);
+    await waitFor(() => expect(backtestFn).toHaveBeenCalledTimes(1));
+    const strategy = backtestFn.mock.calls[0][1];
+    // 55 bar kırılımı: ATR stopu da taşınmalı, sessizce düşmemeli.
+    expect(JSON.stringify(strategy)).toContain('highest');
+    expect(strategy.atrStop).toEqual({ length: 14, mult: 3 });
   });
 
   it('maliyet alanı değişince backtest yeni maliyetle koşar', async () => {
