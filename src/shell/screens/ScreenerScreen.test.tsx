@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ScreenRow } from '../../core/screen/metrics';
 
@@ -166,5 +166,75 @@ describe('Tarayıcı — sektör filtresi', () => {
     await waitFor(() => expect(screen.queryByText('AAA')).toBeNull());
     await user.click(screen.getByRole('button', { name: 'Temizle' }));
     await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+  });
+});
+
+describe('Tarayıcı — sektör sütunu', () => {
+  it('sınıflandırma varsa sektör sütunu gelir, bilinmeyen "—" olur', async () => {
+    sectorsFn.mockResolvedValue({ source: 'test', generated: 1, of: { AAA: 'Bankacılık' } });
+    render(<ScreenerScreen state={STATE} push={push} />);
+    // "Bankacılık" hem rozette hem hücrede geçiyor: tabloya daraltıyoruz.
+    await waitFor(() =>
+      expect(within(screen.getByRole('table')).getByText('Sektör')).toBeInTheDocument(),
+    );
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('Bankacılık')).toBeInTheDocument();
+    // CCC haritada yok: boş hücre değil, açık bir "—".
+    expect(within(table).getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('sınıflandırma yoksa sütun hiç eklenmez', async () => {
+    sectorsFn.mockResolvedValue(null);
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(within(screen.getByRole('table')).queryByText('Sektör')).toBeNull();
+  });
+});
+
+describe('Tarayıcı — kayıtlı taramalar', () => {
+  const SECTORS = { source: 'test', generated: 1, of: { AAA: 'Bankacılık', CCC: 'Gıda' } };
+
+  it('kaydedilen tarama sektör seçimini de taşır', async () => {
+    const user = userEvent.setup();
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByLabelText('Bankacılık'));
+    await waitFor(() => expect(screen.queryByText('CCC')).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Taramayı kaydet' }));
+
+    // Filtreyi temizle, sonra kaydı geri yükle: sektör seçimi geri gelmeli.
+    await user.click(screen.getByRole('button', { name: 'Temizle' }));
+    await waitFor(() => expect(screen.getByText('CCC')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Tarama 1' }));
+    await waitFor(() => expect(screen.queryByText('CCC')).toBeNull());
+    expect(screen.getByLabelText('Bankacılık')).toBeChecked();
+  });
+
+  it('sektör alanı olmayan eski kayıt filtreyi temizler', async () => {
+    const user = userEvent.setup();
+    sectorsFn.mockResolvedValue(SECTORS);
+    // Sürüm öncesi biçim: sectors alanı yok.
+    localStorage.setItem(
+      'screener.saved',
+      JSON.stringify([
+        {
+          name: 'Eski',
+          rules: [],
+          params: { rsiLength: 14, adxLength: 14, emaFast: 20, emaSlow: 50 },
+        },
+      ]),
+    );
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByLabelText('Gıda'));
+    await waitFor(() => expect(screen.queryByText('AAA')).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: 'Eski' }));
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(screen.getByLabelText('Gıda')).not.toBeChecked();
   });
 });

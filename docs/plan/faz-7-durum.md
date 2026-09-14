@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 399 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 403 test)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -146,7 +146,20 @@ Böylece "yalnızca bankacılık ve enerji + RSI 40–70 + 1 aylık getiri > 0" 
 teknik, temel ve sektör filtreleri tek tabloda birleşiyor (ölçüm: 200 sembolde
 17 sonuç, worker 28 ms).
 
+Kayıtlı taramalar sektör seçimini de taşıyor; sektör alanı olmayan ESKİ
+kayıtlar filtreyi temizliyor (kaydedilmemiş bir seçim geri yüklenmiş gibi
+görünmesin). Tabloda sektör sütunu var ve sınıflandırması olmayan sembol boş
+hücre değil açık bir "—" gösteriyor.
+
+## Bilinen boşluk
+
+Tarama kuralları (ve şimdi sektör seçimi) URL'e yazılmıyor; paylaşılan bağlantı
+ekranı açıyor ama filtreleri taşımıyor. Kayıtlı taramalar tarayıcıda duruyor.
+Ürün ilkesi #4 ("her görünüm paylaşılabilir") burada henüz karşılanmıyor —
+kural listesi URL'e sığmayacak kadar büyüyebildiği için sıkıştırılmış bir
+serileştirme gerekiyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
-- Kayıtlı taramaların sektör seçimini de taşıması.
+- Tarama kurallarını paylaşılabilir kılmak (sıkıştırılmış URL serileştirmesi).

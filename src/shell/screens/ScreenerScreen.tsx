@@ -57,6 +57,8 @@ interface SavedScreen {
   name: string;
   rules: Rule[];
   params: ScreenParams;
+  /** Seçili sektörler; eski kayıtlarda yok (geri uyumlu). */
+  sectors?: string[];
 }
 
 function loadSaved(): SavedScreen[] {
@@ -193,6 +195,19 @@ export default function ScreenerScreen({ state, push }: Props) {
         render: (r) => r.symbol,
         sortValue: (r) => r.symbol,
       },
+      // Sektör sütunu yalnızca sınıflandırma varsa; bilinmeyen "—" olarak
+      // görünür, boş hücre "sektörsüz" izlenimi vermesin.
+      ...(sectors
+        ? [
+            {
+              key: 'sector',
+              header: 'Sektör',
+              width: '150px',
+              render: (r: ScreenRow) => r.sector ?? '—',
+              sortValue: (r: ScreenRow) => r.sector ?? 'zzz',
+            } as Column<ScreenRow>,
+          ]
+        : []),
       ...shown.map<Column<ScreenRow>>((id) => ({
         key: id,
         header: METRIC_BY_ID.get(id)?.label ?? id,
@@ -201,7 +216,7 @@ export default function ScreenerScreen({ state, push }: Props) {
         sortValue: (r) => r.values[id],
       })),
     ];
-  }, [snapshot]);
+  }, [snapshot, sectors]);
 
   const updateRule = useCallback((index: number, patch: Partial<Rule>) => {
     setRules((prev) => prev.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
@@ -209,7 +224,7 @@ export default function ScreenerScreen({ state, push }: Props) {
 
   function saveCurrent() {
     const name = `Tarama ${saved.length + 1}`;
-    const next = [...saved, { name, rules, params }];
+    const next = [...saved, { name, rules, params, sectors: pickedSectors }];
     setSaved(next);
     try {
       localStorage.setItem(SAVED_KEY, JSON.stringify(next));
@@ -387,6 +402,9 @@ export default function ScreenerScreen({ state, push }: Props) {
                 onClick={() => {
                   setRules(s.rules);
                   setParams(s.params);
+                  // Eski kayıtlarda sektör alanı yok: o zaman filtre temizlenir,
+                  // kaydedilmemiş bir seçim geri yüklenmiş gibi görünmesin.
+                  setPickedSectors(s.sectors ?? []);
                 }}
               >
                 {s.name}
