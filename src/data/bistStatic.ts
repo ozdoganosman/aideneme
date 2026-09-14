@@ -1,4 +1,5 @@
 import { Candles, emptyCandles } from './types';
+import { dataBase } from '../data-client/markets';
 
 // Reads pre-built BIST OHLCV from same-origin static JSON (generated in CI by
 // scripts/build_bist.py). No proxy, no key, no CORS — the data ships with the
@@ -13,10 +14,8 @@ interface Rec {
   v: number;
 }
 
-const base = import.meta.env.BASE_URL; // './' (works under /aideneme/ on Pages)
-
 export async function fetchBistStatic(symbol: string, signal?: AbortSignal): Promise<Candles> {
-  const res = await fetch(`${base}data/bist/${symbol}.json`, { signal });
+  const res = await fetch(`${dataBase()}bist/${symbol}.json`, { signal });
   if (!res.ok) {
     throw new Error(`"${symbol}" için statik BIST verisi yok (CI henüz üretmemiş olabilir)`);
   }
@@ -37,7 +36,7 @@ export async function fetchBistStatic(symbol: string, signal?: AbortSignal): Pro
 
 export async function fetchBistSymbols(signal?: AbortSignal): Promise<string[]> {
   try {
-    const res = await fetch(`${base}data/bist/symbols.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/symbols.json`, { signal });
     if (!res.ok) return [];
     const j = (await res.json()) as { symbols: string[] };
     return j.symbols ?? [];
@@ -52,7 +51,7 @@ export type Quotes = Record<string, { c: number; pc: number }>;
 
 export async function fetchBistQuotes(signal?: AbortSignal): Promise<Quotes> {
   try {
-    const res = await fetch(`${base}data/bist/quotes.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/quotes.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Quotes;
   } catch {
@@ -97,7 +96,7 @@ export interface StrategiesFile {
 
 export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesFile | null> {
   try {
-    const res = await fetch(`${base}data/bist/strategies.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/strategies.json`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as StrategiesFile;
   } catch {
@@ -107,7 +106,7 @@ export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesF
 
 export async function fetchBistNames(signal?: AbortSignal): Promise<Record<string, string>> {
   try {
-    const res = await fetch(`${base}data/bist/names.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/names.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Record<string, string>;
   } catch {
@@ -161,7 +160,7 @@ export interface ScreenerFile {
 
 export async function fetchScreener(signal?: AbortSignal): Promise<ScreenerFile | null> {
   try {
-    const res = await fetch(`${base}data/bist/screener.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/screener.json`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as ScreenerFile;
   } catch {
@@ -171,7 +170,7 @@ export async function fetchScreener(signal?: AbortSignal): Promise<ScreenerFile 
 
 export async function fetchBistSpark(signal?: AbortSignal): Promise<Record<string, number[]>> {
   try {
-    const res = await fetch(`${base}data/bist/spark.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/spark.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Record<string, number[]>;
   } catch {

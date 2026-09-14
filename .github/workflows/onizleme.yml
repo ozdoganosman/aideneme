@@ -1,0 +1,114 @@
+name: onizleme
+
+# Bu dalın canlı önizlemesi: https://<kullanıcı>.github.io/<depo>/onizleme/next.html
+#
+# Kökteki yayın (main'in dağıttığı eski arayüz) ELLENMEZ; bu iş yalnızca
+# `onizleme/` klasörünü ve kökteki `data/bist/pack/` paketini günceller.
+#
+# Veri neden kökte: uygulama alt yolda yayımlanıyor ama veriyi kökteki TEK
+# kopyadan okuyor (`VITE_DATA_BASE`). İkinci bir kopya ~29 MB yer kaplar ve
+# iki kopya farklı zamanlarda tazelenip birbirini tutmaz.
+on:
+  push:
+    branches: [claude/stoic-planck-vxaul2]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Kök dağıtımıyla AYNI kuyruk: gh-pages'e iki iş aynı anda yazmasın.
+# İptal edilmiyor, çünkü yarıda kesilen bir yayın kısmi ağaç bırakır.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  onizleme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Yayındaki veriyi yeniden indirmiyoruz. Sığ (shallow) klon push'ta
+      # reddedilebildiği için tam klon: gh-pages her dağıtımda tek commit'e
+      # sıfırlandığı için geçmiş zaten kısa.
+      - name: Yayındaki veriyi al
+        run: |
+          git clone -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" _site
+          mkdir -p public/data
+          if [ -d _site/data/bist ]; then cp -r _site/data/bist public/data/; fi
+
+      # Kaynaklara erişilemezse dosyalar yazılmaz; arayüz "veri yok" der,
+      # derleme kırılmaz (deploy.yml ile aynı sözleşme).
+      - name: Finansal tablolar ve sektör sınıflandırması
+        continue-on-error: true
+        run: |
+          python -m pip install --quiet isyatirimhisse pandas
+          python scripts/build_fundamentals.py
+          python scripts/build_sectors.py
+
+      - name: Kur serisi (TCMB)
+        continue-on-error: true
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: python scripts/build_fx.py
+
+      # Verbose JSON → kolonsal .bin + manifest + latest-250 paketi.
+      - name: Kolonsal veri paketi
+        run: |
+          python -m pip install --quiet numpy
+          python scripts/pack_data.py --market all --bundle-bars 250 --verify
+
+      - run: npm ci
+      - run: npm run typecheck
+
+      - name: Önizleme derlemesi
+        env:
+          VITE_DATA_BASE: /${{ github.event.repository.name }}/data/
+        run: npx vite build --base=/${{ github.event.repository.name }}/onizleme/
+
+      - name: gh-pages'e yayımla
+        run: |
+          set -e
+          # Uygulama alt klasöre; kendi data/ kopyası atılıyor (kökten okunuyor).
+          rm -rf _site/onizleme
+          mkdir -p _site/onizleme
+          cp -r dist/. _site/onizleme/
+          rm -rf _site/onizleme/data
+
+          # Paket köke: eski arayüzün JSON'ları duruyor, yanına pack/ ekleniyor.
+          mkdir -p _site/data/bist
+          rm -rf _site/data/bist/pack
+          cp -r public/data/bist/pack _site/data/bist/pack
+          for f in sectors.json fx.json; do
+            if [ -f "public/data/bist/$f" ]; then cp "public/data/bist/$f" "_site/data/bist/$f"; fi
+          done
+          if [ -d public/data/bist/fundamentals ]; then
+            rm -rf _site/data/bist/fundamentals
+            cp -r public/data/bist/fundamentals _site/data/bist/fundamentals
+          fi
+
+          cd _site
+          touch .nojekyll
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Değişiklik yok — yayımlanacak bir şey yok."
+            exit 0
+          fi
+          git commit -q -m "onizleme ${GITHUB_SHA}"
+          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+
+      - name: Adres
+        run: |
+          echo "### Önizleme yayında" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/onizleme/next.html" >> $GITHUB_STEP_SUMMARY

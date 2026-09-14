@@ -37,6 +37,10 @@ jobs:
           git clone --depth 1 -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" _site 2>/dev/null || true
           mkdir -p public/data
           if [ -d _site/data/bist ]; then cp -r _site/data/bist public/data/; fi
+          # Dal önizlemesi (onizleme.yml) gh-pages'te ayrı bir klasörde duruyor.
+          # Buradaki yayın gh-pages'i BAŞTAN yazdığı için önce kenara alınır,
+          # yoksa her kök dağıtımı önizlemeyi sessizce siler.
+          if [ -d _site/onizleme ]; then mv _site/onizleme /tmp/onizleme; fi
           rm -rf _site
 
       - name: BIST data (incremental on push; full refresh on schedule / manual run)
@@ -96,6 +100,7 @@ jobs:
       - name: Publish to gh-pages
         run: |
           touch dist/.nojekyll
+          if [ -d /tmp/onizleme ]; then cp -r /tmp/onizleme dist/onizleme; fi
           cd dist
           git init -q
           git checkout -q -b gh-pages
