@@ -1197,7 +1197,9 @@
 }
 .screener__chip.is-on {
   border-color: var(--accent);
-  color: var(--accent);
+  /* Metin olarak accent açık temada 4,27:1 kalıyor; --accent-text tam bu iş
+     için var (6,93:1). Kenarlık rengi accent kalabilir: metin değil. */
+  color: var(--accent-text);
 }
 .screener__chip input {
   margin: 0;
@@ -1288,7 +1290,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -1315,7 +1317,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   font-size: var(--fs-xs);
   cursor: pointer;
@@ -1337,7 +1339,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text);
   font: inherit;
   cursor: pointer;
 }

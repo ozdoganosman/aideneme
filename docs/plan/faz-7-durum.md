@@ -918,6 +918,40 @@ Yardımcı kendi testini taşıyor (sonsuz `∞`, tanımsız `—`, sıfırda i�
 ve tek yerde durduğu için bundan sonra yeni bir kart eklerken biçim sorusu
 yeniden çıkmıyor.
 
+## Renk kontrastı ölçüldü: iki tema da eşiğin altındaydı
+
+Erişilebilirlik denetimleri şimdiye kadar etiketlere, klavyeye ve dokunma
+hedeflerine baktı; **renge hiç bakmamıştı.** Dokuz ekranın her metin düğümü,
+zeminine karşı ölçüldü (WCAG AA: normal metin 4,5:1, büyük metin 3:1).
+
+| Kusur | Açık | Koyu |
+|---|---|---|
+| İkincil metin (`--text-muted`) | 3,98 | 4,27 |
+| Rozet: yükseliş / düşüş / uyarı | 3,85 / 4,17 / 3,98 | ✓ |
+| Yeşil–kırmızı sayılar | 4,36 | ✓ |
+| Birincil düğme metni | ✓ | **3,13** |
+| Bağlantı görünümlü düğmeler | 4,27 | ✓ |
+
+En can alıcısı ilk satır: **açıklama metinlerinin çoğu bu tokenı kullanıyor.**
+Yani ürünün ayırt edici özelliği olan "neden böyle" yazısı, tam da onu okumaya
+çalışan kullanıcı için okunaksızdı.
+
+Düzeltmeler ölçüyle seçildi, göz kararıyla değil:
+
+- `--text-muted`: açık `#78808f` → `#656d7e` (4,55–5,20), koyu `#6d7788` →
+  `#8b95a6` (5,65–6,39). Hâlâ ikincil görünüyor.
+- Anlam renkleri koyulaştırıldı (`#0f8a5f` → `#0a7a53` gibi); hem kendi rozet
+  zemininde hem yüzeyde geçiyor, renk kimliği bozulmuyor.
+- Koyu temada birincil düğme: accent PARLAK olduğu için beyaz metin 3,13
+  veriyordu. Accent'i karartmak yerine (bağlantılar ve grafik çizgileri de onu
+  kullanıyor) **metin rengi** tokenlaştırıldı: `--accent-on` koyu temada koyu
+  metin → 6,16.
+- Metin olarak kullanılan accent'ler `--accent-text`e çevrildi. İlginç olan:
+  bu token ZATEN VARDI, üç yerde kullanılmamıştı.
+
+Ölçüm kalıcı: `e2e/kontrast.spec.ts` dokuz ekranı **iki temada** da denetliyor
+(18 test). Eşiğin altına düşen tek bir metin CI'yı kırıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

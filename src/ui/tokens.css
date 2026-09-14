@@ -22,7 +22,11 @@
 
   --text-primary: #0f1420;
   --text-secondary: #4a5266;
-  --text-muted: #78808f;
+  /* WCAG AA: #78808f ölçüldüğünde yalnızca 3,98:1 veriyordu (gerek 4,5).
+     Açıklama metinlerinin çoğu bu tokenı kullanıyor — yani ürünün "neden"
+     anlatan yazısı okunaklı değildi. #656d7e üç zeminde de geçiyor
+     (5,20 / 4,89 / 4,55) ve hâlâ ikincil görünüyor. */
+  --text-muted: #656d7e;
   --text-inverse: #ffffff;
 
   --border-subtle: #e2e5eb;
@@ -31,14 +35,20 @@
   /* ── Anlamsal renkler ──────────────────────────────────────────────── */
   --accent: #2f6df5;
   --accent-hover: #2259d8;
+  /* Birincil düğmenin metin rengi. Koyu temada accent PARLAK olduğu için
+     beyaz metin yalnızca 3,13:1 veriyordu; orada koyu metin kullanılıyor. */
+  --accent-on: #ffffff;
   --accent-weak: #e8efff;
   --accent-text: #1b4bc4;
 
-  --up: #0f8a5f;
+  /* Anlam renkleri WCAG AA ölçülerek koyulaştırıldı: eski değerler hem kendi
+     rozet zeminlerinde hem beyaz üzerinde 3,85–4,42 arasındaydı (gerek 4,5).
+     Yeni değerler her iki zeminde de geçiyor ve renk kimliği korunuyor. */
+  --up: #0a7a53;
   --up-weak: #e3f5ec;
-  --down: #d13c36;
+  --down: #c22a24;
   --down-weak: #fdeceb;
-  --warn: #a96a06;
+  --warn: #8a5605;
   --warn-weak: #fdf2dd;
   --danger: #c62a24;
   --info: #2f6df5;
@@ -108,7 +118,8 @@
 
     --text-primary: #e6e9ef;
     --text-secondary: #9aa3b2;
-    --text-muted: #6d7788;
+    /* Koyu temada da eşiğin altındaydı (4,27:1). */
+    --text-muted: #8b95a6;
     --text-inverse: #0b0e14;
 
     --border-subtle: #1e242f;
@@ -116,6 +127,7 @@
 
     --accent: #5b8dff;
     --accent-hover: #79a1ff;
+    --accent-on: #0b0e14;
     --accent-weak: #16223a;
     --accent-text: #9dbaff;
 
@@ -148,7 +160,7 @@
 
   --text-primary: #e6e9ef;
   --text-secondary: #9aa3b2;
-  --text-muted: #6d7788;
+  --text-muted: #8b95a6;
   --text-inverse: #0b0e14;
 
   --border-subtle: #1e242f;
@@ -156,6 +168,7 @@
 
   --accent: #5b8dff;
   --accent-hover: #79a1ff;
+  --accent-on: #0b0e14;
   --accent-weak: #16223a;
   --accent-text: #9dbaff;
 
