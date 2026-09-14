@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { trDay } from '../../core/format/date';
 import {
   Badge,
   Button,
@@ -274,14 +275,14 @@ export default function Lab({ state, push, replace }: Props) {
         key: 'entry',
         header: 'Giriş',
         width: '110px',
-        render: (t) => new Date(t.entryTime * 1000).toISOString().slice(0, 10),
+        render: (t) => trDay(t.entryTime),
         sortValue: (t) => t.entryTime,
       },
       {
         key: 'exit',
         header: 'Çıkış',
         width: '110px',
-        render: (t) => new Date(t.exitTime * 1000).toISOString().slice(0, 10),
+        render: (t) => trDay(t.exitTime),
       },
       {
         key: 'bars',

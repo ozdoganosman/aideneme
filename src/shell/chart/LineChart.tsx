@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { trDay } from '../../core/format/date';
 import { trPct, axisLabel } from '../../ui';
 import { useChartColors } from './useThemeColors';
 
@@ -194,7 +195,7 @@ export function LineChart({
       }
 
       ctx.fillStyle = colors.muted;
-      const day = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+      const day = trDay;
       ctx.fillText(day(start), padL, height - 6);
       const endLabel = day(end);
       ctx.fillText(endLabel, padL + plotW - ctx.measureText(endLabel).width, height - 6);

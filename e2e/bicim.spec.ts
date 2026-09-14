@@ -49,10 +49,24 @@ for (const [name, query, ready] of SCREENS) {
       //      Williams %R içeriyor; Türkçede yüzde her zaman % + rakamdır,
       //      "%R" bir yüzde değil indikatör adıdır.
       const sondanYuzde = [...text.matchAll(/\d\s?%(?![\d\p{L}])/gu)].map((m) => m[0]);
-      return { ondalik: [...new Set(ondalik)], sondanYuzde: [...new Set(sondanYuzde)] };
+      // ISO tarih (2025-09-28). Üründe iki tarih biçimi yan yana duruyordu:
+      // tazelik rozeti "11 Eyl 2026" derken rapor, portföy, laboratuvar,
+      // model ve grafik ekseni ISO yazıyordu — on ayrı yerde. Bu, ondalık
+      // virgül kusurunun aynısı ve elle tarama iki turda da kaçırmıştı.
+      //
+      // `<input type="date">` DEĞERİ ISO olmak zorunda (HTML sözleşmesi) ama
+      // innerText giriş alanlarının değerini içermez, o yüzden yanlış alarm
+      // vermiyor.
+      const isoTarih = [...text.matchAll(/(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)/g)].map((m) => m[0]);
+      return {
+        ondalik: [...new Set(ondalik)],
+        sondanYuzde: [...new Set(sondanYuzde)],
+        isoTarih: [...new Set(isoTarih)],
+      };
     });
 
     expect(bulgular.ondalik, 'ondalık ayırıcı virgül olmalı').toEqual([]);
     expect(bulgular.sondanYuzde, 'yüzde işareti sayıdan önce gelmeli').toEqual([]);
+    expect(bulgular.isoTarih, 'tarih Türkçe biçimde olmalı (28 Eyl 2025)').toEqual([]);
   });
 }

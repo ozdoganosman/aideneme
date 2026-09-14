@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { trDay } from '../../core/format/date';
 import { Badge, Button, Combobox, EmptyState, Select, Skeleton, trPct, trNum } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { HealthReport } from '../../core/data/health';
@@ -44,7 +45,7 @@ const fmtRatio = (v: number | null | undefined, digits = 2): string =>
 const fmtRatioPct = (v: number | null | undefined, digits = 1): string =>
   v === null || v === undefined ? '—' : trPct(v, digits, true);
 
-const day = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+const day = trDay;
 
 /**
  * Rapor — tek sayfalık, paylaşılabilir ve YAZDIRILABİLİR özet.
@@ -170,7 +171,7 @@ export default function Report({ state, push }: Props) {
               <p className="desk__muted">
                 Veri {day(result.candles.time[0])} –{' '}
                 {day(result.candles.time[result.candles.length - 1])} · {result.candles.length} bar
-                · rapor {new Date().toISOString().slice(0, 10)}
+                · rapor {trDay(Date.now() / 1000)}
               </p>
             </div>
             <Badge

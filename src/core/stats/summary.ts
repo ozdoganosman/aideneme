@@ -1,3 +1,4 @@
+import { trDay } from '../format/date';
 import { inflationAvgAnnual } from '../data/inflation';
 import type { Candles } from '../data/types';
 
@@ -30,9 +31,9 @@ export interface Metric {
 const YEAR_DAYS = 365.25;
 const DAY = 86400;
 
-function fmtDay(t: number): string {
-  return new Date(t * 1000).toISOString().slice(0, 10);
-}
+// Rapordaki "pencere" ve "formül" metinleri KULLANICIYA gösteriliyor;
+// biçim tek kaynaktan geliyor (bkz. core/format/date.ts).
+const fmtDay = trDay;
 
 /**
  * Son bardan `days` TAKVİM GÜNÜ geriye bakan pencerenin ilk barı.

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { trDay } from '../../core/format/date';
 import {
   Badge,
   Button,
@@ -99,7 +100,7 @@ function loadSnapshots(): Record<string, ScreenSnapshot> {
   }
 }
 
-const fmtDay = (seconds: number): string => new Date(seconds * 1000).toISOString().slice(0, 10);
+const fmtDay = trDay;
 
 /**
  * Sütun başlığı; penceresi araç çubuğunda görünmeyen metrikte pencereyi de

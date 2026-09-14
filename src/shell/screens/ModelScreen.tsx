@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { trDayIndex } from '../../core/format/date';
 import {
   Badge,
   Button,
@@ -30,8 +31,7 @@ const pct = (v: number, digits = 1): string => trPct(v * 100, digits);
 const num = (v: number, digits = 3): string => trNum(v, digits);
 const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-const day = (d: number) =>
-  Number.isFinite(d) ? new Date(d * 86400_000).toISOString().slice(0, 10) : '—';
+const day = (d: number) => trDayIndex(d);
 
 const VERDICT_TONE: Record<ModelCard['verdict'], 'up' | 'warn' | 'down'> = {
   kullanılabilir: 'up',

@@ -118,7 +118,7 @@ describe('Rapor', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('THYAO · BIST'),
     );
-    expect(screen.getByText(/2024-01-01 – .* · 300 bar/)).toBeInTheDocument();
+    expect(screen.getByText(/1 Oca 2024 – .* · 300 bar/)).toBeInTheDocument();
   });
 
   it('her metriğin yanında formülünü ve penceresini gösterir', async () => {

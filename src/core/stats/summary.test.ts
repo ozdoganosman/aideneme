@@ -91,7 +91,10 @@ describe('summarize', () => {
   it('her metrik formülünü ve penceresini taşır', () => {
     for (const m of summarize(c)) {
       expect(m.formula.length).toBeGreaterThan(10);
-      expect(m.window).toMatch(/\d{4}-\d{2}-\d{2}/);
+      // Türkçe tarih: "10 Mar 2022". ISO değil — üründe iki tarih biçimi
+      // yan yana duruyordu (rozet "11 Eyl 2026", rapor "2026-09-11"), tek
+      // kaynağa toplandı.
+      expect(m.window).toMatch(/\d{1,2} \p{L}{3} \d{4}/u);
       expect(m.bars).toBeGreaterThan(0);
     }
   });

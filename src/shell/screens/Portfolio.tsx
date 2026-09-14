@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { trDay } from '../../core/format/date';
 import {
   Badge,
   Button,
@@ -73,6 +74,8 @@ const money = (v: number): string =>
 
 const pct = (v: number, digits = 1): string => trPct(v, digits, true);
 
+// ISO bilerek: `<input type="date">` değeri HTML sözleşmesi gereği
+// YYYY-MM-DD olmak zorunda. Kullanıcıya gösterilen tarihler trDay ile.
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 /** Portföy — "param nerede, riskim ne?" */
@@ -285,7 +288,7 @@ export default function Portfolio({ state, push }: Props) {
         key: 'date',
         header: 'Tarih',
         width: '110px',
-        render: (t) => new Date(t.date * 1000).toISOString().slice(0, 10),
+        render: (t) => trDay(t.date),
         sortValue: (t) => t.date,
       },
       { key: 'symbol', header: 'Sembol', render: (t) => t.symbol, sortValue: (t) => t.symbol },
