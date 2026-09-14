@@ -802,7 +802,14 @@ MAX_ATTEMPTS = 3
 # düzeltme HİÇ denenmedi. Ölçüldü: düzeltmeden sonraki turlarda AKBNK, ALBRK
 # ve GARAN'a tek bir istek bile gitmedi. Kural değişince eski sayaç bir kanıt
 # değil, yalnızca eski bir kusurun gölgesidir; sürüm atlayınca sıfırlanır.
-EXTRACT_VERSION = 2
+#
+# v3: üçlü sınıflandırma (veriyok / tanimsiz / hata) geldi. Aynı tuzağa
+# ikinci kez düşüldü — 96 sembolün 86'sı eski kuralla MAX_ATTEMPTS'e
+# ulaşmıştı ve atlama listesindeydi, dolayısıyla onları AÇIKLAYACAK yeni
+# sınıflandırmaya hiç sıra gelmedi (ölçüldü: tur yeşil bitti, tablosuz.json
+# boş kaldı). Sayaçları sıfırlamak bir "yeniden dene" değil, kuralın
+# değiştiğini kabul etmek.
+EXTRACT_VERSION = 3
 
 
 def read_failures(out_dir: Path) -> dict[str, int]:
@@ -1144,9 +1151,17 @@ def main() -> None:
         print(f"[fund] hedefli çalıştırma: {', '.join(pending)} (atlama listesi yok sayıldı)")
     else:
         pending = pending_symbols(symbols, OUT, force_all, failures, nostatement)
-        skipped = sum(1 for c in failures.values() if c >= MAX_ATTEMPTS)
-        if skipped:
-            print(f"[fund] {skipped} sembol {MAX_ATTEMPTS} denemede alınamadı, atlanıyor")
+        atlanan = sorted(s for s, c in failures.items() if c >= MAX_ATTEMPTS)
+        if atlanan:
+            # Adları da basılıyor: bu liste bir kör nokta. İki kez ısırdı —
+            # atlama listesindeki sembol, onu AÇIKLAYACAK yeni koda da hiç
+            # ulaşmıyor. Ayıklama ya da sınıflandırma kuralı değiştiğinde
+            # EXTRACT_VERSION artırılmalı, yoksa düzeltme bu sembollere
+            # hiç denenmez ve tur yeşil bitip hiçbir şey değiştirmez.
+            print(
+                f"[fund] {len(atlanan)} sembol {MAX_ATTEMPTS} denemede alınamadı, atlanıyor "
+                f"(kural değiştiyse EXTRACT_VERSION artırılmalı): {', '.join(atlanan[:40])}"
+            )
         if nostatement:
             print(
                 f"[fund] {len(nostatement)} sembolde kaynakta finansal tablo yok "
