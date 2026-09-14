@@ -16,7 +16,8 @@
 | Alarmlar | ⏭️ ertelendi | gerekçe aşağıda |
 | Korelasyon matrisi + hiyerarşik kümeleme | ✅ | `src/core/stats/correlation.ts` |
 | Normalize karşılaştırma | ✅ | `src/shell/chart/NormalizedChart.tsx` (canvas, bağımlılıksız) |
-| Isı haritası | ⏭️ Nabız ekranıyla birlikte | Faz 3'ün kalan işi |
+| Isı haritası | ✅ | `src/shell/chart/HeatMap.tsx` (canvas) + Nabız ekranı |
+| Nabız ekranı (piyasa özeti + para akışı) | ✅ | `src/core/screen/pulse.ts`, `src/shell/screens/Pulse.tsx` |
 
 ## Kabul ölçütleri
 
@@ -88,7 +89,30 @@ hesaplanamadıysa uzaklık 2 (mümkün olan en uzak) kabul edilir.
 2. **Isı haritası.** Piyasa geneli ısı haritasının doğal yeri Nabız ekranı;
    kümeleme sırası (`order`) hazır, ekranla birlikte gelecek.
 
+## Nabız ekranı ve para akışı
+
+"Endeks yükseldi" tek başına az şey söyler: 30 hisse taşıyıp 400 hisse düşüyor
+olabilir. Ekran iki ayrı soruyu ayrı ayrı cevaplıyor:
+
+- **Genişlik** — yükselenlerin yön veren semboller içindeki payı (değişmeyenler
+  hesaba girmez).
+- **Para akışı** — (yükselenlerin işlem değeri − düşenlerin işlem değeri) ÷
+  toplam. Sayıca çoğunluk ile paranın yönü zıt olabilir; ölçüm ikincisini
+  gösterir.
+
+**Isı haritası** kümeleme sırasıyla çiziliyor: yan yana düşen kutular birlikte
+hareket eden hisseler, yani "hangi grup taşıyor / hangi grup satılıyor" tek
+bakışta görünüyor. 200 kutu canvas'a tek geçişte çiziliyor (DOM'da 200 düğüm
+her tema değişiminde yeniden stillenirdi).
+
+**Gruplara göre para akışı** tablosu, kümeleri en çok işlem gören üyesiyle
+etiketliyor. Bu bir sektör listesi DEĞİL — elimizde resmî sınıflandırma yok —
+ve arayüz bunu açıkça yazıyor: "birlikte hareket eden hisselerin kümeleri".
+Ağırlıklandırma işlem değerine göre; eşit ağırlık büyük ve küçük hisseyi aynı
+sayardı.
+
+Ölçüm: 200 sembol nabız hesabı tarayıcıda **13–31 ms** (tek worker).
+
 ## Sıradaki
 
-- Nabız ekranı: piyasa özeti + kümeleme sıralı ısı haritası (canvas).
 - Faz 4: kural DSL'i, olay güdümlü maliyetli backtest, doğrulama rozetleri.

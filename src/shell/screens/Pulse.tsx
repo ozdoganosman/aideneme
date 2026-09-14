@@ -1,0 +1,281 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Badge, Button, EmptyState, Popover, Select, Skeleton, Stat, Toggle } from '../../ui';
+import { Icon } from '../../ui/icons';
+import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
+import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
+import { HeatMap } from '../chart/HeatMap';
+import { useAnalysis } from '../useAnalysis';
+import type { UrlState } from '../urlState';
+
+interface Props {
+  state: UrlState;
+  push: (patch: UrlState) => void;
+}
+
+const fmtValue = (v: number): string => {
+  if (!Number.isFinite(v)) return '—';
+  if (v >= 1e9) return `${(v / 1e9).toFixed(1)} mlr`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)} mn`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)} b`;
+  return v.toFixed(0);
+};
+
+const fmtPct = (v: number, digits = 1): string =>
+  Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
+
+/** Nabız — "piyasada bugün ne oluyor?" */
+export default function Pulse({ state, push }: Props) {
+  const market = (MARKETS.includes(state.m as Market) ? state.m : 'bist') as Market;
+  const analysis = useAnalysis(market);
+
+  const [pulse, setPulse] = useState<{
+    rows: PulseRow[];
+    summary: PulseSummary;
+    ms: number;
+  } | null>(null);
+  const [clusters, setClusters] = useState<{
+    order: string[];
+    clusterOf: Map<string, number>;
+    count: number;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [clusterOrder, setClusterOrder] = useState(true);
+
+  const clientRef = useRef(analysis.client);
+  clientRef.current = analysis.client;
+
+  useEffect(() => {
+    const client = clientRef.current;
+    if (analysis.status !== 'ready' || !client) return;
+    let cancelled = false;
+    setBusy(true);
+
+    // Nabız hızlı (tek geçiş), kümeleme yavaş (~0,5 sn) — ikisini ayrı isteyip
+    // ısı haritasını nabız gelir gelmez çiziyoruz, sıralama sonra oturuyor.
+    client
+      .pulse(market)
+      .then((result) => {
+        if (!cancelled) setPulse(result);
+      })
+      .catch(() => {
+        if (!cancelled) setPulse(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+
+    client
+      .correlate(market, { lookback: 120 })
+      .then((result) => {
+        if (cancelled) return;
+        setClusters({
+          order: result.order.map((i) => result.symbols[i]),
+          clusterOf: new Map(result.symbols.map((s, i) => [s, result.clusterOf[i]])),
+          count: result.clusters,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setClusters(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [analysis.status, market]);
+
+  const flows = useMemo(() => {
+    if (!pulse || !clusters) return [];
+    return flowByCluster(pulse.rows, clusters.clusterOf).slice(0, 8);
+  }, [pulse, clusters]);
+
+  if (analysis.status === 'error') {
+    return (
+      <EmptyState
+        tone="error"
+        icon={<Icon name="alert" size={28} />}
+        title="Piyasa verisi yüklenemedi"
+        description={analysis.error ?? ''}
+      />
+    );
+  }
+
+  const s = pulse?.summary;
+
+  return (
+    <div className="pulse">
+      <section className="pulse__bar" aria-label="Piyasa seçimi">
+        <Select
+          label="Piyasa"
+          value={market}
+          onChange={(value) => push({ m: value })}
+          options={MARKETS.map((m) => ({ value: m, label: MARKET_LABEL[m] }))}
+        />
+        <Toggle
+          label="Kümeleme sırası"
+          checked={clusterOrder}
+          onChange={setClusterOrder}
+          description={clusters ? `${clusters.count} küme` : 'hesaplanıyor…'}
+        />
+        <div className="pulse__status">
+          {busy ? (
+            <Badge tone="warn">Hesaplanıyor…</Badge>
+          ) : pulse ? (
+            <span className="desk__muted">
+              {pulse.rows.length} sembol · worker {pulse.ms.toFixed(0)} ms
+            </span>
+          ) : null}
+        </div>
+      </section>
+
+      {!s ? (
+        <Skeleton height="96px" />
+      ) : (
+        <section className="pulse__stats" aria-label="Piyasa özeti">
+          <Stat
+            label="Genişlik"
+            value={fmtPct(s.breadthPct - 50, 1)}
+            hint={`${s.advancing} yükselen · ${s.declining} düşen`}
+            provenance={
+              <Popover
+                title="Genişlik"
+                trigger={(p) => (
+                  <button
+                    type="button"
+                    className="desk__prov"
+                    aria-label="Bu sayı nereden geliyor?"
+                    {...p}
+                  >
+                    ?
+                  </button>
+                )}
+              >
+                Yükselenlerin yön veren semboller içindeki payı, %50'den sapma olarak. Pozitif =
+                yükselenler çoğunlukta. Değişmeyen semboller hesaba girmez.
+              </Popover>
+            }
+          />
+          <Stat
+            label="Para akışı"
+            value={fmtPct(s.flowPct, 1)}
+            hint={`${fmtValue(s.totalValue)} toplam işlem değeri`}
+            provenance={
+              <Popover
+                title="Para akışı"
+                trigger={(p) => (
+                  <button
+                    type="button"
+                    className="desk__prov"
+                    aria-label="Bu sayı nereden geliyor?"
+                    {...p}
+                  >
+                    ?
+                  </button>
+                )}
+              >
+                (yükselenlerin işlem değeri − düşenlerin işlem değeri) ÷ toplam. İşlem değeri =
+                kapanış × hacim. Sayıca çoğunluk ile paranın yönü farklı olabilir; bu ikincisini
+                ölçer.
+              </Popover>
+            }
+          />
+          <Stat label="Medyan değişim" value={fmtPct(s.medianChangePct, 2)} hint="ortanca sembol" />
+          <Stat
+            label="Yeni zirve / dip"
+            value={`${s.newHighs} / ${s.newLows}`}
+            hint="son 250 bar içinde"
+          />
+        </section>
+      )}
+
+      <section className="pulse__panel" aria-label="Isı haritası">
+        <header>
+          <h2>Isı haritası</h2>
+          <span className="desk__muted">Renk: son bar değişimi · Sıra: davranış kümeleri</span>
+        </header>
+        {!pulse ? (
+          <Skeleton height="320px" />
+        ) : (
+          <HeatMap
+            rows={pulse.rows}
+            order={clusterOrder && clusters ? clusters.order : undefined}
+            onSelect={(symbol) => push({ v: 'sembol', s: symbol })}
+          />
+        )}
+      </section>
+
+      <section className="pulse__panel" aria-label="Gruplara göre para akışı">
+        <header>
+          <h2>Para akışı — davranış grupları</h2>
+          <span className="desk__muted">
+            Resmî sektör sınıflandırması değil: birlikte hareket eden hisselerin kümeleri, en çok
+            işlem gören üyesiyle etiketli.
+          </span>
+        </header>
+        {flows.length === 0 ? (
+          <Skeleton count={4} height="20px" />
+        ) : (
+          <table className="pulse__flows">
+            <caption className="visually-hidden">Kümelere göre işlem değeri ve yön</caption>
+            <thead>
+              <tr>
+                <th scope="col">Grup</th>
+                <th scope="col" className="num">
+                  Hisse
+                </th>
+                <th scope="col" className="num">
+                  İşlem değeri
+                </th>
+                <th scope="col" className="num">
+                  Ağırlıklı değişim
+                </th>
+                <th scope="col" className="num">
+                  Akış
+                </th>
+                <th scope="col" className="num">
+                  Yük./Düş.
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {flows.map((flow) => (
+                <tr key={flow.cluster}>
+                  <th scope="row">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => push({ v: 'sembol', s: flow.label })}
+                    >
+                      {flow.label} grubu
+                    </Button>
+                  </th>
+                  <td className="num">{flow.symbols}</td>
+                  <td className="num">{fmtValue(flow.value)}</td>
+                  <td
+                    className="num"
+                    style={{ color: flow.weightedChangePct >= 0 ? 'var(--up)' : 'var(--down)' }}
+                  >
+                    {fmtPct(flow.weightedChangePct, 2)}
+                  </td>
+                  <td className="num">
+                    <span
+                      className="pulse__flowbar"
+                      style={{
+                        width: `${Math.min(100, Math.abs(flow.flowPct))}%`,
+                        background: flow.flowPct >= 0 ? 'var(--up)' : 'var(--down)',
+                      }}
+                      aria-hidden="true"
+                    />
+                    {fmtPct(flow.flowPct, 0)}
+                  </td>
+                  <td className="num">
+                    {flow.advancing}/{flow.declining}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  );
+}

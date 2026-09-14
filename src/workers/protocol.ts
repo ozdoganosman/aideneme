@@ -1,4 +1,5 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
+import type { PulseRow, PulseSummary } from '../core/screen/pulse';
 
 /**
  * Ana thread ↔ Worker sözleşmesi. Tek dosyada tutuluyor ki iki uç tip düzeyinde
@@ -36,7 +37,16 @@ export interface CorrelateRequest {
   threshold?: number;
 }
 
-export type WorkerRequest = InitRequest | ScreenRequest | CorrelateRequest;
+export interface PulseRequest {
+  id: number;
+  type: 'pulse';
+  market: string;
+  /** Yeni zirve/dip penceresi (bar). */
+  window?: number;
+  minBars?: number;
+}
+
+export type WorkerRequest = InitRequest | ScreenRequest | CorrelateRequest | PulseRequest;
 
 export interface InitResponse {
   id: number;
@@ -73,4 +83,14 @@ export interface ErrorResponse {
   error: string;
 }
 
-export type WorkerResponse = InitResponse | ScreenResponse | CorrelateResponse | ErrorResponse;
+export interface PulseResponse {
+  id: number;
+  ok: true;
+  type: 'pulse';
+  rows: PulseRow[];
+  summary: PulseSummary;
+  ms: number;
+}
+
+export type WorkerResponse =
+  InitResponse | ScreenResponse | CorrelateResponse | PulseResponse | ErrorResponse;

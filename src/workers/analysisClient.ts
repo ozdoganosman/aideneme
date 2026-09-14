@@ -1,7 +1,7 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
-import type { CorrelateResponse, WorkerResponse } from './protocol';
+import type { CorrelateResponse, PulseResponse, WorkerResponse } from './protocol';
 
 /**
  * Uygulamanın analiz servisi: paketi bir kez indirir, worker'lara dağıtır,
@@ -22,6 +22,7 @@ export interface ScreenOutcome {
 }
 
 export type CorrelateOutcome = Omit<CorrelateResponse, 'id' | 'ok' | 'type'>;
+export type PulseOutcome = Omit<PulseResponse, 'id' | 'ok' | 'type'>;
 
 function defaultSize(): number {
   const cores = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency ?? 4) : 4;
@@ -98,6 +99,25 @@ export class AnalysisClient {
       ms = Math.max(ms, ok.ms);
     }
     return { rows, ms };
+  }
+
+  /** Piyasa nabzı: genişlik + para akışı (tek worker). */
+  async pulse(
+    market: Market,
+    options: { window?: number; minBars?: number } = {},
+  ): Promise<PulseOutcome> {
+    const response = unwrap(
+      await this.pool.run((id) => ({
+        id,
+        type: 'pulse',
+        market,
+        window: options.window,
+        minBars: options.minBars,
+      })),
+    );
+    if (response.type !== 'pulse') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = response;
+    return rest;
   }
 
   /** Korelasyon + kümeleme (tek worker; matris aktarılarak döner). */

@@ -1,5 +1,6 @@
 import { decodeBundle, type Bundle } from '../core/data/pack';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
+import { pulseRow, summarizePulse, type PulseRow } from '../core/screen/pulse';
 import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
@@ -32,6 +33,29 @@ export function createHandler() {
             if (row) rows.push(row);
           }
           return { id: req.id, ok: true, type: 'screen', rows, ms: now() - started };
+        }
+
+        case 'pulse': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const rows: PulseRow[] = [];
+          for (const symbol of bundle.names) {
+            const candles = bundle.seriesOf(symbol);
+            if (!candles) continue;
+            const row = pulseRow(symbol, candles, {
+              window: req.window,
+              minBars: req.minBars,
+            });
+            if (row) rows.push(row);
+          }
+          return {
+            id: req.id,
+            ok: true,
+            type: 'pulse',
+            rows,
+            summary: summarizePulse(rows),
+            ms: now() - started,
+          };
         }
 
         case 'correlate': {

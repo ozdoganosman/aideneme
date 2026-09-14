@@ -83,6 +83,23 @@ describe('handler', () => {
     }
   });
 
+  it('nabız: tüm semboller için değişim + işlem değeri ve özet', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(30, 150) });
+
+    const response = handle({ id: 2, type: 'pulse', market: 'bist' });
+    expect(response.ok).toBe(true);
+    if (response.ok && response.type === 'pulse') {
+      expect(response.rows).toHaveLength(30);
+      expect(response.summary.symbols).toBe(30);
+      expect(response.summary.advancing + response.summary.declining).toBeLessThanOrEqual(30);
+      // Genişlik ve akış yön veren sembollerden türetilir; ikisi de tanımlı olmalı.
+      expect(Number.isFinite(response.summary.breadthPct)).toBe(true);
+      expect(Number.isFinite(response.summary.flowPct)).toBe(true);
+      expect(response.summary.totalValue).toBeGreaterThan(0);
+    }
+  });
+
   it('paket yüklenmeden tarama isteği anlaşılır hata döner', () => {
     const handle = createHandler();
     const response = handle({
