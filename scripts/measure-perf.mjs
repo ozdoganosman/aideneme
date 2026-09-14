@@ -136,6 +136,26 @@ results.push(
 
 results.push(await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=THYAO,GARAN,ASELS`, '.compare__matrix'));
 
+// Fazlardan sonra eklenen ekranlar: en ağır iki iş (1600 backtest ve model
+// eğitimi) burada. İkisi de worker'da koşuyor; ölçüm bunu doğruluyor.
+results.push(
+  await repeat('stratejiler (1600 backtest)', `${BASE}?v=stratejiler`, '.rank__table tbody tr', async (page) => {
+    const t = Date.now();
+    await page.getByLabel('Kapsam').selectOption('symbol');
+    await page.waitForFunction(
+      () => document.querySelectorAll('.rank__table tbody tr').length > 0,
+      { timeout: 120000 },
+    );
+    return { 'kapsam_değişimi_ms': Date.now() - t };
+  }),
+);
+
+results.push(
+  await repeat('model (purged CV)', `${BASE}?v=model&s=THYAO`, '.model__verdict'),
+);
+
+results.push(await repeat('rapor', `${BASE}?v=rapor&s=THYAO`, '.report__sheet'));
+
 console.log(`\nCPU yavaşlatma: ${THROTTLE}× · ${RUNS} tekrarın medyanı\n`);
 for (const r of results) {
   console.log(

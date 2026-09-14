@@ -33,6 +33,27 @@ medyanı** raporlanır.
 **Normal makinede hiçbir ekranda 50 ms'yi aşan tek bir görev yok.** Zayıf
 makinede tek istisna grafik kütüphanesinin ilk kurulumu (369 ms) — aşağıda.
 
+### Fazlardan sonra eklenen ekranlar
+
+Bu üç ekran plandaki yedi faz bittikten sonra eklendi ve ilk kez burada
+bütçeye sokuldu (2 tekrarın medyanı; yukarıdaki satırlar 3 tekrar):
+
+| Ekran | Normal makine (1×) | Zayıf makine (6×) |
+|---|---|---|
+| Stratejiler (1600 backtest) | hazır 418 ms · blok **0** · kapsam değişimi 73 ms | hazır 1,4 sn · en kötü 121 ms · kapsam 252 ms |
+| Model (purged CV) | hazır 907 ms · blok **0** | hazır 1,9 sn · en kötü 113 ms |
+| Rapor | hazır 303 ms · blok **0** | hazır 1,5 sn · en kötü 130 ms |
+
+En ağır iki iş bu ekranlarda: 200 sembol × 8 strateji = **1600 backtest** ve
+üçlü bariyer etiketleme + 5 katmanlı purged CV. İkisi de worker'da koştuğu
+için ana iş parçacığında iz bırakmıyorlar — zayıf makinede bile en kötü blok
+121 ms ve 113 ms, yani mevcut ekranların hepsinden düşük. Modelin "hazır"
+süresi (907 ms) eğitimin kendisidir; o sırada arayüz donmuyor, iskelet
+gösteriliyor.
+
+Ölçüm aracı bu ekranları da kapsıyor (`scripts/measure-perf.mjs`), böylece
+sonraki değişiklikler bütçeden sessizce kaçamaz.
+
 ## Yapılan iyileştirmeler (ve etkileri)
 
 1. **Sembol analizi worker'a taşındı.** Periyot dönüşümü, EMA'lar, özet
