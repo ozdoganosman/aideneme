@@ -135,6 +135,13 @@ describe('strateji sıralaması', () => {
     expect(Number.isNaN(rows[0].medianExcessPct)).toBe(true);
   });
 
+  it('koştu ama hiç sinyal üretmediyse "sinyal yok" der', () => {
+    const rows = rankStrategies([{ preset, results: results([0, 0, 0], 0) }]);
+    expect(rows[0].verdict).toBe('sinyal yok');
+    expect(rows[0].symbols).toBe(3);
+    expect(rows[0].withTrades).toBe(0);
+  });
+
   it('en çok fark yaratan sembolleri sıralı verir', () => {
     const rows = rankStrategies([{ preset, results: results([1, 9, 5, 3, 7, 2]) }], {
       topSymbols: 3,

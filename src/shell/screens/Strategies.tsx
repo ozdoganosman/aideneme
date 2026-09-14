@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, Combobox, EmptyState, Select, Skeleton, Stat, Toggle } from '../../ui';
+import {
+  Badge,
+  Button,
+  Combobox,
+  EmptyState,
+  NumberField,
+  Select,
+  Skeleton,
+  Stat,
+  Toggle,
+} from '../../ui';
 import { Icon } from '../../ui/icons';
 import { DEFAULT_COSTS, ZERO_COSTS } from '../../core/backtest/engine';
 import type { BacktestMetrics } from '../../core/backtest/metrics';
@@ -20,6 +30,13 @@ interface Props {
   push: (patch: UrlState) => void;
 }
 
+type Scope = 'market' | 'symbol' | 'deep';
+
+/** Aynı anda kaç sembol indirilip hesaplansın (zayıf makinede de akıcı kalsın). */
+const DEEP_CONCURRENCY = 3;
+
+const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
 const pct = (v: number, digits = 1): string =>
   Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
 const plain = (v: number, digits = 1): string => (Number.isFinite(v) ? v.toFixed(digits) : '—');
@@ -31,6 +48,7 @@ const VERDICT_TONE: Record<RankRow['verdict'], 'up' | 'warn' | 'down' | 'neutral
   belirsiz: 'warn',
   zayıf: 'down',
   ölçülemedi: 'neutral',
+  'sinyal yok': 'neutral',
 };
 
 /**
@@ -53,7 +71,10 @@ export default function Strategies({ state, push }: Props) {
   const analysis = useAnalysis(market);
   const symbol = state.s || analysis.symbols[0] || '';
 
-  const [scope, setScope] = useState<'market' | 'symbol'>('market');
+  const [scope, setScope] = useState<Scope>('market');
+  const [deepCount, setDeepCount] = useState(30);
+  const [deep, setDeep] = useState<{ done: number; total: number } | null>(null);
+  const [plan, setPlan] = useState<{ symbols: string[]; bytes: number } | null>(null);
   const [withCosts, setWithCosts] = useState(true);
   const [rows, setRows] = useState<RankRow[] | null>(null);
   const [skipped, setSkipped] = useState<Record<string, number>>({});
@@ -72,6 +93,29 @@ export default function Strategies({ state, push }: Props) {
     let cancelled = false;
     setRows(null);
     setError(null);
+
+    if (scope === 'deep') {
+      // Derin tarama KENDİLİĞİNDEN başlamaz: megabaytlarca indirme demek.
+      // Önce ne indirileceği hesaplanıp kullanıcıya söylenir.
+      (async () => {
+        try {
+          const [manifest, pulse] = await Promise.all([
+            dataClient.manifest(market),
+            client.pulse(market),
+          ]);
+          if (cancelled) return;
+          const ranked = [...pulse.rows].sort((a, b) => b.value - a.value);
+          const symbols = ranked.slice(0, deepCount).map((r) => r.symbol);
+          const bytes = symbols.reduce((sum, s) => sum + (manifest.symbols[s]?.b ?? 0), 0);
+          setPlan({ symbols, bytes });
+        } catch (err) {
+          if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
 
     (async () => {
       try {
@@ -119,7 +163,70 @@ export default function Strategies({ state, push }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [market, scope, symbol, analysis.status, analysis.bars, options]);
+  }, [market, scope, symbol, deepCount, analysis.status, analysis.bars, options]);
+
+  /**
+   * Derin tarama: en likit N sembolün TAM geçmişi indirilir ve tüm stratejiler
+   * gerçek tarih üzerinde koşar. Ortak pencere kısıtı kalktığı için EMA(200)
+   * tabanlı kurallar da ölçülebilir hale gelir.
+   */
+  async function runDeep() {
+    const client = clientRef.current;
+    if (!client || !plan) return;
+    setRows(null);
+    setError(null);
+    setDeep({ done: 0, total: plan.symbols.length });
+
+    const collected: Record<string, SymbolResult[]> = {};
+    const missed: Record<string, number> = {};
+    for (const preset of STRATEGY_PRESETS) {
+      collected[preset.id] = [];
+      missed[preset.id] = 0;
+    }
+
+    const strategies = STRATEGY_PRESETS.map((p) => ({ id: p.id, strategy: p.strategy }));
+    const queue = [...plan.symbols];
+    let bars = 0;
+    let ms = 0;
+    let done = 0;
+
+    async function worker() {
+      for (;;) {
+        const next = queue.shift();
+        if (!next) return;
+        try {
+          const { candles } = await dataClient.series(market, next);
+          const outcome = await client!.rankSeries(next, candles, strategies, options, 120);
+          for (const [id, metrics] of Object.entries(outcome.metrics)) {
+            collected[id].push({ symbol: next, metrics });
+          }
+          for (const id of outcome.skipped) missed[id]++;
+          bars = Math.max(bars, outcome.bars);
+          ms += outcome.ms;
+        } catch {
+          // Tek sembolün indirilememesi taramayı düşürmez; sayım eksik kalır
+          // ve tabloda "ölçülen sembol" sayısı bunu gösterir.
+        }
+        done++;
+        setDeep({ done, total: plan!.symbols.length });
+      }
+    }
+
+    try {
+      await Promise.all(Array.from({ length: DEEP_CONCURRENCY }, worker));
+      setSkipped(missed);
+      setInfo({ symbols: plan.symbols.length, bars, ms: Math.round(ms) });
+      setRows(
+        rankStrategies(
+          STRATEGY_PRESETS.map((preset) => ({ preset, results: collected[preset.id] })),
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeep(null);
+    }
+  }
 
   const sorted = useMemo(() => {
     if (!rows) return null;
@@ -153,12 +260,28 @@ export default function Strategies({ state, push }: Props) {
         <Select
           label="Kapsam"
           value={scope}
-          onChange={(value) => setScope(value as 'market' | 'symbol')}
+          onChange={(value) => {
+            setScope(value as Scope);
+            setRows(null);
+            setPlan(null);
+          }}
           options={[
             { value: 'market', label: 'Piyasa (ortak pencere)' },
             { value: 'symbol', label: 'Tek sembol (tüm geçmiş)' },
+            { value: 'deep', label: 'Derin (en likitler, tam geçmiş)' },
           ]}
         />
+        {scope === 'deep' ? (
+          <NumberField
+            label="Sembol sayısı"
+            value={deepCount}
+            min={5}
+            max={100}
+            step={5}
+            onChange={setDeepCount}
+            hint="işlem değerine göre en likitler"
+          />
+        ) : null}
         {scope === 'symbol' ? (
           <Combobox
             label="Sembol"
@@ -176,25 +299,64 @@ export default function Strategies({ state, push }: Props) {
 
       <p className="rank__lead">
         {scope === 'market'
-          ? 'Aynı kurallar tüm sembollerde, ortak pencerede. Karşılaştırma tabanı al-tut ve al-tut aynı maliyeti öder.'
-          : `Tüm hazır stratejiler ${symbol} sembolünün tam geçmişinde. Tek gözlem olduğu için p-değeri hesaplanmaz.`}
-        {scope === 'market' ? ` ${INDEPENDENCE_CAVEAT}` : ''}
+          ? 'Aynı kurallar tüm sembollerde, ortak 250 barlık pencerede — paket zaten inmiş olduğu için ek indirme yok. Karşılaştırma tabanı al-tut ve al-tut aynı maliyeti öder.'
+          : scope === 'deep'
+            ? 'En likit sembollerin TAM geçmişi indirilip stratejiler gerçek tarih üzerinde koşar. Ortak pencere kısıtı kalkar; EMA(200) tabanlı kurallar da ölçülebilir.'
+            : `Tüm hazır stratejiler ${symbol} sembolünün tam geçmişinde. Tek gözlem olduğu için p-değeri hesaplanmaz.`}
+        {scope !== 'symbol' ? ` ${INDEPENDENCE_CAVEAT}` : ''}
       </p>
 
+      {scope === 'deep' ? (
+        <section className="rank__deep" aria-label="Derin tarama">
+          {deep ? (
+            <>
+              <p>
+                {deep.done} / {deep.total} sembol işlendi.
+              </p>
+              <progress value={deep.done} max={deep.total} />
+            </>
+          ) : plan ? (
+            <>
+              <p>
+                {plan.symbols.length} sembol · <strong>{mb(plan.bytes)}</strong> indirilecek ve{' '}
+                {plan.symbols.length * STRATEGY_PRESETS.length} backtest koşacak. Boyut manifestten
+                okundu, tahmin değil.
+              </p>
+              <Button variant="primary" onClick={runDeep}>
+                Derin taramayı başlat
+              </Button>
+              <span className="desk__muted">
+                İnen seriler tarayıcı önbelleğinde kalır; ikinci çalıştırma ağa çıkmaz.
+              </span>
+            </>
+          ) : (
+            <p className="desk__muted">İndirme boyutu hesaplanıyor…</p>
+          )}
+        </section>
+      ) : null}
+
       {!sorted ? (
-        <Skeleton count={6} height="52px" />
+        scope === 'deep' && !deep ? null : (
+          <Skeleton count={6} height="52px" />
+        )
       ) : (
         <>
           <div className="rank__meta">
             <Stat
-              label={scope === 'market' ? 'Sembol' : 'Bar'}
-              value={String(scope === 'market' ? (info?.symbols ?? 0) : (info?.bars ?? 0))}
-              hint={scope === 'market' ? `${info?.bars ?? 0} barlık ortak pencere` : 'tam geçmiş'}
+              label={scope === 'symbol' ? 'Bar' : 'Sembol'}
+              value={String(scope === 'symbol' ? (info?.bars ?? 0) : (info?.symbols ?? 0))}
+              hint={
+                scope === 'market'
+                  ? `${info?.bars ?? 0} barlık ortak pencere`
+                  : scope === 'deep'
+                    ? `tam geçmiş · en uzunu ${info?.bars ?? 0} bar`
+                    : 'tam geçmiş'
+              }
             />
             <Stat
               label="Strateji"
               value={String(STRATEGY_PRESETS.length)}
-              hint={scope === 'market' ? 'p-değeri Holm ile düzeltildi' : 'düzeltme gerekmez'}
+              hint={scope === 'symbol' ? 'düzeltme gerekmez' : 'p-değeri Holm ile düzeltildi'}
             />
             <Stat label="Hesap" value={`${Math.round(info?.ms ?? 0)} ms`} hint="worker" />
           </div>
@@ -215,7 +377,7 @@ export default function Strategies({ state, push }: Props) {
                 <th scope="col" className="num">
                   İşlem
                 </th>
-                {scope === 'market' ? (
+                {scope !== 'symbol' ? (
                   <>
                     <th scope="col" className="num">
                       Yenme oranı
@@ -244,7 +406,13 @@ export default function Strategies({ state, push }: Props) {
                     {row.verdict === 'ölçülemedi' ? (
                       <span className="desk__muted">
                         Bu pencerede ölçülemedi: kural {skipped[row.id] ?? 0} sembolde ısınma
-                        barlarına sığmıyor. Tek sembol kapsamında tam geçmişle ölçülebilir.
+                        barlarına sığmıyor. Derin kapsamda tam geçmişle ölçülebilir.
+                      </span>
+                    ) : null}
+                    {row.verdict === 'sinyal yok' ? (
+                      <span className="desk__muted">
+                        Backtest koştu ama kural {row.symbols} sembolün hiçbirinde tetiklenmedi —
+                        kaybetmedi, hiç denemedi.
                       </span>
                     ) : null}
                     {open === row.id ? (
@@ -279,7 +447,7 @@ export default function Strategies({ state, push }: Props) {
                   <td className="num">{pct(row.medianCagrPct)}</td>
                   <td className="num">{plain(row.medianMaxDDPct)}%</td>
                   <td className="num">{plain(row.medianTrades, 0)}</td>
-                  {scope === 'market' ? (
+                  {scope !== 'symbol' ? (
                     <>
                       <td className="num">{plain(row.beatPct, 0)}%</td>
                       <td className="num">{pval(row.adjustedP)}</td>

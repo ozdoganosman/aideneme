@@ -3,7 +3,7 @@ import { metricsFor, type ScreenRow } from '../core/screen/metrics';
 import { pulseRow, summarizePulse, type PulseRow } from '../core/screen/pulse';
 import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
 import { runBacktest } from '../core/backtest/engine';
-import { computeMetrics } from '../core/backtest/metrics';
+import { computeMetrics, type BacktestMetrics } from '../core/backtest/metrics';
 import { validateStrategy } from '../core/backtest/validate';
 import { warmupBars } from '../core/strategy/dsl';
 import type { SymbolResult } from '../core/strategy/rank';
@@ -164,6 +164,30 @@ export function createHandler() {
           }
 
           return { id: req.id, ok: true, type: 'rank', results, skipped, ms: now() - started };
+        }
+
+        case 'rankSeries': {
+          const started = now();
+          const metrics: Record<string, BacktestMetrics> = {};
+          const skipped: string[] = [];
+          for (const entry of req.strategies) {
+            if (req.candles.length - warmupBars(entry.strategy) < req.minUsableBars) {
+              skipped.push(entry.id);
+              continue;
+            }
+            const result = runBacktest(req.candles, entry.strategy, req.options);
+            metrics[entry.id] = computeMetrics(result, req.candles);
+          }
+          return {
+            id: req.id,
+            ok: true,
+            type: 'rankSeries',
+            symbol: req.symbol,
+            metrics,
+            skipped,
+            bars: req.candles.length,
+            ms: now() - started,
+          };
         }
 
         case 'correlate': {

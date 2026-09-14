@@ -207,6 +207,36 @@ export class AnalysisClient {
     return { results, skipped, symbols: total, ms };
   }
 
+  /** Tek sembolün tam geçmişinde tüm stratejiler (derin tarama adımı). */
+  async rankSeries(
+    symbol: string,
+    candles: import('../core/data/types').Candles,
+    strategies: { id: string; strategy: Strategy }[],
+    options: BacktestOptions = {},
+    minUsableBars = 60,
+  ): Promise<{
+    symbol: string;
+    metrics: Record<string, import('../core/backtest/metrics').BacktestMetrics>;
+    skipped: string[];
+    bars: number;
+    ms: number;
+  }> {
+    const response = unwrap(
+      await this.pool.run((id) => ({
+        id,
+        type: 'rankSeries',
+        symbol,
+        candles,
+        strategies,
+        options,
+        minUsableBars,
+      })),
+    );
+    if (response.type !== 'rankSeries') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = response;
+    return rest;
+  }
+
   /** Model kartı: üçlü bariyer etiketleme + purged CV + kalibrasyon. */
   async model(
     candles: import('../core/data/types').Candles,

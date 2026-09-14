@@ -64,12 +64,22 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'breakout-55',
     name: '55 bar kırılımı',
-    detail: 'Fiyat son 55 barın en yükseğini aşınca al, 20 bar dibine inince sat.',
+    detail: 'Fiyat önceki 55 barın en yükseğini aşınca al, önceki 20 barın dibine inince sat.',
     premise: 'Donchian tipi kırılım: yeni zirve, yeni bilgi demektir.',
     strategy: {
       name: '55 bar kırılımı',
-      entry: { op: 'gt', left: { kind: 'close' }, right: { kind: 'highest', length: 55 } },
-      exit: { op: 'lt', left: { kind: 'close' }, right: { kind: 'lowest', length: 20 } },
+      // prev(…, 1) şart: highest/lowest içinde bulunulan barı da kapsar, yoksa
+      // kural hiçbir zaman doğru olamaz (bkz. dsl.ts 'prev').
+      entry: {
+        op: 'gt',
+        left: { kind: 'close' },
+        right: { kind: 'prev', of: { kind: 'highest', length: 55 }, bars: 1 },
+      },
+      exit: {
+        op: 'lt',
+        left: { kind: 'close' },
+        right: { kind: 'prev', of: { kind: 'lowest', length: 20 }, bars: 1 },
+      },
       atrStop: { length: 14, mult: 3 },
     },
   },
@@ -143,16 +153,20 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
     id: 'new-high-momentum',
     name: 'Yeni zirve momentumu',
-    detail: 'Fiyat 250 barlık zirveye değince al, 50 bar dibine inince sat.',
+    detail: 'Fiyat önceki 250 barın zirvesini aşınca al, önceki 50 barın dibine inince sat.',
     premise: '52 hafta zirvesi etkisi: zirvedeki hisse daha çok yükselir.',
     strategy: {
       name: 'Yeni zirve momentumu',
       entry: {
-        op: 'gte',
+        op: 'gt',
         left: { kind: 'close' },
-        right: { kind: 'highest', length: 250 },
+        right: { kind: 'prev', of: { kind: 'highest', length: 250 }, bars: 1 },
       },
-      exit: { op: 'lt', left: { kind: 'close' }, right: { kind: 'lowest', length: 50 } },
+      exit: {
+        op: 'lt',
+        left: { kind: 'close' },
+        right: { kind: 'prev', of: { kind: 'lowest', length: 50 }, bars: 1 },
+      },
       atrStop: { length: 14, mult: 3 },
     },
   },

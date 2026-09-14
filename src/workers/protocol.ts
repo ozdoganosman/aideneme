@@ -104,6 +104,17 @@ export interface RankRequest {
   minUsableBars: number;
 }
 
+export interface RankSeriesRequest {
+  id: number;
+  type: 'rankSeries';
+  /** Tek sembolün tam geçmişi; tüm stratejiler bunun üstünde koşar. */
+  candles: Candles;
+  symbol: string;
+  strategies: { id: string; strategy: Strategy }[];
+  options: BacktestOptions;
+  minUsableBars: number;
+}
+
 export type WorkerRequest =
   | InitRequest
   | ScreenRequest
@@ -112,7 +123,8 @@ export type WorkerRequest =
   | BacktestRequest
   | SymbolRequest
   | ModelRequest
-  | RankRequest;
+  | RankRequest
+  | RankSeriesRequest;
 
 export interface InitResponse {
   id: number;
@@ -208,6 +220,18 @@ export interface RankResponse {
   ms: number;
 }
 
+export interface RankSeriesResponse {
+  id: number;
+  ok: true;
+  type: 'rankSeries';
+  symbol: string;
+  /** Strateji kimliği → metrikler; ısınma sığmayan strateji listede YOKTUR. */
+  metrics: Record<string, BacktestMetrics>;
+  skipped: string[];
+  bars: number;
+  ms: number;
+}
+
 export type WorkerResponse =
   | InitResponse
   | SymbolResponse
@@ -217,4 +241,5 @@ export type WorkerResponse =
   | BacktestResponse
   | ModelResponse
   | RankResponse
+  | RankSeriesResponse
   | ErrorResponse;

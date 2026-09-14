@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { emptyCandles, type Candles } from '../../core/data/types';
 import { evaluateCondition, type Condition } from '../../core/strategy/dsl';
 import { STRATEGY_PRESETS } from '../../core/strategy/presets';
-import { baseOf, factorOf, fromForm, toForm, withFactor } from './labRules';
+import { baseOf, factorOf, fromForm, shiftOf, toForm, withFactor, withShift } from './labRules';
 
 /** Yeterince uzun, dalgalı bir seri: her kural sinyal üretebilsin. */
 function series(n: number): Candles {
@@ -98,6 +98,24 @@ describe('strateji ↔ kural editörü', () => {
     expect(withAtr.atrStopMult).toBe(3);
     expect(fromForm(withAtr).atrStop).toEqual({ length: 14, mult: 3 });
     expect(fromForm({ ...withAtr, atrStopMult: 0 }).atrStop).toBeUndefined();
+  });
+
+  it('geri kaydırma ve ölçek birlikte ayrılıp geri takılabilir', () => {
+    const both = {
+      kind: 'scale' as const,
+      of: { kind: 'prev' as const, of: { kind: 'highest' as const, length: 55 }, bars: 1 },
+      factor: 0.99,
+    };
+    expect(factorOf(both)).toBe(0.99);
+    expect(shiftOf(both)).toBe(1);
+    expect(baseOf(both)).toEqual({ kind: 'highest', length: 55 });
+    // Sıra her zaman scale(prev(base)): aynı kural her zaman aynı JSON'a serileşir.
+    expect(withShift(withFactor({ kind: 'highest', length: 55 }, 0.99), 1)).toEqual(both);
+    expect(withShift(both, 0)).toEqual({
+      kind: 'scale',
+      of: { kind: 'highest', length: 55 },
+      factor: 0.99,
+    });
   });
 
   it('ölçek katsayısı operanddan ayrılıp geri takılabilir', () => {

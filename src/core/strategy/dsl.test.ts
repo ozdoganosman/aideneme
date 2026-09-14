@@ -23,6 +23,47 @@ function series(closes: number[]): Candles {
 }
 
 describe('evaluateOperand', () => {
+  it("'prev' operandı seriyi geri kaydırır, ilk barlar NaN kalır", () => {
+    const c = series([10, 11, 12, 13]);
+    const shifted = evaluateOperand({ kind: 'prev', of: { kind: 'close' }, bars: 1 }, c);
+    expect(Number.isNaN(shifted[0])).toBe(true);
+    expect(Array.from(shifted.slice(1))).toEqual([10, 11, 12]);
+  });
+
+  it('kırılım kuralı ancak prev ile doğru olabilir', () => {
+    // highest(N) İÇİNDE BULUNULAN barı da kapsar: kapanış onu asla aşamaz.
+    const c = series([10, 11, 12, 20, 12]);
+    const naive: Condition = {
+      op: 'gt',
+      left: { kind: 'close' },
+      right: { kind: 'highest', length: 3 },
+    };
+    expect(Array.from(evaluateCondition(naive, c))).toEqual([0, 0, 0, 0, 0]);
+
+    const correct: Condition = {
+      op: 'gt',
+      left: { kind: 'close' },
+      right: { kind: 'prev', of: { kind: 'highest', length: 3 }, bars: 1 },
+    };
+    // 20, önceki 3 barın en yükseğini (12 × 1.01) aşıyor.
+    expect(Array.from(evaluateCondition(correct, c))[3]).toBe(1);
+  });
+
+  it('kaydırma ısınmaya EKLENİR', () => {
+    const base = warmupBars({
+      entry: { op: 'gt', left: { kind: 'close' }, right: { kind: 'highest', length: 55 } },
+    });
+    const shifted = warmupBars({
+      entry: {
+        op: 'gt',
+        left: { kind: 'close' },
+        right: { kind: 'prev', of: { kind: 'highest', length: 55 }, bars: 2 },
+      },
+    });
+    expect(base).toBe(55);
+    expect(shifted).toBe(57);
+  });
+
   const c = series([10, 11, 12, 13, 14]);
 
   it('fiyat kolonlarını doğrudan verir', () => {

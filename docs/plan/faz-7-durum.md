@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 365 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 372 test)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -17,6 +17,8 @@ piyasa ölçeğinde gösteren görünümdü.
 | Worker'da sembol aralığına bölünmüş backtest | `WorkerRequest.type = 'rank'` |
 | Stratejiler ekranı (iki kapsam) | `src/shell/screens/Strategies.tsx` |
 | Sıralamadan laboratuvara tek tıkla geçiş | `src/shell/screens/labRules.ts` |
+| Derin tarama (en likitler, tam geçmiş) | `WorkerRequest.type = 'rankSeries'` |
+| `prev` operandı (kırılım kuralları için) | `src/core/strategy/dsl.ts` |
 
 ## Kararlar
 
@@ -73,9 +75,35 @@ stopu (motor destekliyordu, editörde yoktu) ve operand başına "× katsayı"
 alanı (ör. "EMA(50) × 0,97"). Katsayı alanı yalnızca anlamlı olduğu yerde
 görünüyor.
 
+**Derin tarama kendiliğinden başlamaz.** Megabaytlarca indirme demek; ekran
+önce ne indirileceğini **manifestten okuyup** söylüyor ("30 sembol · 2,3 MB
+indirilecek ve 240 backtest koşacak"), başlatma kararı kullanıcının. Aynı anda
+üç sembol işleniyor ki zayıf makinede de akıcı kalsın; inen seriler
+önbellekte kaldığı için ikinci çalıştırma ağa çıkmıyor. Ölçüm: 30 sembol ×
+8 strateji = 240 backtest, 1,6 sn duvar saati (410 ms worker).
+
+## Yol boyunca yakalanan gerçek kusur
+
+İki hazır strateji **yapısal olarak ölüydü**: `highest(55)` içinde bulunulan
+barı da kapsar, dolayısıyla "kapanış > 55 barın en yükseği" hiçbir zaman doğru
+olamaz (kapanış o barın yükseğini aşamaz). Kural hiç tetiklenmiyordu ve tablo
+bunu "ölçülemedi" diye gösteriyordu — iki ayrı hatayı aynı anda gizleyen bir
+görünüm.
+
+İkisi de düzeltildi:
+
+1. DSL'e `prev` operandı eklendi: bir operandın N bar önceki değeri. Kırılım
+   kuralları artık `prev(highest(55), 1)` ile doğru yazılıyor; kaydırma ısınma
+   penceresine **ekleniyor** (55 bar + 1 = 56 bar veri gerekir). Editörde
+   "kaç bar önce" alanı olarak görünüyor.
+2. `rank.ts` "ölçülemedi" ile "sinyal yok" hükümlerini ayırdı: biri backtest'in
+   hiç koşmadığı, diğeri koşup kuralın hiç tetiklenmediği durum. İkisi de
+   "kaybetti" değildir.
+
+Düzeltme sonrası THYAO'nun tam geçmişinde: `breakout-55` 0 → 41 işlem,
+`new-high-momentum` 0 → 29 işlem.
+
 ## Sırada
 
-- Derin tarama: en likit N sembolün tam geçmişini indirip ortak pencere
-  yerine tam tarihle sıralama (indirme boyutu kullanıcıya önceden söylenerek).
 - Sektör/endüstri bazlı para akışı: şu an davranış kümeleri var, resmî
   sınıflandırma yok.

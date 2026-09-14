@@ -94,18 +94,40 @@ export function fromForm(form: LabForm): Strategy {
   };
 }
 
-/** Operandın ölçek katsayısı (yoksa 1) — editörde "× katsayı" alanı. */
+/**
+ * Operand sarmalayıcıları (ölçek ve geri kaydırma) editörde ayrı alanlar olarak
+ * gösterilir; çekirdek her zaman scale(prev(base)) sırasında yeniden kurulur ki
+ * aynı kural her zaman aynı JSON'a serileşsin.
+ */
 export function factorOf(operand: Operand): number {
-  return operand.kind === 'scale' ? operand.factor : 1;
+  if (operand.kind === 'scale') return operand.factor;
+  if (operand.kind === 'prev') return factorOf(operand.of);
+  return 1;
 }
 
-/** Operandın ölçeksiz hali — editör veri türünü bunun üstünden gösterir. */
+export function shiftOf(operand: Operand): number {
+  if (operand.kind === 'prev') return operand.bars;
+  if (operand.kind === 'scale') return shiftOf(operand.of);
+  return 0;
+}
+
+/** Operandın sarmalayıcısız hali — editör veri türünü bunun üstünden gösterir. */
 export function baseOf(operand: Operand): Operand {
-  return operand.kind === 'scale' ? operand.of : operand;
+  if (operand.kind === 'scale' || operand.kind === 'prev') return baseOf(operand.of);
+  return operand;
+}
+
+function wrap(base: Operand, factor: number, shift: number): Operand {
+  let out = base;
+  if (Number.isFinite(shift) && shift > 0) out = { kind: 'prev', of: out, bars: shift };
+  if (Number.isFinite(factor) && factor !== 1) out = { kind: 'scale', of: out, factor };
+  return out;
 }
 
 export function withFactor(operand: Operand, factor: number): Operand {
-  const base = baseOf(operand);
-  if (!Number.isFinite(factor) || factor === 1) return base;
-  return { kind: 'scale', of: base, factor };
+  return wrap(baseOf(operand), factor, shiftOf(operand));
+}
+
+export function withShift(operand: Operand, shift: number): Operand {
+  return wrap(baseOf(operand), factorOf(operand), shift);
 }

@@ -26,7 +26,16 @@ export type Operand =
   | { kind: 'highest'; length: number }
   | { kind: 'lowest'; length: number }
   /** Bir operandın yüzdesi: EMA200'ün %95'i gibi eşikler için. */
-  | { kind: 'scale'; of: Operand; factor: number };
+  | { kind: 'scale'; of: Operand; factor: number }
+  /**
+   * Operandın N bar önceki değeri.
+   *
+   * Kırılım kuralları bunu ZORUNLU kılar: `highest(55)` İÇİNDE BULUNULAN barı
+   * da kapsar, dolayısıyla "kapanış > 55 barın en yükseği" hiçbir zaman doğru
+   * olamaz (kapanış, o barın yükseğini aşamaz). Doğru kural "kapanış, ÖNCEKİ
+   * 55 barın en yükseğinin üstünde" — yani `prev(highest(55), 1)`.
+   */
+  | { kind: 'prev'; of: Operand; bars: number };
 
 export type Condition =
   | { op: 'gt' | 'gte' | 'lt' | 'lte'; left: Operand; right: Operand }
@@ -79,6 +88,8 @@ function key(operand: Operand): string {
       return `const:${operand.value}`;
     case 'scale':
       return `scale:${operand.factor}:${key(operand.of)}`;
+    case 'prev':
+      return `prev:${operand.bars}:${key(operand.of)}`;
     case 'close':
     case 'open':
     case 'high':
@@ -148,6 +159,13 @@ export function evaluateOperand(
       const base = evaluateOperand(operand.of, c, cache);
       out = new Float64Array(base.length);
       for (let i = 0; i < base.length; i++) out[i] = base[i] * operand.factor;
+      break;
+    }
+    case 'prev': {
+      const base = evaluateOperand(operand.of, c, cache);
+      const bars = Math.max(0, Math.floor(operand.bars));
+      out = new Float64Array(base.length).fill(NaN);
+      for (let i = bars; i < base.length; i++) out[i] = base[i - bars];
       break;
     }
   }
@@ -223,9 +241,13 @@ export function evaluateCondition(
 /** Stratejinin kullandığı en uzun pencere — ısınma barlarını atlamak için. */
 export function warmupBars(strategy: Strategy): number {
   let max = 0;
+  let shift = 0;
   const visitOperand = (operand: Operand) => {
     if (operand.kind === 'scale') visitOperand(operand.of);
-    else if ('length' in operand) max = Math.max(max, operand.length);
+    else if (operand.kind === 'prev') {
+      shift = Math.max(shift, operand.bars);
+      visitOperand(operand.of);
+    } else if ('length' in operand) max = Math.max(max, operand.length);
   };
   const visit = (condition: Condition) => {
     switch (condition.op) {
@@ -244,7 +266,8 @@ export function warmupBars(strategy: Strategy): number {
   visit(strategy.entry);
   if (strategy.exit) visit(strategy.exit);
   if (strategy.atrStop) max = Math.max(max, strategy.atrStop.length);
-  return max;
+  // Kaydırma pencereye EKLENİR: 55 barlık en yüksek + 1 bar geri = 56 bar veri.
+  return max + shift;
 }
 
 /** İnsan okunur özet — rapor ve kayıtlı stratejilerde gösterilir. */
@@ -255,6 +278,8 @@ export function describeCondition(condition: Condition): string {
         return String(o.value);
       case 'scale':
         return `${operand(o.of)} × ${o.factor}`;
+      case 'prev':
+        return `${o.bars} bar önceki ${operand(o.of)}`;
       case 'close':
         return 'kapanış';
       case 'open':

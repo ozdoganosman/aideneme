@@ -23,8 +23,10 @@ import {
   baseOf,
   factorOf,
   fromForm,
+  shiftOf,
   toForm,
   withFactor,
+  withShift,
   type SimpleOp,
   type SimpleRule,
 } from './labRules';
@@ -562,6 +564,7 @@ function OperandEditor({ value, onChange }: { value: Operand; onChange: (o: Oper
   // onu ayırıp ayrı bir katsayı alanı olarak gösteriyor, tür seçimi sadelensin.
   const base = baseOf(value);
   const factor = factorOf(value);
+  const shift = shiftOf(value);
   const kind = base.kind;
   const hasLength = 'length' in base;
   const isConst = kind === 'const';
@@ -577,8 +580,8 @@ function OperandEditor({ value, onChange }: { value: Operand; onChange: (o: Oper
         onChange={(next) => {
           if (next === 'const') onChange({ kind: 'const', value: 50 });
           else if (['close', 'open', 'high', 'low', 'volume'].includes(next))
-            onChange(withFactor({ kind: next as 'close' }, factor));
-          else onChange(withFactor({ kind: next as 'ema', length: 20 }, factor));
+            onChange(withShift(withFactor({ kind: next as 'close' }, factor), shift));
+          else onChange(withShift(withFactor({ kind: next as 'ema', length: 20 }, factor), shift));
         }}
         options={OPERAND_KINDS}
       />
@@ -608,8 +611,18 @@ function OperandEditor({ value, onChange }: { value: Operand; onChange: (o: Oper
           min={0.1}
           max={3}
           step={0.01}
-          onChange={(next) => onChange(withFactor(base, next))}
+          onChange={(next) => onChange(withFactor(value, next))}
           hint="1 = olduğu gibi"
+        />
+      ) : null}
+      {!isConst ? (
+        <NumberField
+          label="Kaç bar önce"
+          value={shift}
+          min={0}
+          max={50}
+          onChange={(next) => onChange(withShift(value, next))}
+          hint="0 = bu bar"
         />
       ) : null}
     </div>

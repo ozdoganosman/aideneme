@@ -1036,6 +1036,24 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--sp-3);
 }
+.rank__deep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+}
+.rank__deep p {
+  margin: 0;
+}
+.rank__deep progress {
+  flex: 1 1 200px;
+  height: 6px;
+}
 .rank__table {
   width: 100%;
   border-collapse: collapse;

@@ -8,11 +8,15 @@ import type { SymbolResult } from '../../core/strategy/rank';
 
 const rankFn = vi.fn();
 const backtestFn = vi.fn();
+const rankSeriesFn = vi.fn();
+const pulseFn = vi.fn();
 const FAKE_ANALYSIS = {
   client: {
     size: 3,
     rank: (...a: unknown[]) => rankFn(...a),
     backtest: (...a: unknown[]) => backtestFn(...a),
+    rankSeries: (...a: unknown[]) => rankSeriesFn(...a),
+    pulse: (...a: unknown[]) => pulseFn(...a),
   },
   symbols: ['AAA', 'BBB'],
   bars: 250,
@@ -22,8 +26,12 @@ const FAKE_ANALYSIS = {
 vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
 const seriesFn = vi.fn();
+const manifestFn = vi.fn();
 vi.mock('../../data-client/client', () => ({
-  dataClient: { series: (...a: unknown[]) => seriesFn(...a) },
+  dataClient: {
+    series: (...a: unknown[]) => seriesFn(...a),
+    manifest: (...a: unknown[]) => manifestFn(...a),
+  },
 }));
 
 import Strategies from './Strategies';
@@ -93,6 +101,32 @@ beforeEach(() => {
   rankFn.mockResolvedValue({ results, skipped, symbols: 200, ms: 164.7 });
   seriesFn.mockResolvedValue({ candles: candles(3000) });
   backtestFn.mockResolvedValue({ metrics: metrics({ excessCagrPct: 1.5 }), ms: 12 });
+  pulseFn.mockResolvedValue({
+    rows: [
+      { symbol: 'AAA', value: 900 },
+      { symbol: 'BBB', value: 500 },
+    ],
+    summary: {},
+    ms: 5,
+  });
+  manifestFn.mockResolvedValue({
+    version: 1,
+    market: 'bist',
+    generated: 1,
+    symbols: {
+      AAA: { f: 'AAA.bin', n: 3000, d0: 1, d1: 2, b: 1_048_576, h: 'a' },
+      BBB: { f: 'BBB.bin', n: 3000, d0: 1, d1: 2, b: 524_288, h: 'b' },
+    },
+  });
+  rankSeriesFn.mockImplementation(async (symbol: string) => ({
+    symbol,
+    metrics: Object.fromEntries(
+      STRATEGY_PRESETS.slice(0, 2).map((p) => [p.id, metrics({ excessCagrPct: 3 })]),
+    ),
+    skipped: STRATEGY_PRESETS.slice(2).map((p) => p.id),
+    bars: 3000,
+    ms: 9,
+  }));
 });
 
 describe('Stratejiler', () => {
@@ -137,6 +171,34 @@ describe('Stratejiler', () => {
     expect(seriesFn).toHaveBeenCalledWith('bist', 'AAA');
     expect(screen.queryByText(/p \(iki yönlü/)).toBeNull();
     expect(screen.getByText(/tek gözlem olduğu için p-değeri hesaplanmaz/i)).toBeInTheDocument();
+  });
+
+  it('derin tarama kendiliğinden başlamaz, önce indirme boyutunu söyler', async () => {
+    const user = userEvent.setup();
+    render(<Strategies state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Kapsam'), 'deep');
+    // 1 MB + 0,5 MB = 1,5 MB; manifestten okunuyor, tahmin değil.
+    await waitFor(() => expect(screen.getByText('1.5 MB')).toBeInTheDocument());
+    expect(rankSeriesFn).not.toHaveBeenCalled();
+    expect(seriesFn).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Derin taramayı başlat' }));
+    await waitFor(() => expect(rankSeriesFn).toHaveBeenCalledTimes(2));
+    expect(seriesFn).toHaveBeenCalledWith('bist', 'AAA');
+  });
+
+  it('derin taramada ısınma sığmayan strateji ölçülemedi kalır', async () => {
+    const user = userEvent.setup();
+    render(<Strategies state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+
+    await user.selectOptions(screen.getByLabelText('Kapsam'), 'deep');
+    await user.click(await screen.findByRole('button', { name: 'Derin taramayı başlat' }));
+    await waitFor(() => expect(screen.getAllByText('ölçülemedi').length).toBeGreaterThan(0));
+    // Ölçülenler için p-değeri sütunu derin kapsamda da var (birden çok sembol).
+    expect(screen.getByText(/p \(iki yönlü/)).toBeInTheDocument();
   });
 
   it('en iyi sembole tıklamak sembol masasına götürür', async () => {

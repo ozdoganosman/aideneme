@@ -45,8 +45,12 @@ export interface RankRow {
   pValue: number;
   /** Holm–Bonferroni ile çoklu test düzeltmesi uygulanmış p-değeri. */
   adjustedP: number;
-  /** 'ölçülemedi': ısınma pencereye sığmadı, hiç sonuç üretilmedi. */
-  verdict: 'anlamlı' | 'belirsiz' | 'zayıf' | 'ölçülemedi';
+  /**
+   * 'ölçülemedi' — ısınma pencereye sığmadı, backtest hiç koşmadı.
+   * 'sinyal yok' — koştu ama kural hiçbir sembolde tetiklenmedi.
+   * İkisi farklı şeydir ve ikisi de "kaybetti" DEĞİLDİR.
+   */
+  verdict: 'anlamlı' | 'belirsiz' | 'zayıf' | 'ölçülemedi' | 'sinyal yok';
   /** Bu stratejinin en çok fark yarattığı semboller. */
   best: { symbol: string; excessPct: number; cagrPct: number; trades: number }[];
 }
@@ -166,7 +170,9 @@ export function rankStrategies(
     // kaybetmiş saymak, olmayan bir bilgiyi varmış gibi göstermektir.
     const measured = Number.isFinite(row.medianExcessPct);
     const verdict: RankRow['verdict'] = !measured
-      ? 'ölçülemedi'
+      ? row.symbols > 0 && row.withTrades === 0
+        ? 'sinyal yok'
+        : 'ölçülemedi'
       : Number.isFinite(adjustedP) && adjustedP < alpha && positive
         ? 'anlamlı'
         : positive
