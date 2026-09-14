@@ -764,3 +764,39 @@
     padding-top: var(--sp-5);
   }
 }
+
+/* Tablo içi mini fiyat grafiği.
+   Renk bir süs değil ikinci bir bilgi kanalı, ama TEK kanal da değil:
+   çizginin altındaki dolgu yönü renkten bağımsız okunur kılıyor (renk
+   körlüğü, gri baskı). */
+.spark {
+  display: block;
+  overflow: visible;
+}
+.spark--up {
+  color: var(--up);
+}
+.spark--down {
+  color: var(--down);
+}
+.spark--flat {
+  color: var(--text-muted);
+}
+.spark--empty {
+  display: inline-block;
+  min-width: 88px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Sıfır çizgisi etrafında sıralı dağılım (strateji tablosu).
+   Medyanın gizlediği yayılımı gösteriyor. */
+.spread {
+  display: block;
+}
+.spread--empty {
+  display: inline-block;
+  min-width: 96px;
+  color: var(--text-muted);
+  text-align: center;
+}

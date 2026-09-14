@@ -53,6 +53,7 @@ import { LoadNote } from '../LoadNote';
 import { Announce } from '../Announce';
 import { DataError } from '../DataError';
 import { CopyLink } from '../CopyLink';
+import { Sparkline } from '../../ui/Sparkline';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -374,6 +375,21 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
         render: (r) => r.symbol,
         sortValue: (r) => r.symbol,
       },
+      // Sembolün hemen yanında şekil. 14 sütun sayıya bakıp "bu hisse nasıl
+      // hareket ediyor" sorusunu cevaplamak için tek tek tıklamak
+      // gerekiyordu; sayı kesindir ama şekil BİR BAKIŞTA okunur.
+      // Sıralama değeri dönem değişimi: sütun tıklanabilir olmalı, yoksa
+      // "en çok yükselen şekli" bulmanın yolu yok.
+      {
+        key: 'spark',
+        header: '1 yıl',
+        width: '104px',
+        render: (r: ScreenRow) => (
+          <Sparkline points={r.spark} label={`${r.symbol} 1 yıllık seyir`} />
+        ),
+        sortValue: (r: ScreenRow) =>
+          r.spark && r.spark.length > 1 ? r.spark[r.spark.length - 1] / r.spark[0] - 1 : NaN,
+      } as Column<ScreenRow>,
       // Sektör sütunu yalnızca sınıflandırma varsa; bilinmeyen "—" olarak
       // görünür, boş hücre "sektörsüz" izlenimi vermesin.
       ...(sectors

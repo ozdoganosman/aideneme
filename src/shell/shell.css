@@ -1129,9 +1129,9 @@
   flex-direction: column;
   gap: var(--sp-3);
   padding: var(--sp-4);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--surface-0);
 }
 .desk__sector header {
   display: flex;
@@ -1177,7 +1177,7 @@
   font-variant-numeric: tabular-nums;
 }
 .desk__sector-table tr.is-current {
-  background: var(--surface-raised, var(--bg));
+  background: var(--surface-2);
   font-weight: 600;
 }
 
@@ -1221,9 +1221,9 @@
   align-items: center;
   gap: var(--sp-1);
   padding: 4px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--surface-0);
   font-size: var(--fs-sm);
   cursor: pointer;
 }
@@ -1255,9 +1255,9 @@
   align-items: flex-end;
   gap: var(--sp-3);
   padding: var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--surface-0);
 }
 .rank__lead {
   margin: 0;
@@ -1276,9 +1276,9 @@
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--surface-0);
   font-size: var(--fs-sm);
 }
 .rank__deep p {
@@ -1337,7 +1337,7 @@
   margin-top: var(--sp-2);
   padding: var(--sp-2);
   border-radius: var(--radius-sm);
-  background: var(--surface-raised, var(--bg));
+  background: var(--surface-2);
   font-weight: 400;
 }
 .rank__detail p {
@@ -1388,9 +1388,9 @@
   align-items: flex-end;
   gap: var(--sp-3);
   padding: var(--sp-3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--surface-0);
 }
 .model__verdict {
   display: flex;
@@ -1398,9 +1398,9 @@
   align-items: flex-start;
   gap: var(--sp-2);
   padding: var(--sp-4);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--surface-0);
 }
 .model__lead {
   margin: 0;
@@ -1421,9 +1421,9 @@
   flex-direction: column;
   gap: var(--sp-3);
   padding: var(--sp-4);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--surface-0);
 }
 .model__header {
   display: flex;

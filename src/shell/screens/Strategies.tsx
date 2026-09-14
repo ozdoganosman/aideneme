@@ -29,6 +29,7 @@ import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
 import { Prov } from '../Prov';
 import { Announce } from '../Announce';
+import { Spread } from '../../ui/Spread';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -428,6 +429,11 @@ export default function Strategies({ state, push }: Props) {
                 <th scope="col" className="num">
                   Al-tut farkı
                 </th>
+                {/* Medyan yayılımı gizliyor: "her sembolde biraz kaybeden"
+                    kural ile "yarısında kazanıp yarısında çöken" kural aynı
+                    medyanı verebilir. Fark, kuralı kullanıp kullanmama
+                    kararının kendisi. */}
+                {scope !== 'symbol' ? <th scope="col">Dağılım</th> : null}
                 <th scope="col" className="num">
                   Yıllık
                 </th>
@@ -504,6 +510,14 @@ export default function Strategies({ state, push }: Props) {
                     ) : null}
                   </th>
                   <td className="num">{pct(row.medianExcessPct)}</td>
+                  {scope !== 'symbol' ? (
+                    <td>
+                      <Spread
+                        values={row.excessSpread}
+                        label={`${row.name} al-tut farkı dağılımı`}
+                      />
+                    </td>
+                  ) : null}
                   <td className="num">{pct(row.medianCagrPct)}</td>
                   <td className="num">{drawdown(row.medianMaxDDPct)}</td>
                   <td className="num">{plain(row.medianTrades, 0)}</td>
@@ -574,5 +588,8 @@ function singleSymbolRow(id: string, symbol: string, metrics: BacktestMetrics): 
         trades: metrics.trades,
       },
     ],
+    // Tek sembolde dağılım YOKTUR: tek gözlemi dağılım gibi çizmek,
+    // olmayan bir yayılım varmış izlenimi verirdi.
+    excessSpread: [],
   };
 }

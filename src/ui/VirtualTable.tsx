@@ -26,6 +26,32 @@ export interface VirtualTableProps<T> {
 }
 
 /**
+ * Sütun genişliği verilmemişse taban ölçü.
+ *
+ * Sayısal sütun daha geniş: Türkçe biçimde bir yüzde "+%18,67" ve bir çarpan
+ * "1.647,12×" gibi uzayabiliyor; metin sütunu ise kırpılsa da anlamını
+ * büyük ölçüde koruyor ("Bankacıl…" hâlâ okunur), sayı korumuyor.
+ */
+const DEFAULT_WIDTH = 120;
+const DEFAULT_NUM_WIDTH = 104;
+
+function columnWidth<T>(c: Column<T>): string {
+  return c.width ?? `${c.numeric ? DEFAULT_NUM_WIDTH : DEFAULT_WIDTH}px`;
+}
+
+/** Sütun genişliklerinin toplamı — tablo bundan dar olamaz. */
+export function minTableWidth<T>(columns: Column<T>[]): string {
+  const toplam = columns.reduce((sum, c) => {
+    const w = columnWidth(c);
+    const px = Number.parseFloat(w);
+    // px dışında bir birim verilmişse (%, em) toplama katılamaz; o sütun
+    // taban ölçüyle sayılıyor — tahmin etmektense muhafazakâr davran.
+    return sum + (w.endsWith('px') && Number.isFinite(px) ? px : DEFAULT_WIDTH);
+  }, 0);
+  return `${toplam}px`;
+}
+
+/**
  * Pencerelenmiş tablo. 600+ satırlık tarama sonucunda DOM'da yalnızca görünen
  * satırlar durur; üstte/altta boşluk satırları kaydırma çubuğunu doğru tutar.
  *
@@ -69,11 +95,25 @@ export function VirtualTable<T>({
         role="region"
         aria-label={label}
       >
-        <table className="ui-vtable__table">
+        {/*
+          Tablo sütunların TOPLAMINDAN dar olamaz.
+
+          `table-layout: fixed` + `width: 100%` sütunları kaba kapsayıcıya
+          sığdırıyordu ve taşan hücreyi `text-overflow: ellipsis` kesiyordu.
+          Ölçüldü: sütun eklenince "+%18,67" ekranda "+%18,…" oldu — kırpılmış
+          bir sayı okunamaz, yani YANLIŞ bir sayıdır; oysa aynı hücrenin işi
+          tam olarak o sayıyı söylemek.
+
+          Genişlik sütunun kendi ölçüsünden geliyor, `fixed` yerleşim korunuyor
+          (sanallaştırılmış tabloda `auto` yerleşim, yalnızca görünen satırları
+          ölçtüğü için kaydırdıkça sütun genişliklerini oynatırdı). Toplam
+          kapsayıcıyı aşarsa tablo kendi kabında yatay kayar.
+        */}
+        <table className="ui-vtable__table" style={{ minWidth: minTableWidth(columns) }}>
           <caption className="visually-hidden">{label}</caption>
           <colgroup>
             {columns.map((c) => (
-              <col key={c.key} style={c.width ? { width: c.width } : undefined} />
+              <col key={c.key} style={{ width: columnWidth(c) }} />
             ))}
           </colgroup>
           <thead>

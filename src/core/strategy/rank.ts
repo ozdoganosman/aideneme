@@ -53,6 +53,18 @@ export interface RankRow {
   verdict: 'anlamlı' | 'belirsiz' | 'zayıf' | 'ölçülemedi' | 'sinyal yok';
   /** Bu stratejinin en çok fark yarattığı semboller. */
   best: { symbol: string; excessPct: number; cagrPct: number; trades: number }[];
+  /**
+   * Sembol başına al-tut farkının SIRALI dağılımı (küçükten büyüğe, puan).
+   *
+   * Medyan tek sayıdır ve yayılımı gizler: "medyan -%2,6" iki çok farklı
+   * stratejiyi aynı gösterir — biri her sembolde tutarlı olarak biraz
+   * kaybeder, öteki yarısında kazanıp yarısında çöker. İkisi arasındaki
+   * fark, kuralı kullanıp kullanmama kararının kendisidir.
+   *
+   * Sıralı tutuluyor çünkü çizilecek şey dağılım; sembol kimliği bu
+   * sütunun sorusu değil (o `best` içinde).
+   */
+  excessSpread: number[];
 }
 
 export interface RankOptions {
@@ -148,6 +160,7 @@ export function rankStrategies(
       medianExposurePct: median(used.map((r) => r.metrics.exposurePct)),
       beatPct: decided > 0 ? (beats / decided) * 100 : NaN,
       pValue: decided > 0 ? signTest(beats, decided) : NaN,
+      excessSpread: excess.filter((v) => Number.isFinite(v)).sort((a, b) => a - b),
       best: [...used]
         .filter((r) => Number.isFinite(r.metrics.excessCagrPct))
         .sort((a, b) => b.metrics.excessCagrPct - a.metrics.excessCagrPct)
@@ -197,6 +210,7 @@ export function rankStrategies(
       adjustedP,
       verdict,
       best: row.best,
+      excessSpread: row.excessSpread,
     };
   });
 }

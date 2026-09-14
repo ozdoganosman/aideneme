@@ -1,6 +1,7 @@
 import { adxArr, emaArr } from '../indicators/calc';
 import { atrArr, rsiArr } from '../indicators/rsi';
 import { changeSince } from '../stats/summary';
+import { sparkPoints } from '../chart/spark';
 import type { Candles } from '../data/types';
 
 /**
@@ -177,6 +178,15 @@ export interface ScreenRow {
   bars: number;
   /** Sektör (varsa) — sayısal olmadığı için `values` içinde duramaz. */
   sector?: string;
+  /**
+   * Tablo içi mini grafik için seyreltilmiş kapanış serisi.
+   *
+   * Sayı kesindir ama ŞEKİL okunur: 14 sütun sayıya bakıp "bu hisse nasıl
+   * hareket ediyor" sorusunu cevaplamak için tek tek tıklamak gerekiyordu.
+   * Worker'dan geçtiği için burada duruyor — ekran tarafında yeniden
+   * hesaplamak 200 sembolün tam serisini ana iş parçacığına taşımak demekti.
+   */
+  spark?: number[];
 }
 
 const pctChange = (c: Candles, back: number): number => {
@@ -225,6 +235,9 @@ export function metricsFor(
   return {
     symbol,
     bars: n,
+    // Son bir yıl: tablodaki "1 ay" sütunundan daha geniş bir bağlam veriyor
+    // ama tüm geçmişi sıkıştırıp son hareketi görünmez kılmıyor.
+    spark: sparkPoints(c.close.subarray(Math.max(0, n - 250)), 40),
     values: {
       last,
       chg1: pctChange(c, 1),
