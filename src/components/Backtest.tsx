@@ -364,7 +364,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
   };
 
   // Load an optimizer result into the builder so it can be tuned + saved.
-  const useCandidate = (s: CustomStrategy) =>
+  const applyCandidate = (s: CustomStrategy) =>
     setDraft({ id: '', name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
 
   const setBuy = (buy: Cond[]) => setDraft((d) => ({ ...d, buy }));
@@ -627,7 +627,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
                                 </span>
                               </div>
                             </div>
-                            <button className="opt-use" onClick={() => useCandidate(o.strat)} title="Kuralı düzenleyiciye yükle">Kullan →</button>
+                            <button className="opt-use" onClick={() => applyCandidate(o.strat)} title="Kuralı düzenleyiciye yükle">Kullan →</button>
                           </div>
                         );
                       })}

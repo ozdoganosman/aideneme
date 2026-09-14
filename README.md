@@ -27,6 +27,24 @@ Performansın sırrı kütüphane değil, **viewport decimation + LOD**'dur
 
 Sonuç: 1m, 100k veya milyonlarca mum — pan/zoom hep akıcı.
 
+## Yeni nesil sürüm (Faz 0–1 tamamlandı)
+
+Bu repo, [`docs/plan/next-gen-finans-platformu.md`](docs/plan/next-gen-finans-platformu.md)
+planına göre yeniden kuruluyor. İlk iki faz yayında:
+
+- **`core/` katmanı** (`src/core/`): saf TypeScript analiz kodu — DOM, React ve
+  I/O lint ile yasak; Node'da ve Worker'da aynı kodla çalışır.
+- **Tasarım sistemi** (`src/ui/`): token tabanlı iki tema + 18 erişilebilir
+  primitive. Canlı galeri: `next.html?v=kitaplik`.
+- **Uygulama kabuğu** (`src/shell/`): 7 ekran, `Cmd/Ctrl+K` komut paleti,
+  paylaşılabilir URL durumu, tek responsive ağaç (ayrı mobil bileşen yok).
+- **Kalite kapısı**: `npm run verify` → tip · lint · biçim · test · build ·
+  performans bütçesi. CI'da da aynısı çalışır (`.github/workflows/verify.yml`).
+
+Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
+(`index.html`) Faz 2'de Sembol Masası veriyle dolana kadar yayında kalıyor.
+Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md).
+
 ## Çalıştırma
 
 ```bash
