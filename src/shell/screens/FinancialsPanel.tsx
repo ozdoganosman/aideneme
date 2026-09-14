@@ -58,20 +58,24 @@ function prov(title: string, body: string) {
 export function FinancialsPanel({ market, symbol, price }: Props) {
   const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
   const [fin, setFin] = useState<Financials | null>(null);
+  const [noStatement, setNoStatement] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setFin(null);
+    setNoStatement(false);
     Promise.all([
       fundamentalsClient.snapshot(market),
       fundamentalsClient.financials(market, symbol),
+      fundamentalsClient.noStatementSymbols(market),
     ])
-      .then(([snap, financials]) => {
+      .then(([snap, financials, tablosuz]) => {
         if (cancelled) return;
         setSnapshot(snap);
         setFin(financials);
+        setNoStatement(tablosuz.has(symbol));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -119,7 +123,23 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
   if (loading) return <Skeleton count={4} height="60px" />;
 
   if (!row && !fin) {
-    return (
+    // İki ayrı durum, iki ayrı cümle. "Veri yok" demek endeks ve fonlarda
+    // YANLIŞ: XU100'ün bilançosu eksik değil, hiç yoktur. Ölçüldü — tablosu
+    // gelmeyen 97 sembolün 52'si doğrudan endeks, kalanının çoğu fon ve
+    // varant. Kullanıcıyı olmayan bir kusuru beklemeye bırakmamak gerekiyor.
+    return noStatement ? (
+      <EmptyState
+        icon={<Icon name="report" size={28} />}
+        title="Bu araç finansal tablo yayımlamıyor"
+        description={
+          <>
+            Endeksler (XU100, XBANK…), fonlar ve varantlar bilanço ya da gelir tablosu açıklamaz —
+            burada gösterilecek bir şey yok. Fiyat, grafik ve teknik ölçüler diğer sekmelerde
+            çalışmaya devam ediyor.
+          </>
+        }
+      />
+    ) : (
       <EmptyState
         icon={<Icon name="report" size={28} />}
         title="Bu sembol için finansal veri yok"

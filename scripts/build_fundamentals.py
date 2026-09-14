@@ -230,12 +230,43 @@ def group_order(symbol: str) -> list[str]:
     return ["1", "2", "3"]
 
 
-def fetch_one(symbol: str, start_year: int, end_year: int, fetch=None) -> dict | None:
+# Kaynak kütüphanesinin "bu sembol için veri yok" hatasının imzası. Kütüphane
+# üç şablon adını da doğruluyor ve BAŞKA bir şablon kabul etmiyor
+# ('1' XI_29, '2' UFRS, '3' UFRS_K) — yani denenecek dördüncü bir tablo yok.
+_VERI_YOK = "no financial data was fetched"
+
+
+def fetch_one(
+    symbol: str, start_year: int, end_year: int, fetch=None
+) -> tuple[dict | None, str]:
+    """
+    (kayıt, sonuç) — sonuç: "ok" · "veriyok" · "tanimsiz" · "hata".
+
+    "Tablo alınamadı"ın üç ayrı anlamı var ve karıştırmak pahalıya patlıyor:
+
+    - **veriyok**: üç şablonun üçü de kütüphanenin "hiç finansal veri
+      çekilemedi" hatasını attı. Endeksler (XU100, XBANK), fonlar (ALTIN,
+      GLDTR, ZGOLD) ve varantlar bilanço YAYIMLAMAZ; bu bir eksiklik değil,
+      aracın türü. Ölçüldü: 655 sembolün 96'sı böyle, 52'si doğrudan endeks.
+    - **tanimsiz**: tablo GELDİ ama tanınan kalem yok. Bu bir AYIKLAMA
+      boşluğu, aracın türü değil — banka bilançolarında tam olarak bu oldu
+      (kalemler oradaydı, madde numarası yüzünden eşleşmiyordu). Bunu
+      "tablosuz" saymak gerçek bir kusuru kalıcı olarak gizlerdi, o yüzden
+      başarısızlık sayılıyor ve teşhis satırları basılıyor.
+    - **hata**: başka bir istisna — ağ, zaman aşımı, kaynak arızası.
+
+    NOT: kütüphane ağ hatasını da yutup aynı "veri yok" hatasına çeviriyor
+    (ölçüldü: proxy engelliyken de aynı ValueError çıkıyor). Bu yüzden
+    "veriyok" tek başına yeterli kanıt değil; build_all bunu ancak AYNI
+    turda başka semboller inmişse (yani ağ çalışıyorsa) kalıcı sayıyor.
+    """
     if fetch is None:
         from isyatirimhisse import fetch_financials as isy_fetch
 
         fetch = isy_fetch
 
+    tablo_geldi = False
+    baska_hata = False
     for group in group_order(symbol):
         try:
             df = fetch(
@@ -246,16 +277,21 @@ def fetch_one(symbol: str, start_year: int, end_year: int, fetch=None) -> dict |
                 financial_group=group,
             )
         except Exception as e:  # noqa: BLE001
+            if _VERI_YOK not in str(e).lower():
+                baska_hata = True
             print(f"[fund] {symbol}: grup {group} çekilemedi ({e})", file=sys.stderr)
             continue
 
+        tablo_geldi = True
         record = extract(df, symbol)
         if record:
             record["group"] = group
-            return record
+            return record, "ok"
         print(f"[fund] {symbol}: grup {group} boş döndü, sıradaki şablon", file=sys.stderr)
 
-    return None
+    if tablo_geldi:
+        return None, "tanimsiz"
+    return None, ("hata" if baska_hata else "veriyok")
 
 
 def ttm(periods: list[str], values: list[float | None], index: int) -> float | None:
@@ -329,6 +365,22 @@ def build_snapshot(records: list[dict]) -> dict:
     }
 
 
+def _uyarla(f):
+    """
+    Test sahtelerini (sembol → kayıt|None) build_all'ın sözleşmesine uyarlar.
+
+    Sahteler kasten basit tutuluyor: sınananlar kaldığı yerden devam,
+    süre bütçesi ve sayaçlar; sonuç kodu bunların hiçbirini değiştirmiyor.
+    "tablosuz" ayrımının kendi testi ayrıca var.
+    """
+
+    def g(symbol: str):
+        r = f(symbol)
+        return r, ("ok" if r else "hata")
+
+    return g
+
+
 def self_test() -> None:
     """TTM mantığını sentetik dönemlerle sına (ağ gerektirmez)."""
     periods = ["2022/12", "2023/3", "2023/6", "2023/9", "2023/12", "2024/3", "2024/6"]
@@ -375,7 +427,7 @@ def self_test() -> None:
             }
 
         try:
-            build_all(["S1", "S2", "DUR", "S3"], out, fake_fetch, every=2)
+            build_all(["S1", "S2", "DUR", "S3"], out, _uyarla(fake_fetch), every=2)
         except KeyboardInterrupt:
             pass
 
@@ -405,7 +457,7 @@ def self_test() -> None:
         records, fetched, failed = build_all(
             [f"S{i}" for i in range(1, 11)],
             out,
-            yavas_fetch,
+            _uyarla(yavas_fetch),
             every=100,          # ara kayıt DEVREYE GİRMESİN: sonu sınanıyor
             max_seconds=25,
             now=sahte_saat,
@@ -426,7 +478,7 @@ def self_test() -> None:
         for tur in range(MAX_ATTEMPTS):
             kalan = pending_symbols(["YOK"], out, failures=read_failures(out))
             assert kalan == ["YOK"], f"{tur + 1}. turda hâlâ denenmeli"
-            build_all(kalan, out, hep_basarisiz)
+            build_all(kalan, out, _uyarla(hep_basarisiz))
 
         kalan = pending_symbols(["YOK"], out, failures=read_failures(out))
         assert kalan == [], f"{MAX_ATTEMPTS} denemeden sonra listeden düşmeliydi"
@@ -437,7 +489,7 @@ def self_test() -> None:
         def basarili(symbol: str):
             return {"symbol": symbol, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}
 
-        build_all(["YOK"], out, basarili)
+        build_all(["YOK"], out, _uyarla(basarili))
         assert read_failures(out).get("YOK", 0) == 0, "başarı sayacı sıfırlamalı"
 
     # TABLO ŞABLONU tek denemede bırakılmamalı. Ölçüldü: hiç alınamayan 12
@@ -484,7 +536,7 @@ def self_test() -> None:
             return {"symbol": symbol, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}
 
         hedef = [f"P{i}" for i in range(1, 13)] + ["KOTU"]
-        _, fetched, failed = build_all(hedef, out, yavas, workers=4)
+        _, fetched, failed = build_all(hedef, out, _uyarla(yavas), workers=4)
         assert fetched == 12, f"paralel yolda 12 sembol inmeliydi, {fetched}"
         assert failed == 1, f"başarısız sembol paralel yolda da sayılmalı, {failed}"
         assert eszamanli["en_cok"] > 1, "eşzamanlılık hiç oluşmadı — paralel yol çalışmıyor"
@@ -505,7 +557,7 @@ def self_test() -> None:
         _, fetched, _ = build_all(
             [f"Q{i}" for i in range(1, 21)],
             out,
-            saatli,
+            _uyarla(saatli),
             every=100,
             max_seconds=25,
             now=lambda: saat[0],
@@ -568,10 +620,73 @@ def self_test() -> None:
             return SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "Boş", "2024/6": 1.0}])
         return SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "Ana Ortaklık Payları", "2024/6": 42.0}])
 
-    record = fetch_one("AGESA", 2024, 2024, fetch=sahte_kaynak)
+    record, sonuc = fetch_one("AGESA", 2024, 2024, fetch=sahte_kaynak)
     assert record is not None, "üçüncü şablonda bulunmalıydı"
+    assert sonuc == "ok", sonuc
     assert record["group"] == "3", record["group"]
     assert denenen == ["1", "2", "3"], denenen
+
+    # TABLOSUZ ile HATA ayrı şeyler. Ölçüldü: 655 sembolün 97'si hiç tablo
+    # vermiyor ve 52'si doğrudan endeks (XU100, XBANK…); fonlar ve varantlar
+    # da bilanço yayımlamaz. Bunları "başarısız" saymak her turda boşuna
+    # istek demek, arayüzde de kullanıcıya bir kusur varmış gibi görünüyor.
+    def hep_bos(symbols, start_year, end_year, exchange, financial_group):
+        return SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "Tanınmayan", "2024/6": 1.0}])
+
+    # Tablo GELDİ ama kalem tanınmadı → ayıklama boşluğu, aracın türü değil.
+    # Bunu "tablosuz" saymak banka kusurunu kalıcı olarak gizlerdi.
+    kayit, sonuc = fetch_one("AKBNK", 2024, 2024, fetch=hep_bos)
+    assert kayit is None and sonuc == "tanimsiz", sonuc
+
+    # Kaynağın "hiç veri yok" hatası → araç tablo yayımlamıyor olabilir.
+    def veri_yok(symbols, start_year, end_year, exchange, financial_group):
+        raise ValueError("No financial data was fetched for any symbol.")
+
+    kayit, sonuc = fetch_one("XU100", 2024, 2024, fetch=veri_yok)
+    assert kayit is None and sonuc == "veriyok", sonuc
+
+    # Başka bir istisna → gerçek hata, yeniden denenmeli.
+    def hep_patla(symbols, start_year, end_year, exchange, financial_group):
+        raise RuntimeError("ağ")
+
+    kayit, sonuc = fetch_one("THYAO", 2024, 2024, fetch=hep_patla)
+    assert kayit is None and sonuc == "hata", sonuc
+
+    # ...ve build_all ikisini ayrı kovalara koymalı.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+
+        def karisik(symbol: str):
+            if symbol == "XU100":
+                return None, "veriyok"
+            if symbol == "KIRIK":
+                return None, "hata"
+            return {"symbol": symbol, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}, "ok"
+
+        # AAA önce iniyor: ağın çalıştığı kanıtlanıyor, XU100 kalıcı sayılabilir.
+        _, fetched, failed = build_all(["AAA", "XU100", "KIRIK"], out, karisik)
+        assert fetched == 1 and failed == 1, (fetched, failed)
+        assert read_nostatement(out) == {"XU100"}, read_nostatement(out)
+        assert read_failures(out).get("XU100") is None, "tablosuz sembol başarısız sayılmamalı"
+        assert read_failures(out).get("KIRIK") == 1, "gerçek hata sayılmalı"
+        # Tablosuz sembol bir daha denenmiyor, hatalı sembol deneniyor.
+        kalan = pending_symbols(
+            ["AAA", "XU100", "KIRIK"], out,
+            failures=read_failures(out), nostatement=read_nostatement(out),
+        )
+        assert kalan == ["KIRIK"], kalan
+        # AĞ ÇÖKTÜĞÜNDE "veriyok" kalıcı sayılmamalı. Kütüphane ağ hatasını da
+        # aynı hataya çeviriyor; hiçbir sembol inmediği bir turda 655 sembolü
+        # birden "tablo yayımlamıyor" diye işaretlemek veriyi yok ederdi.
+        with tempfile.TemporaryDirectory() as tmp2:
+            out2 = Path(tmp2)
+            _, f2, b2 = build_all(["AAA", "BBB"], out2, lambda s: (None, "veriyok"))
+            assert (f2, b2) == (0, 2), (f2, b2)
+            assert read_nostatement(out2) == set(), "ağ şüpheliyken kalıcı yargı verilmemeli"
+
+        # Kaynak düzelirse "tablosuz" kaydı kalkıyor.
+        build_all(["XU100"], out, lambda s: ({"symbol": s, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}, "ok"))
+        assert read_nostatement(out) == set(), read_nostatement(out)
 
     # Şablon uymadığında GELEN kalem adları kayda yazılmalı. Ölçüldü:
     # AKBNK/ALBRK'de tablo geliyor ama tanınan kalem yok; hangi adların
@@ -637,6 +752,9 @@ def self_test() -> None:
 
 SNAPSHOT_FILE = "snapshot.json"
 FAILURES_FILE = "failures.json"
+# Kaynağın "bu sembolde finansal tablo yok" dediği semboller. Arayüz bunu
+# "henüz indirilmedi"den ayırmak için okuyor.
+NOSTATEMENT_FILE = "tablosuz.json"
 MAX_ATTEMPTS = 3
 
 # Ayıklama kurallarının sürümü. Kalem adları, madde numarası soyma ya da
@@ -688,11 +806,34 @@ def write_failures(failures: dict[str, int], out_dir: Path) -> None:
     )
 
 
+def read_nostatement(out_dir: Path) -> set[str]:
+    """Kaynakta finansal tablosu OLMAYAN semboller (endeks, fon, varant)."""
+    try:
+        data = json.loads((out_dir / NOSTATEMENT_FILE).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError, AttributeError):
+        return set()
+    if not isinstance(data, dict) or data.get("_version") != EXTRACT_VERSION:
+        return set()
+    return {str(s) for s in data.get("symbols", []) if s}
+
+
+def write_nostatement(symbols: set[str], out_dir: Path) -> None:
+    (out_dir / NOSTATEMENT_FILE).write_text(
+        json.dumps(
+            {"_version": EXTRACT_VERSION, "symbols": sorted(symbols)},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+
+
 def pending_symbols(
     symbols: list[str],
     out_dir: Path,
     force_all: bool = False,
     failures: dict[str, int] | None = None,
+    nostatement: set[str] | None = None,
 ) -> list[str]:
     """
     Henüz indirilmemiş semboller (FORCE_ALL ile hepsi).
@@ -706,11 +847,16 @@ def pending_symbols(
     getiriyor (kaynak düzelmiş olabilir).
     """
     fails = failures or {}
+    yok = nostatement or set()
     return [
         s
         for s in symbols
         if force_all
-        or (not (out_dir / f"{s}.json").exists() and fails.get(s, 0) < MAX_ATTEMPTS)
+        or (
+            not (out_dir / f"{s}.json").exists()
+            and fails.get(s, 0) < MAX_ATTEMPTS
+            and s not in yok
+        )
     ]
 
 
@@ -718,7 +864,7 @@ def records_on_disk(out_dir: Path) -> list[dict]:
     """Diskteki tüm sembol kayıtları. Bozuk dosya sessizce atlanır."""
     records: list[dict] = []
     for path in sorted(out_dir.glob("*.json")):
-        if path.name in (SNAPSHOT_FILE, FAILURES_FILE):
+        if path.name in (SNAPSHOT_FILE, FAILURES_FILE, NOSTATEMENT_FILE):
             continue
         try:
             records.append(json.loads(path.read_text(encoding="utf-8")))
@@ -797,6 +943,7 @@ def build_all(
     now=time.monotonic,
     workers: int = 1,
 ) -> tuple[list[dict], int, int]:
+    # `fetch` sözleşmesi: sembol → (kayıt | None, "ok" | "tablosuz" | "hata").
     """
     Eksik sembolleri indirip diske yazar; arada bir anlık görüntüyü tazeler ve
     KENDİ SÜRESİNİ kendisi sınırlar.
@@ -815,8 +962,10 @@ def build_all(
     """
     records = records_on_disk(out_dir)
     failures = read_failures(out_dir)
+    nostatement = read_nostatement(out_dir)
     fetched = 0
     failed = 0
+    tablosuz = 0
     started = now()
     deadline_reported = False
 
@@ -833,15 +982,31 @@ def build_all(
         return True
 
     i = 0
-    for symbol, record in _fetch_stream(pending, fetch, workers, should_stop):
+    for symbol, (record, sonuc) in _fetch_stream(pending, fetch, workers, should_stop):
         i += 1
         if not record:
+            # "Kaynakta veri yok" kalıcı bir yargı: sembol bir daha hiç
+            # denenmiyor ve arayüz kullanıcıya "bu araç tablo yayımlamıyor"
+            # diyor. Bu yüzden KANIT isteniyor — kütüphane ağ hatasını da
+            # aynı "veri yok" hatasına çeviriyor (ölçüldü). Aynı turda başka
+            # semboller indiyse ağ çalışıyor demektir; hiçbiri inmediyse
+            # suçlu büyük olasılıkla ağ ve sembol sıradan bir başarısızlık.
+            if sonuc == "veriyok" and fetched > 0:
+                tablosuz += 1
+                nostatement.add(symbol)
+                write_nostatement(nostatement, out_dir)
+                continue
             failed += 1
             # Başarısızlık HEMEN kaydediliyor: süre dolup kesilirsek de
             # bir sonraki tur aynı sembole aynı süreyi harcamasın.
             failures[symbol] = failures.get(symbol, 0) + 1
             write_failures(failures, out_dir)
             continue
+        # Tablo geldiyse önceki "tablosuz" kaydı yanlıştı (kaynak düzelmiş
+        # ya da şablon eklenmiş olabilir).
+        if symbol in nostatement:
+            nostatement.discard(symbol)
+            write_nostatement(nostatement, out_dir)
         # Başarı sayacı sıfırlar VE diske yazar: yoksa kaynak düzeldikten
         # sonra bile eski sayaç sembolü gereksiz yere listeden düşürürdü.
         if failures.pop(symbol, None) is not None:
@@ -853,7 +1018,10 @@ def build_all(
         fetched += 1
         if i % every == 0:
             write_snapshot(records, out_dir)
-            print(f"[fund] {i}/{len(pending)} · başarılı {fetched} · başarısız {failed}")
+            print(
+                f"[fund] {i}/{len(pending)} · başarılı {fetched} · tablosuz {tablosuz} "
+                f"· başarısız {failed}"
+            )
     write_snapshot(records, out_dir)
     return records, fetched, failed
 
@@ -896,6 +1064,7 @@ def main() -> None:
     # verildiğinde (planlı tam tazeleme) hepsi yeniden çekilir.
     force_all = bool(os.environ.get("FORCE_ALL"))
     failures = read_failures(OUT)
+    nostatement = read_nostatement(OUT)
 
     # Hedefli çalıştırma: belirli sembolleri, atlama listesine RAĞMEN dene.
     # Buna ihtiyaç doğdu çünkü kendi düzeltmem teşhisi engelledi — üç denemede
@@ -907,10 +1076,15 @@ def main() -> None:
         pending = only
         print(f"[fund] hedefli çalıştırma: {', '.join(pending)} (atlama listesi yok sayıldı)")
     else:
-        pending = pending_symbols(symbols, OUT, force_all, failures)
+        pending = pending_symbols(symbols, OUT, force_all, failures, nostatement)
         skipped = sum(1 for c in failures.values() if c >= MAX_ATTEMPTS)
         if skipped:
             print(f"[fund] {skipped} sembol {MAX_ATTEMPTS} denemede alınamadı, atlanıyor")
+        if nostatement:
+            print(
+                f"[fund] {len(nostatement)} sembolde kaynakta finansal tablo yok "
+                "(endeks/fon/varant), atlanıyor"
+            )
     if not pending:
         print(f"[fund] {len(symbols)} sembolün hepsi zaten var (FORCE_ALL ile tazelenir)")
     else:

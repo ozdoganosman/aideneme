@@ -4,10 +4,12 @@ import { FUNDAMENTAL_FIELDS, type FieldId, type Financials } from '../../core/fu
 
 const snapshotFn = vi.fn();
 const financialsFn = vi.fn();
+const noStatementFn = vi.fn();
 vi.mock('../../data-client/fundamentals', () => ({
   fundamentalsClient: {
     snapshot: (...a: unknown[]) => snapshotFn(...a),
     financials: (...a: unknown[]) => financialsFn(...a),
+    noStatementSymbols: (...a: unknown[]) => noStatementFn(...a),
   },
 }));
 vi.mock('../chart/LineChart', () => ({
@@ -52,6 +54,7 @@ const snapshot = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  noStatementFn.mockResolvedValue(new Set<string>());
   snapshotFn.mockResolvedValue(snapshot);
   financialsFn.mockResolvedValue(
     financials({
@@ -111,5 +114,20 @@ describe('Finansallar paneli', () => {
       expect(screen.getByText('Bu sembol için finansal veri yok')).toBeInTheDocument(),
     );
     expect(screen.getByText(/build_fundamentals\.py/)).toBeInTheDocument();
+  });
+
+  // Endekste "veri yok" demek YANLIŞ: XU100'ün bilançosu eksik değil, hiç
+  // yoktur. Ölçüldü — tablosu gelmeyen 97 sembolün 52'si doğrudan endeks.
+  // Kullanıcı olmayan bir kusurun düzelmesini beklememeli.
+  it('endeks/fon için "tablo yayımlamıyor" der, "veri yok" demez', async () => {
+    snapshotFn.mockResolvedValue(null);
+    financialsFn.mockResolvedValue(null);
+    noStatementFn.mockResolvedValue(new Set(['XU100']));
+    render(<FinancialsPanel market="bist" symbol="XU100" price={10} />);
+    await waitFor(() =>
+      expect(screen.getByText('Bu araç finansal tablo yayımlamıyor')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Bu sembol için finansal veri yok')).not.toBeInTheDocument();
+    expect(screen.queryByText(/build_fundamentals\.py/)).not.toBeInTheDocument();
   });
 });

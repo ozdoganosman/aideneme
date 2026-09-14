@@ -11,6 +11,7 @@ import { dataBase, type Market } from './markets';
 export class FundamentalsClient {
   private readonly snapshots = new Map<Market, Promise<FundamentalsSnapshot | null>>();
   private readonly files = new Map<string, Promise<Financials | null>>();
+  private readonly noStatement = new Map<Market, Promise<ReadonlySet<string>>>();
 
   constructor(private readonly fetchImpl: typeof fetch = (...args) => fetch(...args)) {}
 
@@ -31,6 +32,36 @@ export class FundamentalsClient {
     });
 
     this.snapshots.set(market, promise);
+    return promise;
+  }
+
+  /**
+   * Kaynakta finansal tablosu OLMAYAN semboller (endeks, fon, varant).
+   *
+   * "Eksik veri" ile "böyle bir tablo yok"u ayırmak için gerekiyor: XU100'ün
+   * bilançosu yoktur, bu bir kusur değil aracın türüdür. Ölçüldü — 655
+   * sembolün 97'si tablo vermiyor ve 52'si doğrudan endeks. Dosya yoksa boş
+   * küme döner: ayrımı yapamadığımızda eski (temkinli) mesaj geçerli kalır.
+   */
+  noStatementSymbols(market: Market, signal?: AbortSignal): Promise<ReadonlySet<string>> {
+    const existing = this.noStatement.get(market);
+    if (existing) return existing;
+
+    const promise = (async () => {
+      const res = await this.fetchImpl(`${dataBase()}${market}/fundamentals/tablosuz.json`, {
+        signal,
+      });
+      if (!res.ok) return new Set<string>();
+      const json: unknown = await res.json();
+      const list = (json as { symbols?: unknown })?.symbols;
+      if (!Array.isArray(list)) return new Set<string>();
+      return new Set(list.filter((s): s is string => typeof s === 'string'));
+    })().catch(() => {
+      this.noStatement.delete(market);
+      return new Set<string>();
+    });
+
+    this.noStatement.set(market, promise);
     return promise;
   }
 
