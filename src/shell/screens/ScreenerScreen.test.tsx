@@ -238,3 +238,41 @@ describe('Tarayıcı — kayıtlı taramalar', () => {
     expect(screen.getByLabelText('Gıda')).not.toBeChecked();
   });
 });
+
+describe('Tarayıcı — paylaşılabilir filtre', () => {
+  it('bağlantıdaki filtreyi uygular', async () => {
+    render(
+      <ScreenerScreen
+        state={{ ...STATE, f: '1|rsi~g~70|14.14.20.50.14.20.250||rsi~d' }}
+        push={push}
+      />,
+    );
+    // RSI > 70 → yalnızca BBB (RSI 80) kalır.
+    await waitFor(() => expect(screen.getByText('BBB')).toBeInTheDocument());
+    expect(screen.queryByText('AAA')).toBeNull();
+  });
+
+  it('filtre değişince URL replace ile güncellenir (geçmiş kirlenmesin)', async () => {
+    const user = userEvent.setup();
+    const replace = vi.fn();
+    render(<ScreenerScreen state={STATE} push={push} replace={replace} />);
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+
+    replace.mockClear();
+    const value = screen.getAllByLabelText('Değer')[0];
+    await user.clear(value);
+    await user.type(value, '45');
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+    const last = replace.mock.calls[replace.mock.calls.length - 1][0];
+    expect(last.f).toContain('rsi~b~45');
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('uygulanamayan parça sessizce yutulmaz', async () => {
+    render(<ScreenerScreen state={{ ...STATE, f: '1|zzz~g~5!rsi~g~70|||' }} push={push} />);
+    await waitFor(() =>
+      expect(screen.getByText(/Bağlantıdaki filtrenin bir kısmı uygulanamadı/)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/bilinmeyen metrik: zzz/)).toBeInTheDocument();
+  });
+});

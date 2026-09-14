@@ -25,7 +25,7 @@ const Strategies = lazy(() => import('./screens/Strategies'));
  * URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa>&cmp=<sembol,sembol>
  * Varsayılan değerler yazılmaz — link kısa kalır.
  */
-const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist', cmp: '', st: '' };
+const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist', cmp: '', st: '', f: '' };
 
 const THEME_ICON: Record<ThemePreference, IconName> = {
   system: 'auto',
@@ -34,7 +34,7 @@ const THEME_ICON: Record<ThemePreference, IconName> = {
 };
 
 export function App() {
-  const { state, push } = useUrlState(URL_DEFAULTS);
+  const { state, push, replace } = useUrlState(URL_DEFAULTS);
   const screen = screenById(state.v);
   const [theme, setTheme] = useState<ThemePreference>(readTheme);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -147,7 +147,7 @@ export function App() {
                 ) : screen.id === 'sembol' ? (
                   <SymbolDesk state={state} push={push} />
                 ) : screen.id === 'tarayici' ? (
-                  <ScreenerScreen state={state} push={push} />
+                  <ScreenerScreen state={state} push={push} replace={replace} />
                 ) : screen.id === 'karsilastir' ? (
                   <Compare state={state} push={push} />
                 ) : screen.id === 'nabiz' ? (

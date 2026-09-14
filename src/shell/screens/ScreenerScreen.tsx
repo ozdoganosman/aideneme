@@ -24,6 +24,7 @@ import {
 } from '../../core/screen/metrics';
 import { FUNDAMENTAL_METRIC_DEFS, withFundamentals } from '../../core/screen/fundamentalMetrics';
 import { sectorNames, withSectors, type SectorMap } from '../../core/screen/sectors';
+import { decodeScreen, encodeScreen } from '../../core/screen/share';
 import { sectorsClient } from '../../data-client/sectors';
 import type { FundamentalsSnapshot } from '../../core/fundamentals/types';
 import { fundamentalsClient } from '../../data-client/fundamentals';
@@ -34,6 +35,8 @@ import type { UrlState } from '../urlState';
 interface Props {
   state: UrlState;
   push: (patch: UrlState) => void;
+  /** Filtre değişiminde geçmişi kirletmemek için (her tuşa basış bir girdi olmasın). */
+  replace?: (patch: UrlState) => void;
 }
 
 const OP_LABEL: Record<Operator, string> = {
@@ -82,24 +85,32 @@ function fmtValue(id: string, v: number): string {
 }
 
 /** Tarayıcı — kural tabanlı filtre, parametreler canlı, hesap worker havuzunda. */
-export default function ScreenerScreen({ state, push }: Props) {
+export default function ScreenerScreen({ state, push, replace }: Props) {
   const market = (MARKETS.includes(state.m as Market) ? state.m : 'bist') as Market;
   const analysis = useAnalysis(market);
 
-  const [params, setParams] = useState<ScreenParams>(DEFAULT_SCREEN_PARAMS);
-  const [rules, setRules] = useState<Rule[]>(DEFAULT_RULES);
+  // Bağlantıdan gelen filtre (varsa) ilk durumu belirler; ürün ilkesi #4.
+  const shared = useMemo(() => {
+    const known = new Set(ALL_METRIC_DEFS.map((d) => d.id));
+    return decodeScreen(state.f ?? '', known);
+    // Yalnızca ilk okumada: sonraki URL yazımları kendi yaptığımız yazımlar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [params, setParams] = useState<ScreenParams>(shared.state?.params ?? DEFAULT_SCREEN_PARAMS);
+  const [rules, setRules] = useState<Rule[]>(shared.state?.rules ?? DEFAULT_RULES);
   const [rows, setRows] = useState<ScreenRow[]>([]);
   const [timing, setTiming] = useState<{ ms: number; count: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({
-    key: 'chg21',
-    dir: 'desc',
+    key: shared.state?.sort.metric ?? 'chg21',
+    dir: shared.state?.sort.dir ?? 'desc',
   });
   const [saved, setSaved] = useState<SavedScreen[]>(loadSaved);
   const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
   const [snapshotChecked, setSnapshotChecked] = useState(false);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
-  const [pickedSectors, setPickedSectors] = useState<string[]>([]);
+  const [pickedSectors, setPickedSectors] = useState<string[]>(shared.state?.sectors ?? []);
 
   // Temel veri (finansal tablo anlık görüntüsü) — yoksa ekran teknik metriklerle
   // çalışmaya devam eder, boş sayı uydurmaz.
@@ -123,10 +134,14 @@ export default function ScreenerScreen({ state, push }: Props) {
   }, [market]);
 
   // Sektör sınıflandırması — yoksa sektör filtresi hiç görünmez.
+  const firstSectorLoad = useRef(true);
   useEffect(() => {
     let cancelled = false;
     setSectors(null);
-    setPickedSectors([]);
+    // Piyasa değişince seçim anlamını yitirir (sektör listeleri farklı), ama
+    // İLK yüklemede bağlantıdan gelen seçim korunur.
+    if (!firstSectorLoad.current) setPickedSectors([]);
+    firstSectorLoad.current = false;
     sectorsClient.map(market).then((map) => {
       if (!cancelled) setSectors(map);
     });
@@ -164,6 +179,25 @@ export default function ScreenerScreen({ state, push }: Props) {
       cancelled = true;
     };
   }, [analysis.status, market, params]);
+
+  // Filtre değişince URL'i güncelle — replace ile, çünkü her tuşa basış bir
+  // geçmiş girdisi olsaydı geri tuşu kullanılamaz hale gelirdi.
+  const encoded = useMemo(
+    () =>
+      encodeScreen({
+        rules,
+        params,
+        sectors: pickedSectors,
+        sort: { metric: sort.key, dir: sort.dir },
+      }),
+    [rules, params, pickedSectors, sort],
+  );
+  useEffect(() => {
+    if (!replace || encoded === state.f) return;
+    replace({ f: encoded });
+    // state.f bağımlılık değil: kendi yazdığımızı geri okuyup döngü kurmayalım.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encoded, replace]);
 
   /** Teknik satırlara temel metrikleri ekle (fiyat teknik satırdan gelir). */
   const enriched = useMemo(() => {
@@ -288,6 +322,13 @@ export default function ScreenerScreen({ state, push }: Props) {
           />
         </div>
 
+        {shared.dropped.length > 0 ? (
+          <p className="lab__warn" role="status">
+            Bağlantıdaki filtrenin bir kısmı uygulanamadı: {shared.dropped.join(', ')}. Görünen
+            sonuçlar paylaşılan taramadan farklı olabilir.
+          </p>
+        ) : null}
+
         {sectors ? (
           <fieldset className="screener__sectors">
             <legend>
@@ -401,7 +442,9 @@ export default function ScreenerScreen({ state, push }: Props) {
                 variant="ghost"
                 onClick={() => {
                   setRules(s.rules);
-                  setParams(s.params);
+                  // Eski kayıtlarda parametre alanları eksik olabilir; varsayılanla
+                  // birleştiriliyor ki yarım bir nesne ekrana sızmasın.
+                  setParams({ ...DEFAULT_SCREEN_PARAMS, ...s.params });
                   // Eski kayıtlarda sektör alanı yok: o zaman filtre temizlenir,
                   // kaydedilmemiş bir seçim geri yüklenmiş gibi görünmesin.
                   setPickedSectors(s.sectors ?? []);

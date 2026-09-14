@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 403 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 418 test)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -151,13 +151,34 @@ kayıtlar filtreyi temizliyor (kaydedilmemiş bir seçim geri yüklenmiş gibi
 görünmesin). Tabloda sektör sütunu var ve sınıflandırması olmayan sembol boş
 hücre değil açık bir "—" gösteriyor.
 
-## Bilinen boşluk
+## Paylaşılabilir tarama
 
-Tarama kuralları (ve şimdi sektör seçimi) URL'e yazılmıyor; paylaşılan bağlantı
-ekranı açıyor ama filtreleri taşımıyor. Kayıtlı taramalar tarayıcıda duruyor.
-Ürün ilkesi #4 ("her görünüm paylaşılabilir") burada henüz karşılanmıyor —
-kural listesi URL'e sığmayacak kadar büyüyebildiği için sıkıştırılmış bir
-serileştirme gerekiyor.
+Ürün ilkesi #4 tarayıcıda da karşılandı: kurallar, parametreler, sektör seçimi
+ve sıralama URL'e yazılıyor.
+
+    ?v=tarayici&f=1|rsi~b~40~70!chg21~g~0|14.14.20.50.14.20.250|Bankacılık|chg21~d
+                   ^sürüm ^kurallar       ^parametreler         ^sektör    ^sıralama
+
+Ham JSON yerine kısa ve gözle ayıklanabilir bir biçim: 120 karakterin altında
+kalıyor ve bozulduğunda nerede bozulduğu görülebiliyor. URL `replace` ile
+güncelleniyor — her tuşa basış bir geçmiş girdisi olsaydı geri tuşu
+kullanılamaz hale gelirdi.
+
+**Çözme katı ama sessiz değil.** Tanınmayan metrik, bilinmeyen operatör ya da
+okunamayan sayı atılıyor ve ekranda "bağlantıdaki filtrenin bir kısmı
+uygulanamadı: …" uyarısı çıkıyor. Sessizce düşürmek, kullanıcının paylaşılan
+taramadan farklı bir sonuç görmesi demek olurdu.
+
+Uçtan uca doğrulandı: filtre uygulanmış bağlantı yeni bir sekmede aynı sonucu
+(10/200 sembol) ve aynı sektör rozetini veriyor.
+
+### Yol boyunca yakalanan kusur
+
+Eski bir kayıtlı taramayı geri yüklemek **yarım bir parametre nesnesi**
+bırakıyordu (o sürümde yalnızca dört alan saklanıyordu); bağlantı kodlaması bu
+nesneyi görünce çöküyordu. İki uçtan düzeltildi: geri yükleme varsayılanla
+birleştiriyor, kodlama da eksik alanı varsayılana düşürüyor. İkisi de test
+altında.
 
 ## Sırada
 
