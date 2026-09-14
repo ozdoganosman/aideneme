@@ -25,6 +25,7 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
+import { Prov } from '../Prov';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -378,13 +379,39 @@ export default function Strategies({ state, push }: Props) {
                     ? `tam geçmiş · en uzunu ${info?.bars ?? 0} bar`
                     : 'tam geçmiş'
               }
+              provenance={
+                <Prov label={scope === 'symbol' ? 'Bar' : 'Sembol'}>
+                  {scope === 'market'
+                    ? 'Paketteki tüm semboller, HEPSİNDE ortak olan son N barlık pencerede. Ortak pencere şart: farklı uzunluklarda ölçülen sonuçlar yan yana sıralanamaz.'
+                    : scope === 'deep'
+                      ? 'En likit semboller, her birinin TAM geçmişiyle. Pencereler farklı olduğu için semboller arası karşılaştırma değil, strateji başına dağılım okunur.'
+                      : 'Tek sembol, tam geçmişi. Çoklu test düzeltmesi gerekmez çünkü tek bir seri üzerinde ölçülüyor.'}
+                </Prov>
+              }
             />
             <Stat
               label="Strateji"
               value={String(STRATEGY_PRESETS.length)}
               hint={scope === 'symbol' ? 'düzeltme gerekmez' : 'p-değeri Holm ile düzeltildi'}
+              provenance={
+                <Prov label="Strateji">
+                  Aynı anda sınanan hazır kural sayısı. Ne kadar çok strateji denenirse birinin ŞANS
+                  ESERİ iyi görünme olasılığı o kadar artar; bu yüzden p-değeri Holm–Bonferroni ile
+                  düzeltiliyor (tek sembol kapsamında düzeltme gerekmez).
+                </Prov>
+              }
             />
-            <Stat label="Hesap" value={`${Math.round(info?.ms ?? 0)} ms`} hint="worker" />
+            <Stat
+              label="Hesap"
+              value={`${Math.round(info?.ms ?? 0)} ms`}
+              hint="worker"
+              provenance={
+                <Prov label="Hesap">
+                  En yavaş worker'ın süresi (paralel duvar saati yaklaşımı), indirme hariç. Bir
+                  performans göstergesi; analizin doğruluğuyla ilgisi yok.
+                </Prov>
+              }
+            />
           </div>
 
           <table className="rank__table">

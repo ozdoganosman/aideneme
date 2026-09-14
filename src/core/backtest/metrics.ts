@@ -50,6 +50,35 @@ export interface BacktestMetrics {
   excessCagrPct: number;
 }
 
+/**
+ * Her metriğin formülü — HESABIN YANINDA duruyor.
+ *
+ * Ürün ilkesi #2 ("her sayı tıklanabilir") Sembol Masası'nda yapısaldı ama
+ * Laboratuvar'ın sekiz kartında hiç uygulanmamıştı: kullanıcı Sharpe'ın hangi
+ * risksiz oranla, maks. düşüşün hangi pencerede hesaplandığını göremiyordu.
+ * Metni burada tutmak, hesap değişince açıklamanın eskimesini zorlaştırıyor.
+ */
+export const BACKTEST_METRIC_FORMULA: Record<string, string> = {
+  cagrPct: '(son sermaye ÷ ilk sermaye)^(1 ÷ yıl) − 1. Isınma barları hariç.',
+  excessCagrPct:
+    'Strateji CAGR − al-tut CAGR (puan). Al-tut AYNI maliyet modelini öder: tek giriş, tek çıkış.',
+  buyHoldCagrPct: 'Aynı pencerede al-tut sermayesinin yıllık bileşik getirisi.',
+  maxDrawdownPct:
+    'Sermaye eğrisinde en kötü tepe → dip düşüşü (%). Yanındaki bar sayısı, düşüşün tepeden dibe kaç bar sürdüğü.',
+  sharpe:
+    'Ortalama bar getirisi × yıllık bar sayısı ÷ yıllık oynaklık. RİSKSİZ ORAN 0 KABUL EDİLİR — mutlak yorum için değil, karşılaştırma için.',
+  sortino: 'Sharpe ile aynı, ama paydada yalnızca AŞAĞI yönlü sapma var.',
+  calmar: 'CAGR ÷ maks. düşüş — "acıya karşılık getiri". Düşüş sıfırsa 0.',
+  ulcer:
+    'Ulcer Index: her bardaki tepeden uzaklığın karesel ortalaması. Düşüşün hem derinliğini hem SÜRESİNİ cezalandırır.',
+  trades: 'Kapanmış işlem sayısı. Kazanma oranı ve ortalama süre bu işlemler üzerinden.',
+  profitFactor:
+    'Kazanan işlemlerin net toplamı ÷ kaybedenlerin net toplamının mutlak değeri. Beklenti = net toplam ÷ işlem sayısı.',
+  costDragPct:
+    'Maliyetsiz getiri toplamı − net getiri toplamı (puan). Komisyon + slipajın işlemlerden götürdüğü.',
+  exposurePct: 'Pozisyonda geçirilen bar oranı. Nakitte geçen zaman getiri üretmez.',
+};
+
 const YEAR_SECONDS = 365.25 * 86400;
 /** Yıllık %1e-7'nin altındaki oynaklık "yok" sayılır (kayan nokta gürültüsü). */
 const VOL_EPSILON = 1e-9;

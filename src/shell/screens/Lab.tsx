@@ -18,6 +18,8 @@ import type { Candles } from '../../core/data/types';
 import { DEFAULT_COSTS, type Trade } from '../../core/backtest/engine';
 import type { Badge as ValidationBadge } from '../../core/backtest/validate';
 import { REGIME_CAVEAT, regimeVerdict } from '../../core/stats/regime';
+import { BACKTEST_METRIC_FORMULA } from '../../core/backtest/metrics';
+import { Prov } from '../Prov';
 import { describeCondition, type Operand, type Strategy } from '../../core/strategy/dsl';
 import { STRATEGY_PRESETS } from '../../core/strategy/presets';
 import { decodeStrategy, encodeStrategy } from '../../core/strategy/share';
@@ -88,6 +90,13 @@ const BADGE_ICON: Record<ValidationBadge['level'], string> = {
 function fmt(v: number, digits = 2, suffix = ''): string {
   if (!Number.isFinite(v)) return v === Infinity ? '∞' : '—';
   return `${v > 0 && suffix === '%' ? '+' : ''}${v.toFixed(digits)}${suffix}`;
+}
+
+/** Prov metni: formül + ölçüldüğü pencere (aynı yerde, ayrışamaz). */
+function provText(key: string, metrics: { bars: number; years: number } | undefined): string {
+  const formula = BACKTEST_METRIC_FORMULA[key] ?? '';
+  if (!metrics) return formula;
+  return `${formula} Pencere: ${metrics.bars} bar · ${metrics.years.toFixed(1)} yıl (ısınma hariç).`;
 }
 
 /** İşaretsiz yüzde: pay ve isabet oranında "+" yanıltıcı olurdu. */
@@ -256,6 +265,7 @@ export default function Lab({ state, push, replace }: Props) {
   }
 
   const metrics = outcome?.metrics;
+  const prov = (key: string) => provText(key, metrics);
   const tradeColumns: Column<Trade>[] = useMemo(
     () => [
       {
@@ -465,39 +475,65 @@ export default function Lab({ state, push, replace }: Props) {
               label="Yıllık (CAGR)"
               value={fmt(metrics.cagrPct, 1, '%')}
               hint={`al-tut ${fmt(metrics.buyHoldCagrPct, 1, '%')}`}
+              provenance={<Prov label="Yıllık (CAGR)">{prov('cagrPct')}</Prov>}
             />
             <Stat
               label="Al-tut farkı"
               value={fmt(metrics.excessCagrPct, 1, '%')}
               hint="yıllık puan"
+              provenance={<Prov label="Al-tut farkı">{prov('excessCagrPct')}</Prov>}
             />
             <Stat
               label="Maks. düşüş"
               value={fmt(-metrics.maxDrawdownPct, 1, '%')}
               hint={`${metrics.maxDrawdownBars} bar sürdü`}
+              provenance={<Prov label="Maks. düşüş">{prov('maxDrawdownPct')}</Prov>}
             />
             <Stat
               label="Sharpe / Sortino"
               value={`${fmt(metrics.sharpe, 2)} / ${fmt(metrics.sortino, 2)}`}
+              provenance={
+                <Prov label="Sharpe / Sortino">
+                  {prov('sharpe')}
+                  <br />
+                  {prov('sortino')}
+                </Prov>
+              }
             />
             <Stat
               label="Calmar / Ulcer"
               value={`${fmt(metrics.calmar, 2)} / ${fmt(metrics.ulcer, 1)}`}
+              provenance={
+                <Prov label="Calmar / Ulcer">
+                  {prov('calmar')}
+                  <br />
+                  {prov('ulcer')}
+                </Prov>
+              }
             />
             <Stat
               label="İşlem"
               value={String(metrics.trades)}
               hint={`kazanma %${metrics.winRatePct.toFixed(0)} · ort. ${metrics.avgBars.toFixed(0)} bar`}
+              provenance={<Prov label="İşlem">{prov('trades')}</Prov>}
             />
             <Stat
               label="Profit factor"
               value={fmt(metrics.profitFactor, 2)}
               hint={`beklenti ${fmt(metrics.expectancyPct, 2, '%')}`}
+              provenance={<Prov label="Profit factor">{prov('profitFactor')}</Prov>}
             />
             <Stat
               label="Maliyet yükü"
               value={fmt(metrics.costDragPct, 1, '%')}
               hint={`piyasada %${metrics.exposurePct.toFixed(0)} kalındı`}
+              provenance={
+                <Prov label="Maliyet yükü">
+                  {prov('costDragPct')}
+                  <br />
+                  {prov('exposurePct')}
+                </Prov>
+              }
             />
           </section>
 

@@ -447,6 +447,10 @@ Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
   devralınan `core/indicators/` modülleri (%12) ve demo veri üreticisi. Onlar
   yeniden yazılmadı, uçtan uca akışlarla sınanıyor; sayı gizlenmiyor.
 - Her yayınlanan metriğin provenance popover'ı var (kapsam: **%100**).
+  **Ölçüldü (2026-09-14):** dokuz ekranın sayı kartları tek tek sayıldı ve
+  iddia YANLIŞ çıktı — Laboratuvar'ın 8 kartında, Model'in 9'unda ve Nabız'ın
+  2'sinde katman hiç yoktu (33 karttan 13'ü). Hepsi eklendi; ölçüm artık
+  uçtan uca testte: provenance taşımayan bir kart CI'yı kırıyor.
 - Erişilebilirlik: axe ihlali **0**, tam klavye ile tüm akışlar tamamlanabiliyor.
 
 ---

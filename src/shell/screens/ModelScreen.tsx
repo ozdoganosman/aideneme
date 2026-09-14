@@ -6,6 +6,7 @@ import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
+import { Prov } from '../Prov';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -292,31 +293,72 @@ export default function ModelScreen({ state, push }: Props) {
               label="AUC (ayrım)"
               value={num(card.metrics.auc)}
               hint={`taban ${card.baseline.auc.toFixed(2)} · 0.5 = yazı tura`}
+              provenance={
+                <Prov label="AUC (ayrım)">
+                  Rastgele bir POZİTİF örneğe, rastgele bir negatiften daha yüksek olasılık verme
+                  oranı (Mann–Whitney U). 0,5 yazı tura demek; eşitlikler yarım sayılır. KATMANLAR
+                  DIŞI tahminlerle hesaplanır — modelin görmediği veride.
+                </Prov>
+              }
             />
             <Stat
               label="Brier"
               value={num(card.metrics.brier)}
               hint={`taban ${num(card.baseline.brier)} · küçük iyi`}
+              provenance={
+                <Prov label="Brier">
+                  (olasılık − gerçek)² ortalaması. Hem ayrımı hem KALİBRASYONU cezalandırır: doğru
+                  sıralayan ama abartan bir model burada kaybeder. Küçük iyi.
+                </Prov>
+              }
             />
             <Stat
               label="Brier becerisi"
               value={num(card.brierSkill)}
               hint="≤ 0 ise taban oran daha iyi"
+              provenance={
+                <Prov label="Brier becerisi">
+                  1 − (model Brier ÷ taban Brier). Taban = her zaman eğitim kümesinin pozitif
+                  oranını söyleyen model. Sıfırın altıysa model taban orandan KÖTÜ — hüküm
+                  "kullanma" olur.
+                </Prov>
+              }
             />
             <Stat
               label="Kalibrasyon hatası"
               value={pct(card.metrics.ece)}
               hint="ortalama |söylenen − olan|"
+              provenance={
+                <Prov label="Kalibrasyon hatası">
+                  Beklenen kalibrasyon hatası (ECE): olasılıklar kovalara bölünür, her kovada
+                  |söylenen − olan| farkı kovanın örnek sayısıyla ağırlıklanır. Aşağıdaki
+                  kalibrasyon tablosunun tek sayıya indirilmiş hali.
+                </Prov>
+              }
             />
             <Stat
               label="Doğruluk"
               value={pct(card.metrics.accuracy, 0)}
               hint={`taban ${pct(card.baseline.accuracy, 0)} · dengesiz sınıfta yanıltıcı`}
+              provenance={
+                <Prov label="Doğruluk">
+                  Olasılık 0,5 üstündeyse "olur" sayılıp gerçekle karşılaştırılır. DENGESİZ sınıfta
+                  yanıltıcıdır: %80'i pozitif olan veride hep "olur" demek %80 doğruluk verir ve
+                  hiçbir şey öğrenmemiştir. Taban satırı bu yüzden yanında duruyor.
+                </Prov>
+              }
             />
             <Stat
               label="Örnek"
               value={String(card.samples)}
               hint={`pozitif %${(card.positiveRate * 100).toFixed(0)} · ${card.folds} katman`}
+              provenance={
+                <Prov label="Örnek">
+                  Üçlü bariyer etiketlemesinden çıkan, tüm özellikleri tam olan bar sayısı.
+                  Katmanlara takvim gününe göre bölünür; test penceresiyle örtüşen eğitim örnekleri
+                  atılır (purge) ve arada embargo bırakılır.
+                </Prov>
+              }
             />
           </section>
 
@@ -384,7 +426,17 @@ export default function ModelScreen({ state, push }: Props) {
               </span>
             </header>
             <div className="model__grid">
-              <Stat label="Sinyal" value={String(card.edge.signals)} hint="eşiği geçen bar" />
+              <Stat
+                label="Sinyal"
+                value={String(card.edge.signals)}
+                hint="eşiği geçen bar"
+                provenance={
+                  <Prov label="Sinyal">
+                    Katmanlar dışı olasılığı eşiği geçen bar sayısı. Bir İŞLEM sayısı değil: art
+                    arda gelen barlar ayrı ayrı sayılır, aynı hareketi birkaç kez gösterebilir.
+                  </Prov>
+                }
+              />
               <Stat
                 label="Sinyal ortalaması"
                 value={
@@ -393,6 +445,13 @@ export default function ModelScreen({ state, push }: Props) {
                     : '—'
                 }
                 hint="etiket penceresi getirisi"
+                provenance={
+                  <Prov label="Sinyal ortalaması">
+                    Sinyal barlarında, etiket ufku kadar ileriye bakan getirinin ortalaması. MALİYET
+                    DAHİL DEĞİL ve kesişen pencereler bağımsız değil — bir strateji sonucu olarak
+                    okunamaz.
+                  </Prov>
+                }
               />
               <Stat
                 label="Tüm barlar"
@@ -402,6 +461,13 @@ export default function ModelScreen({ state, push }: Props) {
                     : '—'
                 }
                 hint="karşılaştırma tabanı"
+                provenance={
+                  <Prov label="Tüm barlar">
+                    Aynı hesabın SİNYAL FİLTRESİ OLMADAN hali: bütün barların ortalama ufuk
+                    getirisi. Sinyal ortalaması bunun belirgin üstünde değilse model bir şey
+                    eklemiyor demektir.
+                  </Prov>
+                }
               />
             </div>
           </section>

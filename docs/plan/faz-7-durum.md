@@ -822,6 +822,41 @@ Bu, veri İNMEME hatasından (zaten kapatılmıştı) ayrı bir yol: paket inmi�
 hesap çökmüş. İki durum ayrı ayrı ele alınıyor çünkü kullanıcının yapacağı
 şey de farklı.
 
+## "Her sayı tıklanabilir" ölçüldü: 33 karttan 13'ü değildi
+
+Plan §11 "her yayınlanan metriğin provenance popover'ı var (kapsam %100)"
+diyordu. Dokuz ekranın sayı kartları tek tek sayıldı:
+
+| Ekran | Kart | Provenance'ı olan |
+|---|---|---|
+| Sembol Masası | 9 | 9 |
+| Nabız | 4 | **2** |
+| Laboratuvar | 8 | **0** |
+| Model | 9 | **0** |
+| Stratejiler | 3 | **0** |
+
+Yani Sembol Masası'nda yapısal olan şey (metrik formülünü kendisi taşıyor)
+öteki ekranlara hiç taşınmamıştı. En kötüsü Laboratuvar: Sharpe'ın hangi
+risksiz oranla hesaplandığını, maks. düşüşün hangi pencerede ölçüldüğünü,
+maliyet yükünün neyi içerdiğini kullanıcı göremiyordu — oysa bunlar
+stratejiye güvenip güvenmeyeceğine karar verdiği sayılar.
+
+Otuz üç kartın hepsi artık katman taşıyor. Backtest metriklerinin formülleri
+`core/backtest/metrics.ts` içinde, **hesabın yanında** duruyor
+(`BACKTEST_METRIC_FORMULA`): metni hesaptan uzağa koymak, hesap değişince
+açıklamanın sessizce eskimesi demekti.
+
+Birkaç katman yalnızca formül değil, **sınır** da söylüyor:
+
+- *Doğruluk:* "%80'i pozitif olan veride hep 'olur' demek %80 doğruluk verir
+  ve hiçbir şey öğrenmemiştir."
+- *Sinyal ortalaması:* "Maliyet dahil değil ve kesişen pencereler bağımsız
+  değil — bir strateji sonucu olarak okunamaz."
+- *Sharpe:* "Risksiz oran 0 kabul edilir — mutlak yorum için değil."
+
+Ölçüm kalıcı: `e2e/erisilebilirlik.spec.ts` artık provenance'sız bir sayı
+kartı görürse CI'yı kırıyor. İddia, iddia olmaktan çıktı.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

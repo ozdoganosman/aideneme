@@ -15,6 +15,7 @@ import { HeatMap } from '../chart/HeatMap';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
+import { Prov } from '../Prov';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -239,11 +240,28 @@ export default function Pulse({ state, push }: Props) {
               </Popover>
             }
           />
-          <Stat label="Medyan değişim" value={fmtPct(s.medianChangePct, 2)} hint="ortanca sembol" />
+          <Stat
+            label="Medyan değişim"
+            value={fmtPct(s.medianChangePct, 2)}
+            hint="ortanca sembol"
+            provenance={
+              <Prov label="Medyan değişim">
+                Tüm sembollerin son bar değişimi sıralanıp ORTANCASI alınır. Ortalama değil: tek bir
+                uç hareket ortalamayı çeker, medyanı çekmez.
+              </Prov>
+            }
+          />
           <Stat
             label="Yeni zirve / dip"
             value={`${s.newHighs} / ${s.newLows}`}
             hint="son 250 bar içinde"
+            provenance={
+              <Prov label="Yeni zirve / dip">
+                Son barın KAPANIŞI, son 250 barın en yüksek (en düşük) kapanışına eşit ya da ondan
+                iyiyse sayılır. Bar içi uçlara değil kapanışa bakılır — gün içi bir dokunuş "yeni
+                zirve" saymaz.
+              </Prov>
+            }
           />
         </section>
       )}

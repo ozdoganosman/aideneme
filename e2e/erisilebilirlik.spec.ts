@@ -56,6 +56,13 @@ for (const [name, query, ready] of SCREENS) {
           return !labelled;
         }).length,
         tekrar: [...counts.entries()].filter(([, c]) => c > 1).map(([n, c]) => `${n} ×${c}`),
+        // Ürün ilkesi #2: yayınlanan her sayı "bu nereden geliyor?" katmanını
+        // taşımalı. Plan bunu %100 diye yazıyordu ama ölçülmemişti; ölçünce
+        // Laboratuvar'ın sekiz kartında ve Model'in dokuzunda hiç yoktu.
+        provenanceSiz: all('.ui-stat')
+          .filter(visible)
+          .filter((el) => !el.querySelector('.desk__prov'))
+          .map((el) => (el.querySelector('.ui-stat__label')?.textContent ?? '?').trim()),
       };
     });
 
@@ -65,5 +72,6 @@ for (const [name, query, ready] of SCREENS) {
     expect(audit.adsizBaglanti, 'adsız bağlantı').toBe(0);
     expect(audit.adsizGiris, 'etiketsiz giriş alanı').toBe(0);
     expect(audit.tekrar, 'aynı ada sahip düğmeler ayırt edilemez').toEqual([]);
+    expect(audit.provenanceSiz, 'provenance katmanı olmayan sayı kartı').toEqual([]);
   });
 }
