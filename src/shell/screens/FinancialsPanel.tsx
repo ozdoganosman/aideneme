@@ -171,14 +171,46 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
           value={fmtRatio(ratios?.pb ?? null)}
           provenance={prov('PD/DD', 'Piyasa değeri ÷ özkaynak (ana ortaklık payı).')}
         />
-        <Stat label="PD/Satış" value={fmtRatio(ratios?.ps ?? null)} />
-        <Stat label="Özkaynak kârlılığı" value={fmtPct(ratios?.roePct ?? null)} />
-        <Stat label="Net marj" value={fmtPct(ratios?.netMarginPct ?? null)} />
-        <Stat label="Brüt marj" value={fmtPct(ratios?.grossMarginPct ?? null)} />
+        <Stat
+          label="PD/Satış"
+          value={fmtRatio(ratios?.ps ?? null)}
+          provenance={prov(
+            'PD/Satış',
+            'Piyasa değeri ÷ son 12 ay satış geliri. Zarar eden ya da kârı dalgalanan şirkette F/K anlamsızlaşır, satış ise pozitif kalır — bu yüzden bir yedek çarpandır, daha iyi bir çarpan değil. Bankada "satış" faiz geliridir; sanayi şirketiyle aynı ölçekte okunamaz.',
+          )}
+        />
+        <Stat
+          label="Özkaynak kârlılığı"
+          value={fmtPct(ratios?.roePct ?? null)}
+          provenance={prov(
+            'Özkaynak kârlılığı (ROE)',
+            'Son 12 ay net kâr ÷ özkaynak. Borçla büyüyen şirkette YÜKSEK çıkar: özkaynak küçüldükçe oran şişer, bu yüzden Borç/Özkaynak ile birlikte okunmalı.',
+          )}
+        />
+        <Stat
+          label="Net marj"
+          value={fmtPct(ratios?.netMarginPct ?? null)}
+          provenance={prov(
+            'Net marj',
+            'Son 12 ay net kâr ÷ son 12 ay satış geliri. Tek seferlik kalemler (varlık satışı, kur farkı) net kârı şişirip marjı gerçek faaliyetten kopuk gösterebilir.',
+          )}
+        />
+        <Stat
+          label="Brüt marj"
+          value={fmtPct(ratios?.grossMarginPct ?? null)}
+          provenance={prov(
+            'Brüt marj',
+            'Son 12 ay brüt kâr ÷ satış geliri. Satılan malın maliyeti dışındaki giderleri içermez; faaliyet verimliliğini değil FİYATLAMA gücünü ölçer.',
+          )}
+        />
         <Stat
           label="Borç/Özkaynak"
           value={fmtRatio(ratios?.debtToEquity ?? null)}
           hint={`net borç ${fmtMoney(ratios?.netDebt ?? null)}`}
+          provenance={prov(
+            'Borç/Özkaynak',
+            'Toplam yükümlülük ÷ özkaynak. Yükümlülüğün tamamı finansal borç değildir (ticari borçlar, karşılıklar da içinde); bankada oran yapısı gereği çok yüksektir ve sanayi şirketiyle karşılaştırılamaz. Yanındaki net borç, finansal borçtan nakit düşülerek hesaplanır.',
+          )}
         />
         <Stat
           label="Piyasa değeri"
@@ -192,9 +224,33 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
 
       {g ? (
         <section className="fin__stats" aria-label="Büyüme">
-          <Stat label="Ciro büyümesi" value={fmtPct(g.revenueYoyPct)} hint="son 12 ay, yıllık" />
-          <Stat label="Kâr büyümesi" value={fmtPct(g.netIncomeYoyPct)} hint="son 12 ay, yıllık" />
-          <Stat label="Özkaynak büyümesi" value={fmtPct(g.equityYoyPct)} hint="yıllık" />
+          <Stat
+            label="Ciro büyümesi"
+            value={fmtPct(g.revenueYoyPct)}
+            hint="son 12 ay, yıllık"
+            provenance={prov(
+              'Ciro büyümesi',
+              'Son 12 ay satış geliri ile bir önceki 12 ayın karşılaştırması. ENFLASYONDAN ARINDIRILMAMIŞ: yüksek enflasyonda nominal büyüme, reel küçülmeyi gizleyebilir.',
+            )}
+          />
+          <Stat
+            label="Kâr büyümesi"
+            value={fmtPct(g.netIncomeYoyPct)}
+            hint="son 12 ay, yıllık"
+            provenance={prov(
+              'Kâr büyümesi',
+              'Son 12 ay net kâr ile bir önceki 12 ayın karşılaştırması. Taban küçükse ya da işaret değiştiyse (zarardan kâra) yüzde yanıltıcı büyür; nominal, enflasyondan arındırılmamış.',
+            )}
+          />
+          <Stat
+            label="Özkaynak büyümesi"
+            value={fmtPct(g.equityYoyPct)}
+            hint="yıllık"
+            provenance={prov(
+              'Özkaynak büyümesi',
+              'Son yıl sonu özkaynağı ile bir önceki yıl sonunun karşılaştırması. Sermaye artırımı ve yeniden değerleme de bu satırı büyütür — tamamı kâr birikimi değildir.',
+            )}
+          />
           <Stat
             label="Nakde dönüşüm"
             value={fmtRatio(ratios?.cashConversion ?? null)}

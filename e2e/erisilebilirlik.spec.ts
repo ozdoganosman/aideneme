@@ -9,10 +9,22 @@ import { expect, test } from '@playwright/test';
  * göremez, çünkü teknik olarak hepsi etiketlidir.
  */
 
-const SCREENS: [string, string, string][] = [
+/**
+ * [ad, sorgu, hazır-seçici, açılışta tıklanacak sekme]
+ *
+ * SEKME de bir DURUMDUR. Denetim dokuz ekranı yalnızca varsayılan durumda
+ * geziyordu ve bu iki kez ısırdı: önce Model'in son tahmin kartı (yalnızca
+ * hüküm "kullanma" değilken çiziliyor), sonra Sembol Masası'nın Finansallar
+ * sekmesi — on iki sayı kartının SEKİZİNDE provenance katmanı yoktu ve
+ * denetim o sekmeyi hiç açmadığı için yeşil kalıyordu. Ölçülmemiş durum,
+ * denetlenmemiş durumdur.
+ */
+const SCREENS: [string, string, string, string?][] = [
   ['Nabız', 'v=nabiz', '.pulse__flows'],
   ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
   ['Sembol Masası', 'v=sembol&s=X001', '.desk__health'],
+  ['Sembol Masası — Finansallar', 'v=sembol&s=X001', '.fin', 'Finansallar'],
+  ['Sembol Masası — Sektör', 'v=sembol&s=X001', '.desk__sector', 'Sektör'],
   ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix'],
   ['Strateji Laboratuvarı', 'v=laboratuvar&s=X001', '.lab__stats'],
   ['Stratejiler', 'v=stratejiler', '.rank__table'],
@@ -21,9 +33,14 @@ const SCREENS: [string, string, string][] = [
   ['Rapor', 'v=rapor&s=X001', '.report__sheet'],
 ];
 
-for (const [name, query, ready] of SCREENS) {
+for (const [name, query, ready, tab] of SCREENS) {
   test(`${name}: etiketler eksiksiz ve ayırt edici`, async ({ page }) => {
     await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
+    if (tab) {
+      await page.getByRole('tab', { name: tab }).click();
+      await page.waitForSelector(ready, { timeout: 90_000 });
+      await page.waitForTimeout(800);
+    }
     await page.waitForSelector(ready, { timeout: 90_000 });
     await page.waitForTimeout(300);
 
@@ -67,7 +84,8 @@ for (const [name, query, ready] of SCREENS) {
     });
 
     // Her ekranın tek ve doğru bir h1'i olmalı.
-    expect(audit.h1).toEqual([name]);
+    // Sekme varyantında h1 hâlâ EKRANIN adı; ad alanı testin etiketi.
+    expect(audit.h1).toEqual([name.split(' — ')[0]]);
     expect(audit.adsizDugme, 'adsız düğme').toBe(0);
     expect(audit.adsizBaglanti, 'adsız bağlantı').toBe(0);
     expect(audit.adsizGiris, 'etiketsiz giriş alanı').toBe(0);
