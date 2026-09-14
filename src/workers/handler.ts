@@ -9,6 +9,7 @@ import { inspect } from '../core/data/health';
 import { resample } from '../core/data/resample';
 import { emaArr } from '../core/indicators/calc';
 import { summarize } from '../core/stats/summary';
+import { trainModel } from '../core/ml/model';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 /**
@@ -119,6 +120,14 @@ export function createHandler() {
             report,
             ms: now() - started,
           };
+        }
+
+        case 'model': {
+          const started = now();
+          // Etiketleme + 5 katman eğitim: saniyeler sürebilir, ana iş parçacığı
+          // buna asla kilitlenmemeli.
+          const { card, latest } = trainModel(req.candles, req.options);
+          return { id: req.id, ok: true, type: 'model', card, latest, ms: now() - started };
         }
 
         case 'correlate': {

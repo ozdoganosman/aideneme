@@ -1009,6 +1009,111 @@
   font-size: var(--fs-xs);
 }
 
+/* Model ekranı — kart, ölçüm ızgarası ve uyarı listesi. */
+.model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.model__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.model__verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.model__lead {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+.model__latest {
+  align-self: stretch;
+}
+.model__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.model__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.model__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.model__header h3 {
+  margin: 0;
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.model__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.model__table th,
+.model__table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.model__table th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.model__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.model__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+.model__bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+}
+.model__bar--said {
+  background: var(--text-muted);
+}
+.model__bar--was {
+  background: var(--accent);
+}
+.model__list {
+  margin: 0;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
 /* Yazdırma: kabuk gider, rapor kâğıda sığar. */
 @media print {
   .shell-rail,

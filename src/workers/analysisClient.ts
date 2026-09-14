@@ -3,6 +3,7 @@ import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
 import type {
   BacktestResponse,
+  ModelResponse,
   SymbolResponse,
   CorrelateResponse,
   PulseResponse,
@@ -35,6 +36,7 @@ export type CorrelateOutcome = Omit<CorrelateResponse, 'id' | 'ok' | 'type'>;
 export type PulseOutcome = Omit<PulseResponse, 'id' | 'ok' | 'type'>;
 export type BacktestOutcome = Omit<BacktestResponse, 'id' | 'ok' | 'type'>;
 export type SymbolOutcome = Omit<SymbolResponse, 'id' | 'ok' | 'type'>;
+export type ModelOutcome = Omit<ModelResponse, 'id' | 'ok' | 'type'>;
 
 function defaultSize(): number {
   const cores = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency ?? 4) : 4;
@@ -146,6 +148,17 @@ export class AnalysisClient {
       await this.pool.run((id) => ({ id, type: 'symbol', candles, ...options })),
     );
     if (response.type !== 'symbol') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = response;
+    return rest;
+  }
+
+  /** Model kartı: üçlü bariyer etiketleme + purged CV + kalibrasyon. */
+  async model(
+    candles: import('../core/data/types').Candles,
+    options: import('../core/ml/model').TrainRequest = {},
+  ): Promise<ModelOutcome> {
+    const response = unwrap(await this.pool.run((id) => ({ id, type: 'model', candles, options })));
+    if (response.type !== 'model') throw new Error('beklenmeyen yanıt');
     const { id: _id, ok: _ok, type: _type, ...rest } = response;
     return rest;
   }

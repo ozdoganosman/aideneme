@@ -8,6 +8,7 @@ import type { Candles } from '../core/data/types';
 import type { HealthReport } from '../core/data/health';
 import type { Metric } from '../core/stats/summary';
 import type { TF } from '../core/data/resample';
+import type { ModelCard, TrainRequest } from '../core/ml/model';
 
 /**
  * Ana thread ↔ Worker sözleşmesi. Tek dosyada tutuluyor ki iki uç tip düzeyinde
@@ -80,8 +81,22 @@ export interface SymbolRequest {
   realReturn: boolean;
 }
 
+export interface ModelRequest {
+  id: number;
+  type: 'model';
+  /** Sembolün tam günlük geçmişi. */
+  candles: Candles;
+  options: TrainRequest;
+}
+
 export type WorkerRequest =
-  InitRequest | ScreenRequest | CorrelateRequest | PulseRequest | BacktestRequest | SymbolRequest;
+  | InitRequest
+  | ScreenRequest
+  | CorrelateRequest
+  | PulseRequest
+  | BacktestRequest
+  | SymbolRequest
+  | ModelRequest;
 
 export interface InitResponse {
   id: number;
@@ -156,6 +171,16 @@ export interface SymbolResponse {
   ms: number;
 }
 
+export interface ModelResponse {
+  id: number;
+  ok: true;
+  type: 'model';
+  card: ModelCard;
+  /** Kart 'kullanma' derse null gelir — UI'da gösterilecek tahmin yoktur. */
+  latest: { day: number; probability: number } | null;
+  ms: number;
+}
+
 export type WorkerResponse =
   | InitResponse
   | SymbolResponse
@@ -163,4 +188,5 @@ export type WorkerResponse =
   | CorrelateResponse
   | PulseResponse
   | BacktestResponse
+  | ModelResponse
   | ErrorResponse;

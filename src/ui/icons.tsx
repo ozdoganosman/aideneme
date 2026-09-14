@@ -20,6 +20,7 @@ export type IconName =
   | 'star'
   | 'refresh'
   | 'close'
+  | 'model'
   | 'alert';
 
 const PATHS: Record<IconName, string> = {
@@ -38,6 +39,8 @@ const PATHS: Record<IconName, string> = {
   star: 'M12 4l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8z',
   refresh: 'M20 11a8 8 0 1 0-.6 4M20 5v6h-6',
   close: 'M6 6l12 12M18 6 6 18',
+  model:
+    'M6 5.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6 14.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 8.5l8 2.5M8 15.5l8-2.5',
   alert: 'M12 4 2.5 20h19L12 4zM12 10v4m0 3h.01',
 };
 

@@ -75,13 +75,27 @@ planına göre yeniden kuruluyor. İlk iki faz yayında:
   tuzağı kapalı), Piotroski benzeri kalite skoru ve **teknik + temel karışık
   filtreler** ("RSI 40–70 VE F/K < 10 VE ciro büyümesi %20+").
 
+- **Rapor** (Faz 6): tek sayfalık, paylaşılabilir ve yazdırılabilir sembol
+  özeti. Her metriğin yanında formülü ve hesaplandığı pencere yazılı; `@media
+  print` kabuğu gizliyor, bölümler sayfa arasında bölünmüyor. Bağlantı tüm
+  seçimi taşıdığı için karşı taraf aynı raporu açıyor.
+
+- **Model** (Faz 6): dürüst tahmin katmanı. Üçlü bariyer etiketleme, nedensel
+  özellikler, purged K-fold + embargo, L2 lojistik regresyon ve eğitim
+  katmanından öğrenilen Platt kalibrasyonu. Kural kodda yazılı: **model kartı
+  olmadan olasılık gösterilmez** — kart "kullanma" derse tahmin hiç
+  hesaplanmaz. Kartta AUC, Brier, kalibrasyon hatası, güvenilirlik kovaları,
+  "her zaman taban oranı söyle" modeliyle karşılaştırma ve özellik
+  katsayılarının katmanlar arası kararlılığı var.
+
 Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
 (`index.html`) tüm ekranlar taşınana kadar yayında kalıyor.
 Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),
 [`docs/plan/faz-2-durum.md`](docs/plan/faz-2-durum.md),
 [`docs/plan/faz-3-durum.md`](docs/plan/faz-3-durum.md),
 [`docs/plan/faz-4-durum.md`](docs/plan/faz-4-durum.md),
-[`docs/plan/faz-5-durum.md`](docs/plan/faz-5-durum.md).
+[`docs/plan/faz-5-durum.md`](docs/plan/faz-5-durum.md),
+[`docs/plan/faz-6-durum.md`](docs/plan/faz-6-durum.md).
 
 ## Çalıştırma
 

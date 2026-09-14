@@ -59,6 +59,13 @@ export const SCREENS: Screen[] = [
     phase: 'Faz 5',
   },
   {
+    id: 'model',
+    label: 'Model',
+    icon: 'model',
+    question: 'Bu tahmin gerçekten bilgi taşıyor mu?',
+    phase: 'Faz 6',
+  },
+  {
     id: 'rapor',
     label: 'Rapor',
     icon: 'report',
