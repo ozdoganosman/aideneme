@@ -30,7 +30,7 @@ interface Props {
   push: (patch: UrlState) => void;
 }
 
-type Scope = 'market' | 'symbol' | 'deep';
+type Scope = 'market' | 'symbol' | 'deep' | 'liste';
 
 /** Aynı anda kaç sembol indirilip hesaplansın (zayıf makinede de akıcı kalsın). */
 const DEEP_CONCURRENCY = 3;
@@ -71,7 +71,10 @@ export default function Strategies({ state, push }: Props) {
   const analysis = useAnalysis(market);
   const symbol = state.s || analysis.symbols[0] || '';
 
-  const [scope, setScope] = useState<Scope>('market');
+  // Tarayıcıdan gelen sembol listesi (`sy=`): "bulduğum hisselerde hangi
+  // strateji çalışıyor?" sorusunun cevabı buradan başlıyor.
+  const listed = useMemo(() => (state.sy ? state.sy.split(',').filter(Boolean) : []), [state.sy]);
+  const [scope, setScope] = useState<Scope>(listed.length > 0 ? 'liste' : 'market');
   const [deepCount, setDeepCount] = useState(30);
   const [deep, setDeep] = useState<{ done: number; total: number } | null>(null);
   const [plan, setPlan] = useState<{ symbols: string[]; bytes: number } | null>(null);
@@ -94,7 +97,7 @@ export default function Strategies({ state, push }: Props) {
     setRows(null);
     setError(null);
 
-    if (scope === 'deep') {
+    if (scope === 'deep' || scope === 'liste') {
       // Derin tarama KENDİLİĞİNDEN başlamaz: megabaytlarca indirme demek.
       // Önce ne indirileceği hesaplanıp kullanıcıya söylenir.
       (async () => {
@@ -105,7 +108,12 @@ export default function Strategies({ state, push }: Props) {
           ]);
           if (cancelled) return;
           const ranked = [...pulse.rows].sort((a, b) => b.value - a.value);
-          const symbols = ranked.slice(0, deepCount).map((r) => r.symbol);
+          const symbols =
+            scope === 'liste'
+              ? // Listedekilerin sırası da işlem değerine göre; ilerleme çubuğu
+                // en likitten başlasın.
+                ranked.filter((r) => listed.includes(r.symbol)).map((r) => r.symbol)
+              : ranked.slice(0, deepCount).map((r) => r.symbol);
           const bytes = symbols.reduce((sum, s) => sum + (manifest.symbols[s]?.b ?? 0), 0);
           setPlan({ symbols, bytes });
         } catch (err) {
@@ -163,7 +171,7 @@ export default function Strategies({ state, push }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [market, scope, symbol, deepCount, analysis.status, analysis.bars, options]);
+  }, [market, scope, symbol, deepCount, listed, analysis.status, analysis.bars, options]);
 
   /**
    * Derin tarama: en likit N sembolün TAM geçmişi indirilir ve tüm stratejiler
@@ -266,6 +274,9 @@ export default function Strategies({ state, push }: Props) {
             setPlan(null);
           }}
           options={[
+            ...(listed.length > 0
+              ? [{ value: 'liste', label: `Tarama sonucu (${listed.length} sembol)` }]
+              : []),
             { value: 'market', label: 'Piyasa (ortak pencere)' },
             { value: 'symbol', label: 'Tek sembol (tüm geçmiş)' },
             { value: 'deep', label: 'Derin (en likitler, tam geçmiş)' },
@@ -300,13 +311,15 @@ export default function Strategies({ state, push }: Props) {
       <p className="rank__lead">
         {scope === 'market'
           ? 'Aynı kurallar tüm sembollerde, ortak 250 barlık pencerede — paket zaten inmiş olduğu için ek indirme yok. Karşılaştırma tabanı al-tut ve al-tut aynı maliyeti öder.'
-          : scope === 'deep'
-            ? 'En likit sembollerin TAM geçmişi indirilip stratejiler gerçek tarih üzerinde koşar. Ortak pencere kısıtı kalkar; EMA(200) tabanlı kurallar da ölçülebilir.'
-            : `Tüm hazır stratejiler ${symbol} sembolünün tam geçmişinde. Tek gözlem olduğu için p-değeri hesaplanmaz.`}
+          : scope === 'liste'
+            ? 'Tarayıcıda bulduğunuz sembollerin TAM geçmişinde tüm hazır stratejiler. Seçim tarama kriterlerinden geldiği için sonuçlar o kriterlere koşulludur — piyasanın tamamı için genelleme değildir.'
+            : scope === 'deep'
+              ? 'En likit sembollerin TAM geçmişi indirilip stratejiler gerçek tarih üzerinde koşar. Ortak pencere kısıtı kalkar; EMA(200) tabanlı kurallar da ölçülebilir.'
+              : `Tüm hazır stratejiler ${symbol} sembolünün tam geçmişinde. Tek gözlem olduğu için p-değeri hesaplanmaz.`}
         {scope !== 'symbol' ? ` ${INDEPENDENCE_CAVEAT}` : ''}
       </p>
 
-      {scope === 'deep' ? (
+      {scope === 'deep' || scope === 'liste' ? (
         <section className="rank__deep" aria-label="Derin tarama">
           {deep ? (
             <>
@@ -323,7 +336,7 @@ export default function Strategies({ state, push }: Props) {
                 okundu, tahmin değil.
               </p>
               <Button variant="primary" onClick={runDeep}>
-                Derin taramayı başlat
+                {scope === 'liste' ? 'Bu sembollerde test et' : 'Derin taramayı başlat'}
               </Button>
               <span className="desk__muted">
                 İnen seriler tarayıcı önbelleğinde kalır; ikinci çalıştırma ağa çıkmaz.

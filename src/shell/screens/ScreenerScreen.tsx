@@ -435,6 +435,23 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
             <Button size="sm" onClick={saveCurrent}>
               Taramayı kaydet
             </Button>
+            <Button
+              size="sm"
+              onClick={() =>
+                push({
+                  v: 'stratejiler',
+                  // Sembol listesi URL'e sığsın diye ilk 60 ile sınırlı; sıra
+                  // tablonun sırasıdır (kullanıcının gördüğü sıra).
+                  sy: filtered
+                    .slice(0, 60)
+                    .map((r) => r.symbol)
+                    .join(','),
+                })
+              }
+              disabled={filtered.length === 0}
+            >
+              Stratejilerde test et ({Math.min(filtered.length, 60)})
+            </Button>
             {saved.map((s) => (
               <Button
                 key={s.name}

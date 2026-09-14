@@ -276,3 +276,28 @@ describe('Tarayıcı — paylaşılabilir filtre', () => {
     expect(screen.getByText(/bilinmeyen metrik: zzz/)).toBeInTheDocument();
   });
 });
+
+describe('Tarayıcı — stratejilere aktarma', () => {
+  it('görünen sonucu strateji ekranına taşır', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /Stratejilerde test et/ }));
+    expect(push).toHaveBeenCalledWith({ v: 'stratejiler', sy: 'AAA,CCC' });
+  });
+
+  it('sonuç yoksa düğme pasif', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    // İlk kuralın alt sınırını 90'a çek → hiç sonuç kalmaz.
+    const value = screen.getAllByLabelText('Değer')[0];
+    await user.clear(value);
+    await user.type(value, '90');
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Stratejilerde test et/ })).toBeDisabled(),
+    );
+  });
+});

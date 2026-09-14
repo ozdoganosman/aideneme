@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 442 test; lint 50 uyarı → **0**)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 447 test; lint 50 uyarı → **0**)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -279,6 +279,21 @@ yeniden kurulmuyor.
 Ayrıca artık hiçbir şey bildirmeyen bir `eslint-disable` satırı silindi.
 
 Sonuç: `src/` ve `scripts/` genelinde **sıfır lint uyarısı**.
+
+## Tarayıcıdan stratejilere köprü
+
+Sistemde kopuk bir yer kalmıştı: tarayıcı hisseleri buluyordu, strateji ekranı
+kuralları sıralıyordu, ama "bulduğum bu 10 hissede hangi kural çalışıyor?"
+sorulamıyordu. Artık tarama sonucunun altındaki düğme seçili sembolleri strateji
+ekranına taşıyor (URL'de `sy=`), orada yeni bir **"Tarama sonucu"** kapsamı
+açılıyor ve o sembollerin TAM geçmişinde sekiz strateji koşuyor.
+
+Sınır açıkça yazılı: seçim tarama kriterlerinden geldiği için sonuçlar **o
+kriterlere koşulludur**, piyasanın tamamı için genelleme değildir. İndirme
+boyutu yine önceden söyleniyor ve liste URL'e sığsın diye ilk 60 sembolle
+sınırlı.
+
+Ölçüm: 10 sembol · 0,8 MB · 80 backtest, worker 367 ms.
 
 ## Sırada
 

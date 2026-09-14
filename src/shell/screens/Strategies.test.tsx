@@ -211,3 +211,26 @@ describe('Stratejiler', () => {
     expect(push).toHaveBeenCalledWith({ v: 'sembol', s: 'S0' });
   });
 });
+
+describe('Stratejiler — tarama sonucu kapsamı', () => {
+  it('sy= ile gelince o kapsamda açılır ve yalnızca o sembolleri hazırlar', async () => {
+    render(<Strategies state={{ ...STATE, sy: 'AAA,BBB' }} push={push} />);
+    // Kapsam seçicisi tarama sonucunu gösterir ve indirme planı o sembollerden.
+    await waitFor(() => expect(screen.getByText(/Tarama sonucu \(2 sembol\)/)).toBeInTheDocument());
+    expect(rankFn).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Bu sembollerde test et' })).toBeInTheDocument(),
+    );
+  });
+
+  it('seçimin tarama kriterlerine koşullu olduğunu söyler', async () => {
+    render(<Strategies state={{ ...STATE, sy: 'AAA' }} push={push} />);
+    await waitFor(() => expect(screen.getByText(/o kriterlere koşulludur/)).toBeInTheDocument());
+  });
+
+  it('liste boşsa kapsam seçeneği hiç görünmez', async () => {
+    render(<Strategies state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    expect(screen.queryByText(/Tarama sonucu/)).toBeNull();
+  });
+});

@@ -34,6 +34,7 @@ const URL_DEFAULTS = {
   st: '',
   f: '',
   str: '',
+  sy: '',
 };
 
 const THEME_ICON: Record<ThemePreference, IconName> = {
