@@ -20,39 +20,29 @@ bir dizüstü) her ekran için şunları ölçer:
 Tek ölçüm %30'a varan sapma gösterebildiği için varsayılan **3 tekrarın
 medyanı** raporlanır.
 
-## Sonuçlar (200 sembol × 250 barlık veri seti)
+## Sonuçlar (200 sembol × 3400 barlık sentetik set, 2 tekrarın medyanı)
 
 | Ekran | Normal makine (1×) | Zayıf makine (6×) |
 |---|---|---|
-| Nabız + ısı haritası | hazır 326 ms · blok **0** | hazır 1,6 sn · en kötü blok 131 ms |
-| Tarayıcı | hazır 302 ms · blok **0** · parametre→sonuç 66 ms | hazır 1,7 sn · en kötü 237 ms · parametre→sonuç 341 ms |
-| Sembol Masası | hazır 314 ms · blok **0** · periyot 138 ms | hazır 2,0 sn · en kötü 369 ms · periyot 483 ms |
-| Laboratuvar | hazır 320 ms · blok **0** · doğrulama 358 ms | hazır 1,7 sn · en kötü 233 ms · doğrulama 631 ms |
-| Karşılaştır | hazır 450 ms · blok **0** | hazır 1,9 sn · en kötü 146 ms |
+| Nabız + ısı haritası | hazır 336 ms · blok **0** | hazır 1,3 sn · en kötü 118 ms |
+| Tarayıcı | hazır 403 ms · blok **0** · parametre→sonuç 84 ms | hazır 1,5 sn · en kötü 182 ms · parametre→sonuç 468 ms |
+| Sembol Masası | hazır 311 ms · blok **0** · periyot 146 ms | hazır 1,7 sn · en kötü **319 ms** · periyot 486 ms |
+| Laboratuvar | hazır 350 ms · blok **0** · doğrulama 370 ms | hazır 1,7 sn · en kötü 195 ms · doğrulama 585 ms |
+| Karşılaştır | hazır 415 ms · blok **0** | hazır 1,7 sn · en kötü 185 ms |
+| Stratejiler (1600 backtest) | hazır 439 ms · blok **0** · kapsam 62 ms | hazır 1,5 sn · en kötü 118 ms · kapsam 230 ms |
+| Model (purged CV) | hazır 926 ms · blok **0** | hazır 1,9 sn · en kötü 108 ms |
+| Rapor | hazır 272 ms · blok **0** | hazır 1,4 sn · en kötü 121 ms |
+| Sektör akranları | hazır 270 ms · blok **0** · akran yükleme 198 ms | hazır 1,8 sn · en kötü **342 ms** · akran yükleme 787 ms |
+| Portföy | hazır 159 ms · blok **0** | hazır 0,9 sn · en kötü 135 ms |
 
-**Normal makinede hiçbir ekranda 50 ms'yi aşan tek bir görev yok.** Zayıf
-makinede tek istisna grafik kütüphanesinin ilk kurulumu (369 ms) — aşağıda.
+**Normal makinede hiçbir ekranda 50 ms'yi aşan tek bir görev yok** — sonradan
+eklenen altı ekranda da değişmedi. Zayıf makinede en kötü iki blok (319 ms ve
+342 ms) aynı yerden geliyor: grafik kütüphanesinin İLK kurulumu (aşağıda).
+Model ve Stratejiler en ağır hesabı yaptıkları hâlde en düşük blokları
+üretiyorlar, çünkü iş worker'da.
 
-### Fazlardan sonra eklenen ekranlar
-
-Bu üç ekran plandaki yedi faz bittikten sonra eklendi ve ilk kez burada
-bütçeye sokuldu (2 tekrarın medyanı; yukarıdaki satırlar 3 tekrar):
-
-| Ekran | Normal makine (1×) | Zayıf makine (6×) |
-|---|---|---|
-| Stratejiler (1600 backtest) | hazır 418 ms · blok **0** · kapsam değişimi 73 ms | hazır 1,4 sn · en kötü 121 ms · kapsam 252 ms |
-| Model (purged CV) | hazır 907 ms · blok **0** | hazır 1,9 sn · en kötü 113 ms |
-| Rapor | hazır 303 ms · blok **0** | hazır 1,5 sn · en kötü 130 ms |
-
-En ağır iki iş bu ekranlarda: 200 sembol × 8 strateji = **1600 backtest** ve
-üçlü bariyer etiketleme + 5 katmanlı purged CV. İkisi de worker'da koştuğu
-için ana iş parçacığında iz bırakmıyorlar — zayıf makinede bile en kötü blok
-121 ms ve 113 ms, yani mevcut ekranların hepsinden düşük. Modelin "hazır"
-süresi (907 ms) eğitimin kendisidir; o sırada arayüz donmuyor, iskelet
-gösteriliyor.
-
-Ölçüm aracı bu ekranları da kapsıyor (`scripts/measure-perf.mjs`), böylece
-sonraki değişiklikler bütçeden sessizce kaçamaz.
+Modelin 926 ms'lik "hazır" süresi eğitimin kendisidir; o sırada arayüz
+donmuyor, iskelet gösteriliyor.
 
 ## Yapılan iyileştirmeler (ve etkileri)
 

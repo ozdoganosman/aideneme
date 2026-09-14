@@ -116,7 +116,7 @@ results.push(
 );
 
 results.push(
-  await repeat('sembol masası (grafik)', `${BASE}?v=sembol&s=THYAO`, '.desk__health', async (page) => {
+  await repeat('sembol masası (grafik)', `${BASE}?v=sembol&s=X001`, '.desk__health', async (page) => {
     const t = Date.now();
     await page.getByRole('tab', { name: 'Haftalık' }).click();
     await page.waitForTimeout(50);
@@ -126,7 +126,7 @@ results.push(
 );
 
 results.push(
-  await repeat('laboratuvar (backtest)', `${BASE}?v=laboratuvar&s=THYAO`, '.lab__stats', async (page) => {
+  await repeat('laboratuvar (backtest)', `${BASE}?v=laboratuvar&s=X001`, '.lab__stats', async (page) => {
     const t = Date.now();
     await page.getByRole('button', { name: 'Doğrulamayı çalıştır' }).click();
     await page.waitForSelector('.lab__badge', { timeout: 180000 });
@@ -134,7 +134,7 @@ results.push(
   }),
 );
 
-results.push(await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=THYAO,GARAN,ASELS`, '.compare__matrix'));
+results.push(await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=X001,X002,X003`, '.compare__matrix'));
 
 // Fazlardan sonra eklenen ekranlar: en ağır iki iş (1600 backtest ve model
 // eğitimi) burada. İkisi de worker'da koşuyor; ölçüm bunu doğruluyor.
@@ -151,10 +151,23 @@ results.push(
 );
 
 results.push(
-  await repeat('model (purged CV)', `${BASE}?v=model&s=THYAO`, '.model__verdict'),
+  await repeat('model (purged CV)', `${BASE}?v=model&s=X001`, '.model__verdict'),
 );
 
-results.push(await repeat('rapor', `${BASE}?v=rapor&s=THYAO`, '.report__sheet'));
+results.push(await repeat('rapor', `${BASE}?v=rapor&s=X001`, '.report__sheet'));
+
+// Sektör paneli paketi indiriyor (izinli); portföy kur serisini okuyor.
+results.push(
+  await repeat('sektör akranları', `${BASE}?v=sembol&s=X001`, '.desk__health', async (page) => {
+    const t = Date.now();
+    await page.getByRole('tab', { name: 'Sektör' }).click();
+    await page.getByRole('button', { name: 'Akranları yükle' }).click();
+    await page.waitForSelector('.desk__sector-table tbody tr', { timeout: 60000 });
+    return { 'akran_yükleme_ms': Date.now() - t };
+  }),
+);
+
+results.push(await repeat('portföy', `${BASE}?v=portfoy`, '.pf-form, .screener__panel, .ui-field'));
 
 console.log(`\nCPU yavaşlatma: ${THROTTLE}× · ${RUNS} tekrarın medyanı\n`);
 for (const r of results) {
