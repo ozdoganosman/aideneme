@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { emaArr, rollingHighest, rollingLowest, rollingVWMA, rocArr, adxArr } from './calc';
-import { emptyCandles } from '../data/types';
+import {
+  emaArr,
+  rollingHighest,
+  rollingLowest,
+  rollingVWMA,
+  rocArr,
+  adxArr,
+  computeExtras,
+  computeIndicators,
+  activePeriod,
+  activeBase,
+  DEFAULT_PARAMS,
+} from './calc';
+import { emptyCandles, type Candles } from '../data/types';
+import { DAY_SECONDS } from '../data/pack';
 
 const f = (...v: number[]) => Float64Array.from(v);
 
@@ -87,5 +100,92 @@ describe('adxArr', () => {
     expect(Number.isFinite(last)).toBe(true);
     expect(last).toBeGreaterThan(50);
     expect(last).toBeLessThanOrEqual(100);
+  });
+});
+
+/** Yükselen, hacmi sabit seri — bileşik göstergelerin sınanması için. */
+function ramp(n: number): Candles {
+  const c = emptyCandles(n);
+  for (let i = 0; i < n; i++) {
+    const v = 100 + i;
+    c.time[i] = (20000 + i) * DAY_SECONDS;
+    c.open[i] = v;
+    c.close[i] = v;
+    c.high[i] = v + 1;
+    c.low[i] = v - 1;
+    c.volume[i] = 1000;
+  }
+  return c;
+}
+
+describe('computeExtras', () => {
+  it("ADX ve ROC ile onların EMA'larını aynı uzunlukta döndürür", () => {
+    const c = ramp(400);
+    const e = computeExtras(c);
+    for (const arr of [e.adx, e.adxEma, e.roc, e.rocEma]) expect(arr.length).toBe(400);
+    // Kesintisiz yükselişte ROC pozitif olmalı; ısınma dolduktan sonra bak.
+    expect(e.roc[399]).toBeGreaterThan(0);
+  });
+
+  it('parametreler geçirilebilir ve ısınmayı değiştirir', () => {
+    const c = ramp(200);
+    const kisa = computeExtras(c, { ...DEFAULT_PARAMS, roc: 10 });
+    const uzun = computeExtras(c, { ...DEFAULT_PARAMS, roc: 150 });
+    expect(Number.isFinite(kisa.roc[20])).toBe(true);
+    expect(Number.isNaN(uzun.roc[20])).toBe(true);
+  });
+});
+
+describe('computeIndicators', () => {
+  it("tüm seriler aynı uzunlukta ve normalize MACD hızlı EMA'ya bölünmüş", () => {
+    const c = ramp(800);
+    const b = computeIndicators(c);
+    const keys = [
+      'ema377p',
+      'ema610p',
+      'percentR',
+      'emawil',
+      'emawil120',
+      'macdN',
+      'signalN',
+      'histN',
+      'eMacDN',
+      'deltaN',
+    ] as const;
+    for (const k of keys) expect(b[k].length).toBe(800);
+    // Kesintisiz yükselişte kapanış, penceredeki en yükseğe yakın → %R yüksek.
+    expect(b.percentR[799]).toBeGreaterThan(50);
+    // histN = macdN − signalN (aynı bölenle normalize edildiği için korunur).
+    expect(b.histN[799]).toBeCloseTo(b.macdN[799] - b.signalN[799], 12);
+  });
+
+  it('sabit fiyatta %R tanımsız (sıfıra bölme sessizce 0 olmaz)', () => {
+    const c = ramp(300);
+    for (let i = 0; i < c.length; i++) {
+      c.close[i] = 100;
+      c.high[i] = 100;
+      c.low[i] = 100;
+    }
+    const b = computeIndicators(c);
+    expect(Number.isNaN(b.percentR[299])).toBe(true);
+  });
+});
+
+describe('activePeriod / activeBase', () => {
+  it('anahtarları kullanıcının parametrelerine bağlar', () => {
+    const p = { ...DEFAULT_PARAMS, emaFast: 55, wr: 21, adx: 7, roc: 9, adxEma: 3 };
+    expect(activePeriod('ema', p)).toBe(55);
+    expect(activePeriod('wr', p)).toBe(21);
+    expect(activePeriod('adxema', p)).toBe(3);
+    expect(activePeriod('rsi', p)).toBe(14); // RSI sabit
+    expect(activePeriod('bilinmeyen', p)).toBe(0);
+  });
+
+  it('bileşik göstergede İÇERİDEKİ periyodu ayrı verir', () => {
+    const p = { ...DEFAULT_PARAMS, adx: 7, wr: 21, roc: 9 };
+    expect(activeBase('adxema', p)).toBe(7);
+    expect(activeBase('wrema', p)).toBe(21);
+    expect(activeBase('rocema', p)).toBe(9);
+    expect(activeBase('ema', p)).toBe(0); // bileşik değil
   });
 });

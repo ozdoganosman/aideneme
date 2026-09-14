@@ -32,11 +32,20 @@ export default defineConfig({
       include: ['src/core/**'],
       // DIŞARIDA BIRAKILANLAR ve nedenleri (gizlemek için değil, ölçüyü doğru
       // şeye bakmak için):
-      //  - indicators/: eski uygulamadan (index.html) devralındı, yeniden
-      //    yazılmadı; uçtan uca akışlarla sınanıyor. Kapsamı docs'ta ayrıca
-      //    raporlanıyor (%12), saklanmıyor.
+      //  - indicators/analysis.ts, backtest.ts, customStrategy.ts: eski
+      //    uygulamanın (index.html) strateji motoru. Yeni çekirdekteki
+      //    `core/backtest/` bunun yerini aldı; eskisi yeniden yazılmadı ve
+      //    uçtan uca akışlarla sınanıyor. Kapsamı docs'ta raporlanıyor (%0),
+      //    saklanmıyor.
       //  - synthetic.ts: yalnızca demo/geliştirme verisi üretir.
-      exclude: ['src/core/indicators/**', 'src/core/data/synthetic.ts'],
+      // NOT: indikatörlerin kendisi (calc, rsi, patterns, stats) artık kapının
+      // İÇİNDE — testleri sonradan yazıldı.
+      exclude: [
+        'src/core/indicators/analysis.ts',
+        'src/core/indicators/backtest.ts',
+        'src/core/indicators/customStrategy.ts',
+        'src/core/data/synthetic.ts',
+      ],
       reporter: ['text', 'json-summary'],
       // Eşik, ölçülen değerin hemen altında: geriye gidişi yakalar, ileriye
       // gitmeyi engellemez.

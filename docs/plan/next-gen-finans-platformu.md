@@ -441,11 +441,15 @@ Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
 - Bir strateji kurup doğrulanmış sonuç alma süresi: **< 5 dk**.
 - Veri boyutu: **227 MB → ≤ 60 MB**; ilk açılış JS: **≤ 180 KB**.
 - `core/` test kapsamı **≥ %90**; indikatörlerin **%100'ü** altın-değer testli.
-  **Ölçüldü (2026-09-14):** yeni çekirdek **%98,8 satır / %92,1 dal / %99,2
-  fonksiyon** — eşik `vite.config.ts`'te, CI'da kapı (`npm run coverage`).
-  Tüm `src/core/` klasörü için sayı **%76,8**; aradaki fark eski uygulamadan
-  devralınan `core/indicators/` modülleri (%12) ve demo veri üreticisi. Onlar
-  yeniden yazılmadı, uçtan uca akışlarla sınanıyor; sayı gizlenmiyor.
+  **Ölçüldü (2026-09-14):** kapı içindeki çekirdek **%98,4 satır / %91,6 dal /
+  %99,3 fonksiyon** — eşik `vite.config.ts`'te, CI'da kapı (`npm run
+  coverage`). Tüm `src/core/` klasörü için sayı **%89,2**. Kalan boşluk eski
+  uygulamanın strateji motoru (`indicators/analysis.ts`, `backtest.ts`,
+  `customStrategy.ts` — hepsi %0, yerini `core/backtest/` aldı) ve demo veri
+  üreticisi; uçtan uca akışlarla sınanıyorlar, sayı gizlenmiyor.
+  İndikatörlerin kendisi (EMA, RSI, ATR, ADX, ROC, VWMA, en yüksek/en düşük,
+  %R + MACD paketi, destek/direnç, formasyonlar, özet istatistikler) testleri
+  sonradan yazıldığı için artık kapının **içinde**.
 - Her yayınlanan metriğin provenance popover'ı var (kapsam: **%100**).
   **Ölçüldü (2026-09-14):** dokuz ekranın sayı kartları tek tek sayıldı ve
   iddia YANLIŞ çıktı — Laboratuvar'ın 8 kartında, Model'in 9'unda ve Nabız'ın

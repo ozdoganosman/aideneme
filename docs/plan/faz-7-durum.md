@@ -857,6 +857,40 @@ Birkaç katman yalnızca formül değil, **sınır** da söylüyor:
 Ölçüm kalıcı: `e2e/erisilebilirlik.spec.ts` artık provenance'sız bir sayı
 kartı görürse CI'yı kırıyor. İddia, iddia olmaktan çıktı.
 
+## "İndikatörlerin %100'ü testli" ölçüldü: yarısı değildi
+
+Planın ikinci ölçülmemiş iddiası. Kapsam raporu şunu gösterdi: EMA, RSI, ATR,
+ADX, ROC, VWMA ve kayan en yüksek/en düşük testliydi (yedi fonksiyon); ama
+**destek/direnç, formasyon tanıma, özet istatistikler ve bileşik gösterge
+paketi (%R + MACD) hiç test edilmemişti** — `patterns.ts` %0, `stats.ts` %0,
+`calc.ts` %58.
+
+Bunlar grafikte çizgi çizen ve eski uygulamanın özet kartlarını besleyen
+fonksiyonlar; sessiz bir hata "ekranda bir şey görünmüyor" diye fark edilmeden
+kalır. Testler kurgu serilerle yazıldı — şekil biliniyor, doğru cevap da:
+
+- **Omuz-baş-omuz** şekli kurulup `obo` bulunması, **ters** şekilde `tobo`
+  bulunması ve ikisinin BİRBİRİNE karışmaması.
+- Düz seride formasyon **uydurulmaması**.
+- Destek/direnç: aynı seviyeye iki dokunuş bir seviye; **tek dokunuş değil**.
+- `computeStats`: 2 yılda 100 → 121 serisinde CAGR %10, tepe-dip düşüş %50,
+  52 haftalık uçların pencere DIŞINDAKİ zirveyi almaması.
+- `%R` sabit fiyatta NaN (sıfıra bölme sessizce sıfır olmuyor),
+  `histN = macdN − signalN` özdeşliğinin normalizasyondan sonra korunması.
+
+Sonuç:
+
+| Dosya | Önce | Sonra |
+|---|---|---|
+| `calc.ts` | %58 | **%98** |
+| `patterns.ts` | %0 | **%81** |
+| `stats.ts` | %0 | **%100** |
+| Tüm `src/core/` | %76,8 | **%89,2** |
+
+İndikatörler artık kapsam kapısının **içinde**: dışarıda kalan tek şey eski
+uygulamanın strateji motoru (`analysis.ts`, `backtest.ts`,
+`customStrategy.ts`), yerini `core/backtest/` aldı.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
