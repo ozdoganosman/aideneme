@@ -4,7 +4,7 @@ export const MARKETS: Market[] = ['bist', 'us', 'crypto'];
 
 export const MARKET_LABEL: Record<Market, string> = {
   bist: 'BIST',
-  us: 'ABD',
+  us: 'ABD (NYSE/NASDAQ)',
   crypto: 'Kripto',
 };
 

@@ -1,5 +1,5 @@
 import { Candles, emptyCandles } from './types';
-import { dataBase } from '../data-client/markets';
+import { dataBase, MARKETS, MARKET_LABEL, type Market } from '../data-client/markets';
 
 // Reads pre-built BIST OHLCV from same-origin static JSON (generated in CI by
 // scripts/build_bist.py). No proxy, no key, no CORS — the data ships with the
@@ -14,10 +14,21 @@ interface Rec {
   v: number;
 }
 
-export async function fetchBistStatic(symbol: string, signal?: AbortSignal): Promise<Candles> {
-  const res = await fetch(`${dataBase()}bist/${symbol}.json`, { signal });
+// Markets share one static-JSON layout: public/data/<market>/{<sym>.json,
+// symbols.json, quotes.json, names.json, spark.json, screener.json}.
+//
+// Piyasa listesi ve veri kökü TEK KAYNAKTAN (`data-client/markets`) geliyor;
+// burada yeniden tanımlamak iki ayrı `Market` tipi ve iki ayrı etiket demekti.
+// Veri kökü `dataBase()` çünkü dal önizlemesi `/onizleme/` altında yayımlanıp
+// veriyi KÖKTEKİ tek kopyadan okuyor (yoksa ~29 MB ikinci kez yayımlanırdı).
+export { MARKETS, MARKET_LABEL };
+export type { Market };
+
+// Per-symbol OHLCV for any market.
+export async function fetchStatic(market: Market, symbol: string, signal?: AbortSignal): Promise<Candles> {
+  const res = await fetch(`${dataBase()}${market}/${symbol}.json`, { signal });
   if (!res.ok) {
-    throw new Error(`"${symbol}" için statik BIST verisi yok (CI henüz üretmemiş olabilir)`);
+    throw new Error(`"${symbol}" için statik veri yok (CI henüz üretmemiş olabilir)`);
   }
   const j = (await res.json()) as { data: Rec[] };
   const d = j.data ?? [];
@@ -32,6 +43,48 @@ export async function fetchBistStatic(symbol: string, signal?: AbortSignal): Pro
     c.volume[i] = r.v;
   }
   return c;
+}
+
+export const fetchBistStatic = (symbol: string, signal?: AbortSignal) => fetchStatic('bist', symbol, signal);
+
+export async function fetchSymbolsFor(market: Market, signal?: AbortSignal): Promise<string[]> {
+  try {
+    const res = await fetch(`${dataBase()}${market}/symbols.json`, { signal });
+    if (!res.ok) return [];
+    return ((await res.json()) as { symbols: string[] }).symbols ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchQuotesFor(market: Market, signal?: AbortSignal): Promise<Quotes> {
+  try {
+    const res = await fetch(`${dataBase()}${market}/quotes.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Quotes;
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchNamesFor(market: Market, signal?: AbortSignal): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`${dataBase()}${market}/names.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+export async function fetchSparkFor(market: Market, signal?: AbortSignal): Promise<Record<string, number[]>> {
+  try {
+    const res = await fetch(`${dataBase()}${market}/spark.json`, { signal });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, number[]>;
+  } catch {
+    return {};
+  }
 }
 
 export async function fetchBistSymbols(signal?: AbortSignal): Promise<string[]> {
@@ -159,8 +212,12 @@ export interface ScreenerFile {
 }
 
 export async function fetchScreener(signal?: AbortSignal): Promise<ScreenerFile | null> {
+  return fetchScreenerFor('bist', signal);
+}
+
+export async function fetchScreenerFor(market: Market, signal?: AbortSignal): Promise<ScreenerFile | null> {
   try {
-    const res = await fetch(`${dataBase()}bist/screener.json`, { signal });
+    const res = await fetch(`${dataBase()}${market}/screener.json`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as ScreenerFile;
   } catch {
