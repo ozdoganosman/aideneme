@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DAY_SECONDS } from '../../core/data/pack';
 import { emptyCandles, type Candles } from '../../core/data/types';
@@ -95,6 +95,52 @@ function outcome(badges: { id: string; label: string; level: string; detail: str
     time: Float64Array.from({ length: 300 }, (_, i) => (20000 + i) * DAY_SECONDS),
     warmup: 51,
     badges,
+    regimes: {
+      minTrades: 5,
+      unknown: 1,
+      buckets: [
+        {
+          key: 'dusuk-yatay' as const,
+          label: 'Düşük oynaklık · yatay',
+          trades: 8,
+          medianPct: 1.4,
+          meanPct: 1.1,
+          winRatePct: 62.5,
+          barsPct: 40,
+          enough: true,
+        },
+        {
+          key: 'dusuk-trend' as const,
+          label: 'Düşük oynaklık · trend',
+          trades: 2,
+          medianPct: NaN,
+          meanPct: NaN,
+          winRatePct: NaN,
+          barsPct: 20,
+          enough: false,
+        },
+        {
+          key: 'yuksek-yatay' as const,
+          label: 'Yüksek oynaklık · yatay',
+          trades: 6,
+          medianPct: -0.8,
+          meanPct: -1.2,
+          winRatePct: 33.3,
+          barsPct: 25,
+          enough: true,
+        },
+        {
+          key: 'yuksek-trend' as const,
+          label: 'Yüksek oynaklık · trend',
+          trades: 0,
+          medianPct: NaN,
+          meanPct: NaN,
+          winRatePct: NaN,
+          barsPct: 15,
+          enough: false,
+        },
+      ],
+    },
     ms: 42,
   };
 }
@@ -115,7 +161,9 @@ describe('Strateji Laboratuvarı', () => {
 
     expect(screen.getByText('+20.0%')).toBeInTheDocument();
     expect(screen.getByTestId('equity')).toHaveTextContent('Strateji|Al-tut');
-    expect(screen.getByText(/1 işlem/)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'İşlemler' })).getByText(/1 işlem/),
+    ).toBeInTheDocument();
   });
 
   it('doğrulama çalıştırılmadan sonucun DOĞRULANMADIĞINI söyler', async () => {
@@ -229,5 +277,30 @@ describe('Laboratuvar — paylaşılabilir strateji', () => {
       expect(screen.getByText(/Kuralın bir kısmı uygulanamadı/)).toBeInTheDocument(),
     );
     expect(screen.getByText(/giriş kuralı okunamadı/)).toBeInTheDocument();
+  });
+});
+
+describe('Laboratuvar — rejim kırılımı', () => {
+  it('rejimleri listeler, yetersiz örnekte sayı göstermez', async () => {
+    render(<Lab state={STATE} push={push} />);
+    const region = await screen.findByRole('region', { name: 'Rejim kırılımı' });
+    const rows = region.querySelectorAll('tbody tr');
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveTextContent('+1.40%');
+    // 2 işlemlik kova sayı taşımaz.
+    expect(rows[1]).toHaveTextContent('yetersiz örnek');
+    expect(rows[1]).not.toHaveTextContent('%0.00');
+  });
+
+  it('ısınmada açılan işlemi gizlemez', async () => {
+    render(<Lab state={STATE} push={push} />);
+    const region = await screen.findByRole('region', { name: 'Rejim kırılımı' });
+    expect(region).toHaveTextContent(/1 işlem ısınma döneminde açıldı/);
+  });
+
+  it('kırılımın strateji olmadığını yazar', async () => {
+    render(<Lab state={STATE} push={push} />);
+    const region = await screen.findByRole('region', { name: 'Rejim kırılımı' });
+    expect(region).toHaveTextContent(/aynı veriye ikinci kez/);
   });
 });

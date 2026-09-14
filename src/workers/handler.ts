@@ -11,6 +11,7 @@ import { inspect } from '../core/data/health';
 import { resample } from '../core/data/resample';
 import { emaArr } from '../core/indicators/calc';
 import { summarize } from '../core/stats/summary';
+import { classifyRegimes, regimeBreakdown } from '../core/stats/regime';
 import { trainModel } from '../core/ml/model';
 import { trainPooled } from '../core/ml/pooled';
 import type { WorkerRequest, WorkerResponse } from './protocol';
@@ -109,11 +110,16 @@ export function createHandler() {
             };
           }
 
+          // Rejim kırılımı worker'da: sınıflandırma barları bir kez tarar ve
+          // ana iş parçacığı yalnızca dört satırlık özeti alır.
+          const regimes = regimeBreakdown(result.trades, classifyRegimes(candles));
+
           return {
             id: req.id,
             ok: true,
             type: 'backtest',
             metrics,
+            regimes,
             trades: result.trades,
             equity: result.equity,
             buyHold: result.buyHold,

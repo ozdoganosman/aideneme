@@ -829,6 +829,27 @@
 .lab__trades {
   min-height: 320px;
 }
+.lab__regimes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.lab__regimes th,
+.lab__regimes td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.lab__regimes th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.lab__regimes .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .linechart {
   display: block;
 }

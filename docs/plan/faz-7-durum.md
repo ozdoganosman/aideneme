@@ -569,6 +569,45 @@ Anlık görüntüler kayıtlı tarama koleksiyonunun DIŞINDA, ayrı bir anahtar
 duruyor — koleksiyon taramanın tanımıdır, anlık görüntü ise bu cihazdaki
 gözlem.
 
+## Rejim kırılımı: strateji hangi piyasada çalışıyor?
+
+Planın L2 maddesindeki "rejim kırılımı: yüksek/düşük volatilite, trend/yatay"
+açıkta kalmıştı. Bir stratejinin ortalama getirisi tek başına eksik bir
+cümledir: yalnızca sakin piyasada kazanan bir strateji, piyasa sertleştiğinde
+kullanıcının beklediğinden başka bir şey yapar.
+
+Laboratuvar artık işlemleri **giriş barındaki** rejime göre dört kovaya
+ayırıyor (X001, hazır kural):
+
+| Rejim | Bar payı | İşlem | Medyan | İsabet |
+|---|---|---|---|---|
+| Düşük oynaklık · yatay | 25% | 11 | −4,86% | 18% |
+| Düşük oynaklık · trend | 23% | 9 | −5,93% | 33% |
+| Yüksek oynaklık · yatay | 22% | 6 | −1,34% | 33% |
+| Yüksek oynaklık · trend | 30% | 4 | *yetersiz örnek* | — |
+
+Üç karar, üçü de dürüstlük gereği:
+
+1. **Sınıflandırma nedensel.** Oynaklık eşiği, o bara kadarki geçmişin
+   medyanı — bugünkü barı ve geleceği içermez. Tam örneklem medyanı
+   kullansaydık "bu strateji yüksek oynaklıkta iyi" cümlesi geleceği bilerek
+   kurulmuş olurdu. Test bunu ayrıca sınıyor.
+2. **Az örnekte sayı yok.** Beşten az işlem taşıyan kova medyan/ortalama/
+   isabet göstermiyor, "yetersiz örnek" diyor. Dört işlemin medyanını bir
+   rejim hükmü gibi sunmak, olmayan bir bilgiyi varmış gibi göstermek olurdu.
+3. **Isınmada açılan işlem gizlenmiyor.** Rejimi bilinmeyen işlem hiçbir
+   satıra yazılmıyor ve sayısı ayrıca söyleniyor; yoksa satır toplamları
+   sessizce işlem sayısının altında kalırdı.
+
+Tablonun altında kaldırılamaz bir uyarı var: **kırılım bir teşhistir,
+strateji değil.** "Yalnızca şu rejimde işlem yap" kuralını bu tablodan
+çıkarmak aynı veriye ikinci kez bakmaktır ve buradaki sayıları geçersiz
+kılar.
+
+Hesap worker'da: sınıflandırma barları bir kez tarıyor (5000 barda ~3,7 ms,
+ölçüldü) ve ana iş parçacığı yalnızca dört satırlık özeti alıyor — rejim
+dizilerini aktarsaydık her kural değişikliğinde onlarca kilobayt taşınırdı.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

@@ -17,6 +17,7 @@ import { Icon } from '../../ui/icons';
 import type { Candles } from '../../core/data/types';
 import { DEFAULT_COSTS, type Trade } from '../../core/backtest/engine';
 import type { Badge as ValidationBadge } from '../../core/backtest/validate';
+import { REGIME_CAVEAT, regimeVerdict } from '../../core/stats/regime';
 import { describeCondition, type Operand, type Strategy } from '../../core/strategy/dsl';
 import { STRATEGY_PRESETS } from '../../core/strategy/presets';
 import { decodeStrategy, encodeStrategy } from '../../core/strategy/share';
@@ -87,6 +88,11 @@ const BADGE_ICON: Record<ValidationBadge['level'], string> = {
 function fmt(v: number, digits = 2, suffix = ''): string {
   if (!Number.isFinite(v)) return v === Infinity ? '∞' : '—';
   return `${v > 0 && suffix === '%' ? '+' : ''}${v.toFixed(digits)}${suffix}`;
+}
+
+/** İşaretsiz yüzde: pay ve isabet oranında "+" yanıltıcı olurdu. */
+function plainPct(v: number, digits = 0): string {
+  return Number.isFinite(v) ? `${v.toFixed(digits)}%` : '—';
 }
 
 /** Strateji Laboratuvarı — kural kur, maliyetli sına, doğrulamayı gör. */
@@ -520,6 +526,64 @@ export default function Lab({ state, push, replace }: Props) {
                 },
               ]}
             />
+          </section>
+
+          <section className="lab__panel" aria-label="Rejim kırılımı">
+            <header className="lab__header">
+              <h2>Rejim kırılımı</h2>
+              <span className="desk__muted">İşlemler, GİRİŞ barındaki piyasa rejimine göre</span>
+            </header>
+            <table className="lab__regimes">
+              <caption className="visually-hidden">
+                Oynaklık ve yön rejimlerine göre işlem sayısı ve getiri
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Rejim</th>
+                  <th scope="col" className="num">
+                    Bar payı
+                  </th>
+                  <th scope="col" className="num">
+                    İşlem
+                  </th>
+                  <th scope="col" className="num">
+                    Medyan
+                  </th>
+                  <th scope="col" className="num">
+                    Ortalama
+                  </th>
+                  <th scope="col" className="num">
+                    İsabet
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {outcome.regimes.buckets.map((bucket) => (
+                  <tr key={bucket.key}>
+                    <th scope="row">{bucket.label}</th>
+                    <td className="num">{plainPct(bucket.barsPct)}</td>
+                    <td className="num">{bucket.trades}</td>
+                    <td className="num">
+                      {bucket.enough ? (
+                        fmt(bucket.medianPct, 2, '%')
+                      ) : (
+                        <span className="desk__muted">yetersiz örnek</span>
+                      )}
+                    </td>
+                    <td className="num">{bucket.enough ? fmt(bucket.meanPct, 2, '%') : '—'}</td>
+                    <td className="num">{bucket.enough ? plainPct(bucket.winRatePct) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="desk__muted">{regimeVerdict(outcome.regimes)}</p>
+            {outcome.regimes.unknown > 0 ? (
+              <p className="desk__muted">
+                {outcome.regimes.unknown} işlem ısınma döneminde açıldı; rejimi bilinmiyor ve hiçbir
+                satıra yazılmadı.
+              </p>
+            ) : null}
+            <p className="desk__muted">{REGIME_CAVEAT}</p>
           </section>
 
           <section className="lab__panel lab__trades" aria-label="İşlemler">

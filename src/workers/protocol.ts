@@ -7,6 +7,7 @@ import type { Badge, ValidationOptions, ValidationReport } from '../core/backtes
 import type { Candles } from '../core/data/types';
 import type { HealthReport } from '../core/data/health';
 import type { Metric } from '../core/stats/summary';
+import type { RegimeBreakdown } from '../core/stats/regime';
 import type { TF } from '../core/data/resample';
 import type { ModelCard, TrainRequest } from '../core/ml/model';
 import type { PooledRequest } from '../core/ml/pooled';
@@ -193,6 +194,8 @@ export interface BacktestResponse {
   warmup: number;
   badges: Badge[];
   report?: Omit<ValidationReport, 'badges' | 'metrics'>;
+  /** İşlemlerin giriş barındaki piyasa rejimine göre kırılımı. */
+  regimes: RegimeBreakdown;
   ms: number;
 }
 
