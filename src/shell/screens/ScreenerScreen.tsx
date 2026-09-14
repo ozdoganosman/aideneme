@@ -48,6 +48,7 @@ import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
 import { LoadNote } from '../LoadNote';
+import { Announce } from '../Announce';
 import { DataError } from '../DataError';
 import { CopyLink } from '../CopyLink';
 import type { UrlState } from '../urlState';
@@ -772,6 +773,13 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
       ) : null}
 
       <div className="screener__status">
+        <Announce
+          message={
+            settled
+              ? `Tarama tamamlandı: ${rows.length} sembolden ${filtered.length} tanesi ölçütlere uyuyor.`
+              : ''
+          }
+        />
         <LoadNote progress={analysis.progress} />
         {analysis.status === 'loading' ? (
           <Skeleton width="220px" height="16px" />

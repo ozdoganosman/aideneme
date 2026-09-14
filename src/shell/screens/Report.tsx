@@ -13,6 +13,7 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { LineChart } from '../chart/LineChart';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
+import { Announce } from '../Announce';
 import { CopyLink } from '../CopyLink';
 import type { UrlState } from '../urlState';
 
@@ -160,6 +161,7 @@ export default function Report({ state, push }: Props) {
         <Skeleton count={5} height="60px" />
       ) : (
         <article className="report__sheet">
+          <Announce message={`${symbol} raporu hazır: ${result.candles.length} bar.`} />
           <header className="report__head">
             <div>
               <h2>

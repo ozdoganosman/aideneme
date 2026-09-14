@@ -104,6 +104,50 @@ describe('Portföy', () => {
     expect(screen.getAllByText('+%100,0').length).toBeGreaterThan(0);
   });
 
+  it('değerleme bitince ekran okuyucuya duyurulur', async () => {
+    const user = userEvent.setup();
+    render(<Portfolio state={STATE} push={push} />);
+    await addPosition(user, 'THYAO', 100, 15);
+
+    // WCAG 2.2 §4.1.3: odak değişmiyor, tablo sessizce doluyordu.
+    await waitFor(
+      () =>
+        expect(screen.getByRole('status')).toHaveTextContent(
+          'Portföy değerlemesi hazır: 1 pozisyon.',
+        ),
+      { timeout: 4000 },
+    );
+  });
+
+  it('fiyatlar gelince "yükleniyor" rozeti KAYBOLUR', async () => {
+    const user = userEvent.setup();
+    render(<Portfolio state={STATE} push={push} />);
+    await addPosition(user, 'THYAO', 100, 15);
+
+    // Ölçülen kusur: efekt kendi setSeries'i yüzünden yeniden koşuyor, eski
+    // koşunun temizliği `cancelled`'ı true yapıyor ve `setLoading(false)`
+    // hiç çalışmıyordu. Rozet, tablo dolduktan sonra da duruyordu.
+    await waitFor(() => expect(screen.getByText('Portföy değeri')).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Fiyatlar yükleniyor/)).toBeNull(), {
+      timeout: 4000,
+    });
+  });
+
+  it('seri indirilemeyen sembol sonsuz yeniden istek açmaz', async () => {
+    seriesFn.mockRejectedValue(new Error('404'));
+    const user = userEvent.setup();
+    render(<Portfolio state={STATE} push={push} />);
+    await addPosition(user, 'THYAO', 10, 5);
+
+    await waitFor(() => expect(seriesFn).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const after = seriesFn.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    // Düzeltmeden önce bu sayı saniyede onlarca artıyordu.
+    expect(seriesFn.mock.calls.length).toBe(after);
+    expect(after).toBeLessThanOrEqual(2);
+  });
+
   it('değerleme tarihi son fiyat günüdür, "bugün" değil', async () => {
     const user = userEvent.setup();
     render(<Portfolio state={STATE} push={push} />);

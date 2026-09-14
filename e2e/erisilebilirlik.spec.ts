@@ -75,3 +75,52 @@ for (const [name, query, ready] of SCREENS) {
     expect(audit.provenanceSiz, 'provenance katmanı olmayan sayı kartı').toEqual([]);
   });
 }
+
+/**
+ * WCAG 2.2 §4.1.3 "Durum Mesajları" (AA).
+ *
+ * Ölçüm: hesap sonucu bildiren HİÇBİR metin canlı bölgede değildi. Gören
+ * kullanıcı tablonun dolduğunu görüyordu; ekran okuyucu kullanıcısına
+ * saniyeler süren Stratejiler/Model ekranlarında hiçbir şey söylenmiyordu.
+ * Odak değişmediği için tetiklenecek başka bir duyuru da yok.
+ *
+ * Portföy listede yok: boş portföyde hesaplanan bir şey yoktur, olmayan
+ * sonucun duyurusu da olmaz (işlem eklendiğinde duyuruyu birim testi korur).
+ */
+const DUYURU: [string, string, string, RegExp][] = [
+  ['Nabız', 'v=nabiz', '.pulse__flows', /Piyasa nabzı hazır: \d+ sembol/],
+  ['Tarayıcı', 'v=tarayici', '.ui-vtable', /Tarama tamamlandı: \d+ sembolden \d+/],
+  ['Sembol Masası', 'v=sembol&s=X001', '.desk__health', /X001 hazır: \d+ bar/],
+  ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix', /Korelasyon hazır/],
+  [
+    'Strateji Laboratuvarı',
+    'v=laboratuvar&s=X001',
+    '.lab__stats',
+    /Backtest tamamlandı: \d+ işlem/,
+  ],
+  ['Stratejiler', 'v=stratejiler', '.rank__table', /Strateji sıralaması hazır: \d+ strateji/],
+  ['Model', 'v=model&s=X001', '.model__verdict', /Model eğitimi tamamlandı\. Hüküm:/],
+  ['Rapor', 'v=rapor&s=X001', '.report__sheet', /X001 raporu hazır: \d+ bar/],
+];
+
+for (const [name, query, ready, pattern] of DUYURU) {
+  test(`${name}: sonuç canlı bölgede duyuruluyor`, async ({ page }) => {
+    await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
+    await page.waitForSelector(ready, { timeout: 90_000 });
+
+    // Duyuru gecikmeli yayımlanıyor (ara sonuçlar okunmasın diye).
+    await expect
+      .poll(
+        async () =>
+          (
+            await page.evaluate(() =>
+              Array.from(document.querySelectorAll('main [role="status"]'))
+                .map((el) => el.textContent?.trim() ?? '')
+                .filter(Boolean),
+            )
+          ).join(' || '),
+        { timeout: 15_000 },
+      )
+      .toMatch(pattern);
+  });
+}

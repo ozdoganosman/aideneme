@@ -15,6 +15,7 @@ import { HeatMap } from '../chart/HeatMap';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
+import { Announce } from '../Announce';
 import { Prov } from '../Prov';
 import type { UrlState } from '../urlState';
 
@@ -172,6 +173,13 @@ export default function Pulse({ state, push }: Props) {
           }
         />
         <div className="pulse__status">
+          <Announce
+            message={
+              !busy && pulse && s
+                ? `Piyasa nabzı hazır: ${pulse.rows.length} sembol, ${s.advancing} yükselen, ${s.declining} düşen.`
+                : ''
+            }
+          />
           <LoadNote progress={analysis.progress} />
           {busy ? (
             <Badge tone="warn">Hesaplanıyor…</Badge>

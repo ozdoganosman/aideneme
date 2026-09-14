@@ -17,6 +17,7 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { NormalizedChart } from '../chart/NormalizedChart';
 import { useAnalysis } from '../useAnalysis';
 import { LoadNote } from '../LoadNote';
+import { Announce } from '../Announce';
 import { DataError } from '../DataError';
 import type { UrlState } from '../urlState';
 
@@ -265,6 +266,13 @@ export default function Compare({ state, push }: Props) {
       </section>
 
       <section className="compare__panel" aria-label="Korelasyon">
+        <Announce
+          message={
+            !corrBusy && corr
+              ? `Korelasyon hazır: ${corr.symbols.length} sembol, ${corr.clusters} küme.`
+              : ''
+          }
+        />
         <header>
           <h2>Korelasyon</h2>
           {corrBusy ? (

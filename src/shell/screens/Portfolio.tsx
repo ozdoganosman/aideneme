@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Button,
@@ -37,6 +37,7 @@ import {
 import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
+import { Announce } from '../Announce';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -45,6 +46,9 @@ interface Props {
 }
 
 const STORAGE_KEY = 'portfolio.txns';
+
+/** Sabit kimlik: her render'da yeni {} vermek efektleri boşuna tetikler. */
+const EMPTY_SERIES: Record<string, Candles> = {};
 
 function loadTxns(): Txn[] {
   try {
@@ -85,18 +89,48 @@ export default function Portfolio({ state, push }: Props) {
     fee: 0,
     date: todayISO(),
   });
-  const [series, setSeries] = useState<Record<string, Candles>>({});
-  const [loading, setLoading] = useState(false);
+  /**
+   * Sembol → tam geçmiş. Anahtar yalnızca SEMBOL ama önbellek PİYASAYA ait:
+   * piyasa değişince sıfırlanıyor. Eskiden sıfırlanmıyordu — aynı koda sahip
+   * bir sembolün başka piyasadaki serisi değerlemeye girebilirdi.
+   */
+  const [cache, setCache] = useState<{ market: Market; series: Record<string, Candles> }>({
+    market,
+    series: {},
+  });
+  const series = cache.market === market ? cache.series : EMPTY_SERIES;
+
+  /**
+   * İstenip BAŞARISIZ olan `piyasa:sembol` anahtarları.
+   *
+   * Olmadığında sonsuz istek döngüsü oluyordu: başarısız istek `setSeries`'i
+   * yine de yeni bir nesneyle çağırıyor → `series` kimliği değişiyor → efekt
+   * yeniden koşuyor → eksik sembol hâlâ eksik → yeniden istek… Ölçüldü:
+   * bulunmayan bir sembolle saniyede onlarca istek.
+   */
+  const failed = useRef<Set<string>>(new Set());
+
+  /**
+   * Süren istek sayısı. Eskiden bu bir `loading` bayrağıydı ve `false`'a
+   * dönüşü `cancelled` kontrolüne bağlıydı; efekt kendi `setSeries`'i yüzünden
+   * yeniden koştuğu için bayrak SONSUZA KADAR açık kalıyordu ("Fiyatlar
+   * yükleniyor…" rozeti veriler geldikten sonra da duruyordu). Sayaç her
+   * artışın tam bir azalışına sahip olduğu için yarışa kapalı.
+   */
+  const [pending, setPending] = useState(0);
+  const loading = pending > 0;
 
   const ledger = useMemo(() => buildLedger(txns), [txns]);
   const open = useMemo(() => ledger.positions.filter((p) => p.shares > 0), [ledger]);
 
   // Açık pozisyonların tam geçmişi: değerleme, risk ve senaryolar için.
   useEffect(() => {
-    const missing = open.map((p) => p.symbol).filter((s) => !series[s]);
+    const missing = open
+      .map((p) => p.symbol)
+      .filter((symbol) => !series[symbol] && !failed.current.has(`${market}:${symbol}`));
     if (missing.length === 0) return;
     let cancelled = false;
-    setLoading(true);
+    setPending((n) => n + 1);
     Promise.all(
       missing.map((symbol) =>
         dataClient
@@ -106,14 +140,22 @@ export default function Portfolio({ state, push }: Props) {
       ),
     )
       .then((results) => {
+        // Başarısızları iptalden ÖNCE işaretle: yeniden istek döngüsünü
+        // kapatan şey bu işaret, sonucu kullanıp kullanmadığımız değil.
+        results.forEach((entry, i) => {
+          if (!entry) failed.current.add(`${market}:${missing[i]}`);
+        });
         if (cancelled) return;
         const next: Record<string, Candles> = {};
         for (const entry of results) if (entry) next[entry[0]] = entry[1];
-        setSeries((prev) => ({ ...prev, ...next }));
+        setCache((prev) =>
+          prev.market === market
+            ? { market, series: { ...prev.series, ...next } }
+            : { market, series: next },
+        );
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      // Sayaç iptalden BAĞIMSIZ düşer; yoksa "yükleniyor" asılı kalır.
+      .finally(() => setPending((n) => n - 1));
     return () => {
       cancelled = true;
     };
@@ -486,6 +528,11 @@ export default function Portfolio({ state, push }: Props) {
           ) : null}
 
           <section className="pf__panel" aria-label="Pozisyonlar">
+            <Announce
+              message={
+                loading ? '' : `Portföy değerlemesi hazır: ${valuation.rows.length} pozisyon.`
+              }
+            />
             <header className="pf__header">
               <h2>Pozisyonlar</h2>
               {loading ? <Badge tone="warn">Fiyatlar yükleniyor…</Badge> : null}

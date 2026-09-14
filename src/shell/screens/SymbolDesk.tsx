@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
+import { Announce } from '../Announce';
 import {
   Badge,
   Button,
@@ -235,6 +236,13 @@ export default function SymbolDesk({ state, push }: Props) {
 
   return (
     <div className="desk">
+      <Announce
+        message={
+          analysisResult && !analysisError
+            ? `${symbol} hazır: ${analysisResult.candles.length} bar.`
+            : ''
+        }
+      />
       <div className="desk__bar">
         <Select
           label="Piyasa"

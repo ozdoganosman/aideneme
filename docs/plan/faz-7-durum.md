@@ -1070,6 +1070,104 @@ yanıltan kusurlar düzeltiliyor); kozmetik hizalama yeni kabuğa yatırılıyor
 çünkü asıl ürün o. Bu bir eksik, gizlenmiyor: PR'ın "bilinen sınırlar"
 listesinde yazıyor.
 
+## Hesap bitti ama kimse söylemiyordu (WCAG 4.1.3)
+
+Ölçüm: dokuz ekranda, "sonuç hazır" bilgisi taşıyan her metin bulundu ve
+canlı bölge (`role="status"` / `aria-live`) içinde olup olmadığına bakıldı.
+
+```
+nabiz        → "200 sembol · worker 15 ms"                DUYURULMUYOR
+tarayici     → "96 / 200 sembol"                          DUYURULMUYOR
+             → "200 sembol × 250 bar · worker 34 ms"      DUYURULMUYOR
+karsilastir  → "200 sembol · 200 küme · worker 93 ms"     DUYURULMUYOR
+laboratuvar  → "worker 22 ms"                             DUYURULMUYOR
+```
+
+Hiçbiri değildi. Gören kullanıcı tablonun dolduğunu görüyor; ekran okuyucu
+kullanıcısı için **hiçbir şey olmuyor**. Odak değişmediği için başka bir
+duyuru da tetiklenmiyor. En kötüsü Stratejiler ve Model: saniyeler süren
+hesapların sonunda "bitti mi, dondu mu?" sorusunun cevabı yok.
+
+**Neden görünür durum şeridini canlı bölgeye çevirmedim:** o şerit köken
+notunu, temel veri rozetini ve süreyi de taşıyor; her filtre değişiminde
+tamamı okunurdu. Bunun yerine tek cümlelik, görünmez bir bölge eklendi
+(`src/shell/Announce.tsx`) ve yalnızca sonuç oturduğunda yazılıyor.
+
+Tarayıcıdaki eşik alanları her adımda yeni bir sayı ürettiği için duyuru
+**gecikmeli**: `delay` boyunca değişmeyen ilk mesaj yayımlanıyor, ara
+sonuçlar okunmuyor.
+
+Dokuz ekranın dokuzu da artık duyuruyor; sekizi uçtan uca testle bağlandı
+(Portföy'ünki birim testiyle — boş portföyde duyurulacak bir sonuç yok):
+
+```
+nabiz        → Piyasa nabzı hazır: 200 sembol, 101 yükselen, 99 düşen.
+sembol       → X001 hazır: 3400 bar.
+tarayici     → Tarama tamamlandı: 200 sembolden 96 tanesi ölçütlere uyuyor.
+karsilastir  → Korelasyon hazır: 200 sembol, 200 küme.
+laboratuvar  → Backtest tamamlandı: 27 işlem.
+stratejiler  → Strateji sıralaması hazır: 8 strateji, 200 sembol.
+model        → Model eğitimi tamamlandı. Hüküm: kullanma.
+rapor        → X001 raporu hazır: 3400 bar.
+portfoy      → Portföy değerlemesi hazır: 1 pozisyon.
+```
+
+### Yol boyunca: Portföy saniyede 228 istek atıyordu
+
+Portföy'e duyuru eklerken mesaj hiç yayımlanmadı: `loading` sonsuza kadar
+açık kalıyordu. Nedeni aranınca çok daha ciddi bir kusur çıktı.
+
+Efekt, açık pozisyonların serisini indiriyor ve sonucu `setSeries` ile
+yazıyordu. Bağımlılıklarında `series` var. İstek **başarısız** olduğunda da
+`setSeries` yeni bir nesneyle çağrılıyordu → `series` kimliği değişiyor →
+efekt yeniden koşuyor → eksik sembol hâlâ eksik → yeniden istek… Kapanmayan
+bir döngü.
+
+Ölçüldü (serisi indirilemeyen tek bir pozisyon, 8 saniye):
+
+| | X001.bin isteği | "Fiyatlar yükleniyor…" |
+|---|---|---|
+| Önce | **1.827** | hâlâ açık |
+| Sonra | 1 | kapandı |
+
+Saniyede ~228 istek. Zayıf makinede ve mobil veride bu yalnızca yavaşlık
+değil, kotanın yenmesi demek. Kullanıcının gördüğü tek belirti "Fiyatlar
+yükleniyor…" rozetinin hiç kaybolmamasıydı — sessiz başarısızlığın bir
+başka yüzü.
+
+Üç ayrı düzeltme:
+
+1. **Başarısız `piyasa:sembol` anahtarları işaretleniyor** (`failed` ref) —
+   döngüyü kapatan şey bu. Aynı sembol ikinci kez istenmiyor.
+2. **`loading` bayrağı yerine süren istek SAYACI.** Bayrağın `false`'a
+   dönüşü `cancelled` kontrolüne bağlıydı; efekt kendi `setSeries`'i
+   yüzünden yeniden koştuğunda temizlik `cancelled`'ı true yapıyor ve
+   `setLoading(false)` hiç çalışmayabiliyordu. Sayaçta her artışın tam bir
+   azalışı var; yarışa kapalı.
+3. **Seri önbelleği piyasaya bağlandı.** Anahtar yalnızca semboldü ve piyasa
+   değişince sıfırlanmıyordu: aynı koda sahip bir sembolün BAŞKA piyasadaki
+   serisi değerlemeye girebilirdi.
+
+Üçü de teste bağlandı. Düzeltme geri alındığında birim test takımı
+**hiç bitmiyor** (döngü jsdom'da da kuruluyor) — kusurun kendisi kadar net
+bir kanıt.
+
+### Uzun oturumda bellek: sızıntı yok
+
+Duyuru işi bittikten sonra aynı gözle belleğe bakıldı, çünkü "zayıf
+makinede akıcı" iddiası uzun oturumu da kapsıyor.
+
+| Senaryo | Yığın | Düğüm | Dinleyici |
+|---|---|---|---|
+| 9 ekran × 14 tur (126 geçiş) | 5,20 → 6,70 MB | 417 → 417 | 184 → 184 |
+| 19 sembol × 8 tur (152 değişim) | 4,24 → 4,38 MB | 242 → 242 | 191 → 191 |
+
+Yığın artışı son turlarda duruyor (11 → 14. tur arası toplam +0,04 MB):
+sızıntı değil, ısınma ve önbellek. Düğüm ve dinleyici sayısı **tam olarak**
+sabit — grafik `remove()`, `ResizeObserver` `disconnect()` ve tema
+dinleyicisi temizlikleri çalışıyor. Düzeltilecek bir şey çıkmadı; ölçüm
+`docs/plan/performans.md`'ye eklendi.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

@@ -18,6 +18,7 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { Prov } from '../Prov';
+import { Announce } from '../Announce';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -278,6 +279,7 @@ export default function ModelScreen({ state, push }: Props) {
         )
       ) : (
         <>
+          <Announce message={`Model eğitimi tamamlandı. Hüküm: ${card.verdict}.`} />
           <section className="model__verdict" aria-label="Hüküm">
             <Badge tone={VERDICT_TONE[card.verdict]}>Hüküm: {card.verdict}</Badge>
             <p className="model__lead">

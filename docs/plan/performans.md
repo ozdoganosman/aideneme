@@ -237,6 +237,32 @@ eksik kalmasıydı.
 yani "bayat veriyi gösterme" riski yok. Test bunu kalıcı kıldı: aynı
 önbellekle kurulan İKİNCİ istemci ağa hiç çıkmıyor.
 
+## Uzun oturum: bellek sızıyor mu?
+
+Şimdiye kadar hep AÇILIŞ ve tek etkileşim ölçüldü. Zayıf makinede asıl
+sorun çoğu zaman ilk saniye değil, yarım saat sonra: sızan bir dinleyici ya
+da atılmayan bir grafik, sekmeyi yavaş yavaş boğar.
+
+Ölçüm: CDP `HeapProfiler.collectGarbage` ile zorlanmış çöp toplamadan sonra
+`Performance.getMetrics` (yığın, DOM düğümü, JS olay dinleyicisi).
+
+| Senaryo | Yığın | Düğüm | Dinleyici |
+|---|---|---|---|
+| 9 ekran × 14 tur (126 geçiş) | 5,20 → 6,70 MB | 417 → 417 | 184 → 184 |
+| 19 sembol × 8 tur (152 değişim) | 4,24 → 4,38 MB | 242 → 242 | 191 → 191 |
+
+Yığın artışı **duruyor**: ekran turunda 11 → 14. turlar arası toplam
++0,04 MB. Bu bir sızıntı eğrisi değil, ısınma ve önbellek platosu. Düğüm ve
+dinleyici sayısı tam olarak sabit — `chart.remove()`, `ResizeObserver`
+`disconnect()` ve tema `matchMedia` dinleyicisinin temizliği çalışıyor.
+
+Worker'lardaki paket önbelleği (`bundles` Map'i) piyasa başına bir kopya
+tutuyor; üç piyasa olduğu için sınırlı. Bu ortamda yalnızca BIST örnek
+verisi bulunduğundan piyasa DEĞİŞİMİ ölçülemedi — bilinen boşluk.
+
+Düzeltilecek bir şey çıkmadı. Ölçüm yine de burada: "sızıntı yok" bir
+iddiadır ve ölçülmeden yazılmamalı.
+
 ## Tekrar üretmek için
 
 ```bash

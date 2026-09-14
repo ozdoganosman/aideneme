@@ -22,6 +22,7 @@ import type { Badge as ValidationBadge } from '../../core/backtest/validate';
 import { REGIME_CAVEAT, regimeVerdict } from '../../core/stats/regime';
 import { BACKTEST_METRIC_FORMULA } from '../../core/backtest/metrics';
 import { Prov } from '../Prov';
+import { Announce } from '../Announce';
 import { describeCondition, type Operand, type Strategy } from '../../core/strategy/dsl';
 import { STRATEGY_PRESETS } from '../../core/strategy/presets';
 import { decodeStrategy, encodeStrategy } from '../../core/strategy/share';
@@ -424,6 +425,11 @@ export default function Lab({ state, push, replace }: Props) {
         </p>
 
         <div className="lab__actions">
+          <Announce
+            message={
+              !busy && outcome && metrics ? `Backtest tamamlandı: ${metrics.trades} işlem.` : ''
+            }
+          />
           <CopyLink label="Stratejiyi paylaş" />
           <Button variant="primary" busy={validating} onClick={runValidation}>
             Doğrulamayı çalıştır

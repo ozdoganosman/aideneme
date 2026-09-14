@@ -28,6 +28,7 @@ import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
 import { Prov } from '../Prov';
+import { Announce } from '../Announce';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -369,6 +370,11 @@ export default function Strategies({ state, push }: Props) {
         )
       ) : (
         <>
+          <Announce
+            message={`Strateji sıralaması hazır: ${sorted.length} strateji, ${
+              scope === 'symbol' ? `${info?.bars ?? 0} bar` : `${info?.symbols ?? 0} sembol`
+            }.`}
+          />
           <div className="rank__meta">
             <Stat
               label={scope === 'symbol' ? 'Bar' : 'Sembol'}
