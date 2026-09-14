@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { DEFAULT_PARAMS, type IndBundle, type IndicatorParams } from '../../core/indicators/calc';
 import { useChartColors } from '../chart/useThemeColors';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
@@ -12,6 +13,7 @@ import {
   Skeleton,
   Stat,
   Tabs,
+  NumberField,
   Toggle,
   trPct,
   trNum,
@@ -63,6 +65,38 @@ const OVERLAY_DEFS = [
   { key: 'ema200', label: 'EMA 200', length: 200, token: 'warn' as const },
 ];
 
+/**
+ * Fiyatın ALTINDAKİ paneller. Eski arayüzün iki indikatörü taşındı; ikisi de
+ * "260 günlük paradigma" parametreleriyle geliyor.
+ *
+ * Ayrı panel şart: %R 0–100 aralığında, MACD ise fiyata bölünmüş küçük bir
+ * sayı. Fiyatla aynı eksende çizilseler ikisi de düz çizgiye iner.
+ */
+const PANELLER = [
+  {
+    key: 'wr',
+    label: 'Williams %R',
+    pane: 1,
+    // Parametre ADI → etiket. Değerler `indParams` içinde tutuluyor.
+    params: [
+      ['wr', '%R'],
+      ['wrEmaA', 'EMA yavaş'],
+      ['wrEmaB', 'EMA hızlı'],
+    ] as const,
+  },
+  {
+    key: 'macd',
+    label: 'MACD (NizamiCedid)',
+    pane: 2,
+    params: [
+      ['macdFast', 'hızlı'],
+      ['macdSlow', 'yavaş'],
+      ['macdSig', 'sinyal'],
+      ['macdVwma', 'eMACD'],
+    ] as const,
+  },
+] as const;
+
 type LoadState =
   | { status: 'idle' }
   | { status: 'loading' }
@@ -104,6 +138,9 @@ export default function SymbolDesk({ state, push }: Props) {
   const [chartReady, setChartReady] = useState(false);
   const [showVolume, setShowVolume] = useState(true);
   const [enabled, setEnabled] = useState<Record<string, boolean>>({ ema50: true, ema200: false });
+  // Panel kapalıyken indikatör HİÇ hesaplanmıyor (worker isteğinde yok).
+  const [panels, setPanels] = useState<Record<string, boolean>>({ wr: false, macd: false });
+  const [indParams, setIndParams] = useState<IndicatorParams>(DEFAULT_PARAMS);
   const requestId = useRef(0);
 
   // Grafik kütüphanesi zayıf makinede ~230 ms CPU istiyor (profille ölçüldü).
@@ -191,6 +228,8 @@ export default function SymbolDesk({ state, push }: Props) {
     metrics: Metric[];
     health: HealthReport;
     overlayValues: Float64Array[];
+    /** Panel açıksa: Williams %R ve NizamiCedid MACD serileri. */
+    indicators?: IndBundle;
   } | null>(null);
   /** Analiz (worker) hatası — seri indi ama hesap yapılamadı. */
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -207,6 +246,8 @@ export default function SymbolDesk({ state, push }: Props) {
       .symbol(daily, {
         tf,
         overlays: OVERLAY_DEFS.map((d) => ({ key: d.key, length: d.length })),
+        // Hiçbir panel açık değilse indikatör hesaplanmıyor.
+        indicators: panels.wr || panels.macd ? indParams : undefined,
         todayDay: Math.floor(Date.now() / 1000 / DAY_SECONDS),
         realReturn: market === 'bist',
       })
@@ -223,24 +264,68 @@ export default function SymbolDesk({ state, push }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [daily, tf, market]);
+  }, [daily, tf, market, panels.wr, panels.macd, indParams]);
 
   const candles = analysisResult?.candles ?? null;
   const metrics = analysisResult?.metrics ?? [];
 
   const chartColors = useChartColors();
 
-  const overlays = useMemo(
-    () =>
-      OVERLAY_DEFS.map((def, i) => ({
-        key: def.key,
-        label: def.label,
-        color: chartColors[def.token],
-        values: analysisResult?.overlayValues[i] ?? new Float64Array(0),
-        visible: !!enabled[def.key],
-      })),
-    [analysisResult, enabled, chartColors],
-  );
+  const overlays = useMemo(() => {
+    const bos = new Float64Array(0);
+    const ind = analysisResult?.indicators;
+    const fiyat = OVERLAY_DEFS.map((def, i) => ({
+      key: def.key,
+      label: def.label,
+      color: chartColors[def.token],
+      values: analysisResult?.overlayValues[i] ?? bos,
+      visible: !!enabled[def.key],
+    }));
+
+    // Williams %R paneli. 50 çizgisi eşiğin kendisi: yayındaki stratejilerin
+    // çoğu "%R 50'yi yukarı kesince al" diyor, çizgi olmadan okunmuyor.
+    const wr = [
+      {
+        key: 'wr:r',
+        label: '%R',
+        color: chartColors.accent,
+        values: ind?.percentR ?? bos,
+        baseline: 50,
+      },
+      {
+        key: 'wr:a',
+        label: `EMA ${indParams.wrEmaA}`,
+        color: chartColors.warn,
+        values: ind?.emawil ?? bos,
+      },
+      {
+        key: 'wr:b',
+        label: `EMA ${indParams.wrEmaB}`,
+        color: chartColors.muted,
+        values: ind?.emawil120 ?? bos,
+      },
+    ].map((o) => ({ ...o, pane: 1, visible: !!panels.wr }));
+
+    // NizamiCedid MACD paneli. Seriler hızlı EMA'ya bölünmüş (ölçekten
+    // arındırılmış), yani farklı fiyat seviyelerindeki semboller arasında
+    // karşılaştırılabilir. Sıfır çizgisi yön eşiği.
+    const macd = [
+      {
+        key: 'macd:h',
+        label: 'Histogram',
+        color: chartColors.muted,
+        values: ind?.histN ?? bos,
+        kind: 'hist' as const,
+        momentumColor: true,
+        baseline: 0,
+      },
+      { key: 'macd:m', label: 'MACD', color: chartColors.accent, values: ind?.macdN ?? bos },
+      { key: 'macd:s', label: 'Sinyal', color: chartColors.warn, values: ind?.signalN ?? bos },
+      { key: 'macd:e', label: 'eMACD', color: chartColors.down, values: ind?.eMacDN ?? bos },
+    ].map((o) => ({ ...o, pane: 2, visible: !!panels.macd }));
+
+    return [...fiyat, ...wr, ...macd];
+  }, [analysisResult, enabled, panels, indParams, chartColors]);
 
   return (
     <div className="desk">
@@ -286,6 +371,49 @@ export default function SymbolDesk({ state, push }: Props) {
           <Toggle label="Hacim" checked={showVolume} onChange={setShowVolume} />
         </div>
       </div>
+
+      {/*
+        İndikatör panelleri ayrı bir satırda: parametre alanlarıyla birlikte
+        üst çubuğa sığmıyorlar ve üst çubuk zaten piyasa/sembol/periyot
+        taşıyor. Parametreler yalnızca panel AÇIKKEN görünüyor — kapalı bir
+        indikatörün dört sayı kutusu ekranda yer kaplamamalı.
+      */}
+      {tab === 'grafik' ? (
+        <div className="desk__panels">
+          {PANELLER.map((panel) => (
+            <div key={panel.key} className="desk__panel">
+              <Toggle
+                label={panel.label}
+                checked={!!panels[panel.key]}
+                onChange={(v) => setPanels((prev) => ({ ...prev, [panel.key]: v }))}
+              />
+              {panels[panel.key] ? (
+                <div className="desk__panelparams">
+                  {panel.params.map(([alan, etiket]) => (
+                    <NumberField
+                      key={alan}
+                      label={etiket}
+                      value={indParams[alan]}
+                      min={2}
+                      max={1000}
+                      onChange={(v) =>
+                        setIndParams((prev) => ({ ...prev, [alan]: Math.max(2, Math.round(v)) }))
+                      }
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    className="desk__reset"
+                    onClick={() => setIndParams(DEFAULT_PARAMS)}
+                  >
+                    Varsayılan
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {load.status !== 'error' && (analysisError || analysis.status === 'error') ? (
         <DataError title="Analiz çalıştırılamadı" detail={analysisError ?? analysis.error} />

@@ -152,6 +152,8 @@ export class AnalysisClient {
     options: {
       tf: import('../core/data/resample').TF;
       overlays: { key: string; length: number }[];
+      /** Verilmezse indikatörler hesaplanmıyor (panel kapalı). */
+      indicators?: import('../core/indicators/calc').IndicatorParams;
       todayDay: number;
       realReturn: boolean;
     },

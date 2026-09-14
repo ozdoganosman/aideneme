@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { computeIndicators, type IndicatorParams } from '../../core/indicators/calc';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DAY_SECONDS } from '../../core/data/pack';
@@ -10,13 +11,32 @@ import { emaArr } from '../../core/indicators/calc';
 
 // Grafik ayrı chunk ve canvas gerektiriyor; ekran testinde yerine sahte kondu.
 vi.mock('../chart/PriceChart', () => ({
-  PriceChart: ({ candles }: { candles: Candles }) => (
-    <div data-testid="chart">{candles.length} bar</div>
+  PriceChart: ({
+    candles,
+    overlays = [],
+  }: {
+    candles: Candles;
+    overlays?: { key: string; visible: boolean; pane?: number; values: Float64Array }[];
+  }) => (
+    <div
+      data-testid="chart"
+      // Görünür VE verisi olan panel serileri: "açık ama boş" durumu
+      // (EMA 200 kusurunun aynısı) teste yakalansın.
+      data-panes={overlays
+        .filter((o) => (o.pane ?? 0) > 0 && o.visible && o.values.length > 0)
+        .map((o) => o.key)
+        .join(',')}
+    >
+      {candles.length} bar
+    </div>
   ),
 }));
 
 // Sembol analizi artık worker'da; sahte istemci aynı çekirdek fonksiyonları
 // çağırır, böylece ekranın gösterdiği sayılar gerçek hesapla aynı kalır.
+/** Son `symbol()` isteğinin seçenekleri — indikatör isteği sınanacak. */
+const sonIstek: { indicators?: IndicatorParams } = {};
+
 const FAKE_ANALYSIS = {
   client: {
     size: 2,
@@ -25,16 +45,21 @@ const FAKE_ANALYSIS = {
       options: {
         tf: TF;
         overlays: { key: string; length: number }[];
+        indicators?: IndicatorParams;
         todayDay: number;
         realReturn: boolean;
       },
     ) => {
+      sonIstek.indicators = options.indicators;
       const resampled = resample(candles, options.tf);
       return {
         candles: resampled,
         metrics: summarize(resampled, { realReturn: options.realReturn }),
         health: inspect(candles, { today: options.todayDay }),
         overlayValues: options.overlays.map((o) => emaArr(resampled.close, o.length)),
+        indicators: options.indicators
+          ? computeIndicators(resampled, options.indicators)
+          : undefined,
         ms: 3,
       };
     },
@@ -102,6 +127,43 @@ describe('SymbolDesk', () => {
   // Veri sağlığı paneli KALDIRILDI (kullanıcı isteği): grafik bu ekranın asıl
   // işi ve panel dikey alanı yiyordu. Bulgular kayıp değil — paket üretimi
   // sırasında ölçülüyor ve `core/data/health.ts` testleri yerinde duruyor.
+  // Eski arayüzün iki indikatörü. Panel KAPALIYKEN worker'a istek gitmemeli:
+  // 3650 barlık iki indikatörü kimse bakmıyorken hesaplamak boşa iş.
+  it('panel kapalıyken indikatör hesaplanmıyor', async () => {
+    render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+    expect(sonIstek.indicators).toBeUndefined();
+    expect(screen.getByTestId('chart')).toHaveAttribute('data-panes', '');
+  });
+
+  it('panel açılınca indikatör isteniyor ve seriler VERİYLE geliyor', async () => {
+    const user = userEvent.setup();
+    render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+
+    await user.click(screen.getByText('Williams %R'));
+
+    // "Açık ama boş" olmamalı — EMA 200 kusuru tam olarak buydu.
+    await waitFor(() =>
+      expect(screen.getByTestId('chart')).toHaveAttribute('data-panes', 'wr:r,wr:a,wr:b'),
+    );
+    expect(sonIstek.indicators?.wr).toBe(260);
+  });
+
+  it('parametre değişince yeni değerle yeniden hesaplanıyor', async () => {
+    const user = userEvent.setup();
+    render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+    await user.click(screen.getByText('MACD (NizamiCedid)'));
+    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(120));
+
+    const alan = screen.getByLabelText('hızlı');
+    await user.clear(alan);
+    await user.type(alan, '90');
+
+    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(90));
+  });
+
   it('veri sağlığı paneli artık ekranda değil', async () => {
     render(<SymbolDesk state={STATE} push={push} />);
     await screen.findByTestId('chart');

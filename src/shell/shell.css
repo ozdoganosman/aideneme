@@ -1633,3 +1633,49 @@
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
+
+/* ── İndikatör panelleri (grafik sekmesi) ─────────────────────────────── */
+/* Ayrı satır: parametre alanlarıyla birlikte üst çubuğa sığmıyorlar. */
+.desk__panels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+.desk__panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.desk__panelparams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+/* Parametre kutuları dar: dört tanesi yan yana duracak. */
+.desk__panelparams .ui-field input {
+  width: 72px;
+}
+.desk__reset {
+  align-self: flex-end;
+  /* WCAG 2.5.8: dokunma hedefi en az 24×24. */
+  min-height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.desk__reset:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}

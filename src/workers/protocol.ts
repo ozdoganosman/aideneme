@@ -1,4 +1,5 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
+import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
 import type { PulseRow, PulseSummary } from '../core/screen/pulse';
 import type { Strategy } from '../core/strategy/dsl';
 import type { BacktestOptions, Trade } from '../core/backtest/engine';
@@ -78,6 +79,15 @@ export interface SymbolRequest {
   tf: TF;
   /** Hesaplanacak EMA benzeri örtüler. */
   overlays: { key: string; length: number }[];
+  /**
+   * Fiyatın ALTINDAKİ panellere çizilecek indikatörler için parametreler.
+   *
+   * Verilmezse hesaplanmıyor: kullanıcı paneli kapalıyken 3650 barlık iki
+   * indikatörü hesaplamak boşa iş. Parametreler dışarıdan geliyor çünkü
+   * ayarlanabilir olmaları isteniyor ve worker'ın varsayılan tutması
+   * arayüzle ikinci bir gerçek kaynağı olurdu.
+   */
+  indicators?: IndicatorParams;
   /** Bugün (epoch gün) — sağlık raporu saf kalsın diye dışarıdan gelir. */
   todayDay: number;
   /** TL bazlı piyasada reel getiri metriği eklensin mi. */
@@ -209,6 +219,8 @@ export interface SymbolResponse {
   health: HealthReport;
   /** overlays isteğiyle aynı sırada. */
   overlayValues: Float64Array[];
+  /** İstenmişse: Williams %R ve NizamiCedid MACD serileri. */
+  indicators?: IndBundle;
   ms: number;
 }
 

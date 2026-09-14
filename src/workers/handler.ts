@@ -1,3 +1,4 @@
+import { computeIndicators } from '../core/indicators/calc';
 import { decodeBundle, type Bundle } from '../core/data/pack';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
 import { pulseRow, summarizePulse, type PulseRow } from '../core/screen/pulse';
@@ -84,6 +85,8 @@ export function createHandler() {
             metrics: summarize(resampled, { realReturn: req.realReturn }),
             health: inspect(req.candles, { today: req.todayDay }),
             overlayValues: req.overlays.map((o) => emaArr(resampled.close, o.length)),
+            // Panel kapalıyken hesaplanmıyor: 3650 barlık iki indikatör boşa iş.
+            indicators: req.indicators ? computeIndicators(resampled, req.indicators) : undefined,
             ms: now() - started,
           };
         }

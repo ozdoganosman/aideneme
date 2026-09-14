@@ -19,6 +19,20 @@ export interface Overlay {
   color: string;
   values: Float64Array;
   visible: boolean;
+  /**
+   * Hangi panele çizilecek. 0 = fiyat paneli (EMA örtüleri).
+   * 1, 2… = fiyatın ALTINDA ayrı panel (Williams %R, MACD).
+   *
+   * Ayrı panel şart: %R 0–100, MACD ise fiyata bölünmüş küçük bir sayı.
+   * Fiyatla aynı eksende çizilseler ikisi de düz çizgiye iner.
+   */
+  pane?: number;
+  /** Çizgi mi sütun mu (MACD histogramı sütun). */
+  kind?: 'line' | 'hist';
+  /** Histogramı yönüne göre renklendir (MACD betiğindeki gibi). */
+  momentumColor?: boolean;
+  /** Bu panelde çizilecek sabit yatay çizgi (%R'de 50, MACD'de 0). */
+  baseline?: number;
 }
 
 export interface PriceChartProps {
@@ -47,7 +61,7 @@ export function PriceChart({
   const chartRef = useRef<IChartApi | null>(null);
   const lodRef = useRef<LodController | null>(null);
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
-  const overlayRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const overlayRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
   const lastFitKey = useRef<string | undefined>(undefined);
   const colors = useChartColors();
 
@@ -110,24 +124,87 @@ export function PriceChart({
     chart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
     const specs: ExtraSpec[] = [];
-    const map = new Map<string, ISeriesApi<'Line'>>();
+    const map = new Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>();
     for (const overlay of overlays) {
-      const series = chart.addSeries(
-        LineSeries,
-        {
-          color: overlay.color,
+      const pane = overlay.pane ?? 0;
+      const hist = overlay.kind === 'hist';
+      const series = hist
+        ? chart.addSeries(
+            HistogramSeries,
+            {
+              color: overlay.color,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: overlay.label,
+              visible: overlay.visible,
+            },
+            pane,
+          )
+        : chart.addSeries(
+            LineSeries,
+            {
+              color: overlay.color,
+              lineWidth: 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              crosshairMarkerVisible: false,
+              title: overlay.label,
+              visible: overlay.visible,
+            },
+            pane,
+          );
+      // Sabit yatay çizgi (%R'de 50, MACD'de 0): eşiği görmeden çizginin
+      // "yukarıda" mı "aşağıda" mı olduğu okunamaz.
+      if (overlay.baseline !== undefined) {
+        series.createPriceLine({
+          price: overlay.baseline,
+          // Izgara rengi DEĞİL: eşik çizgisi ızgaranın kendisiyle aynı renkte
+          // olunca görünmüyordu (ölçüldü: %R'de 50, MACD'de 0 çizgisi yok
+          // sanılıyordu). Eşik bir ızgara çizgisi değil, okunması gereken bir
+          // sınır.
+          color: colors.muted,
           lineWidth: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
-          title: overlay.label,
-          visible: overlay.visible,
-        },
-        0,
-      );
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: false,
+          title: '',
+        });
+      }
       map.set(overlay.key, series);
-      specs.push({ series, kind: 'line' });
+      specs.push({ series, kind: hist ? 'hist' : 'line', momentumColor: overlay.momentumColor });
     }
+
+    // Panel yükseklikleri. Varsayılan dağıtımda indikatör panelleri fiyatla
+    // neredeyse eşit pay alıyor ve mumlar eziliyordu; fiyat bu grafiğin asıl
+    // işi. Esneme katsayısı: fiyat 3, her indikatör 1.
+    const paneCount = 1 + Math.max(0, ...overlays.map((o) => o.pane ?? 0));
+    if (paneCount > 1) {
+      const panes = chart.panes();
+      panes[0]?.setStretchFactor(3);
+      for (let i = 1; i < panes.length; i++) panes[i]?.setStretchFactor(1);
+    }
+
+    // Kütüphanenin ATIF bağlantısının erişilebilir adı yok: ekran okuyucu
+    // "bağlantı" deyip susuyor, kullanıcı nereye gittiğini bilmiyor. Lisans
+    // gereği bağlantı kaldırılamaz ama adlandırılabilir.
+    //
+    // Denetimden zamanlama şansıyla kaçıyordu: hazır-seçici değişince ortaya
+    // çıktı. Bağlantı kurulum ANINDA henüz yok (kütüphane sonradan ekliyor),
+    // o yüzden gözlemciyle bekleniyor; etiketlenince gözlemci kapanıyor.
+    const etiketle = (): boolean => {
+      const atif = host.querySelector<HTMLAnchorElement>('a[href*="tradingview"]');
+      if (!atif) return false;
+      if (!atif.getAttribute('aria-label')) {
+        atif.setAttribute('aria-label', 'Grafik kütüphanesi: TradingView (yeni sekmede açılır)');
+      }
+      return true;
+    };
+    // Gözlemci ilk başarıda KAPANMIYOR: kütüphane yeniden boyutlanmada atıf
+    // düğümünü yeniden kuruyor ve bir kez konan etiket siliniyor (ölçüldü:
+    // etiket kurulumda konuyor, 500 ms sonra yok). Grafik ömrü boyunca açık
+    // kalıyor, temizlikte kapanıyor.
+    etiketle();
+    const atifGozlemci = new MutationObserver(() => etiketle());
+    atifGozlemci.observe(host, { childList: true, subtree: true });
 
     chartRef.current = chart;
     volumeRef.current = volumeSeries;
@@ -158,6 +235,7 @@ export function PriceChart({
       chart.remove();
       chartRef.current = null;
       lodRef.current = null;
+      atifGozlemci?.disconnect();
       overlayRef.current = new Map();
     };
     // Renk/görünürlük değişimleri aşağıdaki efektlerde uygulanır — grafik
