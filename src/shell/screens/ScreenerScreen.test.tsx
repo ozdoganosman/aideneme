@@ -20,6 +20,14 @@ vi.mock('../../data-client/sectors', () => ({
   sectorsClient: { map: (...a: unknown[]) => sectorsFn(...a) },
 }));
 
+const manifestFn = vi.fn();
+vi.mock('../../data-client/client', () => ({
+  dataClient: { manifest: (...a: unknown[]) => manifestFn(...a) },
+}));
+
+import { encodeScreen } from '../../core/screen/share';
+import { DEFAULT_SCREEN_PARAMS } from '../../core/screen/metrics';
+
 import ScreenerScreen from './ScreenerScreen';
 
 function row(symbol: string, rsi: number, chg21: number): ScreenRow {
@@ -50,6 +58,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sectorsFn.mockResolvedValue(null);
+  manifestFn.mockResolvedValue({
+    version: 1,
+    market: 'bist',
+    generated: 1_758_000_000,
+    symbols: {},
+    bundle: { file: 'b.bin', hash: 'hash-b' },
+  });
   screenFn.mockResolvedValue({
     rows: [row('AAA', 55, 10), row('BBB', 80, -5), row('CCC', 45, 3)],
     ms: 42,
@@ -373,5 +388,124 @@ describe('Tarayıcı — koleksiyon taşıma', () => {
 
     await waitFor(() => expect(screen.getByText('Hiçbir tarama alınamadı.')).toBeInTheDocument());
     expect(screen.getByText(/JSON olarak okunamadı/)).toBeInTheDocument();
+  });
+});
+
+describe('Tarayıcı — kayıtlı taramada ne değişti', () => {
+  const RULES = [{ metric: 'rsi', op: 'gt' as const, a: 50 }];
+  const CODE = encodeScreen({
+    rules: RULES,
+    params: DEFAULT_SCREEN_PARAMS,
+    sectors: [],
+    sort: { metric: 'chg21', dir: 'desc' },
+  });
+
+  function seed(snapshot: Record<string, unknown> | null) {
+    localStorage.setItem(
+      'screener.saved',
+      JSON.stringify([
+        { name: 'Tarama 1', rules: RULES, params: DEFAULT_SCREEN_PARAMS, sectors: [] },
+      ]),
+    );
+    if (snapshot) localStorage.setItem('screener.snapshots.v1', JSON.stringify(snapshot));
+  }
+
+  it('yeni veri geldiyse gireni ve çıkanı söyler', async () => {
+    // Geçen bakışta AAA ve ZZZ eşleşiyordu; paket o zamandan beri değişti.
+    seed({
+      'bist|Tarama 1': {
+        name: 'Tarama 1',
+        market: 'bist',
+        code: CODE,
+        data: 'hash-a',
+        generated: 1_757_800_000,
+        symbols: ['AAA', 'ZZZ'],
+      },
+    });
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await user.click(await screen.findByRole('button', { name: /^Tarama 1/ }));
+
+    // RSI > 50 → AAA (55) ve BBB (80). ZZZ artık yok.
+    const bar = await screen.findByRole('status', { name: 'Kayıtlı tarama farkı' });
+    await waitFor(() => expect(bar).toHaveTextContent('1 giren'));
+    expect(bar).toHaveTextContent('1 çıkan');
+    expect(
+      within(bar).getByRole('button', { name: 'BBB taramaya girdi, sembol masasında aç' }),
+    ).toBeInTheDocument();
+    expect(
+      within(bar).getByRole('button', { name: 'ZZZ taramadan çıktı, sembol masasında aç' }),
+    ).toBeInTheDocument();
+  });
+
+  it('kaydı açmadan da rozet değişimi duyurur', async () => {
+    // "Alarm" burada: kullanıcı kaydı tıklamadan, listede ne değiştiğini görüyor.
+    seed({
+      'bist|Tarama 1': {
+        name: 'Tarama 1',
+        market: 'bist',
+        code: CODE,
+        data: 'hash-a',
+        generated: 1_757_800_000,
+        symbols: ['AAA', 'ZZZ'],
+      },
+    });
+    render(<ScreenerScreen state={STATE} push={push} />);
+    expect(
+      await screen.findByRole('button', { name: 'Tarama 1: 1 giren, 1 çıkan' }),
+    ).toBeInTheDocument();
+  });
+
+  it('aynı pakette fark aramaz', async () => {
+    seed({
+      'bist|Tarama 1': {
+        name: 'Tarama 1',
+        market: 'bist',
+        code: CODE,
+        data: 'hash-b', // manifest ile aynı
+        generated: 1_758_000_000,
+        symbols: ['AAA'],
+      },
+    });
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await user.click(await screen.findByRole('button', { name: /^Tarama 1/ }));
+
+    const bar = await screen.findByRole('status', { name: 'Kayıtlı tarama farkı' });
+    await waitFor(() => expect(bar).toHaveTextContent(/değişmedi/));
+    // Sonuç listesi anlık görüntüden farklı (BBB de eşleşiyor) ama bu fark
+    // piyasadan gelmiyor: aynı veriye bakıyoruz.
+    expect(bar).not.toHaveTextContent('giren');
+  });
+
+  it('kural kayıttan farklıysa farkı piyasaya yazmaz', async () => {
+    seed({
+      'bist|Tarama 1': {
+        name: 'Tarama 1',
+        market: 'bist',
+        code: '1|rsi~g~10|14.14.20.50.14.20.250||chg21~d',
+        data: 'hash-a',
+        generated: 1_757_800_000,
+        symbols: ['AAA'],
+      },
+    });
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await user.click(await screen.findByRole('button', { name: /^Tarama 1/ }));
+
+    const bar = await screen.findByRole('status', { name: 'Kayıtlı tarama farkı' });
+    await waitFor(() => expect(bar).toHaveTextContent(/kurallar işaretlenen halinden farklı/));
+  });
+
+  it('kaydetmek başlangıç noktasını da işaretler', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Taramayı kaydet' }));
+
+    const bar = await screen.findByRole('status', { name: 'Kayıtlı tarama farkı' });
+    await waitFor(() => expect(bar).toHaveTextContent(/değişmedi/));
+    const stored = JSON.parse(localStorage.getItem('screener.snapshots.v1')!);
+    expect(stored['bist|Tarama 1'].symbols).toEqual(['AAA', 'CCC']);
   });
 });

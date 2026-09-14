@@ -539,6 +539,29 @@
   flex: 1;
   min-height: 320px;
 }
+.screener__watch {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  font-size: var(--fs-sm);
+}
+.screener__watch b {
+  font-weight: 600;
+}
+.screener__watch ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 
 /* ── Karşılaştır ──────────────────────────────────────────────────────── */
 .compare {

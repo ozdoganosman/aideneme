@@ -381,6 +381,8 @@ Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
 1. **Stratejiler ekranı** — piyasa geneli sıralama, üç kapsam, Holm düzeltmesi.
 2. **Sektör bazlı para akışı** — davranış kümelerinin yanına resmî sınıflandırma.
 3. **Paylaşılabilirlik** — tarama filtreleri ve laboratuvar kuralı URL'de.
+   Kayıtlı taramada "ne değişti": durağan veri paketine dürüst alarm karşılığı
+   (bildirim yok; yeni pakette giren/çıkan sembol).
 4. **Erişilebilirlik borcunun kapatılması** — devralınan ekranlarda 46 uyarı → 0.
 
 **Kalan boşluklar** (kapanmadı, gizlenmedi):

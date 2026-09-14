@@ -527,6 +527,48 @@ Akış uçtan uca teste bağlandı (`e2e/akislar.spec.ts`): Nabız'daki ilk sekt
 satırından geçiliyor, tarayıcıda tam olarak o rozet seçili çıkıyor ve URL
 paylaşılabilir kalıyor.
 
+## Kayıtlı taramada "ne değişti"
+
+Plandaki `tarayici` maddelerinden biri — "kayıtlı taramalar ve **alarm
+kurma**" — açıkta kalmıştı. Bu uygulamanın canlı akışı yok; veri, hattın
+ürettiği durağan bir paket. O yüzden bildirim gönderen bir alarm dürüst
+olmazdı. Dürüst olan şu: kullanıcı taramayı kaydettiğinde sonucu bir anlık
+görüntü olarak saklamak, uygulamayı bir sonraki açışında YENİ VERİYLE aynı
+taramayı çalıştırıp farkı göstermek.
+
+Kayıtlı tarama düğmesinde artık rozet var — kaydı açmaya gerek yok:
+
+    Tarama 1  [+2 / −1]
+
+Açıldığında ayrıntı şeridi çıkıyor: "2026-09-11 işaretinden bu yana ·
+2 giren · 1 çıkan · 95 kalan · +X002 +X004 −YOKSA". Giren/çıkan sembollerin
+her biri sembol masasına götüren bir düğme.
+
+Farkın anlamlı olması iki şarta bağlı ve ikisi de `core/screen/watch.ts`
+içinde **kontrol ediliyor** (`diffScreen`):
+
+| Durum | Ne yapılır |
+|---|---|
+| Anlık görüntü yok | Fark uydurulmaz; "işaretle" önerilir |
+| Veri paketi aynı (hash eşit) | Fark **aranmaz** — çıkacak fark piyasadan değil bizim hatamızdan gelirdi |
+| Kayıt başka bir kural setinden | Fark **gösterilmez** — "yeni giren" piyasa hareketi değil kullanıcının değişikliği olurdu |
+| Paket yeni, kural aynı | Giren/çıkan/kalan |
+
+İki ayrıntı bilinçli:
+
+- Fark, ekranda o an düzenlenen kurallara değil **kaydın tanımına** bakıyor.
+  "Tarama 1'e bugün ne girdi" sorusunun cevabı, kullanıcının o sırada ne
+  denediğinden bağımsız olmalı.
+- Taramanın kimliği **sıralamayı içermiyor**. Sıralama hangi sembolün
+  eşleştiğini değiştirmez; kimliğe katsaydık sütun başlığına tıklamak
+  "kural değişti" sayılırdı.
+
+Veri kimliği olarak manifest'teki paket hash'i kullanılıyor, üretim damgası
+değil: hat aynı veriyi yeniden paketlerse damga değişir, baytlar değişmez.
+Anlık görüntüler kayıtlı tarama koleksiyonunun DIŞINDA, ayrı bir anahtarda
+duruyor — koleksiyon taramanın tanımıdır, anlık görüntü ise bu cihazdaki
+gözlem.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

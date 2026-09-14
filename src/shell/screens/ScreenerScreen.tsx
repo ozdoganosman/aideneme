@@ -32,7 +32,15 @@ import {
   importScreens,
   type SavedScreen,
 } from '../../core/screen/share';
+import {
+  diffScreen,
+  readSnapshots,
+  snapshotKey,
+  type ScreenDiff,
+  type ScreenSnapshot,
+} from '../../core/screen/watch';
 import { sectorsClient } from '../../data-client/sectors';
+import { dataClient } from '../../data-client/client';
 import type { FundamentalsSnapshot } from '../../core/fundamentals/types';
 import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
@@ -59,6 +67,7 @@ const DEFAULT_RULES: Rule[] = [
 ];
 
 const SAVED_KEY = 'screener.saved';
+const SNAPSHOT_KEY = 'screener.snapshots.v1';
 
 /** Teknik + temel metrikler tek listede: filtre motoru ikisini ayırt etmiyor. */
 const ALL_METRIC_DEFS: MetricDef[] = [...METRIC_DEFS, ...FUNDAMENTAL_METRIC_DEFS];
@@ -73,6 +82,16 @@ function loadSaved(): SavedScreen[] {
     return [];
   }
 }
+
+function loadSnapshots(): Record<string, ScreenSnapshot> {
+  try {
+    return readSnapshots(localStorage.getItem(SNAPSHOT_KEY));
+  } catch {
+    return {};
+  }
+}
+
+const fmtDay = (seconds: number): string => new Date(seconds * 1000).toISOString().slice(0, 10);
 
 function fmtValue(id: string, v: number): string {
   if (!Number.isFinite(v)) return '—';
@@ -113,6 +132,11 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
   const [transferText, setTransferText] = useState('');
   const [transferNote, setTransferNote] = useState<string[]>([]);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
+  const [snaps, setSnaps] = useState<Record<string, ScreenSnapshot>>(loadSnapshots);
+  /** Ekranda açık olan kayıtlı taramanın adı — fark yalnızca onun için sorulur. */
+  const [activeSaved, setActiveSaved] = useState<string | null>(null);
+  /** Veri paketinin kimliği: fark ancak paket DEĞİŞTİYSE anlamlı. */
+  const [dataId, setDataId] = useState<{ id: string; generated: number } | null>(null);
   const [pickedSectors, setPickedSectors] = useState<string[]>(shared.state?.sectors ?? []);
 
   // Temel veri (finansal tablo anlık görüntüsü) — yoksa ekran teknik metriklerle
@@ -148,6 +172,24 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
     sectorsClient.map(market).then((map) => {
       if (!cancelled) setSectors(map);
     });
+    return () => {
+      cancelled = true;
+    };
+  }, [market]);
+
+  // Paket kimliği manifest'ten: baytlar değişmediyse "yeni sonuç" yoktur.
+  useEffect(() => {
+    let cancelled = false;
+    setDataId(null);
+    dataClient
+      .manifest(market)
+      .then((m) => {
+        if (cancelled) return;
+        setDataId({ id: m.bundle?.hash ?? String(m.generated), generated: m.generated });
+      })
+      .catch(() => {
+        /* manifest okunamazsa fark gösterilmez; uydurulmaz */
+      });
     return () => {
       cancelled = true;
     };
@@ -218,6 +260,67 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
       }),
     [enriched, rules, sort, pickedSectors],
   );
+
+  /** Sonuç hazır mı — hazır olmadan anlık görüntü alınmaz, fark gösterilmez. */
+  const settled = analysis.status === 'ready' && !busy && timing !== null;
+
+  /**
+   * Her KAYITLI taramanın bugünkü sonucu ve işaretli halinden farkı.
+   *
+   * Fark, ekranda düzenlenen kurallara değil KAYDIN TANIMINA bakar: "Tarama
+   * 1'e bugün ne girdi" sorusunun cevabı, kullanıcının o sırada ekranda ne
+   * denediğinden bağımsız olmalı. Hesap ucuz (filtre ana iş parçacığında,
+   * birkaç yüz satır) ve yalnızca sonuç oturduğunda yapılıyor.
+   */
+  const savedDiffs = useMemo(() => {
+    const out: Record<string, { diff: ScreenDiff; shot: ScreenSnapshot }> = {};
+    if (!dataId || !settled) return out;
+    for (const item of saved) {
+      const itemParams = { ...DEFAULT_SCREEN_PARAMS, ...item.params };
+      const itemSectors = item.sectors ?? [];
+      // KİMLİK sıralamayı içermez: sıralama hangi sembolün eşleştiğini
+      // değiştirmez, yalnızca satır sırasını.
+      const shot: ScreenSnapshot = {
+        name: item.name,
+        market,
+        code: encodeScreen({
+          rules: item.rules,
+          params: itemParams,
+          sectors: itemSectors,
+          sort: { metric: 'chg21', dir: 'desc' },
+        }),
+        data: dataId.id,
+        generated: dataId.generated,
+        symbols: applyScreen(enriched, {
+          rules: item.rules,
+          sort: { metric: 'chg21', dir: 'desc' },
+          minBars: 30,
+          sectors: itemSectors,
+        })
+          .map((r) => r.symbol)
+          .sort((a, b) => a.localeCompare(b, 'tr')),
+      };
+      out[item.name] = {
+        shot,
+        diff: diffScreen(snaps[snapshotKey(market, item.name)] ?? null, shot),
+      };
+    }
+    return out;
+  }, [saved, enriched, snaps, dataId, settled, market]);
+
+  const diff = activeSaved ? (savedDiffs[activeSaved]?.diff ?? null) : null;
+
+  function markSnapshot(name: string) {
+    const entry = savedDiffs[name];
+    if (!entry) return;
+    const next = { ...snaps, [snapshotKey(market, name)]: entry.shot };
+    setSnaps(next);
+    try {
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(next));
+    } catch {
+      /* depolama yoksa fark takibi çalışmaz, tarama çalışmaya devam eder */
+    }
+  }
 
   const columns: Column<ScreenRow>[] = useMemo(() => {
     const technical = ['last', 'chg1', 'chg21', 'rsi', 'adx', 'volRatio', 'fromHigh'];
@@ -294,6 +397,31 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
       localStorage.setItem(SAVED_KEY, JSON.stringify(next));
     } catch {
       /* depolama yoksa kayıt atlanır, tarama çalışmaya devam eder */
+    }
+    // Kaydın açılışı, bir sonraki ziyarette "ne değişti" sorusunun başlangıç
+    // noktasıdır: şimdiki sonuç anlık görüntü olarak saklanıyor.
+    setActiveSaved(name);
+    if (dataId && settled) {
+      const shot: ScreenSnapshot = {
+        name,
+        market,
+        code: encodeScreen({
+          rules,
+          params,
+          sectors: pickedSectors,
+          sort: { metric: 'chg21', dir: 'desc' },
+        }),
+        data: dataId.id,
+        generated: dataId.generated,
+        symbols: filtered.map((r) => r.symbol).sort((a, b) => a.localeCompare(b, 'tr')),
+      };
+      const merged = { ...snaps, [snapshotKey(market, name)]: shot };
+      setSnaps(merged);
+      try {
+        localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(merged));
+      } catch {
+        /* depolama yoksa fark takibi çalışmaz */
+      }
     }
   }
 
@@ -506,27 +634,111 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
             >
               Stratejilerde test et ({Math.min(filtered.length, 60)})
             </Button>
-            {saved.map((s) => (
-              <Button
-                key={s.name}
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setRules(s.rules);
-                  // Eski kayıtlarda parametre alanları eksik olabilir; varsayılanla
-                  // birleştiriliyor ki yarım bir nesne ekrana sızmasın.
-                  setParams({ ...DEFAULT_SCREEN_PARAMS, ...s.params });
-                  // Eski kayıtlarda sektör alanı yok: o zaman filtre temizlenir,
-                  // kaydedilmemiş bir seçim geri yüklenmiş gibi görünmesin.
-                  setPickedSectors(s.sectors ?? []);
-                }}
-              >
-                {s.name}
-              </Button>
-            ))}
+            {saved.map((s) => {
+              const d = savedDiffs[s.name]?.diff;
+              const moved = d?.status === 'degisti' ? d.entered.length + d.exited.length : 0;
+              return (
+                <Button
+                  key={s.name}
+                  size="sm"
+                  variant="ghost"
+                  aria-label={
+                    moved > 0
+                      ? `${s.name}: ${d!.entered.length} giren, ${d!.exited.length} çıkan`
+                      : undefined
+                  }
+                  onClick={() => {
+                    setRules(s.rules);
+                    // Eski kayıtlarda parametre alanları eksik olabilir; varsayılanla
+                    // birleştiriliyor ki yarım bir nesne ekrana sızmasın.
+                    setParams({ ...DEFAULT_SCREEN_PARAMS, ...s.params });
+                    // Eski kayıtlarda sektör alanı yok: o zaman filtre temizlenir,
+                    // kaydedilmemiş bir seçim geri yüklenmiş gibi görünmesin.
+                    setPickedSectors(s.sectors ?? []);
+                    setActiveSaved(s.name);
+                  }}
+                >
+                  {s.name}
+                  {moved > 0 ? (
+                    <>
+                      {' '}
+                      <Badge tone={d!.entered.length >= d!.exited.length ? 'up' : 'down'}>
+                        +{d!.entered.length} / −{d!.exited.length}
+                      </Badge>
+                    </>
+                  ) : null}
+                </Button>
+              );
+            })}
           </div>
         </div>
       </section>
+
+      {diff && activeSaved ? (
+        <div className="screener__watch" role="status" aria-label="Kayıtlı tarama farkı">
+          <b>{activeSaved}</b>
+          {diff.status === 'ilk-bakis' ? (
+            <span className="desk__muted">
+              karşılaştırılacak önceki sonuç yok — şimdiki durumu işaretlersen bir sonraki veride ne
+              değiştiğini gösteririz.
+            </span>
+          ) : null}
+          {diff.status === 'ayni-veri' ? (
+            <span className="desk__muted">
+              veri paketi {fmtDay(diff.since!)} tarihinden beri değişmedi — yeni sonuç yok.
+            </span>
+          ) : null}
+          {diff.status === 'kural-degisti' ? (
+            <span className="desk__muted">
+              kurallar işaretlenen halinden farklı; çıkan fark piyasadan değil bu değişiklikten
+              gelirdi.
+            </span>
+          ) : null}
+          {diff.status === 'degisti' ? (
+            <>
+              <span className="desk__muted">{fmtDay(diff.since!)} işaretinden bu yana</span>
+              <Badge tone="up">{diff.entered.length} giren</Badge>
+              <Badge tone="down">{diff.exited.length} çıkan</Badge>
+              <span className="desk__muted">{diff.stayed} kalan</span>
+              {diff.entered.length + diff.exited.length > 0 ? (
+                <ul>
+                  {diff.entered.map((symbol) => (
+                    <li key={`in-${symbol}`}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`${symbol} taramaya girdi, sembol masasında aç`}
+                        onClick={() => push({ v: 'sembol', s: symbol })}
+                      >
+                        +{symbol}
+                      </Button>
+                    </li>
+                  ))}
+                  {diff.exited.map((symbol) => (
+                    <li key={`out-${symbol}`}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`${symbol} taramadan çıktı, sembol masasında aç`}
+                        onClick={() => push({ v: 'sembol', s: symbol })}
+                      >
+                        −{symbol}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="desk__muted">liste aynı kaldı.</span>
+              )}
+            </>
+          ) : null}
+          {diff.status !== 'ayni-veri' ? (
+            <Button size="sm" variant="secondary" onClick={() => markSnapshot(activeSaved)}>
+              {diff.status === 'degisti' ? 'Yeni durumu işaretle' : 'Şimdiki durumu işaretle'}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="screener__status">
         {analysis.status === 'loading' ? (
