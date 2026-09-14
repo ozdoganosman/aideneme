@@ -36,6 +36,7 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import type { BacktestOutcome } from '../../workers/analysisClient';
 import { LineChart } from '../chart/LineChart';
 import { useAnalysis } from '../useAnalysis';
+import { CopyLink } from '../CopyLink';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -406,6 +407,7 @@ export default function Lab({ state, push, replace }: Props) {
         </p>
 
         <div className="lab__actions">
+          <CopyLink label="Stratejiyi paylaş" />
           <Button variant="primary" busy={validating} onClick={runValidation}>
             Doğrulamayı çalıştır
           </Button>

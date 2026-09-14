@@ -12,6 +12,7 @@ import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { LineChart } from '../chart/LineChart';
 import { useAnalysis } from '../useAnalysis';
+import { CopyLink } from '../CopyLink';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -57,7 +58,6 @@ export default function Report({ state, push }: Props) {
   } | null>(null);
   const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
   const [fin, setFin] = useState<Financials | null>(null);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clientRef = useRef(analysis.client);
@@ -111,16 +111,6 @@ export default function Report({ state, push }: Props) {
 
   const quality = useMemo(() => (fin ? qualityScore(fin) : null), [fin]);
 
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }
-
   if (error) {
     return (
       <EmptyState
@@ -151,7 +141,7 @@ export default function Report({ state, push }: Props) {
         <Button variant="primary" onClick={() => window.print()}>
           Yazdır / PDF
         </Button>
-        <Button onClick={copyLink}>{copied ? 'Kopyalandı' : 'Bağlantıyı kopyala'}</Button>
+        <CopyLink />
         <span className="desk__muted">
           Bağlantı tüm seçimleri taşır; karşı taraf aynı raporu görür.
         </span>

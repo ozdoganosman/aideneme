@@ -30,6 +30,7 @@ import type { FundamentalsSnapshot } from '../../core/fundamentals/types';
 import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
+import { CopyLink } from '../CopyLink';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -435,6 +436,7 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
             <Button size="sm" onClick={saveCurrent}>
               Taramayı kaydet
             </Button>
+            <CopyLink label="Filtreyi paylaş" />
             <Button
               size="sm"
               onClick={() =>

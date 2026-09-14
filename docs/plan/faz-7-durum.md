@@ -356,7 +356,12 @@ işçi kullanılıyor — paralel sekmeler aynı çekirdekleri paylaşınca öl�
 kuyruk beklenir.
 
 Ayrı iş akışı (`e2e.yml`): gerçek tarayıcı indirmek `verify` kapısını
-yavaşlatırdı. Süre: 6 akış, yerelde 9 sn.
+yavaşlatırdı. Süre: 6 akış, yerelde 9 sn; **CI'da 7,8 sn** (ilk koşu yeşil,
+veri iş akışında üretiliyor).
+
+Bağlantı paylaşımı da tamamlandı: tarayıcı, laboratuvar ve raporda ortak bir
+"kopyala" düğmesi var. Pano erişilemezse düğme sessizce "kopyalandı" demiyor,
+hata durumunu gösteriyor.
 
 ## Sırada
 
