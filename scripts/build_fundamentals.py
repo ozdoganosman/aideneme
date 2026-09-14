@@ -130,26 +130,49 @@ def extract(df, symbol: str) -> dict | None:
     }
 
 
-def fetch_one(symbol: str, start_year: int, end_year: int) -> dict | None:
-    from isyatirimhisse import fetch_financials as isy_fetch
+def group_order(symbol: str) -> list[str]:
+    """
+    Denenecek tablo şablonları, en olasıdan başlayarak.
 
-    group = "2" if symbol in BANK_SYMBOLS else "1"
-    try:
-        df = isy_fetch(
-            symbols=symbol,
-            start_year=start_year,
-            end_year=end_year,
-            exchange="TRY",
-            financial_group=group,
-        )
-    except Exception as e:  # noqa: BLE001
-        print(f"[fund] {symbol}: çekilemedi ({e})", file=sys.stderr)
-        return None
+    Şablon ELLE TUTULAN bir listeden tahmin ediliyordu ("bankaysa 2, değilse
+    1") ve tahminin yanlış olduğu yerde veri hiç gelmiyordu. Ölçüldü: hiç
+    alınamayan 12 sembolün neredeyse tamamı finans sektörü — AKBNK ve ALBRK
+    listede olduğu hâlde "2" ile gelmiyor, AGESA/AKGRT/ANHYT (sigorta) ise
+    listede olmadığı için "1" deniyor. Tahmini tek denemede bırakmak yerine
+    sırayla hepsini deniyoruz: liste artık bir tahmin değil, yalnızca
+    SIRALAMA ipucu.
+    """
+    if symbol in BANK_SYMBOLS:
+        return ["2", "3", "1"]
+    return ["1", "2", "3"]
 
-    record = extract(df, symbol)
-    if record:
-        record["group"] = group
-    return record
+
+def fetch_one(symbol: str, start_year: int, end_year: int, fetch=None) -> dict | None:
+    if fetch is None:
+        from isyatirimhisse import fetch_financials as isy_fetch
+
+        fetch = isy_fetch
+
+    for group in group_order(symbol):
+        try:
+            df = fetch(
+                symbols=symbol,
+                start_year=start_year,
+                end_year=end_year,
+                exchange="TRY",
+                financial_group=group,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[fund] {symbol}: grup {group} çekilemedi ({e})", file=sys.stderr)
+            continue
+
+        record = extract(df, symbol)
+        if record:
+            record["group"] = group
+            return record
+        print(f"[fund] {symbol}: grup {group} boş döndü, sıradaki şablon", file=sys.stderr)
+
+    return None
 
 
 def ttm(periods: list[str], values: list[float | None], index: int) -> float | None:
@@ -333,6 +356,35 @@ def self_test() -> None:
 
         build_all(["YOK"], out, basarili)
         assert read_failures(out).get("YOK", 0) == 0, "başarı sayacı sıfırlamalı"
+
+    # TABLO ŞABLONU tek denemede bırakılmamalı. Ölçüldü: hiç alınamayan 12
+    # sembolün neredeyse tamamı finans sektörü — elle tutulan liste yanlış
+    # tahmin ettiğinde veri hiç gelmiyordu.
+    assert group_order("AKBNK")[0] == "2", "bankada önce UFRS denenmeli"
+    assert group_order("AGESA")[0] == "1", "sanayide önce XI_29 denenmeli"
+    for sym in ("AKBNK", "AGESA"):
+        assert sorted(group_order(sym)) == ["1", "2", "3"], "üç şablon da denenmeli"
+
+    import pandas as pd
+
+    denenen: list[str] = []
+
+    def sahte_kaynak(symbols, start_year, end_year, exchange, financial_group):
+        denenen.append(financial_group)
+        if financial_group != "3":
+            # İlk iki şablon boş tablo döndürüyor (kalem adları tutmuyor).
+            return pd.DataFrame({"FINANCIAL_ITEM_NAME_TR": ["Boş"], "2024/6": [1.0]})
+        return pd.DataFrame(
+            {
+                "FINANCIAL_ITEM_NAME_TR": ["Ana Ortaklık Payları"],
+                "2024/6": [42.0],
+            }
+        )
+
+    record = fetch_one("AGESA", 2024, 2024, fetch=sahte_kaynak)
+    assert record is not None, "üçüncü şablonda bulunmalıydı"
+    assert record["group"] == "3", record["group"]
+    assert denenen == ["1", "2", "3"], denenen
 
     print("[fund] self-test tamam")
 

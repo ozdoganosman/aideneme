@@ -1366,6 +1366,37 @@ sembole aynı süreyi harcamıyor.
 Not: hedef sembol sayısı **607** (fiyat manifestindeki 655 değil; ikisi
 farklı listeler).
 
+### Hipotez bir sonraki ölçümde çürüdü
+
+Düzeltmeden sonraki ilk tur (7 dakikalık push bütçesi) **+21 sembol** ekledi
+— sembol başına 20 saniye, bir önceki turun 88 saniyesinin dörtte biri. Ama
+o turda hiçbir sembol ATLANMAMIŞTI: `failures.json`'daki sayaçların hepsi
+1'di, yani 12 başarısızın tamamı yine denendi.
+
+Yani hız düşüşünün açıklaması benim hipotezim değildi; **kaynağın kendi
+hızı değişiyor**. Bir önceki turda "kısmen doğru" demiştim, bu ölçümden
+sonra dürüst hâli şu: hipotez yanlıştı. Başarısızları atlamak yine de
+doğru bir düzeltme — ama bu hızlanmayı o sağlamadı ve öyleymiş gibi
+yazılmamalı.
+
+### Asıl kusur: tablo şablonu tek denemede bırakılıyordu
+
+Başarısız listesine bakınca kategori çıktı: AGESA, AKBNK, AKGRT, ALBRK,
+ANHYT — bankalar ve sigortalar. Betik `financial_group`'u elle tutulan bir
+`BANK_SYMBOLS` listesinden tahmin ediyordu ("bankaysa 2, değilse 1") ve
+tahmin yanlış olduğunda veri HİÇ gelmiyordu:
+
+- AKBNK ve ALBRK listede, yani "2" deneniyor — gelmiyor.
+- AGESA, AKGRT, ANHYT sigorta, listede değil, yani "1" deneniyor — gelmiyor.
+
+BIST'te finans sektörü piyasa değerinin büyük kısmı; tarayıcının temel
+filtrelerinde bankaların hiç olmaması gerçek bir boşluk.
+
+Artık üç şablon da sırayla deneniyor (`group_order`); elle tutulan liste
+bir tahmin değil yalnızca SIRALAMA ipucu. Bir şablon boş tablo döndürürse
+sıradakine geçiliyor. Test sahte bir kaynakla üçüncü şablonda bulmayı ve
+sıranın doğru olmasını sınıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
