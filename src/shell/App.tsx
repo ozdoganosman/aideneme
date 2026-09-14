@@ -1,7 +1,8 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, IconButton, Skeleton, ToastProvider, Tooltip } from '../ui';
+import { IconButton, Skeleton, ToastProvider, Tooltip } from '../ui';
 import { Icon, type IconName } from '../ui/icons';
 import { CommandPalette } from './CommandPalette';
+import { FreshnessBadge } from './Freshness';
 import { ErrorBoundary } from './ErrorBoundary';
 import { buildCommands } from './commands';
 import { DEFAULT_SCREEN, SCREENS, screenById } from './nav';
@@ -115,13 +116,7 @@ export function App() {
             </div>
 
             <div className="shell-topbar__actions">
-              <Badge
-                tone="warn"
-                icon={<Icon name="alert" size={12} />}
-                title="Veriler gecikmelidir; yatırım tavsiyesi değildir"
-              >
-                Gecikmeli veri
-              </Badge>
+              <FreshnessBadge market={state.m} />
               <button
                 type="button"
                 className="shell-palette__trigger"

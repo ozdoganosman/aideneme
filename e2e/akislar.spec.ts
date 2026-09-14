@@ -254,3 +254,42 @@ test('model: kart olmadan olasılık gösterilmiyor', async ({ page }) => {
   // Kart her hâlükârda sınırlarını yazar.
   await expect(page.getByText(/işlem maliyeti/)).toBeVisible();
 });
+
+/**
+ * Veri tazeliği rozeti.
+ *
+ * Eskiden üst çubukta sabit "Gecikmeli veri" yazıyordu — veri bir gün de bir
+ * yıl da eski olsa aynı metin. Örnek veri setinin son barı 2025-09-28 ve
+ * dokuz ekranın yedisi bunu hiçbir uyarı olmadan "bugün" diye sunuyordu.
+ */
+test('veri tazeliği rozeti gerçek veri yaşını söylüyor', async ({ page }) => {
+  await open(page, 'v=nabiz');
+  await page.waitForSelector('.pulse__flows', { timeout: 90_000 });
+
+  const badge = page.locator('.shell-topbar__actions .ui-badge').first();
+  // Sabit metin geri gelirse test kırılır.
+  await expect(badge).not.toHaveText('Gecikmeli veri');
+  await expect(badge).toHaveText(/^Veri (\d+ iş günü eski|\d{1,2} \S+ \d{4})$/);
+
+  // Yasal uyarı her durumda rozetin başlığında kalmalı.
+  await expect(badge).toHaveAttribute('title', /yatırım tavsiyesi değildir/);
+
+  // Örnek veri bayat: başlık hesapların hangi tarihe ait olduğunu yazmalı.
+  const title = (await badge.getAttribute('title')) ?? '';
+  if (/iş günü eski/.test((await badge.textContent()) ?? '')) {
+    expect(title).toMatch(/Son bar .+ geride/);
+    expect(title).toMatch(/bu tarihe aittir, bugüne değil/);
+  }
+});
+
+test('tazelik rozeti her ekranda aynı bilgiyi veriyor', async ({ page }) => {
+  const seen = new Set<string>();
+  for (const query of ['v=nabiz', 'v=tarayici', 'v=stratejiler', 'v=rapor&s=X001']) {
+    await open(page, query);
+    const badge = page.locator('.shell-topbar__actions .ui-badge').first();
+    await expect(badge).toHaveText(/^Veri /, { timeout: 90_000 });
+    seen.add(((await badge.textContent()) ?? '').trim());
+  }
+  // Aynı piyasada tek bir doğru cevap var; ekrana göre değişemez.
+  expect([...seen]).toHaveLength(1);
+});

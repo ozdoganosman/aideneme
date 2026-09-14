@@ -1168,6 +1168,53 @@ sabit — grafik `remove()`, `ResizeObserver` `disconnect()` ve tema
 dinleyicisi temizlikleri çalışıyor. Düzeltilecek bir şey çıkmadı; ölçüm
 `docs/plan/performans.md`'ye eklendi.
 
+## "Gecikmeli veri" rozeti hiçbir şey söylemiyordu
+
+Üst çubuktaki rozet **sabit metindi**: veri bir gün de bir yıl da eski olsa
+aynı üç kelime. Tazelik ölçüsü aslında vardı — `health.ts` `staleWeekdays`
+hesaplıyor ve "veri bayat olabilir" bulgusu üretiyor — ama bu yalnızca
+SEMBOL bazlı iki ekrana (Sembol Masası, Rapor) ulaşıyordu.
+
+Ölçüldü, dokuz ekranda, rozetin metni ve başlığı okunarak:
+
+```
+nabiz … rapor   rozet: "Gecikmeli veri"   (hepsinde aynı, bilgi yok)
+veri yaşı bilgisi VAR : sembol, rapor     (2/9)
+veri yaşı bilgisi YOK : diğer yedisi
+```
+
+Aynı anda manifest okundu: örnek veri setinin **en yeni barı 2025-09-28**,
+"bugün" 2026-09-14. Yani Nabız ekranı *"Piyasada bugün ne oluyor?"* başlığı
+altında **251 iş günü eski** veri gösteriyor ve bunu hiçbir yerde
+söylemiyordu. Bir finans aracında bu, yanlış sayı göstermenin bir adım
+gerisindeki kusurdur: sayılar doğru, ama hangi tarihe ait olduğu gizli.
+
+Rozet ölçülen hâline çevrildi (`core/data/freshness.ts`, saf; "bugün"
+çağırandan gelir):
+
+| Durum | Eşik (hafta içi gün) | Rozet |
+|---|---|---|
+| taze | ≤ 1 | `Veri 14 Eyl 2026` (yeşil) |
+| gecikmeli | ≤ 3 | `Veri 11 Eyl 2026` (sarı) |
+| bayat | > 3 | `Veri 251 iş günü eski` (kırmızı) |
+
+Üç karar:
+
+- **En yeni bar alınıyor, ortanca değil.** Bir sembolün işlem görmemesi
+  piyasanın tamamını bayat yapmaz; tersi de doğru — en yeni bar eskiyse
+  daha yenisi yoktur, yani ölçü iyimser tarafta yanılmaz.
+- **Hafta sonu bayatlık üretmiyor.** Cuma kapanışına pazartesi bakmak
+  "3 gün eski" değildir; sayaç `weekdaysBetween` ile hafta içi gün sayıyor.
+- **Yasal uyarı kaybolmadı.** "Veriler gecikmelidir; yatırım tavsiyesi
+  değildir" her durumda rozetin başlığında; bayat durumda başlık ayrıca
+  "ekrandaki tüm hesaplar bu tarihe aittir, bugüne değil" diyor.
+
+Manifest zaten oturumda bir kez iniyor (istemci onu bilerek
+önbelleklemiyor — tazelik ölçüsü odur), yani rozet ek ağ maliyeti
+getirmiyor. Dokuz ekranın dokuzu da artık aynı gerçek yaşı gösteriyor;
+uçtan uca test hem sabit metnin geri gelmesini hem de ekrandan ekrana
+değişen bir cevabı kırıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
