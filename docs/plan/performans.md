@@ -114,6 +114,45 @@ olurdu; bu, bakım maliyeti ve piyasa-standardı etkileşimlerin (crosshair, fiy
 ölçeği, çoklu pane) kaybı anlamına gelir. Ölçülen fayda bunu şu an haklı
 çıkarmıyor — karar yeniden gözden geçirilebilir olsun diye buraya yazıldı.
 
+## Kaydırma akıcılığı — ve yanlış ölçen bir ölçüt
+
+"Akışkan mı" sorusunun ilk açılış dışındaki yarısı hiç ölçülmemişti: 200
+satırlık tablo zayıf makinede **kaydırılırken** ne oluyor?
+
+İlk ölçüm alarm verdi: kare başına medyan 35 ms, p90 90 ms. Yani takılma.
+Ama ölçütün kendisi yanlıştı — her adımda çift `requestAnimationFrame`
+bekleniyordu ve bunun **tabanı zaten iki vsync karesi (≈33 ms)**. Aynı ölçüt
+yavaşlatma KAPALIYKEN de 33 ms veriyordu; ölçtüğüm şey iş değil, ekranın
+yenilenme hızıydı.
+
+Doğru ölçüt, kaydırmanın ana thread'de kaç ms tuttuğu:
+
+| | 1× | 6× (zayıf) |
+|---|---|---|
+| Kaydırma adımı (medyan) | 0,1 ms | 16 ms |
+| Kaydırma adımı (p90) | 2,5 ms | 22 ms |
+| 40 adımın toplamı | 37 ms | ~425 ms |
+| Uzun görev (>50 ms) | 0 | 0 |
+
+Zayıf makinede bile kaydırma sırasında **tek bir uzun görev yok**; iş 16 ms'lik
+kare bütçesine sığıyor. Ölçüm `npm run perf` çıktısına kalıcı olarak eklendi
+(`kaydırma_40_adım_ms`), yoksa bir gün sessizce bozulur.
+
+### Denenip geri alınan: satırları `memo`'ya sarmak
+
+Kaydırırken pencere kayıyor ama ekranda kalan satırların verisi değişmiyor;
+"satır bileşenini `memo` ile sarsam yalnızca yeni girenler çizilir" diye
+düşündüm. A/B ölçümü:
+
+```
+memo YOK : 421 / 430 ms  (40 adım toplamı, 6×)
+memo VAR : 429 / 420 ms
+```
+
+Fark yok. Maliyet React uzlaştırmasında değil, tarayıcı tarafında (kaydırma →
+yapışkan başlık → boyama); tablo zaten `table-layout: fixed` olduğu için düzen
+hesabı da ucuz. Ölçülebilir kazanç vermeyen karmaşıklık geri alındı.
+
 ## Tekrar üretmek için
 
 ```bash

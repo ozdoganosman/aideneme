@@ -111,7 +111,25 @@ results.push(
       () => !document.querySelector('.screener__status .ui-badge')?.textContent?.includes('Hesaplanıyor'),
       { timeout: 60000 },
     );
-    return { 'parametre→sonuç_ms': Date.now() - t };
+    const paramMs = Date.now() - t;
+
+    // Kaydırma akıcılığı: 40 adım, her adımda düzen okuması zorlanarak
+    // kaydırmanın ANA THREAD'de kaç ms tuttuğu ölçülür. Kare süresini
+    // ölçmek yanıltıcıydı: çift rAF'ın tabanı zaten iki vsync (≈33 ms).
+    const scrollMs = await page.evaluate(async () => {
+      const el = document.querySelector('.ui-vtable__scroll');
+      if (!el) return 0;
+      let total = 0;
+      for (let i = 0; i < 40; i++) {
+        const t0 = performance.now();
+        el.scrollTop += 120;
+        void el.offsetHeight;
+        total += performance.now() - t0;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      return Math.round(total);
+    });
+    return { 'parametre→sonuç_ms': paramMs, 'kaydırma_40_adım_ms': scrollMs };
   }),
 );
 

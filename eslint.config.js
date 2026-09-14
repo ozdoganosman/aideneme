@@ -150,6 +150,7 @@ export default tseslint.config(
         document: 'readonly',
         performance: 'readonly',
         PerformanceObserver: 'readonly',
+        setTimeout: 'readonly',
       },
     },
     rules: { 'no-console': 'off' },
