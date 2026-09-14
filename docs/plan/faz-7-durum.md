@@ -1282,9 +1282,32 @@ sahte bir indirici üçüncü sembolde `KeyboardInterrupt` atıyor, test
 istiyor. Ara kayıt kaldırıldığında test kırılıyor, geri konduğunda geçiyor —
 kanıtlandı.
 
-Ders: "yarım iş kullanıcıya ulaşsın" demek yetmiyor; **yarım kalma anının
-neresi olduğuna** bakmak gerekiyor. Süreç öldürülüyorsa, döngüden sonraki
-hiçbir satır çalışmaz.
+**Üçüncü tur — ve asıl sebep.** Ara kayıt eklendi, yine olmadı. İş
+kaydının son satırı sebebi söyledi:
+
+```
+Cleaning up orphan processes
+Terminate orphan process: pid (2132) (python)
+```
+
+`timeout-minutes` **süreci öldürmüyor.** Adımın kabuğunu kesip "tamamlandı"
+diyor, python öksüz süreç olarak çalışmaya devam ediyor; runner onu ancak
+işin en sonunda topluyor. Yani zaman sınırı işi durdurmadı, yalnızca
+*beklemeyi* bıraktı — ve sonraki adımlar hâlâ dosya yazan bir süreçle
+YARIŞTI. Yayımlama o anki yarım klasörü kopyaladı, anlık görüntü yazımı o
+ana yetişmedi.
+
+**Üçüncü düzeltme**: süreyi adım değil **betiğin kendisi** sınırlıyor
+(`--max-seconds` / `FUND_MAX_SECONDS`). Döngü süresi dolunca temiz duruyor
+ve durmadan önce anlık görüntüyü yazıyor; adımdaki sınır artık yalnızca
+emniyet freni. Testi sahte saatle yapılıyor: her sembol 10 "saniye" sürüyor,
+bütçe 25 saniye, üç sembolden sonra durması ve anlık görüntüde tam o üçünün
+bulunması bekleniyor.
+
+Ders üç turda üç kere aynı yerden geldi: **"düzelttim" demek için işin
+kullanıcıya ulaştığını görmek gerekiyor.** Sırasıyla yanlış olan şeyler —
+kaldığı yerden devam etmemek, yazmayı döngüden sonraya koymak, ve sürecin
+gerçekten durduğunu varsaymak. Üçü de "mantıken doğru" görünüyordu.
 
 ## Sırada
 

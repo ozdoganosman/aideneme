@@ -68,8 +68,13 @@ jobs:
           FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
         run: python scripts/screener.py
 
+      # Süre betiğin kendi işi: adım zaman sınırı bu süreci öldürmüyor, öksüz
+      # bırakıyor ve sonraki adımlarla yarıştırıyor (bkz. onizleme.yml).
       - name: Finansal tablolar (İş Yatırım; haftada bir / manuel çalışmada tam)
         continue-on-error: true
+        timeout-minutes: 16
+        env:
+          FUND_MAX_SECONDS: '900'
         run: |
           python -m pip install --quiet isyatirimhisse pandas
           python scripts/build_fundamentals.py

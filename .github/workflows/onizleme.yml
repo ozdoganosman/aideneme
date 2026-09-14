@@ -53,9 +53,16 @@ jobs:
       # 30 dakikalık üst sınırına dayansa HİÇBİR ŞEY yayımlanmazdı. Önizleme
       # isteğe bağlı veriye bağımlı olamaz: yetişen veri girer, yetişmeyen
       # bir sonraki çalıştırmaya kalır (betikler kaldıkları yerden devam eder).
+      # Süreyi BETİK sınırlıyor, adım değil: `timeout-minutes` bu süreci
+      # öldürmüyor — öksüz kalıp yazmaya devam ediyor ve yayımlama adımıyla
+      # yarışıyor (ölçüldü: iş sonunda runner "Terminate orphan process:
+      # (python)" diye topladı, anlık görüntü yayına yetişmedi). Adımdaki
+      # sınır artık yalnızca emniyet freni.
       - name: Finansal tablolar (İş Yatırım)
         continue-on-error: true
-        timeout-minutes: 8
+        timeout-minutes: 9
+        env:
+          FUND_MAX_SECONDS: '420'
         run: |
           python -m pip install --quiet isyatirimhisse pandas
           python scripts/build_fundamentals.py

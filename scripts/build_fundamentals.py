@@ -28,6 +28,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -277,6 +278,36 @@ def self_test() -> None:
         snap = json.loads(snap_path.read_text(encoding="utf-8"))
         assert set(snap["symbols"]) == {"S1", "S2"}, f"ara kayıt eksik: {sorted(snap['symbols'])}"
 
+    # SÜRE BÜTÇESİ. CI adımının kendi zaman sınırı bu süreci öldürmüyor
+    # (öksüz kalıp yazmaya devam ediyor ve yayımlama adımıyla yarışıyor).
+    # Döngü kendi süresini bilmeli ve DURMADAN ÖNCE anlık görüntüyü yazmalı.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        saat = [0.0]
+
+        def sahte_saat() -> float:
+            return saat[0]
+
+        def yavas_fetch(symbol: str):
+            saat[0] += 10.0  # her sembol 10 "saniye"
+            return {
+                "symbol": symbol,
+                "periods": ["2024/6"],
+                "fields": {f: [1.0] for f in FIELDS},
+            }
+
+        records, fetched, failed = build_all(
+            [f"S{i}" for i in range(1, 11)],
+            out,
+            yavas_fetch,
+            every=100,          # ara kayıt DEVREYE GİRMESİN: sonu sınanıyor
+            max_seconds=25,
+            now=sahte_saat,
+        )
+        assert fetched == 3, f"süre dolunca durmalıydı, {fetched} sembol indi"
+        snap = json.loads((out / "snapshot.json").read_text(encoding="utf-8"))
+        assert set(snap["symbols"]) == {"S1", "S2", "S3"}, sorted(snap["symbols"])
+
     print("[fund] self-test tamam")
 
 
@@ -313,19 +344,36 @@ def build_all(
     out_dir: Path,
     fetch,
     every: int = 25,
+    max_seconds: float | None = None,
+    now=time.monotonic,
 ) -> tuple[list[dict], int, int]:
     """
-    Eksik sembolleri indirip diske yazar; ARADA BİR anlık görüntüyü tazeler.
+    Eksik sembolleri indirip diske yazar; arada bir anlık görüntüyü tazeler ve
+    KENDİ SÜRESİNİ kendisi sınırlar.
 
-    Ara kayıt şart: bu iş bir CI adımının zaman sınırında ÖLDÜRÜLÜYOR.
-    Ölçüldü — adım 8 dakikada kesildi, sembol dosyaları diske yazılmıştı ama
-    döngüden SONRA gelen anlık görüntü kodu hiç çalışmadı; tarama yine
-    "temel veri yok" dedi. Yani yapılan iş kullanıcıya yine ulaşmadı.
+    Süreyi neden betik sınırlıyor: CI adımının `timeout-minutes` ayarı bu
+    süreci ÖLDÜRMÜYOR. Ölçüldü — adım 8 dakikada "tamamlandı" sayıldı ama
+    python öksüz süreç olarak çalışmaya devam etti (iş sonunda runner
+    "Terminate orphan process: (python)" diye topladı). Yani sonraki adımlar
+    hâlâ dosya yazan bir süreçle YARIŞTI: yayımlama o anki yarım klasörü
+    kopyaladı, anlık görüntü yazımı yetişmedi ve tarama yine "temel veri yok"
+    dedi. Kendi süresini bilen bir döngü hem temiz duruyor hem de durmadan
+    önce anlık görüntüyü yazıyor.
+
+    Ara kayıt yine de duruyor: süre dolmadan başka bir sebeple kesilirse
+    (bellek, ağ, elle iptal) diskte geçerli bir anlık görüntü kalsın.
     """
     records = records_on_disk(out_dir)
     fetched = 0
     failed = 0
+    started = now()
     for i, symbol in enumerate(pending, 1):
+        if max_seconds is not None and now() - started >= max_seconds:
+            print(
+                f"[fund] süre doldu ({max_seconds:.0f} sn) — {i - 1}/{len(pending)} işlendi, "
+                "kalanlar bir sonraki çalıştırmaya"
+            )
+            break
         record = fetch(symbol)
         if not record:
             failed += 1
@@ -347,6 +395,12 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="ilk N sembol (deneme için)")
     ap.add_argument("--start-year", type=int, default=2015)
     ap.add_argument("--end-year", type=int, default=2026)
+    ap.add_argument(
+        "--max-seconds",
+        type=float,
+        default=float(os.environ.get("FUND_MAX_SECONDS", 0)) or None,
+        help="bu süreden sonra temiz dur (CI adım sınırından ÖNCE bitmek için)",
+    )
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -369,7 +423,10 @@ def main() -> None:
         print(f"[fund] {len(pending)}/{len(symbols)} sembol eksik, indiriliyor")
 
     records, fetched, failed = build_all(
-        pending, OUT, lambda sym: fetch_one(sym, args.start_year, args.end_year)
+        pending,
+        OUT,
+        lambda sym: fetch_one(sym, args.start_year, args.end_year),
+        max_seconds=args.max_seconds,
     )
 
     if not records:
