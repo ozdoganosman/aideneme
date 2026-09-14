@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { PulseRow } from './pulse';
-import { UNCLASSIFIED, flowBySector, isSectorMap, sectorCoverage } from './sectors';
+import {
+  UNCLASSIFIED,
+  flowBySector,
+  isSectorMap,
+  sectorCoverage,
+  sectorNames,
+  withSectors,
+} from './sectors';
 
 function row(symbol: string, value: number, changePct: number): PulseRow {
   return {
@@ -80,5 +87,27 @@ describe('sektör bazlı para akışı', () => {
     expect(isSectorMap({ of: {} })).toBe(false);
     expect(isSectorMap(null)).toBe(false);
     expect(isSectorMap({ source: 'x', generated: 1 })).toBe(false);
+  });
+});
+
+describe('tarama satırlarına sektör işleme', () => {
+  it('bilinen sembole sektör yazar, bilinmeyeni TANIMSIZ bırakır', () => {
+    const rows = withSectors(
+      [{ symbol: 'GARAN' }, { symbol: 'XXXXX' }] as { symbol: string; sector?: string }[],
+      MAP,
+    );
+    expect(rows[0].sector).toBe('Bankacılık');
+    // Boş string değil: "sektörü yok" ile "bilinmiyor" aynı şey değil.
+    expect(rows[1].sector).toBeUndefined();
+  });
+
+  it('harita yoksa satırlara dokunmaz', () => {
+    const rows = [{ symbol: 'GARAN' }];
+    expect(withSectors(rows, null)).toBe(rows);
+  });
+
+  it('sektör adlarını tekilleştirip Türkçe sıralar', () => {
+    expect(sectorNames(MAP)).toEqual(['Bankacılık', 'Demir Çelik']);
+    expect(sectorNames(null)).toEqual([]);
   });
 });

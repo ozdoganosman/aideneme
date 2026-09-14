@@ -154,6 +154,8 @@ export interface ScreenRow {
   values: MetricValues;
   /** Hesaba giren bar sayısı — az barlı sembol sonuçları yanıltmasın. */
   bars: number;
+  /** Sektör (varsa) — sayısal olmadığı için `values` içinde duramaz. */
+  sector?: string;
 }
 
 const pctChange = (c: Candles, back: number): number => {
@@ -229,6 +231,14 @@ export interface ScreenSpec {
   sort?: { metric: string; dir: 'asc' | 'desc' };
   /** Bu kadar bardan az veriye sahip semboller elenir. */
   minBars?: number;
+  /**
+   * Seçili sektörler. Boş/verilmemiş = sektöre göre eleme yok.
+   *
+   * Sayısal kural olarak modellenmedi: sektör kategoriktir, "> 3" gibi bir
+   * karşılaştırması yoktur ve sayıya çevirmek sıralamayı anlamlıymış gibi
+   * gösterirdi.
+   */
+  sectors?: string[];
 }
 
 /** Tek satır kuralları geçiyor mu? NaN metrik ASLA geçmez (bilinmeyen ≠ uygun). */
@@ -250,7 +260,15 @@ export function passes(row: ScreenRow, rules: Rule[]): boolean {
 /** Filtrele + sırala. Girdi dizisi değiştirilmez. */
 export function applyScreen(rows: ScreenRow[], spec: ScreenSpec): ScreenRow[] {
   const minBars = spec.minBars ?? 0;
-  const out = rows.filter((r) => r.bars >= minBars && passes(r, spec.rules));
+  // Sektör filtresi seçiliyse sektörü BİLİNMEYEN sembol de elenir: "bilinmiyor"
+  // seçilen sektöre ait sayılamaz (NaN'ın kuralı geçmemesiyle aynı ilke).
+  const wanted = spec.sectors && spec.sectors.length > 0 ? new Set(spec.sectors) : null;
+  const out = rows.filter(
+    (r) =>
+      r.bars >= minBars &&
+      (!wanted || (r.sector !== undefined && wanted.has(r.sector))) &&
+      passes(r, spec.rules),
+  );
   if (!spec.sort) return out;
 
   const { metric, dir } = spec.sort;

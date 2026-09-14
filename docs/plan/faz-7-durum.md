@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 387 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 399 test)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -21,6 +21,7 @@ piyasa ölçeğinde gösteren görünümdü.
 | `prev` operandı (kırılım kuralları için) | `src/core/strategy/dsl.ts` |
 | Sektör bazlı para akışı | `src/core/screen/sectors.ts` |
 | Sektör sınıflandırma üreticisi | `scripts/build_sectors.py` |
+| Tarayıcıda sektör filtresi | `ScreenSpec.sectors` |
 
 ## Kararlar
 
@@ -130,7 +131,22 @@ doğrulanamadı; ayrıştırıcı birden çok alan adını (SECTOR/Sektor/…) d
 okunamayan kaydı atlıyor. Ekran görüntüleri yerel sentetik sınıflandırmayla
 alındı.
 
+## Tarayıcıda sektör filtresi
+
+Sektör **sayısal kural olarak modellenmedi**: kategoriktir, "> 3" gibi bir
+karşılaştırması yoktur ve sayıya çevirmek sıralamayı anlamlıymış gibi
+gösterirdi. `ScreenSpec.sectors` ayrı bir alan; seçili sektör yoksa eleme de
+yok.
+
+Seçim yapıldığında **sektörü bilinmeyen sembol de eleniyor** — NaN'ın hiçbir
+kuralı geçmemesiyle aynı ilke: "bilinmiyor", seçilen sektöre ait sayılamaz.
+Rozet satırı bunu açıkça yazıyor.
+
+Böylece "yalnızca bankacılık ve enerji + RSI 40–70 + 1 aylık getiri > 0" gibi
+teknik, temel ve sektör filtreleri tek tabloda birleşiyor (ölçüm: 200 sembolde
+17 sonuç, worker 28 ms).
+
 ## Sırada
 
-- Sektör bilgisini tarayıcı filtrelerine bağlamak ("yalnızca bankacılık").
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
+- Kayıtlı taramaların sektör seçimini de taşıması.

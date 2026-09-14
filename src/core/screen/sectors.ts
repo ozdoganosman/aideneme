@@ -101,6 +101,28 @@ export function sectorCoverage(
   return { known, total, pct: (known / total) * 100 };
 }
 
+/**
+ * Tarama satırlarına sektörü işler. Haritada olmayan sembolün `sector` alanı
+ * TANIMSIZ kalır (boş string değil): "sektörü yok" ile "bilinmiyor" aynı şey
+ * değildir ve filtre ikisini de seçili sektöre sokmaz.
+ */
+export function withSectors<T extends { symbol: string; sector?: string }>(
+  rows: T[],
+  map: SectorMap | null,
+): T[] {
+  if (!map) return rows;
+  return rows.map((row) => {
+    const sector = map.of[row.symbol];
+    return sector ? { ...row, sector } : row;
+  });
+}
+
+/** Haritadaki sektör adları, alfabetik — filtre listesi bunu kullanır. */
+export function sectorNames(map: SectorMap | null): string[] {
+  if (!map) return [];
+  return [...new Set(Object.values(map.of))].sort((a, b) => a.localeCompare(b, 'tr'));
+}
+
 export function isSectorMap(value: unknown): value is SectorMap {
   if (!value || typeof value !== 'object') return false;
   const m = value as Partial<SectorMap>;

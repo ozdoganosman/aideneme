@@ -1009,6 +1009,45 @@
   font-size: var(--fs-xs);
 }
 
+/* Tarayıcı — sektör rozetleri. */
+.screener__sectors {
+  margin: 0;
+  padding: var(--sp-2) 0 0;
+  border: 0;
+}
+.screener__sectors legend {
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.screener__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.screener__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.screener__chip.is-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.screener__chip input {
+  margin: 0;
+}
+
 /* Strateji sıralaması. */
 .rank {
   display: flex;

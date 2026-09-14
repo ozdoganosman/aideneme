@@ -146,3 +146,40 @@ describe('applyScreen', () => {
     expect(rows.map((r) => r.symbol)).toEqual(before);
   });
 });
+
+describe('sektör filtresi', () => {
+  const rows: ScreenRow[] = [
+    { symbol: 'GARAN', bars: 250, values: { rsi: 50 }, sector: 'Bankacılık' },
+    { symbol: 'AKBNK', bars: 250, values: { rsi: 60 }, sector: 'Bankacılık' },
+    { symbol: 'EREGL', bars: 250, values: { rsi: 55 }, sector: 'Demir Çelik' },
+    { symbol: 'XXXXX', bars: 250, values: { rsi: 52 } },
+  ];
+
+  it('seçili sektörlere göre eler', () => {
+    const out = applyScreen(rows, { rules: [], sectors: ['Bankacılık'] });
+    expect(out.map((r) => r.symbol)).toEqual(['GARAN', 'AKBNK']);
+  });
+
+  it('birden çok sektör seçilebilir', () => {
+    const out = applyScreen(rows, { rules: [], sectors: ['Bankacılık', 'Demir Çelik'] });
+    expect(out).toHaveLength(3);
+  });
+
+  it('sektörü bilinmeyen sembol seçili sektöre ait sayılmaz', () => {
+    const out = applyScreen(rows, { rules: [], sectors: ['Bankacılık'] });
+    expect(out.find((r) => r.symbol === 'XXXXX')).toBeUndefined();
+  });
+
+  it('boş liste sektöre göre elemez', () => {
+    expect(applyScreen(rows, { rules: [], sectors: [] })).toHaveLength(4);
+    expect(applyScreen(rows, { rules: [] })).toHaveLength(4);
+  });
+
+  it('sektör filtresi sayısal kurallarla birlikte çalışır', () => {
+    const out = applyScreen(rows, {
+      rules: [{ metric: 'rsi', op: 'gt', a: 55 }],
+      sectors: ['Bankacılık'],
+    });
+    expect(out.map((r) => r.symbol)).toEqual(['AKBNK']);
+  });
+});

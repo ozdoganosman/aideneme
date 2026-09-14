@@ -23,6 +23,8 @@ import {
   type ScreenRow,
 } from '../../core/screen/metrics';
 import { FUNDAMENTAL_METRIC_DEFS, withFundamentals } from '../../core/screen/fundamentalMetrics';
+import { sectorNames, withSectors, type SectorMap } from '../../core/screen/sectors';
+import { sectorsClient } from '../../data-client/sectors';
 import type { FundamentalsSnapshot } from '../../core/fundamentals/types';
 import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
@@ -94,6 +96,8 @@ export default function ScreenerScreen({ state, push }: Props) {
   const [saved, setSaved] = useState<SavedScreen[]>(loadSaved);
   const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
   const [snapshotChecked, setSnapshotChecked] = useState(false);
+  const [sectors, setSectors] = useState<SectorMap | null>(null);
+  const [pickedSectors, setPickedSectors] = useState<string[]>([]);
 
   // Temel veri (finansal tablo anlık görüntüsü) — yoksa ekran teknik metriklerle
   // çalışmaya devam eder, boş sayı uydurmaz.
@@ -111,6 +115,19 @@ export default function ScreenerScreen({ state, push }: Props) {
       .catch(() => {
         if (!cancelled) setSnapshotChecked(true);
       });
+    return () => {
+      cancelled = true;
+    };
+  }, [market]);
+
+  // Sektör sınıflandırması — yoksa sektör filtresi hiç görünmez.
+  useEffect(() => {
+    let cancelled = false;
+    setSectors(null);
+    setPickedSectors([]);
+    sectorsClient.map(market).then((map) => {
+      if (!cancelled) setSectors(map);
+    });
     return () => {
       cancelled = true;
     };
@@ -147,10 +164,10 @@ export default function ScreenerScreen({ state, push }: Props) {
   }, [analysis.status, market, params]);
 
   /** Teknik satırlara temel metrikleri ekle (fiyat teknik satırdan gelir). */
-  const enriched = useMemo(
-    () => (snapshot ? withFundamentals(rows, { snapshot }) : rows),
-    [rows, snapshot],
-  );
+  const enriched = useMemo(() => {
+    const withFin = snapshot ? withFundamentals(rows, { snapshot }) : rows;
+    return withSectors(withFin, sectors);
+  }, [rows, snapshot, sectors]);
 
   const filtered = useMemo(
     () =>
@@ -158,8 +175,9 @@ export default function ScreenerScreen({ state, push }: Props) {
         rules,
         sort: { metric: sort.key, dir: sort.dir },
         minBars: 30,
+        sectors: pickedSectors,
       }),
-    [enriched, rules, sort],
+    [enriched, rules, sort, pickedSectors],
   );
 
   const columns: Column<ScreenRow>[] = useMemo(() => {
@@ -254,6 +272,43 @@ export default function ScreenerScreen({ state, push }: Props) {
             onChange={(v) => setParams((p) => ({ ...p, emaSlow: v }))}
           />
         </div>
+
+        {sectors ? (
+          <fieldset className="screener__sectors">
+            <legend>
+              Sektör{' '}
+              <span className="desk__muted">
+                {pickedSectors.length === 0
+                  ? 'hepsi'
+                  : `${pickedSectors.length} seçili · sektörü bilinmeyen semboller elenir`}
+              </span>
+            </legend>
+            <div className="screener__chips">
+              {sectorNames(sectors).map((name) => {
+                const on = pickedSectors.includes(name);
+                return (
+                  <label key={name} className={`screener__chip${on ? ' is-on' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() =>
+                        setPickedSectors((prev) =>
+                          prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name],
+                        )
+                      }
+                    />
+                    {name}
+                  </label>
+                );
+              })}
+              {pickedSectors.length > 0 ? (
+                <Button size="sm" variant="ghost" onClick={() => setPickedSectors([])}>
+                  Temizle
+                </Button>
+              ) : null}
+            </div>
+          </fieldset>
+        ) : null}
 
         <div className="screener__rules">
           {rules.map((rule, i) => (

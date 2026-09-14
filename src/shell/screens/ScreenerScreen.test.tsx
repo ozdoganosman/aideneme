@@ -15,6 +15,11 @@ const FAKE_ANALYSIS = {
 };
 vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
+const sectorsFn = vi.fn();
+vi.mock('../../data-client/sectors', () => ({
+  sectorsClient: { map: (...a: unknown[]) => sectorsFn(...a) },
+}));
+
 import ScreenerScreen from './ScreenerScreen';
 
 function row(symbol: string, rsi: number, chg21: number): ScreenRow {
@@ -44,6 +49,7 @@ const STATE = { v: 'tarayici', m: 'bist', s: '', tf: 'D', cmp: '' };
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  sectorsFn.mockResolvedValue(null);
   screenFn.mockResolvedValue({
     rows: [row('AAA', 55, 10), row('BBB', 80, -5), row('CCC', 45, 3)],
     ms: 42,
@@ -110,5 +116,55 @@ describe('Tarayıcı', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Bu metrik nasıl hesaplanıyor?' })[0]);
     expect(screen.getByRole('dialog', { name: 'RSI' })).toHaveTextContent(/Wilder RSI/);
+  });
+});
+
+describe('Tarayıcı — sektör filtresi', () => {
+  const SECTORS = {
+    source: 'test',
+    generated: 1,
+    of: { AAA: 'Bankacılık', CCC: 'Gıda' },
+  };
+
+  it('sınıflandırma yoksa sektör filtresi hiç görünmez', async () => {
+    sectorsFn.mockResolvedValue(null);
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(screen.queryByRole('group', { name: /Sektör/ })).toBeNull();
+  });
+
+  it('seçilen sektör sonucu daraltır', async () => {
+    const user = userEvent.setup();
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(screen.getByText('CCC')).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Bankacılık'));
+    await waitFor(() => expect(screen.queryByText('CCC')).toBeNull());
+    expect(screen.getByText('AAA')).toBeInTheDocument();
+  });
+
+  it('sektörü bilinmeyen sembol seçili sektöre girmez', async () => {
+    const user = userEvent.setup();
+    // BBB haritada yok; RSI kuralını gevşetip listede olmasını sağlıyoruz.
+    sectorsFn.mockResolvedValue({ ...SECTORS, of: { AAA: 'Bankacılık' } });
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByLabelText('Bankacılık'));
+    await waitFor(() => expect(screen.getByText('1 / 3 sembol')).toBeInTheDocument());
+  });
+
+  it('temizlemek filtreyi kaldırır', async () => {
+    const user = userEvent.setup();
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByLabelText('Gıda'));
+    await waitFor(() => expect(screen.queryByText('AAA')).toBeNull());
+    await user.click(screen.getByRole('button', { name: 'Temizle' }));
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
   });
 });
