@@ -153,6 +153,42 @@ Fark yok. Maliyet React uzlaştırmasında değil, tarayıcı tarafında (kaydı
 yapışkan başlık → boyama); tablo zaten `table-layout: fixed` olduğu için düzen
 hesabı da ucuz. Ölçülebilir kazanç vermeyen karmaşıklık geri alındı.
 
+## Grafik etkileşimi: yakınlaştırma pahalı, kaydırma bedava
+
+LOD seyreltmesi yazıldı ama ETKİLEŞİM sırasında ne kazandırdığı hiç
+ölçülmemişti. 3.400 barlık seride, 6× yavaşlatmayla, 20 tekerlek adımı
+(uzaklaştırma) ve 20 sürükleme adımı (kaydırma):
+
+| | Ana thread bloğu |
+|---|---|
+| Yakınlaştırma (20 adım) | ~600–820 ms |
+| Kaydırma (20 adım) | 0–50 ms |
+
+Kaydırma pratikte bedava; yakınlaştırma adım başına ~20–40 ms tutuyor (1×'te
+~4–7 ms). Profil, maliyetin **kütüphanenin canvas boyaması** olduğunu
+söylüyor: örneklerin yarısı `(program)` (yerel canvas çağrıları), `lod`
+yığınının kendi JS'i yalnızca ~42 ms.
+
+### Denenip geri alınan: kova yoğunluğunu yarıya indirmek
+
+"Ekranın gösteremeyeceği kadar mum çiziyoruz" varsayımıyla kova yoğunluğu
+1,2/px → 0,5/px yapıldı ve ölçüldü:
+
+```
+yoğunluk 1,2 : 530 / 730 ms blok (iki koşu)
+yoğunluk 0,5 : 614 ms blok
+```
+
+Gürültünün içinde kaybolan bir fark. Maliyet mum SAYISINDA değil, her karede
+yeniden çizilen ızgara/eksen/etiket katmanında; bu yüzden değişiklik geri
+alındı ve mevcut cihaz-duyarlı yoğunluk korundu.
+
+Ölçüm kalıcı: `npm run perf` çıktısında `yakınlaştırma_blok_ms` ve
+`kaydırma_blok_ms`. Yol boyunca bir ölçüm hatası da düzeltildi — etkileşim
+blokları açılışın uzun görev sayacına karışıyordu; artık açılış ölçümü
+etkileşimden ÖNCE alınıyor, yoksa "açılışta kaç blok var" sorusunun cevabı
+ölçümün kendisine göre değişirdi.
+
 ## Tekrar üretmek için
 
 ```bash

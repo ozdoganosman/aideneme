@@ -58,10 +58,13 @@ async function measure(name, url, ready, actions) {
     };
   });
 
+  // Uzun görevler AÇILIŞ aşamasına ait olmalı: etkileşim ölçümleri (yakınlaştırma,
+  // kaydırma) kendi bloklarını ayrı alanlarda raporluyor. İkisini tek sayıya
+  // katsaydık "açılışta kaç blok var" sorusu ölçüme göre değişirdi.
+  const long = await page.evaluate(() => [...(window.__long ?? [])]);
+
   let interaction = null;
   if (actions) interaction = await actions(page);
-
-  const long = await page.evaluate(() => window.__long ?? []);
   await ctx.close();
 
   return {
@@ -139,7 +142,40 @@ results.push(
     await page.getByRole('tab', { name: 'Haftalık' }).click();
     await page.waitForTimeout(50);
     await page.waitForFunction(() => !!document.querySelector('.chart-host canvas'), { timeout: 30000 });
-    return { 'periyot_değişimi_ms': Date.now() - t };
+    const tfMs = Date.now() - t;
+
+    // Grafik etkileşimi: 20 tekerlek adımı (uzaklaştırma) ve 20 sürükleme
+    // adımı (kaydırma) sırasında ana thread'i kaç ms bloklandığı. Duvar saati
+    // değil BLOK süresi ölçülüyor: takılmayı yaratan budur.
+    const box = await page.locator('.chart-host').boundingBox();
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    // DİKKAT: __long dizisi sayfa yükleme ölçümünde de kullanılıyor; burada
+    // SIFIRLAMAK o satırın "uzun görev" sayısını siliyordu. Sıfırlamak yerine
+    // etkileşim öncesi toplam alınıp fark hesaplanıyor.
+    const sumLong = () =>
+      page.evaluate(() => Math.round((window.__long ?? []).reduce((s, d) => s + d, 0)));
+    const beforeZoom = await sumLong();
+    for (let i = 0; i < 20; i++) {
+      await page.mouse.move(cx, cy);
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(30);
+    }
+    const afterZoom = await sumLong();
+    const zoomBlock = afterZoom - beforeZoom;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    for (let i = 0; i < 20; i++) {
+      await page.mouse.move(cx - i * 8, cy);
+      await page.waitForTimeout(20);
+    }
+    await page.mouse.up();
+    const panBlock = (await sumLong()) - afterZoom;
+    return {
+      'periyot_değişimi_ms': tfMs,
+      'yakınlaştırma_blok_ms': zoomBlock,
+      'kaydırma_blok_ms': panBlock,
+    };
   }),
 );
 
