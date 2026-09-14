@@ -638,6 +638,32 @@ olurdu. Eskiden 21 bar yoksa NaN'dı; şimdi 30 gün yoksa NaN.
 Tutarlılık kalıcı teste bağlandı: aynı seride tarayıcının `chg21` değeri ile
 Sembol Masası'nın `r1m` metriği birbirinden ayrılırsa test kırılıyor.
 
+### İkinci tur: aynı ad, başka pencere
+
+Denetim sürünce ikinci bir çift çıktı — ama bu kez sayılar HAKLI olarak
+farklıydı:
+
+| Ekran | Metrik | X140 |
+|---|---|---|
+| Tarayıcı | Zirveden (son 250 barın en **yükseği**) | −10,65% |
+| Sembol Masası | Tepeden uzaklık (tüm geçmişin **kapanış** zirvesi) | −59,96% |
+
+İkisi farklı sorular: biri "son bir yılın zirvesine göre neredeyiz" (klasik
+bir tarama ölçütü), öteki "tarihsel tepeden ne kadar aşağıdayız". Kusur
+hesapta değil **adlandırmadaydı**: iki başlık da "zirveden uzaklık" diye
+okunuyordu ve −%10 ile −%60 arasındaki uçurum kullanıcıya birinin bozuk
+olduğunu düşündürürdü.
+
+- Sembol Masası'nın metriği **"Tarihsel zirveden"** oldu; formülü de artık
+  "TÜM GEÇMİŞTEKİ en yüksek kapanış" diyor.
+- Tarayıcı sütun başlıkları, penceresi araç çubuğunda **görünmeyen**
+  metriklerde pencereyi taşıyor: **"Zirveden (250 bar)"**, **"Hacim oranı
+  (20 bar)"**. RSI/ADX/EMA'da başlık sade kaldı, çünkü uzunlukları zaten
+  araç çubuğunda görünüyor ve kullanıcı değiştirdiğinde başlık da değişir.
+
+Geri kalan çakışan metrikler (fiyat, 1 gün, F/K, PD/DD, özkaynak kârlılığı,
+net marj) tarayıcı ile finansallar panelinde birebir aynı çıktı.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

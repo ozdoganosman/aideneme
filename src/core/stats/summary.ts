@@ -195,11 +195,11 @@ export function summarize(c: Candles, options: SummaryOptions = {}): Metric[] {
     },
     {
       key: 'curdd',
-      label: 'Tepeden uzaklık',
+      label: 'Tarihsel zirveden',
       value: -dd.current,
       unit: 'pct',
       signed: true,
-      formula: 'Şu anki fiyatın tarihsel zirveye göre düşüşü',
+      formula: 'Şu anki kapanışın TÜM GEÇMİŞTEKİ en yüksek kapanışa göre düşüşü',
       window: span,
       bars: n,
     },

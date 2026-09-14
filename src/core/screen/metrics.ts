@@ -56,6 +56,15 @@ export interface MetricDef {
   /** Değer işaretine göre renklensin mi. */
   signed?: boolean;
   decimals?: number;
+  /**
+   * Sütun başlığına eklenecek pencere (ör. "250 bar").
+   *
+   * Yalnızca penceresi araç çubuğunda GÖRÜNMEYEN metrikler için doldurulur:
+   * "Zirveden" başlığı tek başına, Sembol Masası'ndaki tarihsel zirveyle aynı
+   * şeyi ölçüyormuş gibi okunuyordu — oysa biri son 250 barın en yükseğine,
+   * öteki tüm geçmişin kapanış zirvesine bakıyor.
+   */
+  windowLabel?: (p: ScreenParams) => string;
 }
 
 export const METRIC_DEFS: MetricDef[] = [
@@ -124,6 +133,7 @@ export const METRIC_DEFS: MetricDef[] = [
     id: 'volRatio',
     label: 'Hacim oranı',
     unit: 'ratio',
+    windowLabel: (p) => `${p.volLookback} bar`,
     formula: (p) => `Son bar hacmi ÷ son ${p.volLookback} barın ortalama hacmi`,
   },
   {
@@ -137,6 +147,7 @@ export const METRIC_DEFS: MetricDef[] = [
     label: 'Zirveden',
     unit: 'pct',
     signed: true,
+    windowLabel: (p) => `${p.highLookback} bar`,
     formula: (p) => `(kapanış ÷ son ${p.highLookback} barın en yükseği − 1) × 100`,
   },
 ];

@@ -93,6 +93,17 @@ function loadSnapshots(): Record<string, ScreenSnapshot> {
 
 const fmtDay = (seconds: number): string => new Date(seconds * 1000).toISOString().slice(0, 10);
 
+/**
+ * Sütun başlığı; penceresi araç çubuğunda görünmeyen metrikte pencereyi de
+ * yazar ("Zirveden (250 bar)"). Aynı adı taşıyan ama başka bir pencereye
+ * bakan Sembol Masası metriğiyle karışmasın diye.
+ */
+function headerFor(id: string, params: ScreenParams): string {
+  const def = METRIC_BY_ID.get(id);
+  if (!def) return id;
+  return def.windowLabel ? `${def.label} (${def.windowLabel(params)})` : def.label;
+}
+
 function fmtValue(id: string, v: number): string {
   if (!Number.isFinite(v)) return '—';
   const def = METRIC_BY_ID.get(id);
@@ -350,13 +361,13 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
         : []),
       ...shown.map<Column<ScreenRow>>((id) => ({
         key: id,
-        header: METRIC_BY_ID.get(id)?.label ?? id,
+        header: headerFor(id, params),
         numeric: true,
         render: (r) => fmtValue(id, r.values[id]),
         sortValue: (r) => r.values[id],
       })),
     ];
-  }, [snapshot, sectors]);
+  }, [snapshot, sectors, params]);
 
   const updateRule = useCallback((index: number, patch: Partial<Rule>) => {
     setRules((prev) => prev.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));

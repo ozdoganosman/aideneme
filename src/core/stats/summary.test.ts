@@ -110,3 +110,15 @@ describe('summarize', () => {
     expect(metrics.find((m) => m.key === 'maxdd')!.value).toBeLessThanOrEqual(0);
   });
 });
+
+describe('Metrik adları kapsamı söyler', () => {
+  it('zirve metriği tüm geçmişe baktığını adında taşır', () => {
+    // Tarayıcıdaki "Zirveden" son 250 barın EN YÜKSEĞİNE bakar; buradaki
+    // metrik tüm geçmişin kapanış zirvesine. İkisi de doğru ama aynı adı
+    // taşısalardı kullanıcı birini yanlış sanırdı.
+    const c = geometric(300, 100, 0.001);
+    const metric = summarize(c).find((m) => m.key === 'curdd')!;
+    expect(metric.label).toBe('Tarihsel zirveden');
+    expect(metric.formula).toMatch(/TÜM GEÇMİŞ/);
+  });
+});

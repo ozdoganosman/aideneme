@@ -124,6 +124,19 @@ describe('Tarayıcı', () => {
     expect(push).toHaveBeenCalledWith({ v: 'sembol', s: 'AAA' });
   });
 
+  it('penceresi görünmeyen sütun pencereyi başlıkta yazar', async () => {
+    render(<ScreenerScreen state={STATE} push={push} />);
+    // "Zirveden" tek başına, Sembol Masası'nın tarihsel zirvesiyle aynı şeyi
+    // ölçüyormuş gibi okunuyordu; başlık artık pencereyi taşıyor.
+    expect(await screen.findByText('Zirveden (250 bar)')).toBeInTheDocument();
+    expect(screen.getByText('Hacim oranı (20 bar)')).toBeInTheDocument();
+    // Penceresi araç çubuğunda görünen metrikte başlık sade kalıyor.
+    const headers = [...document.querySelectorAll('.ui-vtable thead th')].map((h) =>
+      (h.textContent ?? '').trim(),
+    );
+    expect(headers).toContain('RSI');
+  });
+
   it('her kuralın metriği için formül katmanı var', async () => {
     const user = userEvent.setup();
     render(<ScreenerScreen state={STATE} push={push} />);
