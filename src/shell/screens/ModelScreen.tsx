@@ -295,6 +295,18 @@ export default function ModelScreen({ state, push }: Props) {
                   label={`${symbol} · ${day(result.latest.day)} sonrası ${card.barriers.horizon} bar`}
                   value={pct(result.latest.probability, 0)}
                   hint={`üst bariyere (+${trNum(card.barriers.upMult, 1)}σ) önce değme olasılığı`}
+                  provenance={
+                    <Prov label="Son tahmin">
+                      Son barın özelliklerinden üretilen olasılık. Model, eğitim katmanında
+                      öğrenilen KALİBRASYONDAN geçirilmiş çıktıyı veriyor: ham skor değil, "yüzde"
+                      olarak okunabilen bir olasılık. Ufuk {card.barriers.horizon} bar, bariyerler ±
+                      {trNum(card.barriers.upMult, 1)}σ (ATR'ye göre) — yani "
+                      {pct(result.latest.probability, 0)}" demek, önümüzdeki {card.barriers.horizon}{' '}
+                      barda ÜST bariyere alt bariyerden önce değme olasılığı. Tek sembol, tek dönem
+                      ölçümüdür; hüküm {card.verdict === 'zayıf' ? '"zayıf"' : '"kullanılabilir"'}{' '}
+                      olsa bile bir işlem önerisi değildir.
+                    </Prov>
+                  }
                 />
               </div>
             ) : null}

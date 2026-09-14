@@ -165,6 +165,18 @@ describe('Model ekranı', () => {
     expect(region).toHaveTextContent(/işlem maliyeti dahil değil/);
   });
 
+  it('son tahmin kartı da provenance taşır', async () => {
+    // Bu kart YALNIZCA hüküm "kullanma" değilken ve son tahmin varken
+    // görünüyor. Provenance denetimini yaptığımda hüküm "kullanma"ydı,
+    // kart hiç render edilmemişti — eksik, veriye bağlı olarak CI'da
+    // ortaya çıktı. Artık durumdan bağımsız güvence altında.
+    render(<ModelScreen state={STATE} push={push} />);
+    const kart = await screen.findByText(/sonrası 10 bar/);
+    const stat = kart.closest('.ui-stat');
+    expect(stat).not.toBeNull();
+    expect(stat!.querySelector('.desk__prov')).not.toBeNull();
+  });
+
   it('ufuk değişince model yeniden kurulur', async () => {
     render(<ModelScreen state={STATE} push={push} />);
     await waitFor(() => expect(modelFn).toHaveBeenCalledTimes(1));
