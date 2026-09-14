@@ -441,6 +441,11 @@ Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
 - Bir strateji kurup doğrulanmış sonuç alma süresi: **< 5 dk**.
 - Veri boyutu: **227 MB → ≤ 60 MB**; ilk açılış JS: **≤ 180 KB**.
 - `core/` test kapsamı **≥ %90**; indikatörlerin **%100'ü** altın-değer testli.
+  **Ölçüldü (2026-09-14):** yeni çekirdek **%98,8 satır / %92,1 dal / %99,2
+  fonksiyon** — eşik `vite.config.ts`'te, CI'da kapı (`npm run coverage`).
+  Tüm `src/core/` klasörü için sayı **%76,8**; aradaki fark eski uygulamadan
+  devralınan `core/indicators/` modülleri (%12) ve demo veri üreticisi. Onlar
+  yeniden yazılmadı, uçtan uca akışlarla sınanıyor; sayı gizlenmiyor.
 - Her yayınlanan metriğin provenance popover'ı var (kapsam: **%100**).
 - Erişilebilirlik: axe ihlali **0**, tam klavye ile tüm akışlar tamamlanabiliyor.
 

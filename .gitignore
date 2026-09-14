@@ -32,3 +32,6 @@ __pycache__/
 # Playwright çıktıları
 /test-results/
 /playwright-report/
+
+# Test kapsamı raporu
+coverage/

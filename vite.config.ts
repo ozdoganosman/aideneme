@@ -25,5 +25,22 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
     css: false,
+    coverage: {
+      provider: 'v8',
+      // Hedef ÇEKİRDEK katman: saf analiz kodu. Arayüz bileşenleri etkileşim
+      // testleriyle ve uçtan uca akışlarla sınanıyor, satır kapsamıyla değil.
+      include: ['src/core/**'],
+      // DIŞARIDA BIRAKILANLAR ve nedenleri (gizlemek için değil, ölçüyü doğru
+      // şeye bakmak için):
+      //  - indicators/: eski uygulamadan (index.html) devralındı, yeniden
+      //    yazılmadı; uçtan uca akışlarla sınanıyor. Kapsamı docs'ta ayrıca
+      //    raporlanıyor (%12), saklanmıyor.
+      //  - synthetic.ts: yalnızca demo/geliştirme verisi üretir.
+      exclude: ['src/core/indicators/**', 'src/core/data/synthetic.ts'],
+      reporter: ['text', 'json-summary'],
+      // Eşik, ölçülen değerin hemen altında: geriye gidişi yakalar, ileriye
+      // gitmeyi engellemez.
+      thresholds: { statements: 95, branches: 90, functions: 95 },
+    },
   },
 });
