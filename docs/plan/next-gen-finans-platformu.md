@@ -388,8 +388,6 @@ Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
 - `scripts/build_sectors.py`'nin kaynağı geliştirme ortamından erişilemediği için
   canlı yanıt formatı doğrulanamadı; ayrıştırıcı çevrimdışı test altında, CI adımı
   `continue-on-error` ve dosya yazılmazsa arayüz davranış kümelerine düşüyor.
-- Kayıtlı taramalar yalnızca tarayıcıda; paylaşılan bağlantı filtreyi taşıyor ama
-  kayıt listesini taşımıyor.
 - Kesitsel (çoklu sembol) model: kart "tek sembolde, tek dönemde ölçüldü" diyor.
 
 ---

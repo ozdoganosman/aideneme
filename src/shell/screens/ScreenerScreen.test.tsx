@@ -301,3 +301,60 @@ describe('Tarayıcı — stratejilere aktarma', () => {
     );
   });
 });
+
+describe('Tarayıcı — koleksiyon taşıma', () => {
+  it('kayıt yoksa dışa aktarma pasif', async () => {
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Koleksiyonu dışa aktar' })).toBeDisabled();
+  });
+
+  it('kaydedilen taramayı dışa aktarır', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Taramayı kaydet' }));
+    await user.click(screen.getByRole('button', { name: 'Koleksiyonu dışa aktar' }));
+
+    const box = screen.getByLabelText('Koleksiyon metni') as HTMLTextAreaElement;
+    expect(box.value).toContain('borsa.screens');
+    expect(box.value).toContain('Tarama 1');
+    // Dışa aktarma kutusu salt okunur: yanlışlıkla düzenlenip bozulmasın.
+    expect(box).toHaveAttribute('readonly');
+  });
+
+  it('içe aktarılan koleksiyon kitaplığa ekleniyor', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Koleksiyonu içe aktar' }));
+    const box = screen.getByLabelText('Koleksiyon metni');
+    await user.click(box);
+    await user.paste(
+      JSON.stringify({
+        version: 1,
+        kind: 'borsa.screens',
+        screens: [{ name: 'Gelen', f: '1|rsi~g~30|||' }],
+      }),
+    );
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'İçe aktar' }));
+
+    await waitFor(() => expect(screen.getByText('1 tarama eklendi.')).toBeInTheDocument());
+  });
+
+  it('bozuk metin sessizce alınmaz, gerekçesi yazılır', async () => {
+    const user = userEvent.setup();
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'Koleksiyonu içe aktar' }));
+    await user.click(screen.getByLabelText('Koleksiyon metni'));
+    await user.paste('merhaba');
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'İçe aktar' }));
+
+    await waitFor(() => expect(screen.getByText('Hiçbir tarama alınamadı.')).toBeInTheDocument());
+    expect(screen.getByText(/JSON olarak okunamadı/)).toBeInTheDocument();
+  });
+});

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Badge,
   Button,
+  Dialog,
   EmptyState,
   IconButton,
   NumberField,
@@ -24,7 +25,13 @@ import {
 } from '../../core/screen/metrics';
 import { FUNDAMENTAL_METRIC_DEFS, withFundamentals } from '../../core/screen/fundamentalMetrics';
 import { sectorNames, withSectors, type SectorMap } from '../../core/screen/sectors';
-import { decodeScreen, encodeScreen } from '../../core/screen/share';
+import {
+  decodeScreen,
+  encodeScreen,
+  exportScreens,
+  importScreens,
+  type SavedScreen,
+} from '../../core/screen/share';
 import { sectorsClient } from '../../data-client/sectors';
 import type { FundamentalsSnapshot } from '../../core/fundamentals/types';
 import { fundamentalsClient } from '../../data-client/fundamentals';
@@ -56,14 +63,6 @@ const SAVED_KEY = 'screener.saved';
 /** Teknik + temel metrikler tek listede: filtre motoru ikisini ayırt etmiyor. */
 const ALL_METRIC_DEFS: MetricDef[] = [...METRIC_DEFS, ...FUNDAMENTAL_METRIC_DEFS];
 const METRIC_BY_ID = new Map(ALL_METRIC_DEFS.map((d) => [d.id, d]));
-
-interface SavedScreen {
-  name: string;
-  rules: Rule[];
-  params: ScreenParams;
-  /** Seçili sektörler; eski kayıtlarda yok (geri uyumlu). */
-  sectors?: string[];
-}
 
 function loadSaved(): SavedScreen[] {
   try {
@@ -110,6 +109,9 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
   const [saved, setSaved] = useState<SavedScreen[]>(loadSaved);
   const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
   const [snapshotChecked, setSnapshotChecked] = useState(false);
+  const [transfer, setTransfer] = useState<'closed' | 'export' | 'import'>('closed');
+  const [transferText, setTransferText] = useState('');
+  const [transferNote, setTransferNote] = useState<string[]>([]);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
   const [pickedSectors, setPickedSectors] = useState<string[]>(shared.state?.sectors ?? []);
 
@@ -256,6 +258,33 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
   const updateRule = useCallback((index: number, patch: Partial<Rule>) => {
     setRules((prev) => prev.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
   }, []);
+
+  function applyImport() {
+    const known = new Set(ALL_METRIC_DEFS.map((d) => d.id));
+    const { screens, dropped } = importScreens(transferText, known);
+    if (screens.length > 0) {
+      // Aynı adlı kayıt ÜZERİNE YAZILMAZ: kullanıcının mevcut kitaplığını
+      // sessizce değiştirmek yerine gelen kayıtlar ekleniyor.
+      const existing = new Set(saved.map((s) => s.name));
+      const merged = [
+        ...saved,
+        ...screens.map((s) => ({
+          ...s,
+          name: existing.has(s.name) ? `${s.name} (içe aktarılan)` : s.name,
+        })),
+      ];
+      setSaved(merged);
+      try {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(merged));
+      } catch {
+        /* depolama yoksa kayıt atlanır */
+      }
+    }
+    setTransferNote([
+      screens.length > 0 ? `${screens.length} tarama eklendi.` : 'Hiçbir tarama alınamadı.',
+      ...dropped,
+    ]);
+  }
 
   function saveCurrent() {
     const name = `Tarama ${saved.length + 1}`;
@@ -439,6 +468,29 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
             <CopyLink label="Filtreyi paylaş" />
             <Button
               size="sm"
+              variant="ghost"
+              onClick={() => {
+                setTransferText(exportScreens(saved));
+                setTransferNote([]);
+                setTransfer('export');
+              }}
+              disabled={saved.length === 0}
+            >
+              Koleksiyonu dışa aktar
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setTransferText('');
+                setTransferNote([]);
+                setTransfer('import');
+              }}
+            >
+              Koleksiyonu içe aktar
+            </Button>
+            <Button
+              size="sm"
               onClick={() =>
                 push({
                   v: 'stratejiler',
@@ -503,6 +555,43 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
           </>
         )}
       </div>
+
+      <Dialog
+        open={transfer !== 'closed'}
+        onClose={() => setTransfer('closed')}
+        title={transfer === 'export' ? 'Koleksiyonu dışa aktar' : 'Koleksiyonu içe aktar'}
+        description={
+          transfer === 'export'
+            ? 'Metni kopyalayıp başka bir cihazda içe aktarın. Kayıtlar yalnızca tarayıcıda saklanır; sunucuya gönderilmez.'
+            : 'Dışa aktarılmış metni yapıştırın. Tanınmayan metrik ya da bozuk kayıt sessizce alınmaz; gerekçesi yazılır.'
+        }
+        footer={
+          transfer === 'import' ? (
+            <Button variant="primary" onClick={applyImport}>
+              İçe aktar
+            </Button>
+          ) : null
+        }
+      >
+        <label className="ui-field__label" htmlFor="screener-transfer">
+          Koleksiyon metni
+        </label>
+        <textarea
+          id="screener-transfer"
+          className="ui-input screener__transfer"
+          rows={10}
+          value={transferText}
+          readOnly={transfer === 'export'}
+          onChange={(e) => setTransferText(e.target.value)}
+        />
+        {transferNote.length > 0 ? (
+          <ul className="screener__transfer-note" role="status">
+            {transferNote.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        ) : null}
+      </Dialog>
 
       {analysis.status === 'loading' ? (
         <Skeleton height="320px" />

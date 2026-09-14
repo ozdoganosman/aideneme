@@ -131,3 +131,99 @@ export function decodeScreen(text: string, knownMetrics: Set<string>): DecodeRes
 
   return { state: { rules, params, sectors, sort }, dropped };
 }
+
+/**
+ * Kayıtlı tarama koleksiyonu — cihazlar arası taşıma.
+ *
+ * Kayıtlar tarayıcıda duruyor; başka bir makineye geçen kullanıcı kitaplığını
+ * kaybediyordu. Tek bir taramayı paylaşmak için bağlantı yeterli, ama
+ * KOLEKSİYONU taşımak için metin biçimi gerekiyor.
+ *
+ * İçe aktarma KATI: tanınmayan metrik, bozuk sayı ya da adı olmayan kayıt
+ * atılır ve gerekçesi bildirilir. Yarım anlaşılmış bir taramayı sessizce
+ * kabul etmek, kullanıcının sandığından farklı bir filtreyle çalışması demek.
+ */
+
+export interface SavedScreen {
+  name: string;
+  rules: Rule[];
+  params: ScreenParams;
+  sectors?: string[];
+}
+
+export interface ImportResult {
+  screens: SavedScreen[];
+  dropped: string[];
+}
+
+const COLLECTION_VERSION = 1;
+
+export function exportScreens(screens: SavedScreen[]): string {
+  return JSON.stringify(
+    {
+      version: COLLECTION_VERSION,
+      kind: 'borsa.screens',
+      screens: screens.map((s) => ({ name: s.name, f: encodeScreen(toShare(s)) })),
+    },
+    null,
+    2,
+  );
+}
+
+function toShare(screen: SavedScreen): ShareState {
+  return {
+    rules: screen.rules,
+    params: screen.params,
+    sectors: screen.sectors ?? [],
+    sort: { metric: 'chg21', dir: 'desc' },
+  };
+}
+
+export function importScreens(text: string, knownMetrics: Set<string>): ImportResult {
+  const dropped: string[] = [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { screens: [], dropped: ['metin JSON olarak okunamadı'] };
+  }
+
+  const root = parsed as { version?: unknown; kind?: unknown; screens?: unknown };
+  if (root?.kind !== 'borsa.screens') {
+    return { screens: [], dropped: ['bu metin bir tarama koleksiyonu değil'] };
+  }
+  if (root.version !== COLLECTION_VERSION) {
+    return { screens: [], dropped: [`koleksiyon sürümü tanınmadı (${String(root.version)})`] };
+  }
+  if (!Array.isArray(root.screens)) {
+    return { screens: [], dropped: ['koleksiyon listesi bulunamadı'] };
+  }
+
+  const screens: SavedScreen[] = [];
+  for (const [index, raw] of root.screens.entries()) {
+    const item = raw as { name?: unknown; f?: unknown };
+    const name = typeof item?.name === 'string' ? item.name.trim() : '';
+    if (!name) {
+      dropped.push(`${index + 1}. kayıtta ad yok`);
+      continue;
+    }
+    if (typeof item?.f !== 'string') {
+      dropped.push(`"${name}": filtre okunamadı`);
+      continue;
+    }
+    const decoded = decodeScreen(item.f, knownMetrics);
+    if (!decoded.state) {
+      dropped.push(`"${name}": ${decoded.dropped.join(', ') || 'çözülemedi'}`);
+      continue;
+    }
+    for (const reason of decoded.dropped) dropped.push(`"${name}": ${reason}`);
+    screens.push({
+      name,
+      rules: decoded.state.rules,
+      params: decoded.state.params,
+      sectors: decoded.state.sectors,
+    });
+  }
+
+  return { screens, dropped };
+}

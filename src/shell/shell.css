@@ -1072,6 +1072,21 @@
   font-weight: 600;
 }
 
+/* Tarayıcı — koleksiyon aktarım kutusu. */
+.screener__transfer {
+  width: 100%;
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+  resize: vertical;
+}
+.screener__transfer-note {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
 /* Tarayıcı — sektör rozetleri. */
 .screener__sectors {
   margin: 0;

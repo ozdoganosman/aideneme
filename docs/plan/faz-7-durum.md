@@ -389,6 +389,25 @@ son bilinen kur kullanılıyordu — kur etkisi sıfırlanıp TL getirisi "dövi
 getirisi" diye gösteriliyordu. Artık `dayFrom > dayTo` durumunda sonuç
 üretilmiyor. Test altında.
 
+## Kayıtlı taramaların taşınabilirliği
+
+Kayıtlar tarayıcıda duruyor; başka bir makineye geçen kullanıcı kitaplığını
+kaybediyordu. Tek bir taramayı paylaşmak için bağlantı yeterliydi, koleksiyonu
+taşımak için metin biçimi gerekiyordu: "Koleksiyonu dışa aktar" metni veriyor,
+"Koleksiyonu içe aktar" geri alıyor.
+
+İçe aktarma **katı**: tanınmayan metrik, bozuk sayı, adı olmayan kayıt ya da
+başka bir JSON dosyası sessizce kabul edilmiyor; her biri gerekçesiyle
+listeleniyor. Yarım anlaşılmış bir taramayı almak, kullanıcının sandığından
+farklı bir filtreyle çalışması demek olurdu.
+
+Aynı adlı kayıt **üzerine yazılmıyor**, "(içe aktarılan)" ekiyle yanına
+ekleniyor — mevcut kitaplığı sessizce değiştirmek kullanıcının kararı değil.
+
+Yol boyunca küçük bir düzeltme: araç çubuğundaki ve pencere içindeki iki düğme
+de "İçe aktar" diyordu. Aynı ada sahip iki düğme ekran okuyucuda ayırt
+edilemez; dıştaki "Koleksiyonu içe aktar" oldu.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

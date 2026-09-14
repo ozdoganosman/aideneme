@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SCREEN_PARAMS, type Rule } from './metrics';
-import { decodeScreen, encodeScreen, type ShareState } from './share';
+import {
+  decodeScreen,
+  encodeScreen,
+  exportScreens,
+  importScreens,
+  type SavedScreen,
+  type ShareState,
+} from './share';
 
 const KNOWN = new Set(['rsi', 'chg21', 'adx', 'pe']);
 
@@ -95,5 +102,74 @@ describe('tarama bağlantısı', () => {
     const { state: back, dropped } = decodeScreen('1|||,|zzz~a', KNOWN);
     expect(back!.sort).toEqual({ metric: 'chg21', dir: 'desc' });
     expect(dropped).toContain('bilinmeyen sıralama metriği: zzz');
+  });
+});
+
+describe('kayıtlı tarama koleksiyonu', () => {
+  const saved: SavedScreen[] = [
+    {
+      name: 'Ucuz ve güçlü',
+      rules: [{ metric: 'rsi', op: 'between', a: 40, b: 70 }],
+      params: DEFAULT_SCREEN_PARAMS,
+      sectors: ['Bankacılık'],
+    },
+    {
+      name: 'Momentum',
+      rules: [{ metric: 'chg21', op: 'gt', a: 5 }],
+      params: DEFAULT_SCREEN_PARAMS,
+    },
+  ];
+
+  it('dışa aktarıp geri okuyunca koleksiyon korunur', () => {
+    const { screens, dropped } = importScreens(exportScreens(saved), KNOWN);
+    expect(dropped).toEqual([]);
+    expect(screens).toHaveLength(2);
+    expect(screens[0].name).toBe('Ucuz ve güçlü');
+    expect(screens[0].rules).toEqual(saved[0].rules);
+    expect(screens[0].sectors).toEqual(['Bankacılık']);
+    expect(screens[1].sectors).toEqual([]);
+  });
+
+  it('JSON olmayan metni reddeder', () => {
+    expect(importScreens('merhaba', KNOWN).dropped[0]).toMatch(/JSON olarak okunamadı/);
+  });
+
+  it('başka bir JSON dosyasını koleksiyon sanmaz', () => {
+    const out = importScreens(JSON.stringify({ hello: 'world' }), KNOWN);
+    expect(out.screens).toEqual([]);
+    expect(out.dropped[0]).toMatch(/tarama koleksiyonu değil/);
+  });
+
+  it('tanınmayan sürümü çözmeye çalışmaz', () => {
+    const text = JSON.stringify({ version: 9, kind: 'borsa.screens', screens: [] });
+    expect(importScreens(text, KNOWN).dropped[0]).toMatch(/sürümü tanınmadı/);
+  });
+
+  it('adı olmayan ve filtresi bozuk kayıtları gerekçesiyle atar', () => {
+    const text = JSON.stringify({
+      version: 1,
+      kind: 'borsa.screens',
+      screens: [
+        { name: '  ', f: '1|rsi~g~30||' },
+        { name: 'Filtresiz', f: 42 },
+        { name: 'Sağlam', f: '1|rsi~g~30|||' },
+      ],
+    });
+    const out = importScreens(text, KNOWN);
+    expect(out.screens.map((s) => s.name)).toEqual(['Sağlam']);
+    expect(out.dropped[0]).toMatch(/1. kayıtta ad yok/);
+    expect(out.dropped[1]).toMatch(/"Filtresiz": filtre okunamadı/);
+  });
+
+  it('kısmen çözülen kaydı alır ama kaybı bildirir', () => {
+    const text = JSON.stringify({
+      version: 1,
+      kind: 'borsa.screens',
+      screens: [{ name: 'Karma', f: '1|zzz~g~5!rsi~g~30|||' }],
+    });
+    const out = importScreens(text, KNOWN);
+    expect(out.screens).toHaveLength(1);
+    expect(out.screens[0].rules).toHaveLength(1);
+    expect(out.dropped[0]).toMatch(/"Karma": bilinmeyen metrik: zzz/);
   });
 });
