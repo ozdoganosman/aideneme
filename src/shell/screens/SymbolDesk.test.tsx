@@ -3,6 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DAY_SECONDS } from '../../core/data/pack';
 import { emptyCandles, type Candles } from '../../core/data/types';
+import { resample, type TF } from '../../core/data/resample';
+import { summarize } from '../../core/stats/summary';
+import { inspect } from '../../core/data/health';
+import { emaArr } from '../../core/indicators/calc';
 
 // Grafik ayrı chunk ve canvas gerektiriyor; ekran testinde yerine sahte kondu.
 vi.mock('../chart/PriceChart', () => ({
@@ -10,6 +14,37 @@ vi.mock('../chart/PriceChart', () => ({
     <div data-testid="chart">{candles.length} bar</div>
   ),
 }));
+
+// Sembol analizi artık worker'da; sahte istemci aynı çekirdek fonksiyonları
+// çağırır, böylece ekranın gösterdiği sayılar gerçek hesapla aynı kalır.
+const FAKE_ANALYSIS = {
+  client: {
+    size: 2,
+    symbol: async (
+      candles: Candles,
+      options: {
+        tf: TF;
+        overlays: { key: string; length: number }[];
+        todayDay: number;
+        realReturn: boolean;
+      },
+    ) => {
+      const resampled = resample(candles, options.tf);
+      return {
+        candles: resampled,
+        metrics: summarize(resampled, { realReturn: options.realReturn }),
+        health: inspect(candles, { today: options.todayDay }),
+        overlayValues: options.overlays.map((o) => emaArr(resampled.close, o.length)),
+        ms: 3,
+      };
+    },
+  },
+  symbols: ['THYAO', 'GARAN'],
+  bars: 0,
+  status: 'ready' as const,
+  error: null,
+};
+vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
 const manifest = vi.fn();
 const series = vi.fn();

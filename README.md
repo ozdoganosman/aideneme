@@ -38,6 +38,10 @@ planına göre yeniden kuruluyor. İlk iki faz yayında:
   primitive. Canlı galeri: `next.html?v=kitaplik`.
 - **Uygulama kabuğu** (`src/shell/`): 7 ekran, `Cmd/Ctrl+K` komut paleti,
   paylaşılabilir URL durumu, tek responsive ağaç (ayrı mobil bileşen yok).
+- **Zayıf makine ölçümü**: `npm run perf -- 6 3` — CPU'yu 6× yavaşlatıp (düşük
+  güçlü dizüstü) her ekranın ana thread bloklarını ölçer. Normal makinede
+  hiçbir ekranda 50 ms'yi aşan görev yok; bulgular ve iyileştirmeler
+  [`docs/plan/performans.md`](docs/plan/performans.md).
 - **Kalite kapısı**: `npm run verify` → tip · lint · biçim · test · build ·
   performans bütçesi. CI'da da aynısı çalışır (`.github/workflows/verify.yml`).
 

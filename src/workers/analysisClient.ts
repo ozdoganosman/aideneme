@@ -3,6 +3,7 @@ import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
 import type {
   BacktestResponse,
+  SymbolResponse,
   CorrelateResponse,
   PulseResponse,
   WorkerResponse,
@@ -33,6 +34,7 @@ export interface ScreenOutcome {
 export type CorrelateOutcome = Omit<CorrelateResponse, 'id' | 'ok' | 'type'>;
 export type PulseOutcome = Omit<PulseResponse, 'id' | 'ok' | 'type'>;
 export type BacktestOutcome = Omit<BacktestResponse, 'id' | 'ok' | 'type'>;
+export type SymbolOutcome = Omit<SymbolResponse, 'id' | 'ok' | 'type'>;
 
 function defaultSize(): number {
   const cores = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency ?? 4) : 4;
@@ -126,6 +128,24 @@ export class AnalysisClient {
       await this.pool.run((id) => ({ id, type: 'backtest', candles, strategy, options, validate })),
     );
     if (response.type !== 'backtest') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = response;
+    return rest;
+  }
+
+  /** Sembol analizi: periyot dönüşümü + indikatör + özet + veri sağlığı. */
+  async symbol(
+    candles: import('../core/data/types').Candles,
+    options: {
+      tf: import('../core/data/resample').TF;
+      overlays: { key: string; length: number }[];
+      todayDay: number;
+      realReturn: boolean;
+    },
+  ): Promise<SymbolOutcome> {
+    const response = unwrap(
+      await this.pool.run((id) => ({ id, type: 'symbol', candles, ...options })),
+    );
+    if (response.type !== 'symbol') throw new Error('beklenmeyen yanıt');
     const { id: _id, ok: _ok, type: _type, ...rest } = response;
     return rest;
   }

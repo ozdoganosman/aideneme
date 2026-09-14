@@ -5,6 +5,9 @@ import type { BacktestOptions, Trade } from '../core/backtest/engine';
 import type { BacktestMetrics } from '../core/backtest/metrics';
 import type { Badge, ValidationOptions, ValidationReport } from '../core/backtest/validate';
 import type { Candles } from '../core/data/types';
+import type { HealthReport } from '../core/data/health';
+import type { Metric } from '../core/stats/summary';
+import type { TF } from '../core/data/resample';
 
 /**
  * Ana thread ↔ Worker sözleşmesi. Tek dosyada tutuluyor ki iki uç tip düzeyinde
@@ -62,8 +65,23 @@ export interface BacktestRequest {
   validate?: ValidationOptions | false;
 }
 
+export interface SymbolRequest {
+  id: number;
+  type: 'symbol';
+  /** Günlük seri (tam geçmiş). */
+  candles: Candles;
+  /** İstenen periyot; yeniden örnekleme worker'da yapılır. */
+  tf: TF;
+  /** Hesaplanacak EMA benzeri örtüler. */
+  overlays: { key: string; length: number }[];
+  /** Bugün (epoch gün) — sağlık raporu saf kalsın diye dışarıdan gelir. */
+  todayDay: number;
+  /** TL bazlı piyasada reel getiri metriği eklensin mi. */
+  realReturn: boolean;
+}
+
 export type WorkerRequest =
-  InitRequest | ScreenRequest | CorrelateRequest | PulseRequest | BacktestRequest;
+  InitRequest | ScreenRequest | CorrelateRequest | PulseRequest | BacktestRequest | SymbolRequest;
 
 export interface InitResponse {
   id: number;
@@ -125,8 +143,22 @@ export interface BacktestResponse {
   ms: number;
 }
 
+export interface SymbolResponse {
+  id: number;
+  ok: true;
+  type: 'symbol';
+  /** Periyoda indirgenmiş seri — grafik bunu çizer. */
+  candles: Candles;
+  metrics: Metric[];
+  health: HealthReport;
+  /** overlays isteğiyle aynı sırada. */
+  overlayValues: Float64Array[];
+  ms: number;
+}
+
 export type WorkerResponse =
   | InitResponse
+  | SymbolResponse
   | ScreenResponse
   | CorrelateResponse
   | PulseResponse

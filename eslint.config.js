@@ -128,10 +128,21 @@ export default tseslint.config(
     rules: { 'no-restricted-globals': 'off', 'no-restricted-imports': 'off' },
   },
 
-  // Node scripts.
+  // Node scripts. measure-perf.mjs tarayıcı içinde çalışan geri çağırımlar
+  // içerir (page.evaluate/addInitScript), bu yüzden tarayıcı globalleri de
+  // tanımlı: kod Node'da değil, sayfada koşar.
   {
     files: ['scripts/**/*.mjs', '*.config.{js,ts}'],
-    languageOptions: { globals: { process: 'readonly', console: 'readonly' } },
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
+        performance: 'readonly',
+        PerformanceObserver: 'readonly',
+      },
+    },
     rules: { 'no-console': 'off' },
   },
 );

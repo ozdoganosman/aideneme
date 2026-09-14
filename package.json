@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "budget": "node scripts/check-budget.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build && npm run budget"
+    "verify": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build && npm run budget",
+    "perf": "node scripts/measure-perf.mjs"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0",

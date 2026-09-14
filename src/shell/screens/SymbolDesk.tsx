@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useAnalysis } from '../useAnalysis';
 import {
   Badge,
   Button,
@@ -12,12 +13,11 @@ import {
   Toggle,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
-import { inspect, type HealthReport } from '../../core/data/health';
+import type { HealthReport } from '../../core/data/health';
 import { DAY_SECONDS } from '../../core/data/pack';
-import { resample, type TF } from '../../core/data/resample';
+import type { TF } from '../../core/data/resample';
 import type { Candles } from '../../core/data/types';
-import { emaArr } from '../../core/indicators/calc';
-import { summarize, type Metric } from '../../core/stats/summary';
+import type { Metric } from '../../core/stats/summary';
 import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import type { UrlState } from '../urlState';
@@ -81,12 +81,33 @@ export default function SymbolDesk({ state, push }: Props) {
   const market = (MARKETS.includes(state.m as Market) ? state.m : 'bist') as Market;
   const tf = (['D', 'W', 'M'].includes(state.tf) ? state.tf : 'D') as TF;
 
+  // Paket indirilmez: bu ekran tek sembolle çalışır, worker havuzu yeter.
+  const analysis = useAnalysis(market, { bundle: false });
   const [symbols, setSymbols] = useState<string[]>([]);
   const [load, setLoad] = useState<LoadState>({ status: 'idle' });
   const [tab, setTab] = useState('grafik');
+  const [chartReady, setChartReady] = useState(false);
   const [showVolume, setShowVolume] = useState(true);
   const [enabled, setEnabled] = useState<Record<string, boolean>>({ ema50: true, ema200: false });
   const requestId = useRef(0);
+
+  // Grafik kütüphanesi zayıf makinede ~230 ms CPU istiyor (profille ölçüldü).
+  // Mount'u boş zamana bırakınca metrikler ve sağlık paneli önce boyanıyor;
+  // kullanıcı sayfayı "donmuş" görmüyor.
+  useEffect(() => {
+    const idle = (
+      window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+    ).requestIdleCallback;
+    if (idle) {
+      const id = idle(() => setChartReady(true), { timeout: 600 });
+      return () =>
+        (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(
+          id,
+        );
+    }
+    const id = setTimeout(() => setChartReady(true), 60);
+    return () => clearTimeout(id);
+  }, []);
 
   // Manifest → sembol listesi. Piyasa değişince yeniden.
   useEffect(() => {
@@ -144,29 +165,59 @@ export default function SymbolDesk({ state, push }: Props) {
   }, [market, symbol]);
 
   const daily = load.status === 'ready' ? load.candles : null;
-  const candles = useMemo(() => (daily ? resample(daily, tf) : null), [daily, tf]);
+
+  /**
+   * Periyot dönüşümü, indikatörler, özet metrikler ve veri sağlığı WORKER'da.
+   * Ana iş parçacığında yapıldıklarında zayıf makinede (6× CPU yavaşlatma)
+   * tek parça ~150 ms blok ölçülmüştü; artık ana thread yalnızca çiziyor.
+   */
+  const [analysisResult, setAnalysisResult] = useState<{
+    candles: Candles;
+    metrics: Metric[];
+    health: HealthReport;
+    overlayValues: Float64Array[];
+  } | null>(null);
+
+  const clientRef = useRef(analysis.client);
+  clientRef.current = analysis.client;
+
+  useEffect(() => {
+    const client = clientRef.current;
+    if (!daily || !client) return;
+    let cancelled = false;
+    client
+      .symbol(daily, {
+        tf,
+        overlays: OVERLAY_DEFS.map((d) => ({ key: d.key, length: d.length })),
+        todayDay: Math.floor(Date.now() / 1000 / DAY_SECONDS),
+        realReturn: market === 'bist',
+      })
+      .then((result) => {
+        if (!cancelled) setAnalysisResult(result);
+      })
+      .catch(() => {
+        if (!cancelled) setAnalysisResult(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [daily, tf, market]);
+
+  const candles = analysisResult?.candles ?? null;
+  const metrics = analysisResult?.metrics ?? [];
+  const health = analysisResult?.health ?? null;
 
   const overlays = useMemo(
     () =>
-      OVERLAY_DEFS.map((def) => ({
+      OVERLAY_DEFS.map((def, i) => ({
         key: def.key,
         label: def.label,
         color: def.color,
-        values: candles ? emaArr(candles.close, def.length) : new Float64Array(0),
+        values: analysisResult?.overlayValues[i] ?? new Float64Array(0),
         visible: !!enabled[def.key],
       })),
-    [candles, enabled],
+    [analysisResult, enabled],
   );
-
-  const metrics = useMemo(
-    () => (candles ? summarize(candles, { realReturn: market === 'bist' }) : []),
-    [candles, market],
-  );
-
-  const health: HealthReport | null = useMemo(() => {
-    if (!daily) return null;
-    return inspect(daily, { today: Math.floor(Date.now() / 1000 / DAY_SECONDS) });
-  }, [daily]);
 
   return (
     <div className="desk">
@@ -250,12 +301,16 @@ export default function SymbolDesk({ state, push }: Props) {
       {load.status === 'ready' && candles && tab === 'grafik' ? (
         <>
           <section className="desk__chart" aria-label={`${symbol} fiyat grafiği`}>
-            <ChartPanel
-              candles={candles}
-              overlays={overlays}
-              showVolume={showVolume}
-              fitKey={`${market}:${symbol}:${tf}`}
-            />
+            {chartReady ? (
+              <ChartPanel
+                candles={candles}
+                overlays={overlays}
+                showVolume={showVolume}
+                fitKey={`${market}:${symbol}:${tf}`}
+              />
+            ) : (
+              <Skeleton height="320px" />
+            )}
           </section>
 
           <section className="desk__metrics" aria-label="Özet metrikler">

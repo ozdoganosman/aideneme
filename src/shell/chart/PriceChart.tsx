@@ -132,7 +132,17 @@ export function PriceChart({
     chartRef.current = chart;
     volumeRef.current = volumeSeries;
     overlayRef.current = map;
-    lodRef.current = new LodController(chart, candleSeries, volumeSeries, specs);
+    // Ekranın gösterebileceğinden fazla kova çizmenin faydası yok: 1366 px'lik
+    // bir ekranda 4000 kova ≈ piksel başına 3 mum. Cihaz genişliğine göre
+    // ölçeklemek zayıf makinede kare maliyetini belirgin düşürüyor; çekirdek
+    // sayısı düşük cihazlarda ayrıca yarıya iniyor (ölçüm: 6× yavaşlatılmış
+    // CPU'da grafik, sayfanın en pahalı tek işi).
+    const cores = navigator.hardwareConcurrency ?? 4;
+    const density = cores <= 2 ? 0.6 : cores <= 4 ? 0.9 : 1.2;
+    const buckets = Math.round(
+      Math.min(4000, Math.max(600, host.clientWidth * (window.devicePixelRatio || 1) * density)),
+    );
+    lodRef.current = new LodController(chart, candleSeries, volumeSeries, specs, [], buckets);
     lastFitKey.current = undefined;
 
     return () => {

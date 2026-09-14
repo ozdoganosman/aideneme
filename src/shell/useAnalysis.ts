@@ -18,7 +18,17 @@ export interface AnalysisState {
   error: string | null;
 }
 
-export function useAnalysis(market: Market): AnalysisState {
+export interface UseAnalysisOptions {
+  /**
+   * Paket (latest-N) indirilsin mi. Yalnızca tek sembolle çalışan ekranlar
+   * (ör. Sembol Masası) worker havuzuna ihtiyaç duyar ama pakete duymaz;
+   * boşuna ~1 MB indirmek zayıf bağlantıda ilk açılışı uzatır.
+   */
+  bundle?: boolean;
+}
+
+export function useAnalysis(market: Market, options: UseAnalysisOptions = {}): AnalysisState {
+  const withBundle = options.bundle !== false;
   const [state, setState] = useState<AnalysisState>({
     client: null,
     symbols: [],
@@ -36,6 +46,23 @@ export function useAnalysis(market: Market): AnalysisState {
     (async () => {
       try {
         const manifest = await dataClient.manifest(market, controller.signal);
+
+        if (!withBundle) {
+          // Paketsiz mod: worker havuzu kurulur, semboller manifest'ten gelir.
+          clientRef.current?.terminate();
+          const client = new AnalysisClient();
+          clientRef.current = client;
+          if (cancelled) return;
+          setState({
+            client,
+            symbols: Object.keys(manifest.symbols).sort(),
+            bars: 0,
+            status: 'ready',
+            error: null,
+          });
+          return;
+        }
+
         if (!manifest.bundle) throw new Error(`${market}: paket dosyası üretilmemiş`);
 
         const url = packPath(market, `${manifest.bundle.file}?h=${manifest.bundle.hash}`);
@@ -73,7 +100,7 @@ export function useAnalysis(market: Market): AnalysisState {
       cancelled = true;
       controller.abort();
     };
-  }, [market]);
+  }, [market, withBundle]);
 
   // Ekran kapanınca worker'lar bırakılır.
   useEffect(() => {

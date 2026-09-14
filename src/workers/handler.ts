@@ -5,6 +5,10 @@ import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
 import { runBacktest } from '../core/backtest/engine';
 import { computeMetrics } from '../core/backtest/metrics';
 import { validateStrategy } from '../core/backtest/validate';
+import { inspect } from '../core/data/health';
+import { resample } from '../core/data/resample';
+import { emaArr } from '../core/indicators/calc';
+import { summarize } from '../core/stats/summary';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 /**
@@ -57,6 +61,24 @@ export function createHandler() {
             type: 'pulse',
             rows,
             summary: summarizePulse(rows),
+            ms: now() - started,
+          };
+        }
+
+        case 'symbol': {
+          const started = now();
+          // Yeniden örnekleme + indikatör + özet + sağlık: hepsi burada.
+          // Ana iş parçacığında yapıldığında zayıf makinede ~150 ms'lik tek
+          // parça blok oluşturuyordu (ölçüldü).
+          const resampled = resample(req.candles, req.tf);
+          return {
+            id: req.id,
+            ok: true,
+            type: 'symbol',
+            candles: resampled,
+            metrics: summarize(resampled, { realReturn: req.realReturn }),
+            health: inspect(req.candles, { today: req.todayDay }),
+            overlayValues: req.overlays.map((o) => emaArr(resampled.close, o.length)),
             ms: now() - started,
           };
         }

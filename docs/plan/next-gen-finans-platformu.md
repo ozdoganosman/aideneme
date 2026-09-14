@@ -201,14 +201,20 @@ Sheet, Popover, Tooltip, Toast, Table(virtual), Badge, Stat, Skeleton, EmptyStat
 
 ### 5.3 Performans bütçeleri (CI'da ölçülür, aşılırsa build kırmızı)
 
-| Metrik | Bütçe |
-|---|---|
-| İlk JS (gzip) | ≤ 180 KB |
-| İlk anlamlı boya | ≤ 1.5 sn (Fast 3G, orta cihaz) |
-| Sembol değiştirme | ≤ 150 ms (önbellekte), ≤ 600 ms (ağdan) |
-| Pan/zoom | 60 fps (mevcut LOD çekirdeği ile) |
-| 603 sembol taraması | ≤ 1 sn |
-| Ana thread bloğu | tek seferde ≤ 50 ms |
+| Metrik | Bütçe (normal makine) | Bütçe (zayıf makine, 6× yavaş CPU) |
+|---|---|---|
+| İlk JS (gzip) | ≤ 180 KB | aynı |
+| İlk boya (FCP) | ≤ 300 ms | ≤ 600 ms |
+| Ekran hazır | ≤ 600 ms | ≤ 2,5 sn |
+| Periyot/sembol değiştirme | ≤ 150 ms | ≤ 700 ms |
+| Tarama parametresi → sonuç | ≤ 150 ms | ≤ 500 ms |
+| 603 sembol taraması (worker) | ≤ 1 sn | ≤ 3 sn |
+| Ana thread bloğu | tek seferde ≤ 50 ms | grafik ilk kurulumu hariç ≤ 250 ms |
+
+Ölçüm aracı: `node scripts/measure-perf.mjs [yavaşlatma] [tekrar]` — CPU'yu
+yavaşlatıp her ekranın hazır olma süresini, ilk boyamayı ve **uzun görevleri**
+(>50 ms ana thread bloğu) raporlar. "Akıcı mı" sorusunun ölçülebilir karşılığı
+ortalama FPS değil, bloklardır.
 
 ---
 

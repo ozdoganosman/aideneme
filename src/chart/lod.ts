@@ -32,7 +32,11 @@ export interface ExtraSpec {
 export class LodController {
   private full: Candles | null = null;
   private extraVals: Float64Array[] = [];
-  private readonly targetBuckets = 4000;
+  // How many decimated buckets to feed the chart. 4000 was the fixed default;
+  // it is ~3 buckets per pixel on a 1366px screen, i.e. work the display can
+  // never show. Callers may pass a device-aware value (see PriceChart) to cut
+  // per-frame cost on weak machines; the default keeps old behaviour.
+  private readonly targetBuckets: number;
   private applying = false;
   private win = { i0: 0, i1: 0, stride: 1 };
   private raf = 0;
@@ -45,7 +49,9 @@ export class LodController {
     private volume: ISeriesApi<'Histogram'>,
     private extras: ExtraSpec[],
     private bandPool: ISeriesApi<'Baseline'>[] = [],
+    targetBuckets = 4000,
   ) {
+    this.targetBuckets = Math.max(300, targetBuckets);
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
   }
 
@@ -87,6 +93,17 @@ export class LodController {
     this.hasView = true;
   }
 
+  // Hidden series cost as much to decimate as visible ones, but the user can't
+  // see them. Skipping them makes toggled-off indicators free — on a weak
+  // machine that is a measurable share of every pan/zoom frame.
+  private isVisible(k: number): boolean {
+    try {
+      return this.extras[k].series.options().visible !== false;
+    } catch {
+      return true; // series disposed or option unavailable → don't break rendering
+    }
+  }
+
   // Re-frame the new dataset to show `visReal` bars with `gapReal` bars between the
   // view's right edge and the last bar (negative gapReal = right-side whitespace).
   // Left/right whitespace is preserved by letting the visible logical range extend
@@ -121,7 +138,7 @@ export class LodController {
     this.volume.setData(volumes);
     for (let k = 0; k < this.extras.length; k++) {
       const vals = this.extraVals[k];
-      if (!vals) continue;
+      if (!vals || !this.isVisible(k)) continue;
       this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
     }
     this.win = { i0: w0, i1: w1, stride };
@@ -162,7 +179,7 @@ export class LodController {
     this.volume.setData(volumes);
     for (let k = 0; k < this.extras.length; k++) {
       const vals = this.extraVals[k];
-      if (!vals) continue;
+      if (!vals || !this.isVisible(k)) continue;
       this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
     }
     this.win = { i0: w0, i1: w1, stride };
@@ -224,7 +241,7 @@ export class LodController {
     this.volume.setData(volumes);
     for (let k = 0; k < this.extras.length; k++) {
       const vals = this.extraVals[k];
-      if (!vals) continue;
+      if (!vals || !this.isVisible(k)) continue;
       this.extras[k].series.setData(buildExtra(this.full, vals, w0, w1, stride, this.extras[k]) as never);
     }
     this.win = { i0: w0, i1: w1, stride };
@@ -251,7 +268,7 @@ export class LodController {
     this.volume.setData(volumes);
     for (let k = 0; k < this.extras.length; k++) {
       const vals = this.extraVals[k];
-      if (!vals) continue;
+      if (!vals || !this.isVisible(k)) continue;
       this.extras[k].series.setData(buildExtra(this.full, vals, i0, i1, s, this.extras[k]) as never);
     }
     this.win = { i0, i1, stride: s };
