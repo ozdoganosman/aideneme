@@ -12,6 +12,7 @@ import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { LineChart } from '../chart/LineChart';
 import { useAnalysis } from '../useAnalysis';
+import { DataError } from '../DataError';
 import { CopyLink } from '../CopyLink';
 import type { UrlState } from '../urlState';
 
@@ -147,7 +148,11 @@ export default function Report({ state, push }: Props) {
         </span>
       </div>
 
-      {!result ? (
+      {error || analysis.status === 'error' ? (
+        // Hata durumu daha önce HİÇ gösterilmiyordu: ekran sonsuza kadar
+        // iskelet kalıyor, kullanıcı hâlâ yükleniyor sanıyordu.
+        <DataError title="Rapor verisi yüklenemedi" detail={error ?? analysis.error} />
+      ) : !result ? (
         <Skeleton count={5} height="60px" />
       ) : (
         <article className="report__sheet">

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, EmptyState, Popover, Select, Skeleton, Stat, Toggle } from '../../ui';
-import { Icon } from '../../ui/icons';
+import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle } from '../../ui';
 import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
 import {
   flowBySector,
@@ -14,6 +13,7 @@ import { sectorsClient } from '../../data-client/sectors';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { HeatMap } from '../chart/HeatMap';
 import { useAnalysis } from '../useAnalysis';
+import { DataError } from '../DataError';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -138,17 +138,6 @@ export default function Pulse({ state, push }: Props) {
 
   const bySector = grouping === 'sector' && sectorFlows.length > 0;
 
-  if (analysis.status === 'error') {
-    return (
-      <EmptyState
-        tone="error"
-        icon={<Icon name="alert" size={28} />}
-        title="Piyasa verisi yüklenemedi"
-        description={analysis.error ?? ''}
-      />
-    );
-  }
-
   const s = pulse?.summary;
 
   return (
@@ -177,7 +166,9 @@ export default function Pulse({ state, push }: Props) {
         </div>
       </section>
 
-      {!s ? (
+      {analysis.status === 'error' ? (
+        <DataError title="Piyasa verisi yüklenemedi" detail={analysis.error} />
+      ) : !s ? (
         <Skeleton height="96px" />
       ) : (
         <section className="pulse__stats" aria-label="Piyasa özeti">

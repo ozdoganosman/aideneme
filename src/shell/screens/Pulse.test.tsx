@@ -222,3 +222,18 @@ describe('Nabız — sektör bazlı para akışı', () => {
     expect(screen.queryByLabelText('Gruplama')).toBeNull();
   });
 });
+
+describe('Pulse — veri gelmezse', () => {
+  it('sonsuza kadar iskelet göstermez, nedenini yazar', async () => {
+    // Sessiz başarısızlık: ekran "yükleniyor" gibi durup hiç bitmiyordu.
+    const prev = { status: FAKE_ANALYSIS.status, error: FAKE_ANALYSIS.error };
+    Object.assign(FAKE_ANALYSIS, { status: 'error', error: 'Paket indirilemedi (HTTP 404)' });
+    try {
+      render(<Pulse state={STATE} push={push} />);
+      expect(await screen.findByText('Piyasa verisi yüklenemedi')).toBeInTheDocument();
+      expect(screen.getByText(/HTTP 404/)).toBeInTheDocument();
+    } finally {
+      Object.assign(FAKE_ANALYSIS, prev);
+    }
+  });
+});

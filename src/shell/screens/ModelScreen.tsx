@@ -5,6 +5,7 @@ import type { ModelCard } from '../../core/ml/model';
 import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
+import { DataError } from '../DataError';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -256,7 +257,9 @@ export default function ModelScreen({ state, push }: Props) {
         </section>
       ) : null}
 
-      {busy || !card ? (
+      {analysis.status === 'error' ? (
+        <DataError title="Model verisi yüklenemedi" detail={analysis.error} />
+      ) : busy || !card ? (
         // Havuzda kullanıcı eğitimi başlatana kadar iskelet göstermenin anlamı
         // yok: bekleyen bir iş yok, karar kullanıcıda.
         scope === 'pool' && !pool ? null : (

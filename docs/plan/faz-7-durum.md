@@ -711,6 +711,33 @@ Bağlantı uçtan uca teste bağlandı: kopsa kimse fark etmezdi.
   ve konsolda bir hata. Yeni kabuktaki satır içi SVG ikon buraya da
   eklendi — ek istek yok.
 
+## Sessiz başarısızlık denetimi
+
+Bütün veri istekleri kesilerek (çevrimdışı taklidi) dokuz ekran tek tek
+açıldı. Altısı doğru davrandı — "Piyasa verisi yüklenemedi · Failed to
+fetch" gibi net bir mesaj. **Üçü yanlış davrandı:**
+
+| Ekran | Hata durumunda görünen |
+|---|---|
+| Stratejiler | 7 iskelet, sonsuza kadar |
+| Model | 6 iskelet, sonsuza kadar |
+| Rapor | 6 iskelet, sonsuza kadar |
+
+Rapor ekranında hata zaten yakalanıyor ve `error` durumuna yazılıyordu —
+ama hiçbir yerde GÖSTERİLMİYORDU. Kullanıcı yüklenmeyi bekliyor sanıyor,
+oysa istek çoktan başarısız olmuş. Sessiz başarısızlık, yanlış sayı
+göstermenin bir adım gerisindeki kusurdur: ikisinde de kullanıcı gerçekte
+olmayan bir şeye güveniyor.
+
+Üç ekran da artık nedeni yazıyor (`DataError`, tek bileşen). Araç çubuğu
+ekranda kalıyor: piyasa ya da sembol değiştirerek toparlanmak mümkün olsun.
+Nabız da aynı kalıba çekildi — eskiden hata durumunda TÜM ekranı bir boş
+duruma çeviriyordu, yani piyasa seçici de kayboluyordu ve kullanıcı çalışan
+bir piyasaya geçemiyordu.
+
+Dördü de teste bağlandı. Testin gerçekten koruduğu doğrulandı: düzeltme geri
+alındığında test kırılıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
