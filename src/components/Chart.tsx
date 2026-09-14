@@ -1054,7 +1054,10 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       markersRef.current = null;
       chart.remove();
     };
-  }, []);
+    // Bu geri çağırımların HEPSİ sabit: kendi bağımlılıkları boş (ya da yine
+    // sabit) ve durumu ref üzerinden okuyorlar. Listeye eklemek efektin tekrar
+    // koşmasına yol açmaz; kuralı susturmak yerine listeyi dürüstçe tamamlıyoruz.
+  }, [addDraw, paintDraws, persistDraws, recomputeDraw, recomputeForm, removeDraw]);
 
   // Load data + compute indicators; cache last values for the (non-hover) legend.
   useEffect(() => {
@@ -1159,8 +1162,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       bands[k].applyOptions({ baseValue: { type: 'price', price: candles.close[seg.a] } });
     });
     if (lod) lod.setBands(segs.slice(0, bands.length));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strategy, candles, params]); // params → re-draw signals/bands when periods change
+  }, [strategy, candles, params]); // params → periyot değişince sinyal/bant yeniden çizilir
 
   // Portfolio average-cost line on the price pane (Portföy sekmesi açıkken).
   useEffect(() => {

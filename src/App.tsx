@@ -120,6 +120,8 @@ function stratResize(e: RPointerEvent<HTMLElement>, commit: (h: number) => void)
   window.addEventListener('pointercancel', up);
 }
 
+const EMPTY_ITEMS: string[] = [];
+
 export default function App() {
   const [provider, setProvider] = useState<Provider>('bist');
   const [symbol, setSymbol] = useState('THYAO');
@@ -151,7 +153,9 @@ export default function App() {
   const [lists, setLists] = useState<WatchList[]>(initLists.lists);
   const [activeListId, setActiveListId] = useState<string>(initLists.activeId);
   const activeList = lists.find((l) => l.id === activeListId) ?? lists[0];
-  const watchlist = activeList ? activeList.items : [];
+  // Sabit boş dizi: satır içi `[]` her render'da YENİ bir referans üretiyordu ve
+  // buna bağlı efekt/memo'lar (aşağıda) her render'da yeniden koşuyordu.
+  const watchlist = activeList ? activeList.items : EMPTY_ITEMS;
   // Update the ACTIVE list's items (keeps every existing setWatchlist call site
   // working). Writes target the SAME list the UI reads (activeList), so a stale
   // activeListId can't make updates silently no-op.

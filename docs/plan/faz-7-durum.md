@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 442 test, 46 → 0 erişilebilirlik uyarısı)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 442 test; lint 50 uyarı → **0**)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -258,6 +258,27 @@ kapanıyor. Konsol temiz.
 de `id` taşımasını istiyordu. Kontrolü sarmalayan etiket geçerli ve
 erişilebilirdir; kural kullanımdan kalkmış durumda. Kodu kuralın eskimiş
 biçimine uydurmak yerine kural güncellendi.
+
+## Kalan lint uyarıları da kapandı
+
+Erişilebilirlik borcundan sonra geriye dört `react-hooks/exhaustive-deps`
+uyarısı kalmıştı. İkisi gerçek bir kusurdu, ikisi ölü ağırlıktı:
+
+**`watchlist` her render'da yeni referans üretiyordu.** `activeList ?
+activeList.items : []` — satır içi `[]` her render'da yeni bir dizi demek;
+buna bağlı bir efekt ve bir memo her render'da yeniden koşuyordu. Modül
+düzeyinde sabit bir boş diziyle çözüldü.
+
+**`Chart.tsx`'in kurulum efekti eksik bağımlılıkla yazılmıştı.** Susturmak
+yerine liste dürüstçe tamamlandı: o geri çağırımların hepsi `useCallback` ile
+sabit (kendi bağımlılıkları boş, durumu ref üzerinden okuyorlar), dolayısıyla
+eklemek efekti tekrar koşturmuyor. Tarayıcıda kanıtlandı — canvas'lar
+işaretlenip sembol değiştirildi, 24'ünün hepsi yerinde kaldı, yani grafik
+yeniden kurulmuyor.
+
+Ayrıca artık hiçbir şey bildirmeyen bir `eslint-disable` satırı silindi.
+
+Sonuç: `src/` ve `scripts/` genelinde **sıfır lint uyarısı**.
 
 ## Sırada
 
