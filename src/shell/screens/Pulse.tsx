@@ -12,6 +12,7 @@ import { DEFAULT_SCREEN_PARAMS } from '../../core/screen/metrics';
 import { sectorsClient } from '../../data-client/sectors';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { HeatMap } from '../chart/HeatMap';
+import { FlowMap } from '../chart/FlowMap';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
@@ -59,7 +60,10 @@ export default function Pulse({ state, push }: Props) {
   const [busy, setBusy] = useState(false);
   /** Nabız hesabının kendi hatası (paket indi, worker çöktü). */
   const [pulseError, setPulseError] = useState<string | null>(null);
-  const [clusterOrder, setClusterOrder] = useState(true);
+  // Varsayılan PARA AKIŞI (ağaç haritası). Ekranın kendi sorusu "Piyasada
+  // bugün ne oluyor?" ve ona cevap veren şey paranın nerede olduğu; kümeleme
+  // sırası daha özel bir analiz görünümü ve isteyenin açacağı bir seçenek.
+  const [clusterOrder, setClusterOrder] = useState(false);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
   const [grouping, setGrouping] = useState<'cluster' | 'sector'>('cluster');
 
@@ -332,102 +336,122 @@ export default function Pulse({ state, push }: Props) {
         {(bySector ? sectorFlows : flows).length === 0 ? (
           <Skeleton count={4} height="20px" />
         ) : (
-          <table className="pulse__flows">
-            <caption className="visually-hidden">Kümelere göre işlem değeri ve yön</caption>
-            <thead>
-              <tr>
-                <th scope="col">{bySector ? 'Sektör' : 'Grup'}</th>
-                <th scope="col" className="num">
-                  Hisse
-                </th>
-                <th scope="col" className="num">
-                  İşlem değeri
-                </th>
-                {bySector ? (
+          <>
+            {/*
+              Önce ŞEKİL, sonra ayrıntı. "Hangi endüstride para var ve yönü
+              ne?" iki boyutlu bir soru (büyüklük × yön) ve on satırlık bir
+              liste onu tek boyuta indiriyordu. Tablo kaldırılmadı: kesin
+              sayılar, "Tara" eylemi ve sıralama orada duruyor.
+            */}
+            <FlowMap
+              label={`${bySector ? 'Sektör' : 'Grup'} para akışı haritası — kutu alanı işlem değeri, rengi ağırlıklı değişim`}
+              items={(bySector
+                ? sectorFlows.map((f) => ({ key: f.sector, target: f.leader, ...f }))
+                : flows.map((f) => ({ key: `${f.label} grubu`, target: f.label, ...f }))
+              ).map((f) => ({
+                key: f.key,
+                value: f.value,
+                changePct: f.weightedChangePct,
+                onSelect: () => push({ v: 'sembol', s: f.target }),
+              }))}
+            />
+            <table className="pulse__flows">
+              <caption className="visually-hidden">Kümelere göre işlem değeri ve yön</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{bySector ? 'Sektör' : 'Grup'}</th>
                   <th scope="col" className="num">
-                    Pay
+                    Hisse
                   </th>
-                ) : null}
-                <th scope="col" className="num">
-                  Ağırlıklı değişim
-                </th>
-                <th scope="col" className="num">
-                  Akış
-                </th>
-                <th scope="col" className="num">
-                  Yük./Düş.
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {(bySector
-                ? sectorFlows.map((f) => ({ ...f, key: f.sector, target: f.leader }))
-                : flows.map((f) => ({ ...f, key: String(f.cluster), target: f.label }))
-              ).map((flow) => (
-                <tr key={flow.key}>
-                  <th scope="row">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      aria-label={
-                        !bySector
-                          ? undefined
-                          : flow.key === UNCLASSIFIED
-                            ? `Sektörü bilinmeyen sembollerin en çok işlem göreni ${flow.target}`
-                            : `${flow.key} sektörünün en çok işlem göreni ${flow.target}`
-                      }
-                      onClick={() => push({ v: 'sembol', s: flow.target })}
-                    >
-                      {bySector ? flow.key : `${flow.label} grubu`}
-                    </Button>
-                    {bySector && flow.key !== UNCLASSIFIED && isShareableSector(flow.key) ? (
-                      <button
-                        type="button"
-                        className="pulse__scan"
-                        aria-label={`${flow.key} sektörünü tarayıcıda aç`}
-                        onClick={() => push({ v: 'tarayici', f: screenLink(flow.key) })}
-                      >
-                        Tara
-                      </button>
-                    ) : null}
+                  <th scope="col" className="num">
+                    İşlem değeri
                   </th>
-                  <td className="num">{flow.symbols}</td>
-                  <td className="num">{fmtValue(flow.value)}</td>
                   {bySector ? (
-                    <td className="num">
-                      {'sharePct' in flow ? trPct(flow.sharePct as number, 1) : '—'}
-                    </td>
+                    <th scope="col" className="num">
+                      Pay
+                    </th>
                   ) : null}
-                  <td
-                    className="num"
-                    style={{ color: flow.weightedChangePct >= 0 ? 'var(--up)' : 'var(--down)' }}
-                  >
-                    {fmtPct(flow.weightedChangePct, 2)}
-                  </td>
-                  <td className="num">
-                    {/* Çubuk SABİT genişlikte bir rayın içinde: eskiden genişliği
+                  <th scope="col" className="num">
+                    Ağırlıklı değişim
+                  </th>
+                  <th scope="col" className="num">
+                    Akış
+                  </th>
+                  <th scope="col" className="num">
+                    Yük./Düş.
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(bySector
+                  ? sectorFlows.map((f) => ({ ...f, key: f.sector, target: f.leader }))
+                  : flows.map((f) => ({ ...f, key: String(f.cluster), target: f.label }))
+                ).map((flow) => (
+                  <tr key={flow.key}>
+                    <th scope="row">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={
+                          !bySector
+                            ? undefined
+                            : flow.key === UNCLASSIFIED
+                              ? `Sektörü bilinmeyen sembollerin en çok işlem göreni ${flow.target}`
+                              : `${flow.key} sektörünün en çok işlem göreni ${flow.target}`
+                        }
+                        onClick={() => push({ v: 'sembol', s: flow.target })}
+                      >
+                        {bySector ? flow.key : `${flow.label} grubu`}
+                      </Button>
+                      {bySector && flow.key !== UNCLASSIFIED && isShareableSector(flow.key) ? (
+                        <button
+                          type="button"
+                          className="pulse__scan"
+                          aria-label={`${flow.key} sektörünü tarayıcıda aç`}
+                          onClick={() => push({ v: 'tarayici', f: screenLink(flow.key) })}
+                        >
+                          Tara
+                        </button>
+                      ) : null}
+                    </th>
+                    <td className="num">{flow.symbols}</td>
+                    <td className="num">{fmtValue(flow.value)}</td>
+                    {bySector ? (
+                      <td className="num">
+                        {'sharePct' in flow ? trPct(flow.sharePct as number, 1) : '—'}
+                      </td>
+                    ) : null}
+                    <td
+                      className="num"
+                      style={{ color: flow.weightedChangePct >= 0 ? 'var(--up)' : 'var(--down)' }}
+                    >
+                      {fmtPct(flow.weightedChangePct, 2)}
+                    </td>
+                    <td className="num">
+                      {/* Çubuk SABİT genişlikte bir rayın içinde: eskiden genişliği
                         hücreye göreydi ve %70'i geçince sayı alt satıra kayıyordu,
                         satır yüksekliği değişiyordu. */}
-                    <span className="pulse__flowcell">
-                      <span className="pulse__flowtrack" aria-hidden="true">
-                        <span
-                          className="pulse__flowbar"
-                          style={{
-                            width: `${Math.min(100, Math.abs(flow.flowPct))}%`,
-                            background: flow.flowPct >= 0 ? 'var(--up)' : 'var(--down)',
-                          }}
-                        />
+                      <span className="pulse__flowcell">
+                        <span className="pulse__flowtrack" aria-hidden="true">
+                          <span
+                            className="pulse__flowbar"
+                            style={{
+                              width: `${Math.min(100, Math.abs(flow.flowPct))}%`,
+                              background: flow.flowPct >= 0 ? 'var(--up)' : 'var(--down)',
+                            }}
+                          />
+                        </span>
+                        <span className="pulse__flowval">{fmtPct(flow.flowPct, 0)}</span>
                       </span>
-                      <span className="pulse__flowval">{fmtPct(flow.flowPct, 0)}</span>
-                    </span>
-                  </td>
-                  <td className="num">
-                    {flow.advancing}/{flow.declining}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </td>
+                    <td className="num">
+                      {flow.advancing}/{flow.declining}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
     </div>

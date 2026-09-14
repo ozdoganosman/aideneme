@@ -1512,3 +1512,72 @@
     padding: 2px 4px;
   }
 }
+
+/* ── Sektör para akışı haritası ───────────────────────────────────────── */
+/* Kutular yüzdeyle konumlanıyor: kapsayıcı genişliğini ölçmek, yeniden
+   çizmek ve ResizeObserver kurmak gerekmiyor. */
+.flowmap {
+  position: relative;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.flowmap__cell {
+  position: absolute;
+  border: 1px solid var(--surface-0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.flowmap__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+.flowmap__btn[disabled] {
+  cursor: default;
+}
+.flowmap__btn:hover:not([disabled]) {
+  background: rgb(0 0 0 / 8%);
+}
+.flowmap__key {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  /* Dar kutuda ad taşmasın; sayı her hâlükârda okunur kalsın. */
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flowmap__val {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+/* Çok küçük kutuda yazı sığmıyor: adı gizle, yalnızca renk kalsın.
+   Sıkışmış okunmaz bir etiket, etiket yokluğundan kötüdür. */
+.flowmap__cell {
+  container-type: size;
+}
+@container (max-width: 64px) {
+  .flowmap__val {
+    display: none;
+  }
+}
+@container (max-height: 28px) {
+  .flowmap__val {
+    display: none;
+  }
+}

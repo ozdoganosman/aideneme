@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import type { PulseRow } from '../../core/screen/pulse';
 
 const pulseFn = vi.fn();
@@ -21,8 +21,8 @@ vi.mock('../../data-client/sectors', () => ({
 
 // Canvas jsdom'da çizilmez.
 vi.mock('../chart/HeatMap', () => ({
-  HeatMap: ({ rows, order }: { rows: PulseRow[]; order?: string[] }) => (
-    <div data-testid="heatmap" data-order={order?.join(',') ?? 'yok'}>
+  HeatMap: ({ rows, order, layout }: { rows: PulseRow[]; order?: string[]; layout?: string }) => (
+    <div data-testid="heatmap" data-order={order?.join(',') ?? 'yok'} data-layout={layout ?? 'yok'}>
       {rows.length} kutu
     </div>
   ),
@@ -88,6 +88,16 @@ beforeEach(() => {
   });
 });
 
+/**
+ * Akış TABLOSU. Sektör adı artık iki yerde: haritada (şekil) ve tabloda
+ * (ayrıntı). İkisi de doğru; test hangisini sınadığını söylemek zorunda.
+ */
+function akisTablosu(): HTMLElement {
+  const tablo = document.querySelector('table.pulse__flows');
+  if (!tablo) throw new Error('akış tablosu yok');
+  return tablo as HTMLElement;
+}
+
 describe('Nabız', () => {
   it('genişlik ve para akışını özet kartlarında gösterir', async () => {
     render(<Pulse state={STATE} push={push} />);
@@ -99,17 +109,33 @@ describe('Nabız', () => {
     expect(screen.getByText('1 / 0')).toBeInTheDocument();
   });
 
-  it('ısı haritası kümeleme sırasıyla çizilir', async () => {
+  // İki yerleşim iki ayrı soruya cevap veriyor ve biri ötekinin yerine
+  // geçmiyor. Varsayılan para akışı: ekranın kendi sorusu "Piyasada bugün ne
+  // oluyor?" ve ona cevap veren şey paranın nerede olduğu. Ağaç haritası
+  // kutuları büyüklüğe göre sıraladığı için kümeleme sırasını KORUYAMAZ —
+  // o yüzden sıra değil, yerleşim seçiliyor.
+  it('varsayılan yerleşim para akışı (ağaç haritası)', async () => {
     render(<Pulse state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByTestId('heatmap')).toHaveTextContent('4 kutu'));
+    expect(screen.getByTestId('heatmap')).toHaveAttribute('data-layout', 'treemap');
+  });
+
+  it('kümeleme sırası açılınca ızgaraya geçer ve sırayı alır', async () => {
+    const user = userEvent.setup();
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByTestId('heatmap')).toHaveTextContent('4 kutu'));
+
+    await user.click(screen.getByText('Kümeleme sırası'));
+
     await waitFor(() =>
       expect(screen.getByTestId('heatmap')).toHaveAttribute('data-order', 'CCC,DDD,AAA,BBB'),
     );
+    expect(screen.getByTestId('heatmap')).toHaveAttribute('data-layout', 'grid');
   });
 
   it('grup akışı işlem değerine göre sıralı ve en çok işlem görenle etiketli', async () => {
     render(<Pulse state={STATE} push={push} />);
-    await waitFor(() => expect(screen.getByText(/CCC grubu/)).toBeInTheDocument());
+    await waitFor(() => expect(within(akisTablosu()).getByText(/CCC grubu/)).toBeInTheDocument());
 
     const rows = screen.getAllByRole('row');
     const flowRows = rows.filter((r) => r.textContent?.includes('grubu'));
@@ -146,15 +172,37 @@ describe('Nabız — sektör bazlı para akışı', () => {
     sectorsFn.mockResolvedValue(SECTORS);
     render(<Pulse state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText(/Para akışı — sektörler/)).toBeInTheDocument());
-    expect(screen.getByText('Bankacılık')).toBeInTheDocument();
-    expect(screen.getByText('Demir Çelik')).toBeInTheDocument();
+    expect(within(akisTablosu()).getByText('Bankacılık')).toBeInTheDocument();
+
+    // HARİTA da doğru olmalı: tablo geçerken haritanın boş ya da yanlış
+    // ölçekli olması mümkün. "Hangi endüstride para var ve yönü ne?" iki
+    // boyutlu bir soru; alan büyüklüğü, renk yönü taşıyor.
+    const harita = document.querySelector('.flowmap');
+    expect(harita).not.toBeNull();
+    const kutular = [...harita!.querySelectorAll<HTMLElement>('.flowmap__cell')];
+    expect(kutular.length).toBeGreaterThan(1);
+    // Haritanın TEK iddiası bu: alan işlem değerine orantılı. Sıralamayı
+    // sınamak yetmez — yanlış ölçekli bir harita da sırayı doğru verir.
+    // Kutular yüzde uzayında konumlandığı için oran genişlikten bağımsız.
+    const alan = (ad: string) => {
+      const kutu = kutular.find((k) => k.textContent?.includes(ad));
+      if (!kutu) throw new Error(`haritada ${ad} yok`);
+      return parseFloat(kutu.style.width) * parseFloat(kutu.style.height);
+    };
+    // Bankacılık = AAA 5000 + BBB 1000 = 6000 · Demir Çelik = CCC 9000.
+    const toplam = 5000 + 1000 + 9000 + 100;
+    expect(alan('Bankacılık') / 10000).toBeCloseTo(6000 / toplam, 3);
+    expect(alan('Demir Çelik') / 10000).toBeCloseTo(9000 / toplam, 3);
+    expect(within(akisTablosu()).getByText('Demir Çelik')).toBeInTheDocument();
   });
 
   it('eşleşmeyen sembolü gizlemez ve kapsamayı yazar', async () => {
     sectorsFn.mockResolvedValue(SECTORS);
     render(<Pulse state={STATE} push={push} />);
     // DDD'nin sektörü yok: ayrı satırda görünmeli, toplamdan düşülmemeli.
-    await waitFor(() => expect(screen.getByText('Sınıflandırılmamış')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(akisTablosu()).getByText('Sınıflandırılmamış')).toBeInTheDocument(),
+    );
     expect(screen.getByText(/3\/4 sembol eşleşti/)).toBeInTheDocument();
   });
 
@@ -188,7 +236,9 @@ describe('Nabız — sektör bazlı para akışı', () => {
   it('sınıflandırılmamış satır tarayıcıya geçiş sunmaz', async () => {
     sectorsFn.mockResolvedValue(SECTORS);
     render(<Pulse state={STATE} push={push} />);
-    await waitFor(() => expect(screen.getByText('Sınıflandırılmamış')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(akisTablosu()).getByText('Sınıflandırılmamış')).toBeInTheDocument(),
+    );
     // "Sektörü bilinmiyor" bir sektör değil; tarayıcıda karşılığı yok.
     expect(
       screen.queryByRole('button', { name: 'Sınıflandırılmamış sektörünü tarayıcıda aç' }),
@@ -203,7 +253,9 @@ describe('Nabız — sektör bazlı para akışı', () => {
       of: { AAA: 'Gıda, İçecek', BBB: 'Gıda, İçecek', CCC: 'Demir Çelik' },
     });
     render(<Pulse state={STATE} push={push} />);
-    await waitFor(() => expect(screen.getByText('Gıda, İçecek')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(akisTablosu()).getByText('Gıda, İçecek')).toBeInTheDocument(),
+    );
     expect(
       screen.queryByRole('button', { name: /Gıda, İçecek sektörünü tarayıcıda aç/ }),
     ).toBeNull();
