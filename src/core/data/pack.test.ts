@@ -140,6 +140,17 @@ describe('bozuk girdi', () => {
     expect(() => decodeSeries(full.slice(0, 40))).toThrow(/bayt/);
   });
 
+  it('kırpılmış PAKET motor hatası değil kendi mesajımızı verir', () => {
+    // Yarım inen dosya "Invalid typed array length" diye patlıyordu; kullanıcı
+    // bunu okuyup ne yapacağını bilemez.
+    const full = load('bundle-6.bin');
+    for (const kes of [40, 200, 1000]) {
+      if (kes >= full.byteLength) continue;
+      expect(() => decodeBundle(full.slice(0, kes))).toThrow(/pack:/);
+      expect(() => decodeBundle(full.slice(0, kes))).not.toThrow(/typed array/);
+    }
+  });
+
   it('bozuk manifest tanınmaz', () => {
     expect(isManifest({ version: 1, market: 'bist', generated: 1, symbols: {} })).toBe(true);
     expect(isManifest({ version: 99, market: 'bist', generated: 1, symbols: {} })).toBe(false);

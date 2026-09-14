@@ -97,6 +97,13 @@ export function decodeBundle(buf: ArrayBuffer): Bundle {
   const count = head.getUint32(8, true);
   const namesLen = head.getUint32(12, true);
 
+  // Uzunluk kontrolü görünümleri KURMADAN önce: kırpılmış bir dosyada
+  // `new Uint8Array(buf, ...)` "Invalid typed array length" diye patlıyor ve
+  // kullanıcı motor hatası görüyordu. Kendi mesajımız ne olduğunu söylüyor.
+  check(
+    buf.byteLength >= BUNDLE_HEADER + namesLen,
+    `sembol adları için ${BUNDLE_HEADER + namesLen} bayt gerekiyor, gelen ${buf.byteLength}`,
+  );
   const nameBytes = new Uint8Array(buf, BUNDLE_HEADER, namesLen);
   let end = nameBytes.length;
   while (end > 0 && nameBytes[end - 1] === 0) end--; // hizalama dolgusunu at
@@ -104,6 +111,10 @@ export function decodeBundle(buf: ArrayBuffer): Bundle {
   check(names.length === count, `sembol sayısı tutmuyor: ${names.length} ≠ ${count}`);
 
   let offset = BUNDLE_HEADER + namesLen;
+  check(
+    buf.byteLength >= offset + bars * 4,
+    `gün ekseni için ${offset + bars * 4} bayt gerekiyor, gelen ${buf.byteLength}`,
+  );
   const days = new Int32Array(buf, offset, bars);
   offset += bars * 4;
 

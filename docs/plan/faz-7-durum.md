@@ -738,6 +738,29 @@ bir piyasaya geçemiyordu.
 Dördü de teste bağlandı. Testin gerçekten koruduğu doğrulandı: düzeltme geri
 alındığında test kırılıyor.
 
+### Bozuk veri: beş senaryo
+
+Kesilmiş bağlantının yanında BOZUK veri de denendi — yavaş mobil bağlantıda
+yarım inen dosya gerçek bir durumdur:
+
+| Senaryo | Kullanıcının gördüğü |
+|---|---|
+| Manifest bozuk JSON | "Piyasa verisi yüklenemedi · Expected property name…" |
+| Manifest yanlış şema | "bist: manifest biçimi tanınmadı" |
+| Paket çöp bayt | "pack: sihirli sayı tutmuyor" |
+| Sembol serisi kırpılmış | "pack: beklenen 81632 bayt, gelen 120" |
+| **Paket kırpılmış** | **"Invalid typed array length: 1000"** ← motor hatası |
+
+Son satır kusurdu: paket çözücüsünde uzunluk kontrolü, tipli dizi
+görünümleri KURULDUKTAN sonra geliyordu; yarım inen dosyada JavaScript
+motorunun kendi hatası kullanıcıya sızıyordu. Tek sembol çözücüsünde aynı
+kontrol doğru yerdeydi. Kontrol öne alındı, mesaj artık "pack: sembol adları
+için 1024 bayt gerekiyor, gelen 200".
+
+Sektör dosyası bozuk gelirse filtre hiç görünmüyor (şema doğrulaması zaten
+vardı), temel veri bozuksa tarama teknik metriklerle çalışmaya devam
+ediyor — ikisi de sessizce yanlış sayı üretmiyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
