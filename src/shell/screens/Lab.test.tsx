@@ -206,21 +206,25 @@ describe('Strateji Laboratuvarı', () => {
     render(<Lab state={STATE} push={push} />);
     await waitFor(() => expect(backtestFn).toHaveBeenCalledTimes(1));
 
-    await user.selectOptions(screen.getByLabelText('Hazır strateji'), 'rsi-reversion');
+    await user.selectOptions(screen.getByLabelText('Hazır strateji'), 'rsi-14-50');
     await waitFor(() => expect(backtestFn.mock.calls.length).toBeGreaterThan(1));
 
     const strategy = backtestFn.mock.calls[backtestFn.mock.calls.length - 1][1];
     expect(JSON.stringify(strategy)).toContain('rsi');
-    expect(strategy.stopLossPct).toBe(10);
+    expect(strategy.entry.of[0]).toEqual({
+      op: 'crossAbove',
+      left: { kind: 'rsi', length: 14 },
+      right: { kind: 'const', value: 50 },
+    });
   });
 
   it("URL'den gelen strateji kimliğiyle açılır (sıralamadan gelen bağlantı)", async () => {
-    render(<Lab state={{ ...STATE, st: 'breakout-55' }} push={push} />);
+    render(<Lab state={{ ...STATE, st: 'supertrend-10-3' }} push={push} />);
     await waitFor(() => expect(backtestFn).toHaveBeenCalledTimes(1));
     const strategy = backtestFn.mock.calls[0][1];
-    // 55 bar kırılımı: ATR stopu da taşınmalı, sessizce düşmemeli.
-    expect(JSON.stringify(strategy)).toContain('highest');
-    expect(strategy.atrStop).toEqual({ length: 14, mult: 3 });
+    // Çok parametreli operand da sessizce düşmeden taşınmalı.
+    expect(JSON.stringify(strategy)).toContain('supertrend');
+    expect(strategy.entry.of[0].right).toEqual({ kind: 'supertrend', length: 10, mult: 3 });
   });
 
   it('maliyet alanı değişince backtest yeni maliyetle koşar', async () => {

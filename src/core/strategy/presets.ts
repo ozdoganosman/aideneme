@@ -8,6 +8,12 @@ import type { Strategy } from './dsl';
  * ve hangi piyasa görüşüne dayandığını söyler; kullanıcı sıralamaya bakarken
  * "bu neyi varsayıyor?" sorusunu kaybetmesin.
  *
+ * Liste, yayındaki taramanın 27 stratejisinden geliyor. Önceki sekiz kural
+ * genel geçer örneklerdi; bunlar BIST üzerinde 651 sembolde ÖLÇÜLMÜŞ kurallar
+ * ve ölçüm aralarında belirgin fark olduğunu gösteriyor — al-tut'u yenme oranı
+ * %45,8 ile %10,1 arasında değişiyor. Sıralamayı kullanıcı kendi verisinde
+ * yeniden üretebilsin diye hepsi burada.
+ *
  * Hepsi DSL nesnesi: JSON'a serileşir, laboratuvara olduğu gibi yüklenir,
  * parametresi kullanıcı tarafından değiştirilebilir.
  */
@@ -24,7 +30,328 @@ export interface StrategyPreset {
 
 export const STRATEGY_PRESETS: StrategyPreset[] = [
   {
-    id: 'ema-cross',
+    id: 'wr-14',
+    name: '%R 14 > 50',
+    detail: "Williams %R(14) 50'nin üstüne çıkınca al, altına inince sat.",
+    premise: 'Fiyat kendi son penceresinin üst yarısındaysa alıcı baskındır.',
+    strategy: {
+      name: '%R 14 > 50',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'willr', length: 14 },
+        right: { kind: 'const', value: 50 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'willr', length: 14 },
+        right: { kind: 'const', value: 50 },
+      },
+    },
+  },
+  {
+    id: 'wr-50',
+    name: '%R 50 > 50',
+    detail: "Williams %R(50) 50'nin üstüne çıkınca al, altına inince sat.",
+    premise: 'Fiyat kendi son penceresinin üst yarısındaysa alıcı baskındır.',
+    strategy: {
+      name: '%R 50 > 50',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'willr', length: 50 },
+        right: { kind: 'const', value: 50 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'willr', length: 50 },
+        right: { kind: 'const', value: 50 },
+      },
+    },
+  },
+  {
+    id: 'wr-260',
+    name: '%R 260 > 50',
+    detail: "Williams %R(260) 50'nin üstüne çıkınca al, altına inince sat.",
+    premise: 'Fiyat kendi son penceresinin üst yarısındaysa alıcı baskındır.',
+    strategy: {
+      name: '%R 260 > 50',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'willr', length: 260 },
+        right: { kind: 'const', value: 50 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'willr', length: 260 },
+        right: { kind: 'const', value: 50 },
+      },
+    },
+  },
+  {
+    id: 'wr-260-trend',
+    name: '%R 260 > 50 + Trend 200',
+    detail: 'Williams %R(260) 50 üstüne çıkınca ve fiyat EMA(200) üstündeyken al.',
+    premise: 'Uzun pencere momentumu, ana trend yukarıyken daha güvenilirdir.',
+    strategy: {
+      name: '%R 260 > 50 + Trend 200',
+      entry: {
+        op: 'all',
+        of: [
+          { op: 'gt', left: { kind: 'willr', length: 260 }, right: { kind: 'const', value: 50 } },
+          { op: 'gt', left: { kind: 'close' }, right: { kind: 'ema', length: 200 } },
+        ],
+      },
+      exit: { op: 'lt', left: { kind: 'willr', length: 260 }, right: { kind: 'const', value: 50 } },
+    },
+  },
+  {
+    id: 'macd-8-21-5',
+    name: 'MACD 8/21/5 > Sinyal',
+    detail: 'MACD(8/21) sinyal çizgisini yukarı kesince al, aşağı kesince sat.',
+    premise: 'Momentumun kendi ortalamasını geçmesi, hızlanmanın işaretidir.',
+    strategy: {
+      name: 'MACD 8/21/5 > Sinyal',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 8, slow: 21 },
+        right: { kind: 'macdSignal', fast: 8, slow: 21, signal: 5 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 8, slow: 21 },
+        right: { kind: 'macdSignal', fast: 8, slow: 21, signal: 5 },
+      },
+    },
+  },
+  {
+    id: 'macd-12-26-9',
+    name: 'MACD 12/26/9 > Sinyal',
+    detail: 'MACD(12/26) sinyal çizgisini yukarı kesince al, aşağı kesince sat.',
+    premise: 'Momentumun kendi ortalamasını geçmesi, hızlanmanın işaretidir.',
+    strategy: {
+      name: 'MACD 12/26/9 > Sinyal',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 12, slow: 26 },
+        right: { kind: 'macdSignal', fast: 12, slow: 26, signal: 9 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 12, slow: 26 },
+        right: { kind: 'macdSignal', fast: 12, slow: 26, signal: 9 },
+      },
+    },
+  },
+  {
+    id: 'macd-50-100-20',
+    name: 'MACD 50/100/20 > Sinyal',
+    detail: 'MACD(50/100) sinyal çizgisini yukarı kesince al, aşağı kesince sat.',
+    premise: 'Momentumun kendi ortalamasını geçmesi, hızlanmanın işaretidir.',
+    strategy: {
+      name: 'MACD 50/100/20 > Sinyal',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 50, slow: 100 },
+        right: { kind: 'macdSignal', fast: 50, slow: 100, signal: 20 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 50, slow: 100 },
+        right: { kind: 'macdSignal', fast: 50, slow: 100, signal: 20 },
+      },
+    },
+  },
+  {
+    id: 'macd-120-260-50',
+    name: 'MACD 120/260/50 > Sinyal',
+    detail: 'MACD(120/260) sinyal çizgisini yukarı kesince al, aşağı kesince sat.',
+    premise: 'Momentumun kendi ortalamasını geçmesi, hızlanmanın işaretidir.',
+    strategy: {
+      name: 'MACD 120/260/50 > Sinyal',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 120, slow: 260 },
+        right: { kind: 'macdSignal', fast: 120, slow: 260, signal: 50 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 120, slow: 260 },
+        right: { kind: 'macdSignal', fast: 120, slow: 260, signal: 50 },
+      },
+    },
+  },
+  {
+    id: 'macd-8-21-zero',
+    name: 'MACD 8/21 > 0',
+    detail: 'MACD(8/21) sıfırın üstüne çıkınca al, altına inince sat.',
+    premise: 'Hızlı ortalama yavaşın üstündeyse trend yönü yukarıdır.',
+    strategy: {
+      name: 'MACD 8/21 > 0',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 8, slow: 21 },
+        right: { kind: 'const', value: 0 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 8, slow: 21 },
+        right: { kind: 'const', value: 0 },
+      },
+    },
+  },
+  {
+    id: 'macd-12-26-zero',
+    name: 'MACD 12/26 > 0',
+    detail: 'MACD(12/26) sıfırın üstüne çıkınca al, altına inince sat.',
+    premise: 'Hızlı ortalama yavaşın üstündeyse trend yönü yukarıdır.',
+    strategy: {
+      name: 'MACD 12/26 > 0',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 12, slow: 26 },
+        right: { kind: 'const', value: 0 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 12, slow: 26 },
+        right: { kind: 'const', value: 0 },
+      },
+    },
+  },
+  {
+    id: 'macd-50-100-zero',
+    name: 'MACD 50/100 > 0',
+    detail: 'MACD(50/100) sıfırın üstüne çıkınca al, altına inince sat.',
+    premise: 'Hızlı ortalama yavaşın üstündeyse trend yönü yukarıdır.',
+    strategy: {
+      name: 'MACD 50/100 > 0',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 50, slow: 100 },
+        right: { kind: 'const', value: 0 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 50, slow: 100 },
+        right: { kind: 'const', value: 0 },
+      },
+    },
+  },
+  {
+    id: 'macd-120-260-zero',
+    name: 'MACD 120/260 > 0',
+    detail: 'MACD(120/260) sıfırın üstüne çıkınca al, altına inince sat.',
+    premise: 'Hızlı ortalama yavaşın üstündeyse trend yönü yukarıdır.',
+    strategy: {
+      name: 'MACD 120/260 > 0',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'macd', fast: 120, slow: 260 },
+        right: { kind: 'const', value: 0 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 120, slow: 260 },
+        right: { kind: 'const', value: 0 },
+      },
+    },
+  },
+  {
+    id: 'supertrend-10-3',
+    name: 'Supertrend 10/3',
+    detail: 'Kapanış Supertrend(10/3) çizgisinin üstündeyken tut.',
+    premise: "ATR'ye göre ayarlanan takip bandı, oynaklığa uyum sağlar.",
+    strategy: {
+      name: 'Supertrend 10/3',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'close' },
+        right: { kind: 'supertrend', length: 10, mult: 3 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'close' },
+        right: { kind: 'supertrend', length: 10, mult: 3 },
+      },
+    },
+  },
+  {
+    id: 'supertrend-20-4',
+    name: 'Supertrend 20/4',
+    detail: 'Kapanış Supertrend(20/4) çizgisinin üstündeyken tut.',
+    premise: "ATR'ye göre ayarlanan takip bandı, oynaklığa uyum sağlar.",
+    strategy: {
+      name: 'Supertrend 20/4',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'close' },
+        right: { kind: 'supertrend', length: 20, mult: 4 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'close' },
+        right: { kind: 'supertrend', length: 20, mult: 4 },
+      },
+    },
+  },
+  {
+    id: 'rsi-14-50',
+    name: 'RSI 14 > 50',
+    detail: "RSI(14) 50'nin üstüne çıkınca al, altına inince sat.",
+    premise: '50 çizgisi, alıcı ile satıcı baskısının denge noktasıdır.',
+    strategy: {
+      name: 'RSI 14 > 50',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'rsi', length: 14 },
+        right: { kind: 'const', value: 50 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'rsi', length: 14 },
+        right: { kind: 'const', value: 50 },
+      },
+    },
+  },
+  {
+    id: 'rsi-50-50',
+    name: 'RSI 50 > 50',
+    detail: "RSI(50) 50'nin üstüne çıkınca al, altına inince sat.",
+    premise: '50 çizgisi, alıcı ile satıcı baskısının denge noktasıdır.',
+    strategy: {
+      name: 'RSI 50 > 50',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'rsi', length: 50 },
+        right: { kind: 'const', value: 50 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'rsi', length: 50 },
+        right: { kind: 'const', value: 50 },
+      },
+    },
+  },
+  {
+    id: 'ema-9-21',
+    name: 'EMA 9/21 kesişimi',
+    detail: 'EMA(9) EMA(21) üstüne çıkınca al, altına inince sat.',
+    premise: 'Trendler süreklidir: başlayan hareket bir süre devam eder.',
+    strategy: {
+      name: 'EMA 9/21 kesişimi',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'ema', length: 9 },
+        right: { kind: 'ema', length: 21 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'ema', length: 9 },
+        right: { kind: 'ema', length: 21 },
+      },
+    },
+  },
+  {
+    id: 'ema-20-50',
     name: 'EMA 20/50 kesişimi',
     detail: 'EMA(20) EMA(50) üstüne çıkınca al, altına inince sat.',
     premise: 'Trendler süreklidir: başlayan hareket bir süre devam eder.',
@@ -43,12 +370,12 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     },
   },
   {
-    id: 'golden-cross',
-    name: 'Altın kesişim 50/200',
+    id: 'ema-50-200',
+    name: 'EMA 50/200 kesişimi',
     detail: 'EMA(50) EMA(200) üstüne çıkınca al, altına inince sat.',
-    premise: 'Uzun vadeli rejim değişimi; az sinyal, uzun tutuş.',
+    premise: 'Trendler süreklidir: başlayan hareket bir süre devam eder.',
     strategy: {
-      name: 'Altın kesişim 50/200',
+      name: 'EMA 50/200 kesişimi',
       entry: {
         op: 'crossAbove',
         left: { kind: 'ema', length: 50 },
@@ -62,114 +389,164 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
     },
   },
   {
-    id: 'breakout-55',
-    name: '55 bar kırılımı',
-    detail: 'Fiyat önceki 55 barın en yükseğini aşınca al, önceki 20 barın dibine inince sat.',
-    premise: 'Donchian tipi kırılım: yeni zirve, yeni bilgi demektir.',
+    id: 'ema-89-377',
+    name: 'EMA 89/377 kesişimi',
+    detail: 'EMA(89) EMA(377) üstüne çıkınca al, altına inince sat.',
+    premise: 'Trendler süreklidir: başlayan hareket bir süre devam eder.',
     strategy: {
-      name: '55 bar kırılımı',
-      // prev(…, 1) şart: highest/lowest içinde bulunulan barı da kapsar, yoksa
-      // kural hiçbir zaman doğru olamaz (bkz. dsl.ts 'prev').
-      entry: {
-        op: 'gt',
-        left: { kind: 'close' },
-        right: { kind: 'prev', of: { kind: 'highest', length: 55 }, bars: 1 },
-      },
-      exit: {
-        op: 'lt',
-        left: { kind: 'close' },
-        right: { kind: 'prev', of: { kind: 'lowest', length: 20 }, bars: 1 },
-      },
-      atrStop: { length: 14, mult: 3 },
-    },
-  },
-  {
-    id: 'rsi-reversion',
-    name: 'RSI dip alımı',
-    detail: 'RSI(14) 30 altına inince al, 55 üstüne çıkınca sat.',
-    premise: 'Aşırı satım geri çeker: kısa vadeli ortalamaya dönüş.',
-    strategy: {
-      name: 'RSI dip alımı',
-      entry: { op: 'lt', left: { kind: 'rsi', length: 14 }, right: { kind: 'const', value: 30 } },
-      exit: { op: 'gt', left: { kind: 'rsi', length: 14 }, right: { kind: 'const', value: 55 } },
-      stopLossPct: 10,
-    },
-  },
-  {
-    id: 'trend-pullback',
-    name: 'Trendde geri çekilme',
-    detail: 'Fiyat EMA(200) üstündeyken RSI(14) 40 altına inince al, RSI 60 üstünde sat.',
-    premise: 'Yükselen trendde geçici zayıflık fırsattır; trend filtresi yönü sabitler.',
-    strategy: {
-      name: 'Trendde geri çekilme',
-      entry: {
-        op: 'all',
-        of: [
-          { op: 'gt', left: { kind: 'close' }, right: { kind: 'ema', length: 200 } },
-          { op: 'lt', left: { kind: 'rsi', length: 14 }, right: { kind: 'const', value: 40 } },
-        ],
-      },
-      exit: { op: 'gt', left: { kind: 'rsi', length: 14 }, right: { kind: 'const', value: 60 } },
-      stopLossPct: 8,
-    },
-  },
-  {
-    id: 'momentum-adx',
-    name: 'Güçlü momentum',
-    detail: '63 barlık getiri pozitif ve ADX(14) 25 üstündeyken al; momentum negatife dönünce sat.',
-    premise: 'Momentum yalnızca trend güçlüyken çalışır; ADX gücü ölçer.',
-    strategy: {
-      name: 'Güçlü momentum',
-      entry: {
-        op: 'all',
-        of: [
-          { op: 'gt', left: { kind: 'roc', length: 63 }, right: { kind: 'const', value: 0 } },
-          { op: 'gt', left: { kind: 'adx', length: 14 }, right: { kind: 'const', value: 25 } },
-        ],
-      },
-      exit: { op: 'lt', left: { kind: 'roc', length: 21 }, right: { kind: 'const', value: 0 } },
-      atrStop: { length: 14, mult: 2.5 },
-    },
-  },
-  {
-    id: 'ema-trend-hold',
-    name: 'EMA 50 üstünde kal',
-    detail: 'Fiyat EMA(50) üstüne çıkınca al, EMA(50)’nin %97’sinin altına inince sat.',
-    premise: 'Basit trend takibi; küçük gürültüde çıkmamak için eşikte pay var.',
-    strategy: {
-      name: 'EMA 50 üstünde kal',
+      name: 'EMA 89/377 kesişimi',
       entry: {
         op: 'crossAbove',
-        left: { kind: 'close' },
-        right: { kind: 'ema', length: 50 },
+        left: { kind: 'ema', length: 89 },
+        right: { kind: 'ema', length: 377 },
       },
       exit: {
-        op: 'lt',
-        left: { kind: 'close' },
-        right: { kind: 'scale', of: { kind: 'ema', length: 50 }, factor: 0.97 },
+        op: 'crossBelow',
+        left: { kind: 'ema', length: 89 },
+        right: { kind: 'ema', length: 377 },
       },
     },
   },
   {
-    id: 'new-high-momentum',
-    name: 'Yeni zirve momentumu',
-    detail: 'Fiyat önceki 250 barın zirvesini aşınca al, önceki 50 barın dibine inince sat.',
-    premise: '52 hafta zirvesi etkisi: zirvedeki hisse daha çok yükselir.',
+    id: 'ema-377-610',
+    name: 'EMA 377/610 kesişimi',
+    detail: 'EMA(377) EMA(610) üstüne çıkınca al, altına inince sat.',
+    premise: 'Trendler süreklidir: başlayan hareket bir süre devam eder.',
     strategy: {
-      name: 'Yeni zirve momentumu',
+      name: 'EMA 377/610 kesişimi',
       entry: {
-        op: 'gt',
-        left: { kind: 'close' },
-        right: { kind: 'prev', of: { kind: 'highest', length: 250 }, bars: 1 },
+        op: 'crossAbove',
+        left: { kind: 'ema', length: 377 },
+        right: { kind: 'ema', length: 610 },
       },
       exit: {
-        op: 'lt',
-        left: { kind: 'close' },
-        right: { kind: 'prev', of: { kind: 'lowest', length: 50 }, bars: 1 },
+        op: 'crossBelow',
+        left: { kind: 'ema', length: 377 },
+        right: { kind: 'ema', length: 610 },
       },
-      atrStop: { length: 14, mult: 3 },
+    },
+  },
+  {
+    id: 'ema-9-21-trend',
+    name: 'EMA 9/21 + Trend 200',
+    detail: 'EMA(9) EMA(21) üstüne çıkınca VE fiyat EMA(200) üstündeyken al.',
+    premise: 'Kısa vadeli kesişim, ana trend yukarıyken daha az yanlış sinyal verir.',
+    strategy: {
+      name: 'EMA 9/21 + Trend 200',
+      entry: {
+        op: 'all',
+        of: [
+          { op: 'gt', left: { kind: 'ema', length: 9 }, right: { kind: 'ema', length: 21 } },
+          { op: 'gt', left: { kind: 'close' }, right: { kind: 'ema', length: 200 } },
+        ],
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'ema', length: 9 },
+        right: { kind: 'ema', length: 21 },
+      },
+    },
+  },
+  {
+    id: 'ema-20-50-trend',
+    name: 'EMA 20/50 + Trend 200',
+    detail: 'EMA(20) EMA(50) üstüne çıkınca VE fiyat EMA(200) üstündeyken al.',
+    premise: 'Kısa vadeli kesişim, ana trend yukarıyken daha az yanlış sinyal verir.',
+    strategy: {
+      name: 'EMA 20/50 + Trend 200',
+      entry: {
+        op: 'all',
+        of: [
+          { op: 'gt', left: { kind: 'ema', length: 20 }, right: { kind: 'ema', length: 50 } },
+          { op: 'gt', left: { kind: 'close' }, right: { kind: 'ema', length: 200 } },
+        ],
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'ema', length: 20 },
+        right: { kind: 'ema', length: 50 },
+      },
+    },
+  },
+  {
+    id: 'roc-120',
+    name: 'Momentum 120 (ROC>0)',
+    detail: '120 barlık değişim pozitife dönünce al, negatife dönünce sat.',
+    premise: 'Geçmiş getirisi pozitif olan hisse, yakın vadede de pozitif olma eğilimindedir.',
+    strategy: {
+      name: 'Momentum 120 (ROC>0)',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'roc', length: 120 },
+        right: { kind: 'const', value: 0 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'roc', length: 120 },
+        right: { kind: 'const', value: 0 },
+      },
+    },
+  },
+  {
+    id: 'roc-252',
+    name: 'Momentum 252 (ROC>0)',
+    detail: '252 barlık değişim pozitife dönünce al, negatife dönünce sat.',
+    premise: 'Geçmiş getirisi pozitif olan hisse, yakın vadede de pozitif olma eğilimindedir.',
+    strategy: {
+      name: 'Momentum 252 (ROC>0)',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'roc', length: 252 },
+        right: { kind: 'const', value: 0 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'roc', length: 252 },
+        right: { kind: 'const', value: 0 },
+      },
+    },
+  },
+  {
+    id: 'pasa-birlesik',
+    name: 'Paşa Birleşik (%R+EMA+Supertrend)',
+    detail: '%R(260) > 50, fiyat EMA(377) üstünde ve Supertrend(10/3) yukarı iken tut.',
+    premise: 'Üç bağımsız trend ölçütünün aynı anda onaylaması, tek ölçütten seçicidir.',
+    strategy: {
+      name: 'Paşa Birleşik (%R+EMA+Supertrend)',
+      entry: {
+        op: 'all',
+        of: [
+          { op: 'gt', left: { kind: 'willr', length: 260 }, right: { kind: 'const', value: 50 } },
+          { op: 'gt', left: { kind: 'close' }, right: { kind: 'ema', length: 377 } },
+          { op: 'gt', left: { kind: 'close' }, right: { kind: 'supertrend', length: 10, mult: 3 } },
+        ],
+      },
+      exit: { op: 'lt', left: { kind: 'willr', length: 260 }, right: { kind: 'const', value: 50 } },
+    },
+  },
+  {
+    id: 'pasa-cedid',
+    name: 'Paşa+Cedid (Trend 610 + MACD)',
+    detail: 'Fiyat EMA(610) üstünde ve MACD(120/260) sinyalin üstünde iken tut.',
+    premise: 'Çok uzun trend filtresi, yavaş momentumla birlikte gürültüyü eler.',
+    strategy: {
+      name: 'Paşa+Cedid (Trend 610 + MACD)',
+      entry: {
+        op: 'all',
+        of: [
+          { op: 'gt', left: { kind: 'close' }, right: { kind: 'ema', length: 610 } },
+          {
+            op: 'gt',
+            left: { kind: 'macd', fast: 120, slow: 260 },
+            right: { kind: 'macdSignal', fast: 120, slow: 260, signal: 50 },
+          },
+        ],
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'macd', fast: 120, slow: 260 },
+        right: { kind: 'macdSignal', fast: 120, slow: 260, signal: 50 },
+      },
     },
   },
 ];
-
-export const PRESET_BY_ID = new Map(STRATEGY_PRESETS.map((p) => [p.id, p]));

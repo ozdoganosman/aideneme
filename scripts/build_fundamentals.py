@@ -34,6 +34,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "public" / "data" / "bist" / "fundamentals"
 SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
+# Yayındaki tam liste. Depodaki `bist_symbols.json` 607 sembol içeriyor ama
+# veri hattının ürettiği liste 655 — yani depodaki kopya eskimiş ve finansal
+# tablolar 48 sembol için hiç denenmiyordu. Yayındaki liste varsa o kazanır.
+PUBLISHED_SYMBOLS = ROOT / "public" / "data" / "bist" / "symbols.json"
 
 BANK_SYMBOLS = {
     "GARAN", "AKBNK", "YKBNK", "HALKB", "VAKBN", "ISCTR", "TSKB", "ALBRK",
@@ -70,12 +74,33 @@ FIELDS = list(FIELD_ITEMS)
 
 
 def load_symbols(limit: int | None) -> list[str]:
+    """
+    Sembol listesi — önce YAYINDAKİ liste, sonra depodaki kopya.
+
+    Depodaki `bist_symbols.json` elle güncellenen bir dosya ve eskimiş: 607
+    sembol var, oysa veri hattının ürettiği `symbols.json` 655 sembol
+    içeriyor. Fark, finansal tabloların 48 sembol için HİÇ denenmemesi
+    demekti — eksiklik sessizdi, çünkü liste dışı sembol "başarısız" bile
+    sayılmıyordu.
+    """
+    syms: list[str] = []
     try:
-        data = json.loads(SYMBOLS_FILE.read_text(encoding="utf-8"))
-        syms = [s["name"] for s in data.get("stocks", [])]
-    except Exception as e:  # noqa: BLE001
-        print(f"[fund] sembol listesi okunamadı: {e}", file=sys.stderr)
-        syms = ["THYAO", "GARAN", "ASELS", "EREGL", "BIMAS"]
+        published = json.loads(PUBLISHED_SYMBOLS.read_text(encoding="utf-8"))
+        syms = [str(s) for s in published.get("symbols", []) if s]
+        if syms:
+            print(f"[fund] sembol listesi: yayındaki {len(syms)} sembol")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+
+    if not syms:
+        try:
+            data = json.loads(SYMBOLS_FILE.read_text(encoding="utf-8"))
+            syms = [s["name"] for s in data.get("stocks", [])]
+            print(f"[fund] sembol listesi: depodaki kopya, {len(syms)} sembol")
+        except Exception as e:  # noqa: BLE001
+            print(f"[fund] sembol listesi okunamadı: {e}", file=sys.stderr)
+            syms = ["THYAO", "GARAN", "ASELS", "EREGL", "BIMAS"]
+
     return syms[:limit] if limit else syms
 
 
@@ -374,6 +399,27 @@ def self_test() -> None:
     # TABLO ŞABLONU tek denemede bırakılmamalı. Ölçüldü: hiç alınamayan 12
     # sembolün neredeyse tamamı finans sektörü — elle tutulan liste yanlış
     # tahmin ettiğinde veri hiç gelmiyordu.
+    # SEMBOL LİSTESİ: yayındaki liste varsa o kazanmalı. Depodaki kopya 607,
+    # yayındaki 655 sembol içeriyordu — fark, 48 sembolün finansal tablosunun
+    # hiç denenmemesiydi ve bu eksiklik sessizdi.
+    with tempfile.TemporaryDirectory() as tmp:
+        kok = Path(tmp)
+        (kok / "public" / "data" / "bist").mkdir(parents=True)
+        (kok / "public" / "data" / "bist" / "symbols.json").write_text(
+            json.dumps({"symbols": ["AAA", "BBB", "CCC"]}), encoding="utf-8"
+        )
+        global PUBLISHED_SYMBOLS
+        gercek = PUBLISHED_SYMBOLS
+        PUBLISHED_SYMBOLS = kok / "public" / "data" / "bist" / "symbols.json"
+        try:
+            assert load_symbols(None) == ["AAA", "BBB", "CCC"], "yayındaki liste kazanmalı"
+            assert load_symbols(2) == ["AAA", "BBB"], "--limit uygulanmalı"
+            PUBLISHED_SYMBOLS = kok / "yok.json"
+            depo = load_symbols(None)
+            assert len(depo) > 100, "yayındaki liste yoksa depodaki kopyaya düşmeli"
+        finally:
+            PUBLISHED_SYMBOLS = gercek
+
     assert group_order("AKBNK")[0] == "2", "bankada önce UFRS denenmeli"
     assert group_order("AGESA")[0] == "1", "sanayide önce XI_29 denenmeli"
     for sym in ("AKBNK", "AGESA"):

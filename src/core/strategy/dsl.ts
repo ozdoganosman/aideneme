@@ -1,5 +1,6 @@
 import type { Candles } from '../data/types';
 import { adxArr, emaArr, rocArr, rollingHighest, rollingLowest } from '../indicators/calc';
+import { macdArr, macdSignalArr, supertrendArr, willrArr } from '../indicators/trend';
 import { atrArr, rsiArr } from '../indicators/rsi';
 
 /**
@@ -24,6 +25,12 @@ export type Operand =
   | { kind: 'atr'; length: number }
   | { kind: 'roc'; length: number }
   | { kind: 'highest'; length: number }
+  // Eski sistemin taramasındaki üç indikatör. Yeni kuralda yoklardı, bu
+  // yüzden hazır strateji listesi sekiz generic kuralla sınırlıydı.
+  | { kind: 'willr'; length: number }
+  | { kind: 'macd'; fast: number; slow: number }
+  | { kind: 'macdSignal'; fast: number; slow: number; signal: number }
+  | { kind: 'supertrend'; length: number; mult: number }
   | { kind: 'lowest'; length: number }
   /** Bir operandın yüzdesi: EMA200'ün %95'i gibi eşikler için. */
   | { kind: 'scale'; of: Operand; factor: number }
@@ -96,6 +103,12 @@ function key(operand: Operand): string {
     case 'low':
     case 'volume':
       return operand.kind;
+    case 'macd':
+      return `macd:${operand.fast}:${operand.slow}`;
+    case 'macdSignal':
+      return `macdSignal:${operand.fast}:${operand.slow}:${operand.signal}`;
+    case 'supertrend':
+      return `supertrend:${operand.length}:${operand.mult}`;
     default:
       return `${operand.kind}:${operand.length}`;
   }
@@ -154,6 +167,18 @@ export function evaluateOperand(
       break;
     case 'lowest':
       out = rollingLowest(c.low, operand.length);
+      break;
+    case 'willr':
+      out = willrArr(c, operand.length);
+      break;
+    case 'macd':
+      out = macdArr(c.close, operand.fast, operand.slow);
+      break;
+    case 'macdSignal':
+      out = macdSignalArr(c.close, operand.fast, operand.slow, operand.signal);
+      break;
+    case 'supertrend':
+      out = supertrendArr(c, operand.length, operand.mult);
       break;
     case 'scale': {
       const base = evaluateOperand(operand.of, c, cache);
@@ -247,7 +272,9 @@ export function warmupBars(strategy: Strategy): number {
     else if (operand.kind === 'prev') {
       shift = Math.max(shift, operand.bars);
       visitOperand(operand.of);
-    } else if ('length' in operand) max = Math.max(max, operand.length);
+    } else if (operand.kind === 'macd') max = Math.max(max, operand.slow);
+    else if (operand.kind === 'macdSignal') max = Math.max(max, operand.slow + operand.signal);
+    else if ('length' in operand) max = Math.max(max, operand.length);
   };
   const visit = (condition: Condition) => {
     switch (condition.op) {
@@ -290,6 +317,14 @@ export function describeCondition(condition: Condition): string {
         return 'düşük';
       case 'volume':
         return 'hacim';
+      case 'willr':
+        return `%R(${o.length})`;
+      case 'macd':
+        return `MACD(${o.fast}/${o.slow})`;
+      case 'macdSignal':
+        return `MACD sinyal(${o.fast}/${o.slow}/${o.signal})`;
+      case 'supertrend':
+        return `Supertrend(${o.length}/${o.mult})`;
       default:
         return `${o.kind.toUpperCase()}(${o.length})`;
     }

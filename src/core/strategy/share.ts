@@ -51,7 +51,29 @@ const CODE_OP: Record<string, 'gt' | 'gte' | 'lt' | 'lte' | 'crossAbove' | 'cros
   y: 'crossBelow',
 };
 
-const INDICATORS = new Set(['ema', 'sma', 'rsi', 'adx', 'atr', 'roc', 'highest', 'lowest']);
+const INDICATORS = new Set([
+  'ema',
+  'sma',
+  'rsi',
+  'adx',
+  'atr',
+  'roc',
+  'highest',
+  'lowest',
+  'willr',
+]);
+
+/**
+ * Çok parametreli indikatörler tek sayıya sığmıyor: `macd12-26`,
+ * `macdsig12-26-9`, `st10-3`. Ayırıcı olarak `-` seçildi çünkü kural
+ * kodlamasında `,` ve `|` zaten alan ayırıcı (bkz. bu dosyanın başındaki
+ * çakışma notu); üçüncü bir ayırıcı sokmak aynı hatayı tekrarlamak olurdu.
+ */
+const MULTI = {
+  macd: { code: 'macd', parts: ['fast', 'slow'] as const },
+  macdSignal: { code: 'macdsig', parts: ['fast', 'slow', 'signal'] as const },
+  supertrend: { code: 'st', parts: ['length', 'mult'] as const },
+} as const;
 const num = (v: number): string => (Number.isInteger(v) ? String(v) : String(+v.toFixed(4)));
 
 function encodeOperand(operand: Operand): string | null {
@@ -72,7 +94,11 @@ function encodeOperand(operand: Operand): string | null {
   let text: string;
   if (base.kind === 'const') text = `k${num(base.value)}`;
   else if (PRICE_CODE[base.kind]) text = PRICE_CODE[base.kind];
-  else if (INDICATORS.has(base.kind) && 'length' in base) text = `${base.kind}${base.length}`;
+  else if (base.kind in MULTI) {
+    const spec = MULTI[base.kind as keyof typeof MULTI];
+    const values = spec.parts.map((k) => num((base as unknown as Record<string, number>)[k]));
+    text = `${spec.code}${values.join('-')}`;
+  } else if (INDICATORS.has(base.kind) && 'length' in base) text = `${base.kind}${base.length}`;
   else return null;
 
   if (shift > 0) text += `@${shift}`;
@@ -108,9 +134,29 @@ function decodeOperand(text: string): Operand | null {
   } else if (CODE_PRICE[rest]) {
     base = { kind: CODE_PRICE[rest] } as Operand;
   } else {
-    const match = /^([a-z]+)(\d+)$/.exec(rest);
-    if (match && INDICATORS.has(match[1])) {
-      base = { kind: match[1] as 'ema', length: Number(match[2]) };
+    const multi = /^(macdsig|macd|st)([\d.]+)-([\d.]+)(?:-([\d.]+))?$/.exec(rest);
+    if (multi) {
+      const [, code, a, b, cVal] = multi;
+      const na = Number(a);
+      const nb = Number(b);
+      const nc = cVal === undefined ? NaN : Number(cVal);
+      if (code === 'macd' && Number.isFinite(na) && Number.isFinite(nb)) {
+        base = { kind: 'macd', fast: na, slow: nb };
+      } else if (
+        code === 'macdsig' &&
+        Number.isFinite(na) &&
+        Number.isFinite(nb) &&
+        Number.isFinite(nc)
+      ) {
+        base = { kind: 'macdSignal', fast: na, slow: nb, signal: nc };
+      } else if (code === 'st' && Number.isFinite(na) && Number.isFinite(nb)) {
+        base = { kind: 'supertrend', length: na, mult: nb };
+      }
+    } else {
+      const match = /^([a-z]+)(\d+)$/.exec(rest);
+      if (match && INDICATORS.has(match[1])) {
+        base = { kind: match[1] as 'ema', length: Number(match[2]) };
+      }
     }
   }
   if (!base) return null;

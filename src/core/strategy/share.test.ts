@@ -37,8 +37,45 @@ describe('strateji bağlantısı', () => {
   });
 
   it('kodlama kısa ve okunabilir', () => {
-    const { text } = encodeStrategy(STRATEGY_PRESETS[0].strategy);
-    expect(text).toBe('1|ema20~x~ema50|ema20~y~ema50|0_0_14_0');
+    // Hazır listenin SIRASINA bağlanmıyor: liste değiştiğinde kırılan bir
+    // test, kodlamayla ilgili hiçbir şey söylemeden kırmızı yanıyordu.
+    const emaCross: Strategy = {
+      name: 'EMA 20/50 kesişimi',
+      entry: {
+        op: 'crossAbove',
+        left: { kind: 'ema', length: 20 },
+        right: { kind: 'ema', length: 50 },
+      },
+      exit: {
+        op: 'crossBelow',
+        left: { kind: 'ema', length: 20 },
+        right: { kind: 'ema', length: 50 },
+      },
+    };
+    expect(encodeStrategy(emaCross).text).toBe('1|ema20~x~ema50|ema20~y~ema50|0_0_14_0');
+  });
+
+  it('çok parametreli indikatörler de kısa kodlanır', () => {
+    const s: Strategy = {
+      name: 'MACD + Supertrend',
+      entry: {
+        op: 'all',
+        of: [
+          {
+            op: 'gt',
+            left: { kind: 'macd', fast: 12, slow: 26 },
+            right: { kind: 'macdSignal', fast: 12, slow: 26, signal: 9 },
+          },
+          { op: 'gt', left: { kind: 'close' }, right: { kind: 'supertrend', length: 10, mult: 3 } },
+        ],
+      },
+    };
+    const { text } = encodeStrategy(s);
+    expect(text).toContain('macd12-26');
+    expect(text).toContain('macdsig12-26-9');
+    expect(text).toContain('st10-3');
+    // Ve geri çözülünce aynı kural.
+    expect(decodeStrategy(text).strategy!.entry).toEqual(s.entry);
   });
 
   it('ölçek ve geri kaydırma sarmalayıcıları korunur', () => {
