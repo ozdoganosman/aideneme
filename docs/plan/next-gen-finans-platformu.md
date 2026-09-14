@@ -440,6 +440,12 @@ Yedi fazın hepsi uygulandı. Plandan sapmalar ve fazlardan sonra eklenenler:
 - Bir sembolü açıp "bu hisse ne durumda" sorusuna cevap alma süresi: **< 5 sn**.
 - Bir strateji kurup doğrulanmış sonuç alma süresi: **< 5 dk**.
 - Veri boyutu: **227 MB → ≤ 60 MB**; ilk açılış JS: **≤ 180 KB**.
+  **Ölçüldü (2026-09-14):** 200 sembol / 680.000 barda JSON 61,4 MB → ikili
+  16,3 MB (**3,76×**, bar başına 90,3 → 24,0 bayt); bu oranla 227 MB ≈ 60 MB
+  olur, hedef tutuyor. Ama gzip'li transferde fark yalnızca **1,39×** —
+  formatın asıl kazancı bayt değil AYRIŞTIRMA: zayıf makinede tek sembolde
+  17,2 ms → 0,16 ms (ölçüm: `docs/plan/veri-formati.md`). İlk açılış JS
+  53,5 KB gzip (bütçe CI'da kapı).
 - `core/` test kapsamı **≥ %90**; indikatörlerin **%100'ü** altın-değer testli.
   **Ölçüldü (2026-09-14):** kapı içindeki çekirdek **%98,4 satır / %91,6 dal /
   %99,3 fonksiyon** — eşik `vite.config.ts`'te, CI'da kapı (`npm run

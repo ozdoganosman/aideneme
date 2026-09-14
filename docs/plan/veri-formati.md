@@ -20,6 +20,33 @@ ikili formatta **bar başına 24 bayt** tutuyor: 3.400 bar ≈ **82 KB**, ve
 ve hacim büyüklüğü JSON tarafını şişirir): 20 sembollük doğrulama setinde
 6,1 MB JSON → 1,6 MB bin (**3,7×**), sembol başına 305 KB → 81 KB.
 
+### Ölçüm (200 sembol / 680.000 bar, 2026-09-14)
+
+| | bayt/bar | toplam | oran |
+|---|---|---|---|
+| JSON, ham | 90,3 | 61,4 MB | — |
+| İkili, ham | 24,0 | 16,3 MB | **3,76×** |
+| JSON, gzip | 26,4 | 18,0 MB | — |
+| İkili, gzip | 19,0 | 12,9 MB | **1,39×** |
+
+**Dürüst okuma: asıl kazanç bayt değil, AYRIŞTIRMA.** Gzip JSON'u çok iyi
+sıkıştırıyor (anahtarlar tekrar ediyor, sıkıştırıcı bunu sever); ağ üzerinde
+fark 1,4×'e iniyor. Depolamada 3,8× duruyor ve planın "227 MB → ≤ 60 MB"
+hedefi bu oranla tutuyor.
+
+Formatın gerçek gerekçesi ana iş parçacığında harcanan zaman. Aynı sembol
+(3.400 bar), tarayıcıda ölçüldü — JSON tarafında yalnızca `JSON.parse` değil,
+uygulamanın gerçekten yaptığı iş (nesne dizisinden tipli dizilere aktarım):
+
+| | 1× | 6× (zayıf makine) |
+|---|---|---|
+| JSON → tipli dizi | 2,2 ms | **17,2 ms** |
+| İkili → tipli dizi | 0,010 ms | **0,16 ms** |
+
+Yani zayıf makinede tek sembol için ~17 ms'lik bir ana thread bloğu yerine
+0,16 ms. 200 sembollük paket JSON olsaydı bu iş ~3,4 saniye sürerdi; ikili
+formatta görünüm kurmak kopyalama bile gerektirmiyor.
+
 ## Seri dosyası — `<SEMBOL>.bin`
 
 Little-endian. Başlık 32 bayt, ardından 4 bayt hizalı kolonlar:
