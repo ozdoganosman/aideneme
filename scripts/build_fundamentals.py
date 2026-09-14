@@ -251,6 +251,32 @@ def self_test() -> None:
         found = [r["symbol"] for r in records_on_disk(out)]
         assert found == ["AAA"], f"anlık görüntü diskten kurulmalı: {found}"
 
+    # KESİLME tatbikatı. CI adımı zaman sınırında öldürülüyor; döngüden SONRA
+    # gelen bir yazma hiç çalışmıyor. İlk düzeltmemde anlık görüntüyü diskten
+    # kurdum ama yine döngünün ARDINA koymuştum — kusur aynen sürdü ve
+    # yayında "temel veri yok" yazmaya devam etti. Bu test onu yakalar.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+
+        def fake_fetch(symbol: str):
+            if symbol == "DUR":
+                raise KeyboardInterrupt("adım öldürüldü")
+            return {
+                "symbol": symbol,
+                "periods": ["2024/6"],
+                "fields": {f: [1.0] for f in FIELDS},
+            }
+
+        try:
+            build_all(["S1", "S2", "DUR", "S3"], out, fake_fetch, every=2)
+        except KeyboardInterrupt:
+            pass
+
+        snap_path = out / "snapshot.json"
+        assert snap_path.exists(), "kesilse bile anlık görüntü yazılmış olmalı"
+        snap = json.loads(snap_path.read_text(encoding="utf-8"))
+        assert set(snap["symbols"]) == {"S1", "S2"}, f"ara kayıt eksik: {sorted(snap['symbols'])}"
+
     print("[fund] self-test tamam")
 
 
@@ -272,6 +298,50 @@ def records_on_disk(out_dir: Path) -> list[dict]:
     return records
 
 
+def write_snapshot(records: list[dict], out_dir: Path) -> None:
+    """Anlık görüntüyü yaz — taramanın OKUDUĞU tek dosya budur."""
+    if not records:
+        return
+    (out_dir / "snapshot.json").write_text(
+        json.dumps(build_snapshot(records), ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+
+def build_all(
+    pending: list[str],
+    out_dir: Path,
+    fetch,
+    every: int = 25,
+) -> tuple[list[dict], int, int]:
+    """
+    Eksik sembolleri indirip diske yazar; ARADA BİR anlık görüntüyü tazeler.
+
+    Ara kayıt şart: bu iş bir CI adımının zaman sınırında ÖLDÜRÜLÜYOR.
+    Ölçüldü — adım 8 dakikada kesildi, sembol dosyaları diske yazılmıştı ama
+    döngüden SONRA gelen anlık görüntü kodu hiç çalışmadı; tarama yine
+    "temel veri yok" dedi. Yani yapılan iş kullanıcıya yine ulaşmadı.
+    """
+    records = records_on_disk(out_dir)
+    fetched = 0
+    failed = 0
+    for i, symbol in enumerate(pending, 1):
+        record = fetch(symbol)
+        if not record:
+            failed += 1
+            continue
+        (out_dir / f"{symbol}.json").write_text(
+            json.dumps(record, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
+        records.append(record)
+        fetched += 1
+        if i % every == 0:
+            write_snapshot(records, out_dir)
+            print(f"[fund] {i}/{len(pending)} · başarılı {fetched} · başarısız {failed}")
+    write_snapshot(records, out_dir)
+    return records, fetched, failed
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=None, help="ilk N sembol (deneme için)")
@@ -288,8 +358,8 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
 
     # KALDIĞI YERDEN devam: ~660 sembol tek tek indiriliyor ve bu iş bir CI
-    # adımının zaman sınırına sığmayabiliyor. Her çalıştırma baştan başlasaydı
-    # hep aynı ilk kırk sembol indirilir, liste hiç ilerlemezdi. FORCE_ALL
+    # adımının zaman sınırına sığmıyor. Her çalıştırma baştan başlasaydı hep
+    # aynı ilk kırk sembol indirilir, liste hiç ilerlemezdi. FORCE_ALL
     # verildiğinde (planlı tam tazeleme) hepsi yeniden çekilir.
     force_all = bool(os.environ.get("FORCE_ALL"))
     pending = pending_symbols(symbols, OUT, force_all)
@@ -298,36 +368,19 @@ def main() -> None:
     else:
         print(f"[fund] {len(pending)}/{len(symbols)} sembol eksik, indiriliyor")
 
-    fetched = 0
-    failed = 0
-    for i, symbol in enumerate(pending, 1):
-        record = fetch_one(symbol, args.start_year, args.end_year)
-        if not record:
-            failed += 1
-            continue
-        (OUT / f"{symbol}.json").write_text(
-            json.dumps(record, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-        )
-        fetched += 1
-        if i % 25 == 0:
-            print(f"[fund] {i}/{len(pending)} · başarılı {fetched} · başarısız {failed}")
-
-    # Anlık görüntü DİSKTEKİ her şeyden kuruluyor, yalnızca bu turda inenlerden
-    # değil. Eskiden sondaki tek yazma adımıydı: iş yarıda kesilince sembol
-    # dosyaları yazılmış ama taramanın okuduğu snapshot HİÇ oluşmuyordu, yani
-    # yarım iş kullanıcıya hiç ulaşmıyordu.
-    records = records_on_disk(OUT)
+    records, fetched, failed = build_all(
+        pending, OUT, lambda sym: fetch_one(sym, args.start_year, args.end_year)
+    )
 
     if not records:
         print("[fund] hiçbir sembol için finansal tablo alınamadı")
         return
 
-    snapshot = build_snapshot(records)
-    (OUT / "snapshot.json").write_text(
-        json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    total = sum(
+        (OUT / f"{r['symbol']}.json").stat().st_size
+        for r in records
+        if (OUT / f"{r['symbol']}.json").exists()
     )
-
-    total = sum((OUT / f"{r['symbol']}.json").stat().st_size for r in records)
     print(
         f"[fund] diskte {len(records)} sembol · bu turda {fetched} indi, {failed} başarısız · "
         f"{total / 1e6:.1f} MB + anlık görüntü {(OUT / 'snapshot.json').stat().st_size / 1e3:.0f} KB"

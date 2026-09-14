@@ -1248,6 +1248,44 @@ farkı gibi işaretli bir değer o sütuna girdiğinde aynı sütunda iki ayrı 
 görünürdü. Ortak sürümde işaret ayrılıp mutlak değer kısaltılıyor; test
 negatif eşikleri de kapsıyor.
 
+## Önizleme yayını ve iki turda kapanmayan bir kusur
+
+Yeni kabuk yalnızca yerelde görülebiliyordu; kökteki Pages yayını main'den
+gelen eski arayüz. Dalı kökü ezmeden yayımlamak için ayrı bir iş akışı
+(`onizleme.yml`): uygulama `onizleme/` altına kuruluyor, veri kökteki TEK
+kopyadan okunuyor (`VITE_DATA_BASE`). İkinci bir kopya ~29 MB yer kaplar ve
+iki kopya farklı zamanlarda tazelenip birbirini tutmazdı.
+
+Yayındaki veri gerçek: **655 sembol, en yeni bar 11 Eyl 2026**, paket 3,3 MB.
+
+### Aynı kusuru iki kez "düzelttim"
+
+İlk çalıştırma yayımlandı ama finansal veri gelmedi. Neden: ~660 sembolün
+bilançosu tek tek indiriliyor ve adım 8 dakikada kesiliyor.
+
+**Birinci düzeltme** — kaldığı yerden devam (diskte dosyası olan sembol
+atlanıyor) ve anlık görüntüyü diskteki her şeyden kurmak. İkisi de doğruydu,
+ikisi de teste bağlandı. Sonraki çalıştırmada sembol dosyaları gerçekten
+ilerledi (A1CAP…ALVES).
+
+**Ama `snapshot.json` yine yazılmadı.** Çünkü düzeltmeyi yine **döngüden
+SONRA** koymuştum: adım zaman sınırında ÖLDÜRÜLÜYOR, döngüden sonrası hiç
+çalışmıyor. Taramanın okuduğu tek dosya o olduğu için, yapılan onca iş
+kullanıcıya yine ulaşmadı — ekranda yine "temel veri yok" yazdı.
+
+**İkinci düzeltme**: anlık görüntü artık her 25 sembolde bir yazılıyor.
+Kesilme nerede olursa olsun diskte geçerli bir anlık görüntü kalıyor.
+
+Bu kez teste bağlanan şey "diskten kurulma" değil, **kesilmenin kendisi**:
+sahte bir indirici üçüncü sembolde `KeyboardInterrupt` atıyor, test
+`snapshot.json`'ın yine de var olmasını ve ilk iki sembolü taşımasını
+istiyor. Ara kayıt kaldırıldığında test kırılıyor, geri konduğunda geçiyor —
+kanıtlandı.
+
+Ders: "yarım iş kullanıcıya ulaşsın" demek yetmiyor; **yarım kalma anının
+neresi olduğuna** bakmak gerekiyor. Süreç öldürülüyorsa, döngüden sonraki
+hiçbir satır çalışmaz.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

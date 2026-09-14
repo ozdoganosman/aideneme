@@ -263,6 +263,60 @@ verisi bulunduğundan piyasa DEĞİŞİMİ ölçülemedi — bilinen boşluk.
 Düzeltilecek bir şey çıkmadı. Ölçüm yine de burada: "sızıntı yok" bir
 iddiadır ve ölçülmeden yazılmamalı.
 
+## Ölçüm aracının kendisi yanılttı
+
+Konteyner yeniden başladıktan sonra 6× ölçüm alındı ve Nabız'ın en kötü
+bloğu 143 ms yerine **406 ms** çıktı. İlk okuma: son commit'ler (duyuru
+bölgesi, tazelik rozeti, işlem değeri sütunu) bir şeyi bozmuş.
+
+Önce makine mi kod mu ayrıldı. 1× ölçüm PR'daki tabloyla uyumluydu (blok 0
+korunuyor, hazır süreleri %10–25 fazla) — yani makine biraz yavaş ama iddia
+ayakta. Sonra aynı makinede A/B: `6277f42` (değişikliklerden önce) derlenip
+ölçüldü.
+
+| Ekran | Eski en kötü blok | Yeni | Eski toplam | Yeni |
+|---|---|---|---|---|
+| **nabız** | 200 ms | **406 ms** | 708 ms | **1194 ms** |
+| tarayıcı | 244 | 225 | 520 | 450 |
+| sembol masası | 420 | 370 | 928 | 697 |
+| laboratuvar | 483 | 355 | 742 | 634 |
+| stratejiler | 170 | 134 | 361 | 185 |
+| model | 170 | 129 | 316 | 223 |
+| rapor | 153 | 125 | 370 | 199 |
+| sektör akranları | 412 | 369 | 960 | 669 |
+| portföy | 171 | 143 | 215 | 165 |
+
+On ekranın dokuzu iyileşmiş, biri iki katına çıkmış görünüyordu. Tek bir
+ekranın tersine gitmesi ya gerçek bir gerileme ya da gürültüdür; karar
+vermeden önce **aynı derleme üç kez** ölçüldü:
+
+```
+nabız, en kötü blok :  406 / 190 / 212 ms   (medyan 212)
+nabız, toplam blok  : 1194 / 614 / 564 ms   (medyan 614)
+eski commit         :  200 ms / 708 ms
+```
+
+Gerileme yok. İlk tur aykırıydı (konteyner yeni başlamıştı) ve medyan
+alınmasına rağmen tabloya o girmişti. Diğer dokuz ekranın "iyileşmesi" de
+aynı gürültünün öteki yüzü — o yöne de anlam yüklenmemeli.
+
+**Asıl kusur araçtaydı.** Belgesinde "aynı kodda %30 sapma görülebilir"
+yazıyordu; ölçülen sapma **2,3×**. Üstelik araç tek bir sayı basıyordu, yani
+okuyan kişinin sapmayı görme şansı yoktu. Artık her satır medyanın yanında
+**min–maks** yayılımını da yazıyor ve tablonun altına aracın kendi sınırı
+düşülüyor:
+
+```
+nabız … en kötü  187 ms [179–405], toplam blok  535 ms [458–1036]
+…
+En geniş yayılım: 2.3×. Bu tablodaki tek bir sayıya bakıp iki sürümü
+KARŞILAŞTIRMAYIN — aynı derlemede bile bu kadar sapıyor.
+```
+
+Ders, bu dosyadaki kare süresi hatasıyla aynı aileden: **ölçüt yanlışsa
+ölçüm de yanlıştır.** Bir aracın sessizce tek sayı basması, o sayının
+kesin olduğu anlamına gelmiyor.
+
 ## Tekrar üretmek için
 
 ```bash

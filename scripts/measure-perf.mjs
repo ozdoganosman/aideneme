@@ -78,11 +78,25 @@ async function measure(name, url, ready, actions) {
   };
 }
 
-/** Aynı senaryoyu RUNS kez ölçüp medyanını döndür. */
+/**
+ * Aynı senaryoyu RUNS kez ölçüp medyanını VE yayılımını döndür.
+ *
+ * Yayılım neden raporlanıyor: bu araç bir kez çalıştırılıp iki commit
+ * karşılaştırıldığında yanıltıyor. Ölçüldü — DEĞİŞMEYEN bir derlemede
+ * üç ayrı çalıştırma Nabız için 406 / 190 / 212 ms "en kötü blok" verdi
+ * (2,1× fark). Tek sayıya bakan biri buradan rahatlıkla "şu ekran
+ * yavaşlamış" sonucunu çıkarır; çıkardım da, yanlıştı. Medyanın yanında
+ * min–maks görünürse o yanılgı mümkün olmuyor.
+ */
 async function repeat(name, url, ready, actions) {
   const runs = [];
   for (let i = 0; i < RUNS; i++) runs.push(await measure(name, url, ready, actions));
-  const pick = (key) => median(runs.map((r) => r[key]));
+  const values = (key) => runs.map((r) => r[key]);
+  const pick = (key) => median(values(key));
+  const spread = (key) => {
+    const v = values(key);
+    return { min: Math.min(...v), max: Math.max(...v) };
+  };
   const interactionKeys = runs[0].interaction ? Object.keys(runs[0].interaction) : [];
   return {
     name,
@@ -91,6 +105,11 @@ async function repeat(name, url, ready, actions) {
     longTasks: pick('longTasks'),
     worstLongTask: pick('worstLongTask'),
     totalBlocking: pick('totalBlocking'),
+    spread: {
+      ready_ms: spread('ready_ms'),
+      worstLongTask: spread('worstLongTask'),
+      totalBlocking: spread('totalBlocking'),
+    },
     interaction: interactionKeys.length
       ? Object.fromEntries(
           interactionKeys.map((k) => [k, median(runs.map((r) => r.interaction[k]))]),
@@ -111,7 +130,10 @@ results.push(
     const t = Date.now();
     await input.type('30');
     await page.waitForFunction(
-      () => !document.querySelector('.screener__status .ui-badge')?.textContent?.includes('Hesaplanıyor'),
+      () =>
+        !document
+          .querySelector('.screener__status .ui-badge')
+          ?.textContent?.includes('Hesaplanıyor'),
       { timeout: 60000 },
     );
     const paramMs = Date.now() - t;
@@ -132,81 +154,98 @@ results.push(
       }
       return Math.round(total);
     });
-    return { 'parametre→sonuç_ms': paramMs, 'kaydırma_40_adım_ms': scrollMs };
+    return { 'parametre→sonuç_ms': paramMs, kaydırma_40_adım_ms: scrollMs };
   }),
 );
 
 results.push(
-  await repeat('sembol masası (grafik)', `${BASE}?v=sembol&s=X001`, '.desk__health', async (page) => {
-    const t = Date.now();
-    await page.getByRole('tab', { name: 'Haftalık' }).click();
-    await page.waitForTimeout(50);
-    await page.waitForFunction(() => !!document.querySelector('.chart-host canvas'), { timeout: 30000 });
-    const tfMs = Date.now() - t;
+  await repeat(
+    'sembol masası (grafik)',
+    `${BASE}?v=sembol&s=X001`,
+    '.desk__health',
+    async (page) => {
+      const t = Date.now();
+      await page.getByRole('tab', { name: 'Haftalık' }).click();
+      await page.waitForTimeout(50);
+      await page.waitForFunction(() => !!document.querySelector('.chart-host canvas'), {
+        timeout: 30000,
+      });
+      const tfMs = Date.now() - t;
 
-    // Grafik etkileşimi: 20 tekerlek adımı (uzaklaştırma) ve 20 sürükleme
-    // adımı (kaydırma) sırasında ana thread'i kaç ms bloklandığı. Duvar saati
-    // değil BLOK süresi ölçülüyor: takılmayı yaratan budur.
-    const box = await page.locator('.chart-host').boundingBox();
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    // DİKKAT: __long dizisi sayfa yükleme ölçümünde de kullanılıyor; burada
-    // SIFIRLAMAK o satırın "uzun görev" sayısını siliyordu. Sıfırlamak yerine
-    // etkileşim öncesi toplam alınıp fark hesaplanıyor.
-    const sumLong = () =>
-      page.evaluate(() => Math.round((window.__long ?? []).reduce((s, d) => s + d, 0)));
-    const beforeZoom = await sumLong();
-    for (let i = 0; i < 20; i++) {
+      // Grafik etkileşimi: 20 tekerlek adımı (uzaklaştırma) ve 20 sürükleme
+      // adımı (kaydırma) sırasında ana thread'i kaç ms bloklandığı. Duvar saati
+      // değil BLOK süresi ölçülüyor: takılmayı yaratan budur.
+      const box = await page.locator('.chart-host').boundingBox();
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      // DİKKAT: __long dizisi sayfa yükleme ölçümünde de kullanılıyor; burada
+      // SIFIRLAMAK o satırın "uzun görev" sayısını siliyordu. Sıfırlamak yerine
+      // etkileşim öncesi toplam alınıp fark hesaplanıyor.
+      const sumLong = () =>
+        page.evaluate(() => Math.round((window.__long ?? []).reduce((s, d) => s + d, 0)));
+      const beforeZoom = await sumLong();
+      for (let i = 0; i < 20; i++) {
+        await page.mouse.move(cx, cy);
+        await page.mouse.wheel(0, -120);
+        await page.waitForTimeout(30);
+      }
+      const afterZoom = await sumLong();
+      const zoomBlock = afterZoom - beforeZoom;
       await page.mouse.move(cx, cy);
-      await page.mouse.wheel(0, -120);
-      await page.waitForTimeout(30);
-    }
-    const afterZoom = await sumLong();
-    const zoomBlock = afterZoom - beforeZoom;
-    await page.mouse.move(cx, cy);
-    await page.mouse.down();
-    for (let i = 0; i < 20; i++) {
-      await page.mouse.move(cx - i * 8, cy);
-      await page.waitForTimeout(20);
-    }
-    await page.mouse.up();
-    const panBlock = (await sumLong()) - afterZoom;
-    return {
-      'periyot_değişimi_ms': tfMs,
-      'yakınlaştırma_blok_ms': zoomBlock,
-      'kaydırma_blok_ms': panBlock,
-    };
-  }),
+      await page.mouse.down();
+      for (let i = 0; i < 20; i++) {
+        await page.mouse.move(cx - i * 8, cy);
+        await page.waitForTimeout(20);
+      }
+      await page.mouse.up();
+      const panBlock = (await sumLong()) - afterZoom;
+      return {
+        periyot_değişimi_ms: tfMs,
+        yakınlaştırma_blok_ms: zoomBlock,
+        kaydırma_blok_ms: panBlock,
+      };
+    },
+  ),
 );
 
 results.push(
-  await repeat('laboratuvar (backtest)', `${BASE}?v=laboratuvar&s=X001`, '.lab__stats', async (page) => {
-    const t = Date.now();
-    await page.getByRole('button', { name: 'Doğrulamayı çalıştır' }).click();
-    await page.waitForSelector('.lab__badge', { timeout: 180000 });
-    return { 'doğrulama_ms': Date.now() - t };
-  }),
+  await repeat(
+    'laboratuvar (backtest)',
+    `${BASE}?v=laboratuvar&s=X001`,
+    '.lab__stats',
+    async (page) => {
+      const t = Date.now();
+      await page.getByRole('button', { name: 'Doğrulamayı çalıştır' }).click();
+      await page.waitForSelector('.lab__badge', { timeout: 180000 });
+      return { doğrulama_ms: Date.now() - t };
+    },
+  ),
 );
 
-results.push(await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=X001,X002,X003`, '.compare__matrix'));
+results.push(
+  await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=X001,X002,X003`, '.compare__matrix'),
+);
 
 // Fazlardan sonra eklenen ekranlar: en ağır iki iş (1600 backtest ve model
 // eğitimi) burada. İkisi de worker'da koşuyor; ölçüm bunu doğruluyor.
 results.push(
-  await repeat('stratejiler (1600 backtest)', `${BASE}?v=stratejiler`, '.rank__table tbody tr', async (page) => {
-    const t = Date.now();
-    await page.getByLabel('Kapsam').selectOption('symbol');
-    await page.waitForFunction(
-      () => document.querySelectorAll('.rank__table tbody tr').length > 0,
-      { timeout: 120000 },
-    );
-    return { 'kapsam_değişimi_ms': Date.now() - t };
-  }),
+  await repeat(
+    'stratejiler (1600 backtest)',
+    `${BASE}?v=stratejiler`,
+    '.rank__table tbody tr',
+    async (page) => {
+      const t = Date.now();
+      await page.getByLabel('Kapsam').selectOption('symbol');
+      await page.waitForFunction(
+        () => document.querySelectorAll('.rank__table tbody tr').length > 0,
+        { timeout: 120000 },
+      );
+      return { kapsam_değişimi_ms: Date.now() - t };
+    },
+  ),
 );
 
-results.push(
-  await repeat('model (purged CV)', `${BASE}?v=model&s=X001`, '.model__verdict'),
-);
+results.push(await repeat('model (purged CV)', `${BASE}?v=model&s=X001`, '.model__verdict'));
 
 results.push(await repeat('rapor', `${BASE}?v=rapor&s=X001`, '.report__sheet'));
 
@@ -217,18 +256,41 @@ results.push(
     await page.getByRole('tab', { name: 'Sektör' }).click();
     await page.getByRole('button', { name: 'Akranları yükle' }).click();
     await page.waitForSelector('.desk__sector-table tbody tr', { timeout: 60000 });
-    return { 'akran_yükleme_ms': Date.now() - t };
+    return { akran_yükleme_ms: Date.now() - t };
   }),
 );
 
 results.push(await repeat('portföy', `${BASE}?v=portfoy`, '.pf-form, .screener__panel, .ui-field'));
 
-console.log(`\nCPU yavaşlatma: ${THROTTLE}× · ${RUNS} tekrarın medyanı\n`);
+console.log(
+  `\nCPU yavaşlatma: ${THROTTLE}× · ${RUNS} tekrarın medyanı (köşeli parantez: min–maks)\n`,
+);
+const ratio = (s) => (s.min > 0 ? s.max / s.min : s.max > 0 ? Infinity : 1);
+let worstRatio = 1;
 for (const r of results) {
+  const b = r.spread.totalBlocking;
+  worstRatio = Math.max(worstRatio, ratio(r.spread.worstLongTask), ratio(b));
   console.log(
     `${r.name.padEnd(34)} hazır ${String(r.ready_ms).padStart(6)} ms · FCP ${String(r.fcp).padStart(5)} ms · ` +
-      `uzun görev ${String(r.longTasks).padStart(3)} (en kötü ${String(r.worstLongTask).padStart(4)} ms, toplam blok ${String(r.totalBlocking).padStart(5)} ms)` +
-      (r.interaction ? ` · ${Object.entries(r.interaction).map(([k, v]) => `${k}=${v}`).join(' ')}` : ''),
+      `uzun görev ${String(r.longTasks).padStart(3)} (en kötü ${String(r.worstLongTask).padStart(4)} ms ` +
+      `[${r.spread.worstLongTask.min}–${r.spread.worstLongTask.max}], toplam blok ${String(r.totalBlocking).padStart(5)} ms ` +
+      `[${b.min}–${b.max}])` +
+      (r.interaction
+        ? ` · ${Object.entries(r.interaction)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')}`
+        : ''),
   );
 }
+
+// Aracın kendi sınırını kullanıcıya SÖYLEMESİ gerekiyor: yayılım büyükse
+// iki çalıştırmayı karşılaştırmak bir şey kanıtlamaz.
+console.log(
+  `\nEn geniş yayılım: ${worstRatio.toFixed(1)}×. ` +
+    (worstRatio >= 1.5
+      ? 'Bu tablodaki tek bir sayıya bakıp iki sürümü KARŞILAŞTIRMAYIN — ' +
+        'aynı derlemede bile bu kadar sapıyor. Karşılaştırma için her sürümü ' +
+        'birkaç kez çalıştırıp medyanların medyanına bakın.'
+      : 'Sapma dar; karşılaştırma için kullanılabilir.'),
+);
 await browser.close();
