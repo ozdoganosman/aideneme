@@ -108,6 +108,41 @@ test('depolama kapalıyken iki arayüz de açılıyor', async ({ page }) => {
   await expect(page.locator('.ui-vtable')).toBeVisible();
 });
 
+test('hareket duyarlılığı iki arayüzde de onurlandırılıyor', async ({ page }) => {
+  // Yeni kabukta bu tercih zaten vardı, yayındaki uygulamada hiç yoktu:
+  // aynı kullanıcı iki arayüzde iki farklı davranış görüyordu.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/index.html', { waitUntil: 'networkidle' });
+  const eski = await page.evaluate(() => {
+    const wrap = document.createElement('span');
+    wrap.className = 'live-toggle on';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    wrap.appendChild(dot);
+    document.body.appendChild(wrap);
+    const d = getComputedStyle(dot).animationDuration;
+    wrap.remove();
+    return d;
+  });
+  expect(parseFloat(eski)).toBeLessThan(0.05);
+
+  await open(page, 'v=nabiz');
+  const yeni = await page.evaluate(
+    () => getComputedStyle(document.body).getPropertyValue('--dur-med') || '',
+  );
+  // Yeni kabukta kural genel: her animasyon/geçiş süresi kısaltılıyor.
+  const ornek = await page.evaluate(() => {
+    const el = document.createElement('div');
+    el.style.transitionDuration = 'var(--dur-med)';
+    document.body.appendChild(el);
+    const d = getComputedStyle(el).transitionDuration;
+    el.remove();
+    return d;
+  });
+  expect(parseFloat(ornek)).toBeLessThan(0.05);
+  expect(yeni.length).toBeGreaterThan(0);
+});
+
 test('rapor yazdırmada beyaz kâğıda uygun çıkıyor', async ({ page }) => {
   // Koyu tema açıkken "Yazdır / PDF" koyu zeminli, açık metinli bir rapor
   // üretiyordu: kâğıtta ya okunmaz ya da sayfa dolusu mürekkep.

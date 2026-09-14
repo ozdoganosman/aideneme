@@ -3603,3 +3603,18 @@ button.ctl:disabled {
   flex: 0 0 auto;
   width: 58px;
 }
+
+/* Hareket duyarlılığı (WCAG 2.3.3 / vestibüler rahatsızlık).
+   Yayındaki uygulamada iki sonsuz animasyon var: canlı veri noktasının nabzı
+   ve yükleniyor çarkı. Yeni kabukta bu tercih zaten onurlandırılıyordu, burada
+   hiç yoktu — aynı kullanıcı iki arayüzde iki farklı davranış görüyordu. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

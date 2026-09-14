@@ -1044,6 +1044,32 @@ kaydedilmeye değer:
 Testin gerçekten koruduğu kanıtlandı: tarayıcıdaki bir biçim bilerek
 bozulunca kırılıyor, geri alınınca geçiyor.
 
+## Eski arayüz: neyi düzeltip neyi düzeltmediğim
+
+İki arayüz artık birbirine bağlı olduğu için yayındaki uygulamaya da aynı
+gözle bakıldı.
+
+**Düzeltilen** (ucuz, riski yok, kullanıcıyı doğrudan etkiliyor):
+
+- `prefers-reduced-motion` hiç onurlandırılmıyordu. İki sonsuz animasyon var
+  (canlı veri noktasının nabzı, yükleniyor çarkı) ve hareket duyarlılığı olan
+  kullanıcı için bunlar rahatsız edici. Yeni kabukta kural zaten vardı; aynı
+  kullanıcı iki arayüzde iki farklı davranış görüyordu. Ölçüldü: tercih açıkken
+  nabız süresi 1,4 sn → 0,00001 sn.
+- (Daha önce) depolama kapalıyken boş sayfa, yakınlaştırma engeli, favicon 404.
+
+**Düzeltilmeyen — bilinçli:**
+
+Eski arayüzün sayıları İngilizce biçimde (`47.60`, `-4.2%`, `0.27%`). Yeni
+kabukta bu Türkçeye çevrildi ama eskide **101 ayrı `toFixed` çağrısı** var ve
+o katmanın test kapsamı düşük. Kısmî çevirme daha kötü olurdu: uygulamanın
+kendi içinde tutarsız olması, baştan sona İngilizce olmasından beterdir.
+
+Karar: eski arayüz **çalışır ve erişilebilir** tutuluyor (çöken, engelleyen,
+yanıltan kusurlar düzeltiliyor); kozmetik hizalama yeni kabuğa yatırılıyor —
+çünkü asıl ürün o. Bu bir eksik, gizlenmiyor: PR'ın "bilinen sınırlar"
+listesinde yazıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
