@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -230,7 +232,44 @@ def self_test() -> None:
     assert got == 400.0 + 250.0 - 180.0, f"TTM yanlış: {got}"
     assert ttm(periods, [None] * 7, 3) is None
     assert ttm(["2024/6"], [100.0], 0) is None, "önceki yıl yoksa TTM üretilmez"
+
+    # Kaldığı yerden devam + yarım işin kullanıcıya ulaşması.
+    # CI adımı ~660 sembolü indirmeye yetmiyor; her çalıştırma baştan
+    # başlasaydı liste hiç ilerlemez, anlık görüntü de yalnızca sondaki tek
+    # yazmada oluştuğu için yarım iş tarayıcıya HİÇ ulaşmazdı.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        (out / "AAA.json").write_text(
+            json.dumps({"symbol": "AAA", "periods": ["2024/6"], "fields": {}}), encoding="utf-8"
+        )
+        (out / "snapshot.json").write_text("{}", encoding="utf-8")
+        (out / "BOZUK.json").write_text("{ bu json değil", encoding="utf-8")
+
+        assert pending_symbols(["AAA", "BBB"], out) == ["BBB"], "var olan yeniden indirilmemeli"
+        assert pending_symbols(["AAA", "BBB"], out, force_all=True) == ["AAA", "BBB"]
+
+        found = [r["symbol"] for r in records_on_disk(out)]
+        assert found == ["AAA"], f"anlık görüntü diskten kurulmalı: {found}"
+
     print("[fund] self-test tamam")
+
+
+def pending_symbols(symbols: list[str], out_dir: Path, force_all: bool = False) -> list[str]:
+    """Henüz indirilmemiş semboller (FORCE_ALL ile hepsi)."""
+    return [s for s in symbols if force_all or not (out_dir / f"{s}.json").exists()]
+
+
+def records_on_disk(out_dir: Path) -> list[dict]:
+    """Diskteki tüm sembol kayıtları. Bozuk dosya sessizce atlanır."""
+    records: list[dict] = []
+    for path in sorted(out_dir.glob("*.json")):
+        if path.name == "snapshot.json":
+            continue
+        try:
+            records.append(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return records
 
 
 def main() -> None:
@@ -248,9 +287,20 @@ def main() -> None:
     symbols = load_symbols(args.limit)
     OUT.mkdir(parents=True, exist_ok=True)
 
-    records: list[dict] = []
+    # KALDIĞI YERDEN devam: ~660 sembol tek tek indiriliyor ve bu iş bir CI
+    # adımının zaman sınırına sığmayabiliyor. Her çalıştırma baştan başlasaydı
+    # hep aynı ilk kırk sembol indirilir, liste hiç ilerlemezdi. FORCE_ALL
+    # verildiğinde (planlı tam tazeleme) hepsi yeniden çekilir.
+    force_all = bool(os.environ.get("FORCE_ALL"))
+    pending = pending_symbols(symbols, OUT, force_all)
+    if not pending:
+        print(f"[fund] {len(symbols)} sembolün hepsi zaten var (FORCE_ALL ile tazelenir)")
+    else:
+        print(f"[fund] {len(pending)}/{len(symbols)} sembol eksik, indiriliyor")
+
+    fetched = 0
     failed = 0
-    for i, symbol in enumerate(symbols, 1):
+    for i, symbol in enumerate(pending, 1):
         record = fetch_one(symbol, args.start_year, args.end_year)
         if not record:
             failed += 1
@@ -258,9 +308,15 @@ def main() -> None:
         (OUT / f"{symbol}.json").write_text(
             json.dumps(record, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
         )
-        records.append(record)
+        fetched += 1
         if i % 25 == 0:
-            print(f"[fund] {i}/{len(symbols)} · başarılı {len(records)} · başarısız {failed}")
+            print(f"[fund] {i}/{len(pending)} · başarılı {fetched} · başarısız {failed}")
+
+    # Anlık görüntü DİSKTEKİ her şeyden kuruluyor, yalnızca bu turda inenlerden
+    # değil. Eskiden sondaki tek yazma adımıydı: iş yarıda kesilince sembol
+    # dosyaları yazılmış ama taramanın okuduğu snapshot HİÇ oluşmuyordu, yani
+    # yarım iş kullanıcıya hiç ulaşmıyordu.
+    records = records_on_disk(OUT)
 
     if not records:
         print("[fund] hiçbir sembol için finansal tablo alınamadı")
@@ -273,7 +329,7 @@ def main() -> None:
 
     total = sum((OUT / f"{r['symbol']}.json").stat().st_size for r in records)
     print(
-        f"[fund] {len(records)} sembol yazıldı ({failed} başarısız) · "
+        f"[fund] diskte {len(records)} sembol · bu turda {fetched} indi, {failed} başarısız · "
         f"{total / 1e6:.1f} MB + anlık görüntü {(OUT / 'snapshot.json').stat().st_size / 1e3:.0f} KB"
     )
 
