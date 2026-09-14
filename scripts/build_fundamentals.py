@@ -568,6 +568,11 @@ def main() -> None:
     ap.add_argument("--start-year", type=int, default=2015)
     ap.add_argument("--end-year", type=int, default=2026)
     ap.add_argument(
+        "--only",
+        default=os.environ.get("FUND_ONLY", ""),
+        help="yalnızca bu semboller (virgülle); atlama listesini de yok sayar",
+    )
+    ap.add_argument(
         "--max-seconds",
         type=float,
         default=float(os.environ.get("FUND_MAX_SECONDS", 0)) or None,
@@ -589,10 +594,21 @@ def main() -> None:
     # verildiğinde (planlı tam tazeleme) hepsi yeniden çekilir.
     force_all = bool(os.environ.get("FORCE_ALL"))
     failures = read_failures(OUT)
-    pending = pending_symbols(symbols, OUT, force_all, failures)
-    skipped = sum(1 for c in failures.values() if c >= MAX_ATTEMPTS)
-    if skipped:
-        print(f"[fund] {skipped} sembol {MAX_ATTEMPTS} denemede alınamadı, atlanıyor")
+
+    # Hedefli çalıştırma: belirli sembolleri, atlama listesine RAĞMEN dene.
+    # Buna ihtiyaç doğdu çünkü kendi düzeltmem teşhisi engelledi — üç denemede
+    # alınamayan sembol listeden düşünce, o sembolün NEDEN alınamadığını yazan
+    # teşhis koduna da hiç sıra gelmiyor. Bir kusuru inceleyebilmek için onu
+    # bir kez daha çalıştırabilmek gerekiyor.
+    only = [s.strip().upper() for s in args.only.split(",") if s.strip()]
+    if only:
+        pending = only
+        print(f"[fund] hedefli çalıştırma: {', '.join(pending)} (atlama listesi yok sayıldı)")
+    else:
+        pending = pending_symbols(symbols, OUT, force_all, failures)
+        skipped = sum(1 for c in failures.values() if c >= MAX_ATTEMPTS)
+        if skipped:
+            print(f"[fund] {skipped} sembol {MAX_ATTEMPTS} denemede alınamadı, atlanıyor")
     if not pending:
         print(f"[fund] {len(symbols)} sembolün hepsi zaten var (FORCE_ALL ile tazelenir)")
     else:
