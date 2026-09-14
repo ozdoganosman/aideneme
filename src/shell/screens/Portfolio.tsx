@@ -12,6 +12,7 @@ import {
   Stat,
   VirtualTable,
   type Column,
+  trPct,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { Candles } from '../../core/data/types';
@@ -65,8 +66,7 @@ function saveTxns(txns: Txn[]): void {
 const money = (v: number): string =>
   Number.isFinite(v) ? v.toLocaleString('tr-TR', { maximumFractionDigits: 0 }) : '—';
 
-const pct = (v: number, digits = 1): string =>
-  Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
+const pct = (v: number, digits = 1): string => trPct(v, digits, true);
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -304,7 +304,7 @@ export default function Portfolio({ state, push }: Props) {
         key: 'weight',
         header: 'Ağırlık',
         numeric: true,
-        render: (r) => `${r.weightPct.toFixed(1)}%`,
+        render: (r) => trPct(r.weightPct, 1),
       },
     ],
     [],

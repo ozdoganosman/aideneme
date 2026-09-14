@@ -150,7 +150,7 @@ describe('Stratejiler', () => {
     // Maks. düşüş sütunu (satırın 3. sayısal hücresi); sahte veride %12.
     const row = document.querySelector('tbody tr')!;
     const nums = [...row.querySelectorAll('td.num')].map((c) => c.textContent ?? '');
-    expect(nums[2]).toBe('-12.0%');
+    expect(nums[2]).toBe('-%12,0');
   });
 
   it('bağımsızlık uyarısını tablodan ayırmaz', async () => {

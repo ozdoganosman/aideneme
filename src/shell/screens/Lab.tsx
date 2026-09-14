@@ -12,6 +12,8 @@ import {
   Stat,
   VirtualTable,
   type Column,
+  trPct,
+  trNum,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { Candles } from '../../core/data/types';
@@ -88,8 +90,7 @@ const BADGE_ICON: Record<ValidationBadge['level'], string> = {
 };
 
 function fmt(v: number, digits = 2, suffix = ''): string {
-  if (!Number.isFinite(v)) return v === Infinity ? '∞' : '—';
-  return `${v > 0 && suffix === '%' ? '+' : ''}${v.toFixed(digits)}${suffix}`;
+  return suffix === '%' ? trPct(v, digits, true) : trNum(v, digits);
 }
 
 /** Prov metni: formül + ölçüldüğü pencere (aynı yerde, ayrışamaz). */
@@ -101,7 +102,7 @@ function provText(key: string, metrics: { bars: number; years: number } | undefi
 
 /** İşaretsiz yüzde: pay ve isabet oranında "+" yanıltıcı olurdu. */
 function plainPct(v: number, digits = 0): string {
-  return Number.isFinite(v) ? `${v.toFixed(digits)}%` : '—';
+  return trPct(v, digits);
 }
 
 /** Strateji Laboratuvarı — kural kur, maliyetli sına, doğrulamayı gör. */

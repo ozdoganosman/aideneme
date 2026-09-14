@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, EmptyState, Popover, Skeleton, Stat } from '../../ui';
+import { Badge, EmptyState, Popover, Skeleton, Stat, trPct } from '../../ui';
 import { Icon } from '../../ui/icons';
 import {
   annualSeries,
@@ -24,7 +24,7 @@ const fmtRatio = (v: number | null, digits = 2): string =>
   v === null || !Number.isFinite(v) ? '—' : v.toFixed(digits);
 
 const fmtPct = (v: number | null, digits = 1): string =>
-  v === null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(digits)}%`;
+  v === null || !Number.isFinite(v) ? '—' : trPct(v, digits, true);
 
 const fmtMoney = (v: number | null): string => {
   if (v === null || !Number.isFinite(v)) return '—';

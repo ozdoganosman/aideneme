@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { trPct } from '../../ui';
 import type { PulseRow } from '../../core/screen/pulse';
 import { useChartColors } from './useThemeColors';
 
@@ -87,12 +88,7 @@ export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: Heat
           ctx.fillText(row.symbol, x + w / 2, y + h / 2 + (twoLines ? -5 : 0), w - 4);
           if (twoLines) {
             ctx.font = `${Math.max(8, Math.min(10, w / 5.5))}px system-ui, sans-serif`;
-            ctx.fillText(
-              `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`,
-              x + w / 2,
-              y + h / 2 + 7,
-              w - 4,
-            );
+            ctx.fillText(trPct(change, 1, true), x + w / 2, y + h / 2 + 7, w - 4);
           }
         }
       });
@@ -136,7 +132,7 @@ export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: Heat
         {hover ? (
           <>
             <strong>{hover.symbol}</strong> {hover.changePct >= 0 ? '+' : ''}
-            {hover.changePct.toFixed(2)}% · işlem değeri{' '}
+            {trPct(hover.changePct, 2, true)} · işlem değeri{' '}
             {hover.value.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}
             {hover.newHigh ? ' · yeni zirve' : hover.newLow ? ' · yeni dip' : ''}
           </>

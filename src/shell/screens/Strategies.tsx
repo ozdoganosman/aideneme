@@ -9,6 +9,8 @@ import {
   Skeleton,
   Stat,
   Toggle,
+  trPct,
+  trNum,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import { DEFAULT_COSTS, ZERO_COSTS } from '../../core/backtest/engine';
@@ -40,15 +42,14 @@ const DEEP_CONCURRENCY = 3;
 
 const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-const pct = (v: number, digits = 1): string =>
-  Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
-const plain = (v: number, digits = 1): string => (Number.isFinite(v) ? v.toFixed(digits) : '—');
+const pct = (v: number, digits = 1): string => trPct(v, digits, true);
+const plain = (v: number, digits = 1): string => trNum(v, digits);
 /**
  * Maks. düşüş işaretli gösteriliyor: Laboratuvar aynı sayıyı "-45,6%" diye
  * yazıyordu, burada "45,6%" görünüyordu. Aynı sayının iki ekranda iki farklı
  * işaretle çıkması gereksiz bir tereddüt üretiyor.
  */
-const drawdown = (v: number): string => (Number.isFinite(v) ? `-${v.toFixed(1)}%` : '—');
+const drawdown = (v: number): string => trPct(-Math.abs(v), 1);
 const pval = (v: number): string =>
   !Number.isFinite(v) ? '—' : v < 0.001 ? '< 0,001' : v.toFixed(3).replace('.', ',');
 

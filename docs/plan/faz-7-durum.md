@@ -891,6 +891,33 @@ Sonuç:
 uygulamanın strateji motoru (`analysis.ts`, `backtest.ts`,
 `customStrategy.ts`), yerini `core/backtest/` aldı.
 
+## Ekran Türkçe konuşmuyordu: 127,63 ama +3.61%
+
+Uygulamanın dili Türkçe ve fiyatlar Türkçe yazılıyordu (`127,63` — virgül,
+binlik nokta). Ama yüzdeler İngilizce yazılıyordu: **`+3.61%`**. Aynı satırda
+iki farklı yazım.
+
+Bu yalnızca bir görgü meselesi değil: ondalık **virgülle noktanın** aynı
+tabloda karışması gerçek bir yanlış okuma riski. Üstelik uygulama kendi
+içinde de tutarsızdı — bazı yerlerde Türkçe kurala uyup `%40` yazıyor, bazı
+yerlerde `40.00%`.
+
+Türkçe kural tek kaynağa toplandı (`src/ui/format.ts`): ondalık virgül,
+binlik nokta, **yüzde işareti sayının önünde**, işaret en başta.
+
+```
+önce : +3.61%   -45.6%   0.610   39.7%
+sonra: +%3,61   -%45,6   0,610   %39,7
+```
+
+Yirmi dört çağrı yeri ve dokuz ekran geçirildi; grafik eksen etiketleri, ısı
+haritası ipuçları ve rejim hükmü cümlesi dahil. Tarayıcıda doğrulandı:
+ekranlarda İngilizce biçimde tek bir yüzde kalmadı.
+
+Yardımcı kendi testini taşıyor (sonsuz `∞`, tanımsız `—`, sıfırda işaret yok)
+ve tek yerde durduğu için bundan sonra yeni bir kart eklerken biçim sorusu
+yeniden çıkmıyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

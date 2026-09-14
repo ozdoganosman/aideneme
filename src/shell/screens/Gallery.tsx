@@ -20,6 +20,7 @@ import {
   sortRows,
   useToast,
   type Column,
+  trPct,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 
@@ -85,7 +86,7 @@ export default function Gallery() {
         sortValue: (r) => r.degisim,
         render: (r) => (
           <span style={{ color: r.degisim >= 0 ? 'var(--up)' : 'var(--down)' }}>
-            {r.degisim >= 0 ? '▲' : '▼'} {r.degisim.toFixed(2)}%
+            {r.degisim >= 0 ? '▲' : '▼'} {trPct(r.degisim, 2)}
           </span>
         ),
       },

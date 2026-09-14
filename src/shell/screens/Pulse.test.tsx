@@ -95,7 +95,7 @@ describe('Nabız', () => {
 
     expect(screen.getByText('2 yükselen · 2 düşen')).toBeInTheDocument();
     // Sayıca eşit ama para düşenlerde → akış negatif.
-    expect(screen.getByText('-20.5%')).toBeInTheDocument();
+    expect(screen.getByText('-%20,5')).toBeInTheDocument();
     expect(screen.getByText('1 / 0')).toBeInTheDocument();
   });
 
@@ -162,9 +162,9 @@ describe('Nabız — sektör bazlı para akışı', () => {
     sectorsFn.mockResolvedValue(SECTORS);
     render(<Pulse state={STATE} push={push} />);
     // Bankacılık = AAA 5000 + BBB 1000 = 6000 / 15100 = %39,7
-    await waitFor(() => expect(screen.getByText('39.7%')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('%39,7')).toBeInTheDocument());
     // Sınıflandırılmamış = DDD 100 / 15100 = %0,7 — gizlenmiş olsaydı paylar şişerdi.
-    expect(screen.getByText('0.7%')).toBeInTheDocument();
+    expect(screen.getByText('%0,7')).toBeInTheDocument();
   });
 
   it('sektör satırından o sektör seçili tarayıcıya geçilir', async () => {

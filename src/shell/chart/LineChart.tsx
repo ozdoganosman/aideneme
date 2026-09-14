@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { trPct } from '../../ui';
 import { useChartColors } from './useThemeColors';
 
 export interface LineSeries {
@@ -101,7 +102,7 @@ export function LineChart({
       const toX = (x: number) => padL + x * plotW;
       const toY = (y: number) => padT + (1 - (y - min) / (max - min)) * plotH;
       const fmt = (v: number) => {
-        if (unit === 'pct') return `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`;
+        if (unit === 'pct') return trPct(v, 0, true);
         if (unit === 'compact') {
           // Milyar/milyon ölçeğindeki finansal kalemler eksende okunur kalsın.
           const abs = Math.abs(v);

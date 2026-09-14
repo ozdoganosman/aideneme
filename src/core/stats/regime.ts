@@ -208,7 +208,9 @@ export function regimeVerdict(breakdown: RegimeBreakdown): string {
   if (positive === measured.length) {
     return `Ölçülen ${measured.length} rejimin hepsinde medyan işlem pozitif; en iyisi ${best.label}.`;
   }
-  return `En iyi ${best.label} (medyan ${best.medianPct.toFixed(2)}%), en kötü ${worst.label} (${worst.medianPct.toFixed(2)}%).`;
+  // Türkçe yazım: yüzde işareti sayıdan ÖNCE, ondalık virgül (bkz. ui/format).
+  const pct = (v: number) => `${v < 0 ? '-' : ''}%${Math.abs(v).toFixed(2).replace('.', ',')}`;
+  return `En iyi ${best.label} (medyan ${pct(best.medianPct)}), en kötü ${worst.label} (${pct(worst.medianPct)}).`;
 }
 
 export const REGIME_CAVEAT =

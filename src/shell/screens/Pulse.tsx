@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle } from '../../ui';
+import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct } from '../../ui';
 import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
 import {
   flowBySector,
@@ -31,8 +31,7 @@ const fmtValue = (v: number): string => {
   return v.toFixed(0);
 };
 
-const fmtPct = (v: number, digits = 1): string =>
-  Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
+const fmtPct = (v: number, digits = 1): string => trPct(v, digits, true);
 
 /**
  * "Bu sektöre para giriyor" cümlesinin devamı "hangi hisseye?" sorusudur.
@@ -378,7 +377,7 @@ export default function Pulse({ state, push }: Props) {
                   <td className="num">{fmtValue(flow.value)}</td>
                   {bySector ? (
                     <td className="num">
-                      {'sharePct' in flow ? `${(flow.sharePct as number).toFixed(1)}%` : '—'}
+                      {'sharePct' in flow ? trPct(flow.sharePct as number, 1) : '—'}
                     </td>
                   ) : null}
                   <td

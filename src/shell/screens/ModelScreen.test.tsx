@@ -116,10 +116,10 @@ describe('Model ekranı', () => {
   it('hükmü, ölçümleri ve taban karşılaştırmasını gösterir', async () => {
     render(<ModelScreen state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('Hüküm: kullanılabilir')).toBeInTheDocument());
-    expect(screen.getByText('0.610')).toBeInTheDocument(); // AUC
-    expect(screen.getByText(/taban 0.50/)).toBeInTheDocument();
-    expect(screen.getByText(/taban 0.250/)).toBeInTheDocument(); // Brier tabanı
-    expect(screen.getByText('63%')).toBeInTheDocument(); // canlı olasılık
+    expect(screen.getByText('0,610')).toBeInTheDocument(); // AUC
+    expect(screen.getByText(/taban 0,50/)).toBeInTheDocument();
+    expect(screen.getByText(/taban 0,250/)).toBeInTheDocument(); // Brier tabanı
+    expect(screen.getByText('%63')).toBeInTheDocument(); // canlı olasılık
   });
 
   it('kart "kullanma" derse olasılık hiç gösterilmez', async () => {
@@ -135,7 +135,7 @@ describe('Model ekranı', () => {
     render(<ModelScreen state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('Hüküm: kullanma')).toBeInTheDocument());
     expect(screen.getByText(/Tahmin üretilmedi/)).toBeInTheDocument();
-    expect(screen.queryByText('63%')).toBeNull();
+    expect(screen.queryByText('%63')).toBeNull();
   });
 
   it('kalibrasyon kovalarını söylenen–olan olarak listeler, boş kovayı uydurmaz', async () => {
@@ -144,15 +144,15 @@ describe('Model ekranı', () => {
     const rows = region.querySelectorAll('tbody tr');
     expect(rows).toHaveLength(5);
     expect(rows[0]).toHaveTextContent('—'); // sayısı 0 olan kova
-    expect(rows[2]).toHaveTextContent('50%');
-    expect(rows[2]).toHaveTextContent('49%');
+    expect(rows[2]).toHaveTextContent('%50');
+    expect(rows[2]).toHaveTextContent('%49');
   });
 
   it('özellik katsayılarını ve kararlılığını yazar', async () => {
     render(<ModelScreen state={STATE} push={push} />);
     const region = await screen.findByRole('region', { name: 'Özellikler' });
     expect(region).toHaveTextContent('Momentum (20) %');
-    expect(region).toHaveTextContent('0.310');
+    expect(region).toHaveTextContent('0,310');
     expect(region).toHaveTextContent('hayır'); // RSI katsayısı katmanlar arası kararsız
   });
 
@@ -215,7 +215,7 @@ describe('Model ekranı — havuz kapsamı', () => {
     await user.click(await screen.findByRole('button', { name: 'Havuzu eğit' }));
     await waitFor(() => expect(screen.getByText('Hüküm: kullanılabilir')).toBeInTheDocument());
     // Tek sembol kapsamındaki %63'lük olasılık kartı burada olmamalı.
-    expect(screen.queryByText('63%')).toBeNull();
+    expect(screen.queryByText('%63')).toBeNull();
   });
 });
 

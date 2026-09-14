@@ -12,6 +12,7 @@ import {
   Stat,
   Tabs,
   Toggle,
+  trPct,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { HealthReport } from '../../core/data/health';
@@ -69,7 +70,7 @@ function fmt(metric: Metric): string {
   if (!Number.isFinite(v)) return '—';
   switch (metric.unit) {
     case 'pct':
-      return `${v > 0 && metric.signed ? '+' : ''}${v.toFixed(2)}%`;
+      return trPct(v, 2, !!metric.signed);
     case 'price':
       return v.toLocaleString('tr-TR', { maximumFractionDigits: v < 10 ? 4 : 2 });
     case 'years':

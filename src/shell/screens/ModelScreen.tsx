@@ -1,5 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Badge, Button, Combobox, EmptyState, NumberField, Select, Skeleton, Stat } from '../../ui';
+import {
+  Badge,
+  Button,
+  Combobox,
+  EmptyState,
+  NumberField,
+  Select,
+  Skeleton,
+  Stat,
+  trPct,
+  trNum,
+} from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { ModelCard } from '../../core/ml/model';
 import { dataClient } from '../../data-client/client';
@@ -14,9 +25,8 @@ interface Props {
   push: (patch: UrlState) => void;
 }
 
-const pct = (v: number, digits = 1): string =>
-  Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : '—';
-const num = (v: number, digits = 3): string => (Number.isFinite(v) ? v.toFixed(digits) : '—');
+const pct = (v: number, digits = 1): string => trPct(v * 100, digits);
+const num = (v: number, digits = 3): string => trNum(v, digits);
 const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 const day = (d: number) =>
@@ -292,7 +302,7 @@ export default function ModelScreen({ state, push }: Props) {
             <Stat
               label="AUC (ayrım)"
               value={num(card.metrics.auc)}
-              hint={`taban ${card.baseline.auc.toFixed(2)} · 0.5 = yazı tura`}
+              hint={`taban ${trNum(card.baseline.auc, 2)} · 0,5 = yazı tura`}
               provenance={
                 <Prov label="AUC (ayrım)">
                   Rastgele bir POZİTİF örneğe, rastgele bir negatiften daha yüksek olasılık verme
@@ -440,9 +450,7 @@ export default function ModelScreen({ state, push }: Props) {
               <Stat
                 label="Sinyal ortalaması"
                 value={
-                  Number.isFinite(card.edge.meanRetPct)
-                    ? `${card.edge.meanRetPct.toFixed(2)}%`
-                    : '—'
+                  Number.isFinite(card.edge.meanRetPct) ? trPct(card.edge.meanRetPct, 2, true) : '—'
                 }
                 hint="etiket penceresi getirisi"
                 provenance={
@@ -457,7 +465,7 @@ export default function ModelScreen({ state, push }: Props) {
                 label="Tüm barlar"
                 value={
                   Number.isFinite(card.edge.allMeanRetPct)
-                    ? `${card.edge.allMeanRetPct.toFixed(2)}%`
+                    ? trPct(card.edge.allMeanRetPct, 2, true)
                     : '—'
                 }
                 hint="karşılaştırma tabanı"

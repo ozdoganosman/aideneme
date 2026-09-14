@@ -28,8 +28,8 @@ function candles(last: number, prev: number, volume: number): Candles {
 }
 
 const SERIES: Record<string, Candles> = {
-  GARAN: candles(102, 100, 10_000), // +2%, değer 1.020.000
-  AKBNK: candles(99, 100, 5_000), //  −1%, değer   495.000
+  GARAN: candles(102, 100, 10_000), // +%2, değer 1.020.000
+  AKBNK: candles(99, 100, 5_000), //  −%1, değer   495.000
   EREGL: candles(50, 50, 1_000),
 };
 
@@ -75,8 +75,8 @@ describe('Sektör paneli', () => {
     const user = userEvent.setup();
     render(<SectorPanel market="bist" symbol="GARAN" onSelect={onSelect} />);
     await user.click(await screen.findByRole('button', { name: 'Akranları yükle' }));
-    // (1.020.000×2 + 495.000×−1) / 1.515.000 = +1.02%
-    await waitFor(() => expect(screen.getByText('+1.02%')).toBeInTheDocument());
+    // (1.020.000×2 + 495.000×−1) / 1.515.000 = +%1,02
+    await waitFor(() => expect(screen.getByText('+%1,02')).toBeInTheDocument());
   });
 
   it('akrana tıklamak o sembole geçirir', async () => {

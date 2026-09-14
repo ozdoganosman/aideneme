@@ -101,7 +101,7 @@ describe('Portföy', () => {
     // ("3.000" hem özet kartında hem pozisyon satırında görünür.)
     await waitFor(() => expect(screen.getAllByText('3.000').length).toBeGreaterThan(0));
     expect(screen.getByText(/maliyet 1\.500/)).toBeInTheDocument();
-    expect(screen.getByText('+100.00%')).toBeInTheDocument();
+    expect(screen.getAllByText('+%100,0').length).toBeGreaterThan(0);
   });
 
   it('değerleme tarihi son fiyat günüdür, "bugün" değil', async () => {
@@ -172,7 +172,7 @@ describe('Portföy — döviz bazlı getiri', () => {
     await addPosition(user, 'THYAO', 100, 10, '2021-01-04');
 
     await waitFor(() => expect(screen.getByText('USD bazında')).toBeInTheDocument());
-    expect(screen.getByText('+50.0%')).toBeInTheDocument();
+    expect(screen.getByText('+%50,0')).toBeInTheDocument();
     expect(screen.getByText(/10.00 → 20.00 · Test kaynağı/)).toBeInTheDocument();
   });
 

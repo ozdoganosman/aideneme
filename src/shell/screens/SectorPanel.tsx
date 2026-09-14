@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, Button, EmptyState, Skeleton, Stat } from '../../ui';
+import { Badge, Button, EmptyState, Skeleton, Stat, trPct } from '../../ui';
 import { Icon } from '../../ui/icons';
 import { sectorPeers, type PeerRow, type SectorMap } from '../../core/screen/sectors';
 import { dataClient } from '../../data-client/client';
@@ -20,8 +20,7 @@ const fmtValue = (v: number): string => {
   return v.toFixed(0);
 };
 
-const fmtPct = (v: number, digits = 2): string =>
-  Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)}%` : '—';
+const fmtPct = (v: number, digits = 2): string => trPct(v, digits, true);
 
 /**
  * Sektör bağlamı — "bu hisse bugün %2 düştü" eksik bir cümledir; sektörü %3

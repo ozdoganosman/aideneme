@@ -11,6 +11,7 @@ import {
   Skeleton,
   VirtualTable,
   type Column,
+  trPct,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import {
@@ -109,7 +110,7 @@ function headerFor(id: string, params: ScreenParams): string {
 function fmtValue(id: string, v: number): string {
   if (!Number.isFinite(v)) return '—';
   const def = METRIC_BY_ID.get(id);
-  if (def?.unit === 'pct') return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+  if (def?.unit === 'pct') return trPct(v, 2, true);
   if (def?.unit === 'ratio') return `${v.toFixed(2)}×`;
   if (def?.unit === 'price')
     return v.toLocaleString('tr-TR', { maximumFractionDigits: def.decimals ?? 2 });

@@ -159,7 +159,7 @@ describe('Strateji Laboratuvarı', () => {
     render(<Lab state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('Yıllık (CAGR)')).toBeInTheDocument());
 
-    expect(screen.getByText('+20.0%')).toBeInTheDocument();
+    expect(screen.getByText('+%20,0')).toBeInTheDocument();
     expect(screen.getByTestId('equity')).toHaveTextContent('Strateji|Al-tut');
     expect(
       within(screen.getByRole('region', { name: 'İşlemler' })).getByText(/1 işlem/),
@@ -286,7 +286,7 @@ describe('Laboratuvar — rejim kırılımı', () => {
     const region = await screen.findByRole('region', { name: 'Rejim kırılımı' });
     const rows = region.querySelectorAll('tbody tr');
     expect(rows).toHaveLength(4);
-    expect(rows[0]).toHaveTextContent('+1.40%');
+    expect(rows[0]).toHaveTextContent('+%1,40');
     // 2 işlemlik kova sayı taşımaz.
     expect(rows[1]).toHaveTextContent('yetersiz örnek');
     expect(rows[1]).not.toHaveTextContent('%0.00');
