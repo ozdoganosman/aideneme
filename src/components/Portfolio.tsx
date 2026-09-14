@@ -1,4 +1,5 @@
 import { ChangeEvent, useMemo, useState } from 'react';
+import { clickable } from './clickable';
 import { Quotes } from '../data/bistStatic';
 
 export interface Holding {
@@ -236,10 +237,20 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
       </div>
       <div className="pf-form">
         <div className="ac">
+          {/* ARIA birleşik kutu (APG): odak girişte kalır, etkin seçenek
+              aria-activedescendant ile bildirilir. */}
           <input
             placeholder="Sembol"
             value={sym}
             spellCheck={false}
+            role="combobox"
+            aria-label="Sembol"
+            aria-expanded={acOpen && matches.length > 0}
+            aria-controls="pf-search-list"
+            aria-autocomplete="list"
+            aria-activedescendant={
+              acOpen && matches.length > 0 ? `pf-search-opt-${active}` : undefined
+            }
             onChange={(e) => {
               setSym(e.target.value.toUpperCase());
               setAcOpen(true);
@@ -267,10 +278,19 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
             }}
           />
           {matches.length > 0 && (
-            <div className="search-dropdown">
+            <div
+              className="search-dropdown"
+              id="pf-search-list"
+              role="listbox"
+              aria-label="Eşleşen semboller"
+            >
               {matches.map((m, i) => (
+                // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- APG birleşik kutu deseni: seçenekler odak almaz, aria-activedescendant kullanılır
                 <div
                   key={m}
+                  id={`pf-search-opt-${i}`}
+                  role="option"
+                  aria-selected={i === active}
                   className={'search-item' + (i === active ? ' active' : '')}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -312,7 +332,12 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
       {rows.map((r) => {
         const weight = totVal ? (r.val / totVal) * 100 : 0;
         return (
-          <div key={r.h.symbol} className="pf-card" onClick={() => onSelect(r.h.symbol)} title="Grafikte aç">
+          <div
+            key={r.h.symbol}
+            className="pf-card"
+            title="Grafikte aç"
+            {...clickable(() => onSelect(r.h.symbol), `${r.h.symbol} grafiğini aç`)}
+          >
             <div className="pf-card-top">
               <span className="pf-dot" style={{ background: r.color }} />
               <b>{r.h.symbol}</b>
@@ -395,7 +420,12 @@ export function Portfolio({ txns, positions, closed, realized, quotes, spark, sy
           </button>
           {showClosed &&
             closed.map((c, i) => (
-              <div key={i} className="pf-closed" onClick={() => onSelect(c.symbol)} title="Grafikte aç">
+              <div
+                key={i}
+                className="pf-closed"
+                title="Grafikte aç"
+                {...clickable(() => onSelect(c.symbol), `${c.symbol} grafiğini aç`)}
+              >
                 <div className="pf-closed-top">
                   <b>{c.symbol}</b>
                   <span className={'pf-cz ' + (c.pnl >= 0 ? 'up' : 'down')}>

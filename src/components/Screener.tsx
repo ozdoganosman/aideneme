@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ModalShell } from './ModalShell';
 import { fetchScreener, fetchBistSpark, fetchBistStatic, isIndexSymbol, ScreenerFile, ScreenerItem } from '../data/bistStatic';
 import { Candles } from '../data/types';
 import { emaArr, adxArr, rocArr, rollingHighest, rollingLowest, IndicatorParams } from '../indicators/calc';
@@ -467,8 +468,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onClose} className="modal wide" label="Hisse tarama">
         <div className="modal-head">
           <span className="scr-head-title">
             <b>🔍 Hisse Tarama{data ? ` · ${data.items.length} hisse` : ''}</b>
@@ -772,8 +772,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 

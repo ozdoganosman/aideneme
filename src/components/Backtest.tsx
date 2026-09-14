@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { clickable } from './clickable';
+import { ModalShell } from './ModalShell';
 import { Candles } from '../data/types';
 import { evalPosition, StrategyResult, idxYearsAgo } from '../indicators/backtest';
 import { inflationDailyRates, inflationAvgAnnual } from '../data/inflation';
@@ -476,8 +478,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onClose} className="modal" label="Stratejilerim">
         <div className="modal-head">
           <b>Stratejilerim {strats.length > 0 && `· ${strats.length}`}</b>
           <button className="row-x" onClick={onClose} title="Kapat">×</button>
@@ -743,8 +744,11 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
                       <div
                         key={t.sym + t.strat.id}
                         className="bt-srow clickable"
-                        onClick={() => onPickCombo(t.sym, t.strat)}
                         title="Hisseyi aç + grafikte göster"
+                        {...clickable(
+                          () => onPickCombo(t.sym, t.strat),
+                          `${t.sym} · ${t.strat.name} sonucunu aç`,
+                        )}
                       >
                         <div className="bt-srow-head">
                           <span className="bt-rank">{i + 1}</span>
@@ -787,8 +791,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -1059,7 +1062,10 @@ function Heatmap({ data }: { data: MonthRow[] }) {
       <table className="hm">
         <thead>
           <tr>
-            <th />
+            {/* Sol üst köşe: satır başlıkları (yıl) için boş hücre. */}
+            <th>
+              <span className="visually-hidden">Yıl</span>
+            </th>
             {MONTHS.map((m, i) => (
               <th key={i}>{m}</th>
             ))}

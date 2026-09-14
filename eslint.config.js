@@ -60,6 +60,14 @@ export default tseslint.config(
       ...jsxA11y.flatConfigs.recommended.rules,
       // Kaydırılabilir bir bölge klavyeyle de erişilebilir OLMALIDIR (WCAG 2.1.1);
       // kuralın varsayılanı yalnızca tabpanel'e izin verdiği için region eklendi.
+      // `label-has-for` kullanımdan kalktı ve etiketin hem sarmalamasını HEM de
+      // id taşımasını istiyor; oysa kontrolü SARMALAYAN etiket geçerli ve
+      // erişilebilirdir. Yerine güncel kural: ikisinden biri yeterli.
+      'jsx-a11y/label-has-for': 'off',
+      'jsx-a11y/label-has-associated-control': [
+        'error',
+        { assert: 'either', depth: 3 },
+      ],
       'jsx-a11y/no-noninteractive-tabindex': [
         'error',
         { tags: [], roles: ['tabpanel', 'region'], allowExpressionValues: true },
@@ -112,15 +120,9 @@ export default tseslint.config(
     },
   },
 
-  // --- Devralınan ekranlar (Faz 2'de core/ + tasarım sistemine taşınacak).
-  // Erişilebilirlik kuralları burada UYARI: yeni kodda hata olarak zorunlu,
-  // eski kodda ise taşıma sırasında tek tek kapatılacak bir borç listesi.
-  {
-    files: ['src/App.tsx', 'src/components/**/*.tsx'],
-    rules: Object.fromEntries(
-      Object.keys(jsxA11y.flatConfigs.recommended.rules).map((rule) => [rule, 'warn']),
-    ),
-  },
+  // Not: devralınan ekranlar için erişilebilirlik kurallarını UYARIYA indiren
+  // geçici blok KALDIRILDI. Borç kapandı (46 uyarı → 0); kurallar artık her
+  // yerde hata, yani eski ekranlarda da geri gidiş derlemeyi kırar.
 
   // Test files may reach for anything.
   {

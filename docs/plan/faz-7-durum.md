@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 442 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 442 test, 46 → 0 erişilebilirlik uyarısı)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -229,6 +229,35 @@ Grafik ayarları (EMA/Hacim anahtarları) diğer sekmelerde de görünüyordu:
 eziyordu. Global bir `[hidden] { display: none !important }` kuralı eklendi —
 gizlenen bir kontrolün ekranda kalması, yanlış sekmenin ayarını göstermek
 demekti. Test altında.
+
+## Devralınan ekranların erişilebilirlik borcu kapandı
+
+Faz 0'da erişilebilirlik kuralları yeni kodda **hata**, devralınan ekranlarda
+**uyarı** yapılmıştı: "taşıma sırasında tek tek kapatılacak bir borç listesi".
+46 uyarı vardı, şimdi sıfır — ve o geçici blok kaldırıldı, yani eski ekranlarda
+da geri gidiş artık derlemeyi kırar.
+
+| Kalıp | Sayı | Ne yapıldı |
+|---|---|---|
+| Modallar (yalnızca fareyle kapanıyordu) | 4 | Ortak `ModalShell`: Escape, odak tuzağı, `role="dialog"` |
+| Tıklanabilir kart/satırlar | 8 | Ortak `clickable()`: `role="button"`, sekme sırası, Enter/Space |
+| Otomatik tamamlama listeleri | 2 | APG birleşik kutu: `aria-expanded`, `aria-activedescendant`, `role="listbox"` |
+| Sarmalayan etiketler | 5 | Kural düzeltildi: `label-has-for` kullanımdan kalkmış, yerine `label-has-associated-control` |
+| Boş tablo başlığı | 1 | Görsel olarak gizli metin |
+
+Kazanç gerçek, kozmetik değil: modallar artık Escape ile kapanıyor ve odak
+içeri girip çıkışta geldiği yere dönüyor; kartlar sekme ile geziliyor ve Enter
+ile açılıyor; sembol arama listesi ekran okuyucuya listbox olarak bildiriliyor.
+
+Tarayıcıda doğrulandı (yayındaki `index.html`): 24 grafik hâlâ çiziliyor,
+birleşik kutuda ok tuşu `aria-activedescendant`'ı ilerletiyor, Enter sembolü
+seçiyor, takip listesi satırı odak alıp Enter ile açılıyor, modal Escape ile
+kapanıyor. Konsol temiz.
+
+**`label-has-for` hakkında:** bu kural etiketin hem kontrolü sarmalamasını HEM
+de `id` taşımasını istiyordu. Kontrolü sarmalayan etiket geçerli ve
+erişilebilirdir; kural kullanımdan kalkmış durumda. Kodu kuralın eskimiş
+biçimine uydurmak yerine kural güncellendi.
 
 ## Sırada
 

@@ -559,7 +559,10 @@ export default function App() {
         </div>
       </header>
 
-      {tbMenu && <div className="tb-menu-backdrop" onClick={() => setTbMenu(false)} />}
+      {/* Dekoratif kapatma katmanı: menü Escape ile de kapanıyor (aşağıdaki efekt). */}
+      {tbMenu && (
+        <div className="tb-menu-backdrop" role="presentation" onClick={() => setTbMenu(false)} />
+      )}
 
       <div className="body">
         {showLeft ? (
@@ -728,7 +731,15 @@ export default function App() {
                     <span
                       className="wl-tab-x"
                       role="button"
+                      tabIndex={0}
+                      aria-label="Listeyi sil"
                       title="Listeyi sil"
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.click();
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteList(l.id);
@@ -764,6 +775,7 @@ export default function App() {
         {(showLeft || showRight) && (
           <div
             className="drawer-backdrop"
+            role="presentation"
             onClick={() => {
               setShowLeft(false);
               setShowRight(false);
