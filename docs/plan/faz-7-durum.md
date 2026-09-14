@@ -1328,10 +1328,43 @@ yalnızca kütüphanenin içine taşıyor (kaynağın uç noktası tek sembol al
 ettiği için ikisi aynı listeyi ilerletiyor; birikmiş liste birkaç elle
 çalıştırmayla kapanıyor.
 
-Ölçülmemiş bir alternatif olarak duruyor: yıl aralığını daraltmak istek
-sayısını doğrudan düşürür (2015 yerine 2021'den başlamak %50 kazanç), ama
-finansal panelin gösterdiği geçmiş kısalır. Kullanıcıya görünen bir şeyi
-ölçmeden kısaltmıyorum.
+Yıl aralığını daraltmak akla geliyor ama ölçünce **yanlış** çıktı: finansal
+panel yıllık (`/12`) dönemleri grafikliyor ve tüm geçmişi çiziyor; 2015
+yerine 2021'den başlamak ciro grafiğini 11 noktadan 5 noktaya düşürürdü.
+Kullanıcıya görünen bir şeyi hız için kısaltmıyorum.
+
+İki fazlı çekim de tartıldı (önce son yıllar → anlık görüntü hızla dolsun,
+geçmiş sonra). Kazanç gerçek, ama bedeli iki parçalı finansal kaydı
+birleştirme mantığı — yani sessiz bir hatanın **yanlış bilançoyu doğruymuş
+gibi** göstereceği tek yer. Bu projenin tüm disiplini "savunamadığın sayıyı
+gösterme" üzerine kurulu; hız için oraya risk konmadı.
+
+### Sürekli başarısız sembol her turda yeniden deneniyordu
+
+Turlar arası hız düştü: +38 sembol (25 dk) → +17 sembol (25 dk). Hipotez,
+başarısız sembollerin birikip her turda baştan denenmesiydi. Ölçüldü:
+
+```
+alfabetik sınır DIRIT → sıra 135
+yazılan dosya        → 124
+hiç alınamayan       →  11  (%8)
+```
+
+Hipotez **kısmen** doğruydu: büyüyen bir yığın yok, 11 sembol var. Ama bir
+başarısızlık ucuz değil — 12 yıl isteğinin hepsi yeniden denenip zaman
+aşımına uğruyor, ve bu 25 dakikalık bütçenin ciddi bir kısmını yiyor
+olabilir. Hız düşüşünün tamamını buna bağlayamam (kaynağın kendi hızı da
+değişiyor olabilir, kanıtlamadım), ama sürekli başarısız olan bir sembolü
+her turda yeniden denemek **maliyeti ne olursa olsun yanlış**.
+
+Artık başarısızlıklar `failures.json`'da sayılıyor; üç denemede alınamayan
+sembol listeden düşüyor, başarılı bir çekim sayacı sıfırlıyor, `FORCE_ALL`
+hepsini geri getiriyor (kaynak düzelmiş olabilir). Sayaç başarısızlık
+anında diske yazılıyor: süre dolup kesilsek bile bir sonraki tur aynı
+sembole aynı süreyi harcamıyor.
+
+Not: hedef sembol sayısı **607** (fiyat manifestindeki 655 değil; ikisi
+farklı listeler).
 
 ## Sırada
 

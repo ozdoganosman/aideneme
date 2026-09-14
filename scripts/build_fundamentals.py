@@ -305,22 +305,89 @@ def self_test() -> None:
             now=sahte_saat,
         )
         assert fetched == 3, f"süre dolunca durmalıydı, {fetched} sembol indi"
-        snap = json.loads((out / "snapshot.json").read_text(encoding="utf-8"))
+        snap = json.loads((out / SNAPSHOT_FILE).read_text(encoding="utf-8"))
         assert set(snap["symbols"]) == {"S1", "S2", "S3"}, sorted(snap["symbols"])
+
+    # SÜREKLİ BAŞARISIZ sembol listeden düşmeli. Ölçüldü: 135 sembollük
+    # ilerlemede 11'i hiç alınamıyor ve her tur baştan deneniyordu; bir
+    # başarısızlık 12 yıl isteğinin tamamının zaman aşımına uğraması demek.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+
+        def hep_basarisiz(symbol: str):
+            return None
+
+        for tur in range(MAX_ATTEMPTS):
+            kalan = pending_symbols(["YOK"], out, failures=read_failures(out))
+            assert kalan == ["YOK"], f"{tur + 1}. turda hâlâ denenmeli"
+            build_all(kalan, out, hep_basarisiz)
+
+        kalan = pending_symbols(["YOK"], out, failures=read_failures(out))
+        assert kalan == [], f"{MAX_ATTEMPTS} denemeden sonra listeden düşmeliydi"
+        # FORCE_ALL kaynağın düzelmiş olabileceği durumda hepsini geri getirir.
+        assert pending_symbols(["YOK"], out, force_all=True, failures=read_failures(out)) == ["YOK"]
+
+        # Başarılı bir çekim sayacı sıfırlar.
+        def basarili(symbol: str):
+            return {"symbol": symbol, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}
+
+        build_all(["YOK"], out, basarili)
+        assert read_failures(out).get("YOK", 0) == 0, "başarı sayacı sıfırlamalı"
 
     print("[fund] self-test tamam")
 
 
-def pending_symbols(symbols: list[str], out_dir: Path, force_all: bool = False) -> list[str]:
-    """Henüz indirilmemiş semboller (FORCE_ALL ile hepsi)."""
-    return [s for s in symbols if force_all or not (out_dir / f"{s}.json").exists()]
+SNAPSHOT_FILE = "snapshot.json"
+FAILURES_FILE = "failures.json"
+MAX_ATTEMPTS = 3
+
+
+def read_failures(out_dir: Path) -> dict[str, int]:
+    """Sembol → üst üste başarısız deneme sayısı."""
+    try:
+        data = json.loads((out_dir / FAILURES_FILE).read_text(encoding="utf-8"))
+        return {k: int(v) for k, v in data.items() if isinstance(v, (int, float))}
+    except (OSError, json.JSONDecodeError, ValueError, AttributeError):
+        return {}
+
+
+def write_failures(failures: dict[str, int], out_dir: Path) -> None:
+    (out_dir / FAILURES_FILE).write_text(
+        json.dumps(failures, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
+
+
+def pending_symbols(
+    symbols: list[str],
+    out_dir: Path,
+    force_all: bool = False,
+    failures: dict[str, int] | None = None,
+) -> list[str]:
+    """
+    Henüz indirilmemiş semboller (FORCE_ALL ile hepsi).
+
+    Üst üste `MAX_ATTEMPTS` kez başarısız olan sembol listeden düşüyor.
+    Ölçüldü: 135 sembollük ilerlemede 11'i hiç alınamıyor ve her çalıştırma
+    onları BAŞTAN deniyor. Bir başarısızlık ucuz değil — 12 yıl isteğinin
+    hepsi yeniden denenip zaman aşımına uğruyor. Sürekli başarısız olan bir
+    sembolü her turda yeniden denemek, maliyeti ne olursa olsun yanlış:
+    ilerlemeyi yiyor ve kayıt gürültüsü üretiyor. FORCE_ALL hepsini geri
+    getiriyor (kaynak düzelmiş olabilir).
+    """
+    fails = failures or {}
+    return [
+        s
+        for s in symbols
+        if force_all
+        or (not (out_dir / f"{s}.json").exists() and fails.get(s, 0) < MAX_ATTEMPTS)
+    ]
 
 
 def records_on_disk(out_dir: Path) -> list[dict]:
     """Diskteki tüm sembol kayıtları. Bozuk dosya sessizce atlanır."""
     records: list[dict] = []
     for path in sorted(out_dir.glob("*.json")):
-        if path.name == "snapshot.json":
+        if path.name in (SNAPSHOT_FILE, FAILURES_FILE):
             continue
         try:
             records.append(json.loads(path.read_text(encoding="utf-8")))
@@ -333,7 +400,7 @@ def write_snapshot(records: list[dict], out_dir: Path) -> None:
     """Anlık görüntüyü yaz — taramanın OKUDUĞU tek dosya budur."""
     if not records:
         return
-    (out_dir / "snapshot.json").write_text(
+    (out_dir / SNAPSHOT_FILE).write_text(
         json.dumps(build_snapshot(records), ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
@@ -364,6 +431,7 @@ def build_all(
     (bellek, ağ, elle iptal) diskte geçerli bir anlık görüntü kalsın.
     """
     records = records_on_disk(out_dir)
+    failures = read_failures(out_dir)
     fetched = 0
     failed = 0
     started = now()
@@ -377,7 +445,15 @@ def build_all(
         record = fetch(symbol)
         if not record:
             failed += 1
+            # Başarısızlık HEMEN kaydediliyor: süre dolup kesilirsek de
+            # bir sonraki tur aynı sembole aynı süreyi harcamasın.
+            failures[symbol] = failures.get(symbol, 0) + 1
+            write_failures(failures, out_dir)
             continue
+        # Başarı sayacı sıfırlar VE diske yazar: yoksa kaynak düzeldikten
+        # sonra bile eski sayaç sembolü gereksiz yere listeden düşürürdü.
+        if failures.pop(symbol, None) is not None:
+            write_failures(failures, out_dir)
         (out_dir / f"{symbol}.json").write_text(
             json.dumps(record, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
         )
@@ -416,7 +492,11 @@ def main() -> None:
     # aynı ilk kırk sembol indirilir, liste hiç ilerlemezdi. FORCE_ALL
     # verildiğinde (planlı tam tazeleme) hepsi yeniden çekilir.
     force_all = bool(os.environ.get("FORCE_ALL"))
-    pending = pending_symbols(symbols, OUT, force_all)
+    failures = read_failures(OUT)
+    pending = pending_symbols(symbols, OUT, force_all, failures)
+    skipped = sum(1 for c in failures.values() if c >= MAX_ATTEMPTS)
+    if skipped:
+        print(f"[fund] {skipped} sembol {MAX_ATTEMPTS} denemede alınamadı, atlanıyor")
     if not pending:
         print(f"[fund] {len(symbols)} sembolün hepsi zaten var (FORCE_ALL ile tazelenir)")
     else:
