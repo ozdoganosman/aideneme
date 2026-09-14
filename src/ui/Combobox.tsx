@@ -102,13 +102,18 @@ export function Combobox({
         aria-activedescendant={activeId}
         autoComplete="off"
         placeholder={placeholder ?? selected?.label ?? ''}
-        value={query}
+        // Kapalıyken seçili değer görünür (soluk placeholder değil, gerçek metin);
+        // açılınca kullanıcının yazdığı sorguya döner.
+        value={open ? query : (selected?.value ?? value)}
         onChange={(e) => {
           setQuery(e.target.value);
           setActive(0);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setQuery('');
+          setOpen(true);
+        }}
         onKeyDown={onKeyDown}
       />
       {open ? (

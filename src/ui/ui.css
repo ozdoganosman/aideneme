@@ -445,6 +445,17 @@
 .ui-popover__panel--end {
   right: 0;
 }
+.ui-popover__panel,
+.ui-popover__panel * {
+  /* Tetikleyici bir etiketin içinde olabilir (ör. Stat başlığı); katmanın
+     tipografisi bağlamdan miras almasın. */
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+}
+.ui-popover__panel {
+  min-width: 260px;
+}
 .ui-popover__title {
   margin-bottom: var(--sp-2);
   color: var(--text-primary);

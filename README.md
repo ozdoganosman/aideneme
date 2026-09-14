@@ -41,9 +41,19 @@ planına göre yeniden kuruluyor. İlk iki faz yayında:
 - **Kalite kapısı**: `npm run verify` → tip · lint · biçim · test · build ·
   performans bütçesi. CI'da da aynısı çalışır (`.github/workflows/verify.yml`).
 
+- **Kolonsal veri hattı** (Faz 2): verbose JSON → `.bin` (bar başına 24 bayt,
+  ~3,7× küçülme) + manifest + `latest-250` paketi. Üretici
+  `scripts/pack_data.py`, saf çözücü `src/core/data/pack.ts`, hash tabanlı
+  IndexedDB önbelleği `src/data-client/`. Format:
+  [`docs/plan/veri-formati.md`](docs/plan/veri-formati.md).
+- **Sembol Masası** (`next.html?v=sembol`): LOD grafik çekirdeği üzerinde mum +
+  hacim + EMA, her metriğin formülünü/penceresini açan provenance katmanı ve
+  veri sağlık paneli (eksik bar, bölünme benzeri sıçrama, bayatlık).
+
 Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
-(`index.html`) Faz 2'de Sembol Masası veriyle dolana kadar yayında kalıyor.
-Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md).
+(`index.html`) tüm ekranlar taşınana kadar yayında kalıyor.
+Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),
+[`docs/plan/faz-2-durum.md`](docs/plan/faz-2-durum.md).
 
 ## Çalıştırma
 

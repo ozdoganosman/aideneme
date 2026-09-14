@@ -24,6 +24,15 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Veri üreticisi, veri olmadan da sınanabilir: sentetik seri yaz → paketle
+      # → geri oku → bar bar karşılaştır. Format sözleşmesinin Python ucu.
+      - name: Veri paketleyici kendi kendine testi
+        run: python scripts/pack_data.py --self-test
+
       - run: npm ci
 
       - name: Tip kontrolü

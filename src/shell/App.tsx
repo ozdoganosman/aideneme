@@ -11,9 +11,10 @@ import { useUrlState } from './urlState';
 import './shell.css';
 
 const Gallery = lazy(() => import('./screens/Gallery'));
+const SymbolDesk = lazy(() => import('./screens/SymbolDesk'));
 
-/** URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot> — varsayılanlar yazılmaz. */
-const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D' };
+/** URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa> — varsayılanlar yazılmaz. */
+const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist' };
 
 const THEME_ICON: Record<ThemePreference, IconName> = {
   system: 'auto',
@@ -129,13 +130,15 @@ export function App() {
 
           <main className="shell-content" id="icerik" tabIndex={-1}>
             <ErrorBoundary key={screen.id}>
-              {screen.id === 'kitaplik' ? (
-                <Suspense fallback={<Skeleton count={6} height="22px" />}>
+              <Suspense fallback={<Skeleton count={6} height="22px" />}>
+                {screen.id === 'kitaplik' ? (
                   <Gallery />
-                </Suspense>
-              ) : (
-                <Placeholder screen={screen} />
-              )}
+                ) : screen.id === 'sembol' ? (
+                  <SymbolDesk state={state} push={push} />
+                ) : (
+                  <Placeholder screen={screen} />
+                )}
+              </Suspense>
             </ErrorBoundary>
           </main>
 

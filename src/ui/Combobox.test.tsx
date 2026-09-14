@@ -57,6 +57,18 @@ describe('Combobox', () => {
     expect(input.getAttribute('aria-activedescendant')).toContain('GARAN');
   });
 
+  it('kapalıyken seçili değeri gösterir (soluk placeholder değil)', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    const input = screen.getByRole('combobox', { name: 'Sembol' }) as HTMLInputElement;
+    expect(input.value).toBe('THYAO');
+
+    await user.click(input);
+    expect(input.value).toBe(''); // odakta sorgu kutusu boşalır
+    await user.keyboard('asel{Enter}');
+    expect(input.value).toBe('ASELS');
+  });
+
   it('Esc listeyi kapatır', async () => {
     const user = userEvent.setup();
     render(<Harness />);

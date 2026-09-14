@@ -64,6 +64,12 @@ jobs:
           FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
         run: python scripts/screener.py
 
+      # Verbose JSON → kolonsal .bin + manifest + latest-250 paketi.
+      # --verify yazılanı geri okuyup kaynakla bar bar karşılaştırır; uyuşmazlık
+      # derlemeyi kırar (bkz. docs/plan/veri-formati.md).
+      - name: Kolonsal veri paketi
+        run: python scripts/pack_data.py --market all --bundle-bars 250 --verify
+
       - run: npm ci
       - run: npm run build
 

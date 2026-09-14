@@ -2,3 +2,27 @@ dist
 node_modules
 public/data
 package-lock.json
+
+# Devralınan ekranlar — Faz 2/3'te yeni kabuğa taşınırken biçimlendirmeye katılacaklar.
+# Şimdi biçimlendirmek açık PR'larla gereksiz çakışma üretir.
+src/App.tsx
+src/components
+src/chart
+src/data
+src/indicators
+src/main.tsx
+src/useEscClose.ts
+src/index.css
+
+# core/ altına TAŞINAN devralınan modüller: içerikleri bilinçli olarak
+# byte-byte korunuyor (taşıma diff'i temiz kalsın diye). Testleri hariç.
+src/core/indicators/analysis.ts
+src/core/indicators/backtest.ts
+src/core/indicators/calc.ts
+src/core/indicators/customStrategy.ts
+src/core/indicators/patterns.ts
+src/core/indicators/stats.ts
+src/core/data/inflation.ts
+src/core/data/resample.ts
+src/core/data/synthetic.ts
+src/core/data/types.ts
