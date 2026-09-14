@@ -123,6 +123,61 @@ export function sectorNames(map: SectorMap | null): string[] {
   return [...new Set(Object.values(map.of))].sort((a, b) => a.localeCompare(b, 'tr'));
 }
 
+export interface PeerRow {
+  symbol: string;
+  /** İşlem değeri (kapanış × hacim). */
+  value: number;
+  changePct: number;
+}
+
+export interface SectorPeers {
+  sector: string;
+  /** Sembolün sektör içindeki işlem değeri sırası (1 = en çok işlem gören). */
+  rank: number;
+  total: number;
+  /** İşlem değerine göre sıralı akranlar; sembolün kendisi de listede. */
+  peers: PeerRow[];
+  /** Sektörün işlem değeriyle ağırlıklı ortalama değişimi. */
+  weightedChangePct: number;
+}
+
+/**
+ * Bir sembolün sektör akranları ve içindeki konumu.
+ *
+ * "Bu hisse bugün %2 düştü" tek başına eksik bir cümledir: sektörü %3 düştüyse
+ * hisse aslında İYİ performans göstermiştir. Akran listesi bu bağlamı veriyor.
+ */
+export function sectorPeers(
+  rows: PeerRow[],
+  map: SectorMap | null,
+  symbol: string,
+): SectorPeers | null {
+  const sector = map?.of[symbol];
+  // Sembolün sektörü bilinmiyorsa akran listesi ÜRETİLMEZ: rastgele bir grup
+  // göstermek, olmayan bir bağlamı varmış gibi sunmak olurdu.
+  if (!sector) return null;
+
+  const peers = rows
+    .filter((row) => map!.of[row.symbol] === sector)
+    .sort((a, b) => b.value - a.value);
+  if (peers.length === 0) return null;
+
+  let value = 0;
+  let weighted = 0;
+  for (const peer of peers) {
+    value += peer.value;
+    weighted += peer.value * peer.changePct;
+  }
+
+  return {
+    sector,
+    rank: peers.findIndex((p) => p.symbol === symbol) + 1,
+    total: peers.length,
+    peers,
+    weightedChangePct: value ? weighted / value : NaN,
+  };
+}
+
 export function isSectorMap(value: unknown): value is SectorMap {
   if (!value || typeof value !== 'object') return false;
   const m = value as Partial<SectorMap>;

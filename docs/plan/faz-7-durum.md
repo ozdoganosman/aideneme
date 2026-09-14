@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 430 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 442 test)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -206,6 +206,29 @@ Uçtan uca doğrulandı: `st=breakout-55` ile açılan ekran URL'i tam kurala
    ile ayrılıyor (`adx14~g~k25`).
 
 İkisi de test altında; ikisi de gerçek veriyle karşılaşmadan önce yakalandı.
+
+## Sembol masasında sektör bağlamı
+
+"Bu hisse bugün %2 düştü" eksik bir cümledir: sektörü %3 düştüyse hisse aslında
+iyi performans göstermiştir. Yeni **Sektör** sekmesi bu bağlamı veriyor —
+sektör içindeki sıra (işlem değerine göre), sektörün ağırlıklı değişimi ve
+akran listesi (tıklanınca o sembole geçer).
+
+**Paket kendiliğinden inmiyor.** Sembol Masası bilinçli olarak tek sembolle
+çalışıyor ve ~1 MB'lık paketi indirmiyor (bkz. `performans.md`); akran
+karşılaştırması o paketi gerektirdiği için sekme önce boyutu söyleyip izin
+istiyor. Panel ayrı bir chunk: grafiğe gelen kullanıcı bu kodu da indirmiyor.
+
+Sembolün sektörü bilinmiyorsa **rastgele bir grup gösterilmiyor**; boş durum
+nedenini yazıyor.
+
+### Yol boyunca yakalanan kusur
+
+Grafik ayarları (EMA/Hacim anahtarları) diğer sekmelerde de görünüyordu:
+`hidden` özniteliği veriliyordu ama `.desk__toggles { display: flex }` onu
+eziyordu. Global bir `[hidden] { display: none !important }` kuralı eklendi —
+gizlenen bir kontrolün ekranda kalması, yanlış sekmenin ayarını göstermek
+demekti. Test altında.
 
 ## Sırada
 

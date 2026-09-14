@@ -32,9 +32,13 @@ const LazyFinancials = lazy(() =>
   import('./FinancialsPanel').then((m) => ({ default: m.FinancialsPanel })),
 );
 
+/** Sektör paneli de ayrı chunk; paketi yalnızca o sekme isterse indirir. */
+const LazySector = lazy(() => import('./SectorPanel').then((m) => ({ default: m.SectorPanel })));
+
 const VIEW_TABS = [
   { id: 'grafik', label: 'Grafik' },
   { id: 'finansal', label: 'Finansallar' },
+  { id: 'sektor', label: 'Sektör' },
 ];
 
 const TF_ITEMS = [
@@ -295,6 +299,12 @@ export default function SymbolDesk({ state, push }: Props) {
             symbol={symbol}
             price={candles.close[candles.length - 1]}
           />
+        </Suspense>
+      ) : null}
+
+      {tab === 'sektor' ? (
+        <Suspense fallback={<Skeleton count={4} height="40px" />}>
+          <LazySector market={market} symbol={symbol} onSelect={(next) => push({ s: next })} />
         </Suspense>
       ) : null}
 

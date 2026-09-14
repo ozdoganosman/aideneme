@@ -6,6 +6,7 @@ import {
   isSectorMap,
   sectorCoverage,
   sectorNames,
+  sectorPeers,
   withSectors,
 } from './sectors';
 
@@ -109,5 +110,38 @@ describe('tarama satırlarına sektör işleme', () => {
   it('sektör adlarını tekilleştirip Türkçe sıralar', () => {
     expect(sectorNames(MAP)).toEqual(['Bankacılık', 'Demir Çelik']);
     expect(sectorNames(null)).toEqual([]);
+  });
+});
+
+describe('sektör akranları', () => {
+  const rows = [
+    { symbol: 'GARAN', value: 900, changePct: -1 },
+    { symbol: 'AKBNK', value: 400, changePct: 2 },
+    { symbol: 'EREGL', value: 700, changePct: 3 },
+  ];
+
+  it('aynı sektördeki sembolleri işlem değerine göre sıralar', () => {
+    const out = sectorPeers(rows, MAP, 'AKBNK')!;
+    expect(out.sector).toBe('Bankacılık');
+    expect(out.peers.map((p) => p.symbol)).toEqual(['GARAN', 'AKBNK']);
+    expect(out.rank).toBe(2);
+    expect(out.total).toBe(2);
+  });
+
+  it('sektörün ağırlıklı değişimini verir (bağlam için)', () => {
+    // (900×−1 + 400×2) / 1300 = −0.0769…
+    expect(sectorPeers(rows, MAP, 'GARAN')!.weightedChangePct).toBeCloseTo(-1 / 13, 12);
+  });
+
+  it('sektörü bilinmeyen sembol için akran listesi üretmez', () => {
+    expect(sectorPeers(rows, MAP, 'XXXXX')).toBeNull();
+  });
+
+  it('sınıflandırma yoksa null döner', () => {
+    expect(sectorPeers(rows, null, 'GARAN')).toBeNull();
+  });
+
+  it('tek üyeli sektörde sıra 1/1 olur', () => {
+    expect(sectorPeers(rows, MAP, 'EREGL')).toMatchObject({ rank: 1, total: 1 });
   });
 });

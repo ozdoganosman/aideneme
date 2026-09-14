@@ -153,3 +153,18 @@ describe('SymbolDesk', () => {
     expect(options.join(' ')).toContain('GARAN');
   });
 });
+
+describe('Sembol Masası — sekmeler', () => {
+  it('grafik ayarları yalnızca grafik sekmesinde görünür', async () => {
+    const user = userEvent.setup();
+    render(<SymbolDesk state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByTestId('chart')).toBeInTheDocument());
+
+    const toggles = screen.getByLabelText('EMA 50').closest('.desk__toggles');
+    expect(toggles).not.toHaveAttribute('hidden');
+
+    await user.click(screen.getByRole('tab', { name: 'Sektör' }));
+    // hidden özniteliği: CSS'te display kuralı bunu ezmemeli (shell.css).
+    await waitFor(() => expect(toggles).toHaveAttribute('hidden'));
+  });
+});

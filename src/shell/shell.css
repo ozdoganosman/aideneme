@@ -352,6 +352,11 @@
 .desk__tf {
   margin-bottom: 2px;
 }
+/* [hidden] hiçbir display kuralı tarafından ezilmemeli: gizlenen bir kontrol
+   ekranda kalırsa yanlış sekmenin ayarı görünür (gerçek bir kusurdu). */
+[hidden] {
+  display: none !important;
+}
 .desk__toggles {
   display: flex;
   align-items: center;
@@ -1007,6 +1012,64 @@
   border-top: 1px solid var(--border-subtle);
   color: var(--text-muted);
   font-size: var(--fs-xs);
+}
+
+/* Sembol masası — sektör bağlamı. */
+.desk__sector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.desk__sector header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.desk__sector-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.desk__sector-cta p {
+  margin: 0;
+  max-width: 62ch;
+}
+.desk__sector-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.desk__sector-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.desk__sector-table th,
+.desk__sector-table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.desk__sector-table th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+}
+.desk__sector-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.desk__sector-table tr.is-current {
+  background: var(--surface-raised, var(--bg));
+  font-weight: 600;
 }
 
 /* Tarayıcı — sektör rozetleri. */
