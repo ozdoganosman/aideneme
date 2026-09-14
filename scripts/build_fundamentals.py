@@ -29,6 +29,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -463,6 +464,74 @@ def self_test() -> None:
         finally:
             PUBLISHED_SYMBOLS = gercek
 
+    # PARALEL İNDİRME. Sırayla 420 sembol 2–3,5 saat sürüyor ve hiçbir CI
+    # işine sığmıyor; liste her turda birkaç sembol ilerlediği için kullanıcı
+    # yıllarca "finansal veri yok" görüyordu.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        eszamanli = {"simdi": 0, "en_cok": 0}
+        kilit = threading.Lock()
+
+        def yavas(symbol: str):
+            with kilit:
+                eszamanli["simdi"] += 1
+                eszamanli["en_cok"] = max(eszamanli["en_cok"], eszamanli["simdi"])
+            time.sleep(0.02)  # ağ beklemesini taklit et
+            with kilit:
+                eszamanli["simdi"] -= 1
+            if symbol == "KOTU":
+                return None
+            return {"symbol": symbol, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}
+
+        hedef = [f"P{i}" for i in range(1, 13)] + ["KOTU"]
+        _, fetched, failed = build_all(hedef, out, yavas, workers=4)
+        assert fetched == 12, f"paralel yolda 12 sembol inmeliydi, {fetched}"
+        assert failed == 1, f"başarısız sembol paralel yolda da sayılmalı, {failed}"
+        assert eszamanli["en_cok"] > 1, "eşzamanlılık hiç oluşmadı — paralel yol çalışmıyor"
+        assert eszamanli["en_cok"] <= 4, f"işçi sınırı aşıldı: {eszamanli['en_cok']}"
+        snap = json.loads((out / SNAPSHOT_FILE).read_text(encoding="utf-8"))
+        assert len(snap["symbols"]) == 12, sorted(snap["symbols"])
+        assert read_failures(out).get("KOTU") == 1, "paralel yolda sayaç işlemedi"
+
+    # Paralel yolda da SÜRE BÜTÇESİ geçerli: dolduğunda yeni iş verilmemeli.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        saat = [0.0]
+
+        def saatli(symbol: str):
+            saat[0] += 10.0
+            return {"symbol": symbol, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}
+
+        _, fetched, _ = build_all(
+            [f"Q{i}" for i in range(1, 21)],
+            out,
+            saatli,
+            every=100,
+            max_seconds=25,
+            now=lambda: saat[0],
+            workers=3,
+        )
+        # Uçuştaki işler toplanıyor, yenisi verilmiyor: sayı işçi sayısı kadar
+        # taşabilir ama listenin tamamı İNMEMELİ.
+        assert 3 <= fetched <= 8, f"süre bütçesi paralel yolda tutmadı: {fetched}"
+
+    # BAŞARISIZLIK SAYAÇLARI ayıklama kuralı değişince sıfırlanmalı. Ölçüldü:
+    # madde numarası soyma eklendikten sonra AKBNK/ALBRK/GARAN'a tek istek bile
+    # gitmedi, çünkü eski kuralla biriken sayaç onları listeden düşürmüştü.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        write_failures({"AKBNK": 5}, out)
+        assert read_failures(out) == {"AKBNK": 5}, "aynı sürümde sayaç korunmalı"
+        eski = json.loads((out / FAILURES_FILE).read_text(encoding="utf-8"))
+        eski["_version"] = EXTRACT_VERSION - 1
+        (out / FAILURES_FILE).write_text(json.dumps(eski), encoding="utf-8")
+        assert read_failures(out) == {}, "eski kuralın sayaçları atılmalı"
+        # Sürüm alanı olmayan dosya da eski kuraldandır.
+        (out / FAILURES_FILE).write_text(json.dumps({"AKBNK": 5}), encoding="utf-8")
+        assert read_failures(out) == {}, "sürümsüz dosya eski kuraldandır"
+        # ...ve sıfırlanınca sembol yeniden denenir.
+        assert pending_symbols(["AKBNK"], out, failures=read_failures(out)) == ["AKBNK"]
+
     assert group_order("AKBNK")[0] == "2", "bankada önce UFRS denenmeli"
     assert group_order("AGESA")[0] == "1", "sanayide önce XI_29 denenmeli"
     for sym in ("AKBNK", "AGESA"):
@@ -570,19 +639,52 @@ SNAPSHOT_FILE = "snapshot.json"
 FAILURES_FILE = "failures.json"
 MAX_ATTEMPTS = 3
 
+# Ayıklama kurallarının sürümü. Kalem adları, madde numarası soyma ya da
+# şablon sırası değiştiğinde ELLE artırılır.
+#
+# Neden gerekli: "AKBNK üç kez alınamadı" kaydı, o üç denemenin YAPILDIĞI
+# kuralların ifadesidir. Madde numarası soyma eklendiğinde aynı sembol artık
+# okunabiliyordu ama sayaç 5'te kalmıştı ve sembol listeden düşük olduğu için
+# düzeltme HİÇ denenmedi. Ölçüldü: düzeltmeden sonraki turlarda AKBNK, ALBRK
+# ve GARAN'a tek bir istek bile gitmedi. Kural değişince eski sayaç bir kanıt
+# değil, yalnızca eski bir kusurun gölgesidir; sürüm atlayınca sıfırlanır.
+EXTRACT_VERSION = 2
+
 
 def read_failures(out_dir: Path) -> dict[str, int]:
-    """Sembol → üst üste başarısız deneme sayısı."""
+    """
+    Sembol → üst üste başarısız deneme sayısı.
+
+    Dosya başka bir ayıklama sürümünde yazılmışsa sayaçlar ATILIR (yukarıdaki
+    EXTRACT_VERSION notuna bakın). Sürüm alanı olmayan eski dosyalar da öyle:
+    onlar madde numarası soyma öncesinden kalma.
+    """
     try:
         data = json.loads((out_dir / FAILURES_FILE).read_text(encoding="utf-8"))
-        return {k: int(v) for k, v in data.items() if isinstance(v, (int, float))}
     except (OSError, json.JSONDecodeError, ValueError, AttributeError):
         return {}
+    if not isinstance(data, dict):
+        return {}
+    if data.get("_version") != EXTRACT_VERSION:
+        print(
+            f"[fund] başarısızlık sayaçları eski kurala ait "
+            f"(v{data.get('_version')!r} ≠ v{EXTRACT_VERSION}) — sıfırlanıyor"
+        )
+        return {}
+    counts = data.get("counts", {})
+    if not isinstance(counts, dict):
+        return {}
+    return {k: int(v) for k, v in counts.items() if isinstance(v, (int, float))}
 
 
 def write_failures(failures: dict[str, int], out_dir: Path) -> None:
     (out_dir / FAILURES_FILE).write_text(
-        json.dumps(failures, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        json.dumps(
+            {"_version": EXTRACT_VERSION, "counts": failures},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
     )
 
 
@@ -635,6 +737,57 @@ def write_snapshot(records: list[dict], out_dir: Path) -> None:
     )
 
 
+def _fetch_stream(pending: list[str], fetch, workers: int, should_stop):
+    """
+    (sembol, kayıt) çiftlerini üretir; `workers > 1` ise TAMAMLANMA sırasında.
+
+    Neden paralel: sembol başına maliyet ağ bekleme, işlem değil. Kaynak her
+    sembol için yıl yıl istek alıyor (2015–2026 için 12 istek) ve üç tablo
+    şablonunu sırayla deniyor; ölçülen süre sembol başına 15–30 sn. Sırayla
+    420 sembol 2–3,5 saat demek — hiçbir CI işine sığmaz ve her turda birkaç
+    sembol ilerleyen bir liste kullanıcıya ASLA tamamlanmış görünmez.
+
+    Neden altı: kaynak tek bir kurumun sunucusu, sınırsız eşzamanlılık
+    kabalık ve engellenme riski. Altı işçi bekleme süresini örtüştürmeye
+    yetiyor, saniyedeki istek sayısını insani tutuyor.
+
+    `workers == 1` yolu tek satırlık ve SIRALI: mevcut testler (kesilme
+    tatbikatı, süre bütçesi) bu yolu sınıyor ve davranışı değişmedi.
+    """
+    if workers <= 1:
+        for symbol in pending:
+            if should_stop():
+                return
+            yield symbol, fetch(symbol)
+        return
+
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+    executor = ThreadPoolExecutor(max_workers=workers)
+    try:
+        queue = list(reversed(pending))
+        running: dict = {}
+        while queue or running:
+            # Süre dolduysa YENİ iş verilmiyor; uçuştakiler toplanıp çıkılıyor.
+            while queue and len(running) < workers and not should_stop():
+                symbol = queue.pop()
+                running[executor.submit(fetch, symbol)] = symbol
+            if not running:
+                return
+            done, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in done:
+                symbol = running.pop(future)
+                try:
+                    yield symbol, future.result()
+                except Exception as e:  # noqa: BLE001
+                    # fetch_one kendi hatalarını yutuyor; buraya düşen bir şey
+                    # beklenmedik demektir — sembolü düşürüp devam ediyoruz.
+                    print(f"[fund] {symbol}: beklenmedik hata ({e})", file=sys.stderr)
+                    yield symbol, None
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def build_all(
     pending: list[str],
     out_dir: Path,
@@ -642,6 +795,7 @@ def build_all(
     every: int = 25,
     max_seconds: float | None = None,
     now=time.monotonic,
+    workers: int = 1,
 ) -> tuple[list[dict], int, int]:
     """
     Eksik sembolleri indirip diske yazar; arada bir anlık görüntüyü tazeler ve
@@ -664,14 +818,23 @@ def build_all(
     fetched = 0
     failed = 0
     started = now()
-    for i, symbol in enumerate(pending, 1):
-        if max_seconds is not None and now() - started >= max_seconds:
+    deadline_reported = False
+
+    def should_stop() -> bool:
+        nonlocal deadline_reported
+        if max_seconds is None or now() - started < max_seconds:
+            return False
+        if not deadline_reported:
+            deadline_reported = True
             print(
-                f"[fund] süre doldu ({max_seconds:.0f} sn) — {i - 1}/{len(pending)} işlendi, "
-                "kalanlar bir sonraki çalıştırmaya"
+                f"[fund] süre doldu ({max_seconds:.0f} sn) — {fetched + failed}/{len(pending)} "
+                "işlendi, kalanlar bir sonraki çalıştırmaya"
             )
-            break
-        record = fetch(symbol)
+        return True
+
+    i = 0
+    for symbol, record in _fetch_stream(pending, fetch, workers, should_stop):
+        i += 1
         if not record:
             failed += 1
             # Başarısızlık HEMEN kaydediliyor: süre dolup kesilirsek de
@@ -711,6 +874,12 @@ def main() -> None:
         default=float(os.environ.get("FUND_MAX_SECONDS", 0)) or None,
         help="bu süreden sonra temiz dur (CI adım sınırından ÖNCE bitmek için)",
     )
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=int(os.environ.get("FUND_WORKERS", 1)),
+        help="eşzamanlı indirme sayısı (ağ beklemesi örtüşsün diye; kaynağa saygılı tutun)",
+    )
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args()
 
@@ -745,13 +914,17 @@ def main() -> None:
     if not pending:
         print(f"[fund] {len(symbols)} sembolün hepsi zaten var (FORCE_ALL ile tazelenir)")
     else:
-        print(f"[fund] {len(pending)}/{len(symbols)} sembol eksik, indiriliyor")
+        print(
+            f"[fund] {len(pending)}/{len(symbols)} sembol eksik, "
+            f"{max(1, args.workers)} eşzamanlı indiriliyor"
+        )
 
     records, fetched, failed = build_all(
         pending,
         OUT,
         lambda sym: fetch_one(sym, args.start_year, args.end_year),
         max_seconds=args.max_seconds,
+        workers=max(1, args.workers),
     )
 
     if not records:

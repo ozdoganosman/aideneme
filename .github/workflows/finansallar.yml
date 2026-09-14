@@ -1,0 +1,113 @@
+name: finansallar
+
+# Finansal tabloları çeken AYRI iş. Önizleme dağıtımından ayrılmasının sebebi
+# ölçüldü: tarama `onizleme` işinin içindeyken her push taramayı aç bırakıyordu.
+#
+# 1) Kuyruk. İkisi de `deploy` grubundaydı; bir push geldiğinde SIRADAKİ
+#    çalıştırma iptal ediliyor. Bankaları doğrulamak için elle tetiklediğim
+#    tur (run 24) kendi push'um tarafından iptal edildi, hiç çalışmadı.
+# 2) Bütçe. Her push'ta tarama 420 sn alıyordu; sembol başına 15–30 sn ile
+#    tur başına ~20 sembol. 420 eksik sembol ≈ 20 tur. Sıklıkla push atınca
+#    ilerleme sıfıra yakın kalıyordu.
+#
+# Artık tarama kendi kuyruğunda, kendi saatinde ve eşzamanlı çalışıyor.
+# Önizleme yalnızca gh-pages'te NE VARSA onu yayımlıyor; tarama ile arasında
+# bağımlılık yok, ikisi birbirini bekletmiyor.
+on:
+  schedule:
+    # Üç saatte bir. Bilançolar günde birkaç kez değişmiyor; bu sıklık
+    # eksikleri kapatmak ve yeni dönem tablolarını yakalamak için yeterli.
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      semboller:
+        description: 'Yalnızca bu semboller (virgülle) — atlama listesini yok sayar'
+        required: false
+        default: ''
+      hepsi:
+        description: 'Var olanlar dahil hepsini yeniden çek (tam tazeleme)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+# Önizlemeden AYRI kuyruk: push'lar taramayı iptal edemesin.
+# İptal yok, çünkü yarıda kesilen tarama kısmi klasör bırakır.
+concurrency:
+  group: finansallar
+  cancel-in-progress: false
+
+jobs:
+  finansallar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Yayındaki veri: hem sembol listesi (655) hem de önceki turların
+      # indirdikleri. Betik kaldığı yerden devam ediyor.
+      - name: Yayındaki veriyi al
+        run: |
+          git clone -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" _site
+          mkdir -p public/data
+          if [ -d _site/data/bist ]; then cp -r _site/data/bist public/data/; fi
+          ls public/data/bist/fundamentals 2>/dev/null | wc -l
+
+      # Süreyi BETİK sınırlıyor, adım değil: `timeout-minutes` bu süreci
+      # öldürmüyor, öksüz kalıp yazmaya devam ediyor ve yayımlama adımıyla
+      # yarışıyor (ölçüldü). Adımdaki sınır yalnızca emniyet freni.
+      - name: Finansal tablolar (İş Yatırım)
+        continue-on-error: true
+        timeout-minutes: 50
+        env:
+          FUND_MAX_SECONDS: '2700'
+          FUND_WORKERS: '6'
+          FUND_ONLY: ${{ inputs.semboller }}
+          FORCE_ALL: ${{ inputs.hepsi && '1' || '' }}
+        run: |
+          python -m pip install --quiet isyatirimhisse pandas
+          python scripts/build_fundamentals.py
+
+      - name: gh-pages'e yayımla
+        run: |
+          set -e
+          mkdir -p _site/data/bist
+          rm -rf _site/data/bist/fundamentals
+          cp -r public/data/bist/fundamentals _site/data/bist/fundamentals
+
+          cd _site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # YALNIZCA finansal tablolar. Önizleme işi aynı dalın başka
+          # klasörlerini (onizleme/, data/bist/pack/) yazıyor; `git add -A`
+          # onun işini geri almaya çalışırdı.
+          git add data/bist/fundamentals
+          if git diff --cached --quiet; then
+            echo "Yeni finansal tablo yok."
+            exit 0
+          fi
+          git commit -q -m "finansallar ${GITHUB_RUN_ID}"
+
+          # İki iş aynı dala yazıyor. Yollar ayrık olduğu için rebase temiz
+          # uygulanır; çakışma yalnızca zamanlamadandır, içerikten değil.
+          url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          for deneme in 1 2 3 4 5; do
+            if git push "$url" gh-pages; then exit 0; fi
+            echo "push reddedildi ($deneme), yeniden tabanlanıyor"
+            git fetch "$url" gh-pages
+            git rebase FETCH_HEAD || { git rebase --abort; exit 1; }
+            sleep $((deneme * 3))
+          done
+          exit 1
+
+      - name: Kapsam
+        if: always()
+        run: |
+          var=$(ls _site/data/bist/fundamentals/*.json 2>/dev/null | grep -vc -e snapshot -e failures || echo 0)
+          top=$(python -c "import json;print(len(json.load(open('public/data/bist/symbols.json'))['symbols']))" 2>/dev/null || echo '?')
+          echo "### Finansal tablo kapsamı: $var / $top" >> $GITHUB_STEP_SUMMARY

@@ -11,18 +11,16 @@ name: onizleme
 on:
   push:
     branches: [claude/stoic-planck-vxaul2]
+  # Elle tetikleme: veri yeniden paketlensin diye (sembol seçimi artık
+  # `finansallar` işinin girdisi).
   workflow_dispatch:
-    inputs:
-      semboller:
-        description: 'Yalnızca bu semboller (virgülle) — atlama listesini yok sayar, teşhis için'
-        required: false
-        default: ''
 
 permissions:
   contents: write
 
 # Kök dağıtımıyla AYNI kuyruk: gh-pages'e iki iş aynı anda yazmasın.
 # İptal edilmiyor, çünkü yarıda kesilen bir yayın kısmi ağaç bırakır.
+# (`finansallar` işi AYRI kuyrukta — bu iş onu bekletmiyor, iptal etmiyor.)
 concurrency:
   group: deploy
   cancel-in-progress: false
@@ -53,31 +51,12 @@ jobs:
       # Kaynaklara erişilemezse dosyalar yazılmaz; arayüz "veri yok" der,
       # derleme kırılmaz (deploy.yml ile aynı sözleşme).
       #
-      # HER ADIMIN KENDİ ZAMAN SINIRI VAR. İlk çalıştırmada finansal tablo
-      # çekimi ~660 sembolü tek tek indiriyor ve 13 dakikada bitmedi; işin
-      # 30 dakikalık üst sınırına dayansa HİÇBİR ŞEY yayımlanmazdı. Önizleme
-      # isteğe bağlı veriye bağımlı olamaz: yetişen veri girer, yetişmeyen
-      # bir sonraki çalıştırmaya kalır (betikler kaldıkları yerden devam eder).
-      # Süreyi BETİK sınırlıyor, adım değil: `timeout-minutes` bu süreci
-      # öldürmüyor — öksüz kalıp yazmaya devam ediyor ve yayımlama adımıyla
-      # yarışıyor (ölçüldü: iş sonunda runner "Terminate orphan process:
-      # (python)" diye topladı, anlık görüntü yayına yetişmedi). Adımdaki
-      # sınır artık yalnızca emniyet freni.
-      #
-      # Bütçe olaya göre: kaynak sembol başına YIL YIL istek atıyor (2015–2026
-      # için 12 istek), yani sembol başına ~15–30 sn. Her push'ta uzun sürmesi
-      # anlamsız; birikeni elle tetiklenen çalıştırma toplu olarak çekiyor.
-      # Betik kaldığı yerden devam ettiği için ikisi aynı listeyi ilerletiyor.
-      - name: Finansal tablolar (İş Yatırım)
-        continue-on-error: true
-        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 28 || 9 }}
-        env:
-          FUND_MAX_SECONDS: ${{ github.event_name == 'workflow_dispatch' && '1500' || '420' }}
-          FUND_ONLY: ${{ inputs.semboller }}
-        run: |
-          python -m pip install --quiet isyatirimhisse pandas
-          python scripts/build_fundamentals.py
-
+      # FİNANSAL TABLOLAR BURADA ÇEKİLMİYOR — ayrı `finansallar` işinde.
+      # Ölçüldü: tarama bu işin içindeyken her push onu aç bırakıyordu.
+      # Aynı kuyrukta oldukları için sıradaki tarama iptal ediliyor, ayrıca
+      # push başına 420 sn bütçe sembol başına 15–30 sn ile tur başına ~20
+      # sembole denk geliyordu. Önizleme artık gh-pages'te NE VARSA onu
+      # yayımlıyor; isteğe bağlı veriyi beklemiyor.
       - name: Sektör sınıflandırması
         continue-on-error: true
         timeout-minutes: 3
@@ -121,10 +100,8 @@ jobs:
           for f in sectors.json fx.json; do
             if [ -f "public/data/bist/$f" ]; then cp "public/data/bist/$f" "_site/data/bist/$f"; fi
           done
-          if [ -d public/data/bist/fundamentals ]; then
-            rm -rf _site/data/bist/fundamentals
-            cp -r public/data/bist/fundamentals _site/data/bist/fundamentals
-          fi
+          # Finansal tablolara dokunulmuyor: onları `finansallar` işi yazıyor
+          # ve buradaki kopya o işin klonu alındığı andan eski olabilir.
 
           cd _site
           touch .nojekyll
@@ -136,7 +113,18 @@ jobs:
             exit 0
           fi
           git commit -q -m "onizleme ${GITHUB_SHA}"
-          git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+
+          # `finansallar` işi aynı dala yazıyor; yollar ayrık olduğu için
+          # rebase temiz uygulanır, çakışma yalnızca zamanlamadandır.
+          url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          for deneme in 1 2 3 4 5; do
+            if git push "$url" gh-pages; then exit 0; fi
+            echo "push reddedildi ($deneme), yeniden tabanlanıyor"
+            git fetch "$url" gh-pages
+            git rebase FETCH_HEAD || { git rebase --abort; exit 1; }
+            sleep $((deneme * 3))
+          done
+          exit 1
 
       - name: Adres
         run: |
