@@ -42,15 +42,18 @@ test('nabız: ısı haritası ve sektör akışı gerçek worker ile hesaplanıy
 
 test('nabız → tarayıcı: sektör satırı o sektör seçili taramayı açıyor', async ({ page }) => {
   await open(page, 'v=nabiz');
-  const row = page.locator('.pulse__flows tbody tr').first();
-  await expect(row).toBeVisible();
+  await expect(page.locator('.pulse__flows tbody tr').first()).toBeVisible();
 
-  const tara = row.getByRole('button', { name: /sektörünü tarayıcıda aç$/ });
-  const sector = (await tara.getAttribute('aria-label'))!.replace(
-    ' sektörünü tarayıcıda aç',
-    '',
+  // Adı BOŞLUKLU bir sektör varsa onu seç: boşluk sorgu dizesinde "+" olarak
+  // kodlanır ve tek kelimelik bir adla bu yol hiç sınanmamış olurdu.
+  const buttons = page.getByRole('button', { name: /sektörünü tarayıcıda aç$/ });
+  const labels = await buttons.evaluateAll((els) =>
+    els.map((el) => el.getAttribute('aria-label') ?? ''),
   );
-  await tara.click();
+  const strip = (label: string) => label.replace(' sektörünü tarayıcıda aç', '');
+  const picked = labels.find((l) => strip(l).includes(' ')) ?? labels[0];
+  const sector = strip(picked);
+  await page.getByRole('button', { name: picked }).click();
 
   await expect(page.locator('.ui-vtable')).toBeVisible();
   // Tek bir rozet seçili ve o rozet Nabız'da tıklanan sektör.
@@ -58,7 +61,12 @@ test('nabız → tarayıcı: sektör satırı o sektör seçili taramayı açıy
   await expect(page.locator('.screener__chip.is-on')).toHaveText(sector);
   // Kural eklenmedi: kullanıcının kurmadığı bir filtre varsayılmıyor.
   await expect(page.getByRole('button', { name: /^Giriş kuralları/ })).toHaveCount(0);
-  expect(decodeURIComponent(page.url())).toContain(`|${sector}|`);
+  // DİKKAT: sorgu dizesinde boşluk "+" olarak kodlanır ve decodeURIComponent
+  // bunu boşluğa ÇEVİRMEZ ("Demir Çelik" → "Demir+Çelik"). Adı iki kelimelik
+  // bir sektörde bu testi kıran gerçek bir tuzaktı; URLSearchParams doğru
+  // çözüyor.
+  const f = new URL(page.url()).searchParams.get('f') ?? '';
+  expect(f.split('|')[3]).toBe(sector);
 });
 
 test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor', async ({ page }) => {
