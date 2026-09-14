@@ -101,11 +101,11 @@ describe('model kartı', () => {
   });
 
   it('tüm ölçümler katman-dışı tahminlerden gelir; sızıntı temizliği sayılır', () => {
-    const { card } = trainModel(momentumRegime(1200), { folds: 5, embargoBars: 10 });
+    const { card } = trainModel(momentumRegime(1200), { folds: 5, embargoDays: 14 });
     expect(card.folds).toBeGreaterThan(1);
     // Etiketler 10 bar sürdüğü için her katmanda atılan örnek olmalı.
     expect(card.purged).toBeGreaterThan(0);
-    expect(card.embargoBars).toBe(10);
+    expect(card.embargoDays).toBe(14);
   });
 
   it('kart her zaman sınırlarını yazar ve kalibrasyon kovalarını taşır', () => {

@@ -10,7 +10,7 @@ import {
   type ReliabilityBin,
 } from './calibration';
 import { purgedFolds } from './cv';
-import { buildFeatures, isComplete, type FeatureDef } from './features';
+import { FEATURE_DEFS, buildFeatures, isComplete, type FeatureDef } from './features';
 import { DEFAULT_BARRIERS, tripleBarrier, type BarrierOptions } from './labels';
 import { predictProba, trainLogistic } from './logistic';
 
@@ -50,12 +50,15 @@ export type ModelVerdict = 'kullanılabilir' | 'zayıf' | 'kullanma';
 
 export interface ModelCard {
   symbol: string;
+  /** Kaç sembolün örnekleri havuzlandı (1 = tek sembol). */
+  symbols: number;
   /** Etiketleme kuralı (üçlü bariyer parametreleri). */
   barriers: BarrierOptions;
   samples: number;
   positiveRate: number;
   folds: number;
-  embargoBars: number;
+  /** Karantina penceresi (takvim günü). */
+  embargoDays: number;
   /** Sızıntı riski nedeniyle eğitimden atılan örnek sayısı (tüm katmanlar). */
   purged: number;
   firstDay: number;
@@ -83,48 +86,115 @@ export interface TrainRequest {
   symbol?: string;
   barriers?: BarrierOptions;
   folds?: number;
-  embargoBars?: number;
+  /**
+   * Testten sonra karantinaya alınacak TAKVİM GÜNÜ sayısı.
+   *
+   * Bar değil gün: sızıntı temizliği takvim ekseninde çalışıyor (havuzlanmış
+   * eğitimde bar indeksleri semboller arasında kıyaslanamaz). 10 işlem günü
+   * ≈ 14 takvim günü olduğu için varsayılan, ufku 1,4 ile ölçekliyor; bar
+   * sayısı olduğu gibi kullanılsaydı embargo olması gerekenden KISA olurdu.
+   */
+  embargoDays?: number;
   /** Sinyal sayılacak olasılık eşiği. */
   threshold?: number;
 }
 
 const MIN_SAMPLES = 200;
 
-export function trainModel(candles: Candles, request: TrainRequest = {}): ModelResult {
-  const barriers = request.barriers ?? DEFAULT_BARRIERS;
-  const k = request.folds ?? 5;
-  const embargoBars = request.embargoBars ?? barriers.horizon;
-  const threshold = request.threshold ?? 0.55;
-  const symbol = request.symbol ?? '';
+export interface Samples {
+  rows: Float64Array[];
+  y: number[];
+  /**
+   * Örneğin başladığı ve kesinleştiği GÜN (epoch gün) — bar indeksi değil.
+   *
+   * Havuzlanmış (çok sembollü) eğitimde bar indeksleri semboller arasında
+   * kıyaslanamaz; sızıntı temizliği ortak bir TAKVİM ekseni ister. Tek sembolde
+   * de aynı eksen kullanılıyor ki iki yol aynı kodu paylaşsın.
+   */
+  startDay: number[];
+  endDay: number[];
+  ret: number[];
+  /** Havuzda hangi sembolden geldiği; tek sembolde hepsi aynı. */
+  symbol: string[];
+  /** Son barın özellik vektörü tamsa canlı tahmin için. */
+  latest: { day: number; row: Float64Array } | null;
+}
 
+/** Bir sembolden etiketli, tam özellikli örnekler üretir. */
+export function buildSamples(candles: Candles, barriers: BarrierOptions, symbol = ''): Samples {
   const labels = tripleBarrier(candles, barriers);
   const features = buildFeatures(candles);
+  const day = (i: number) => Math.floor(candles.time[i] / 86400);
+
+  const out: Samples = {
+    rows: [],
+    y: [],
+    startDay: [],
+    endDay: [],
+    ret: [],
+    symbol: [],
+    latest: null,
+  };
 
   // Yalnızca hem etiketi hem TAM özellik vektörü olan barlar.
-  const rows: Float64Array[] = [];
-  const y: number[] = [];
-  const start: number[] = [];
-  const end: number[] = [];
-  const ret: number[] = [];
   for (let s = 0; s < labels.index.length; s++) {
     const i = labels.index[s];
     if (!isComplete(features.rows[i])) continue;
-    rows.push(features.rows[i]);
-    y.push(labels.y[s]);
-    start.push(i);
-    end.push(labels.touchedAt[s]);
-    ret.push(labels.retPct[s]);
+    out.rows.push(features.rows[i]);
+    out.y.push(labels.y[s]);
+    out.startDay.push(day(i));
+    out.endDay.push(day(labels.touchedAt[s]));
+    out.ret.push(labels.retPct[s]);
+    out.symbol.push(symbol);
   }
+
+  const lastIndex = candles.length - 1;
+  if (lastIndex >= 0 && isComplete(features.rows[lastIndex])) {
+    out.latest = { day: day(lastIndex), row: features.rows[lastIndex] };
+  }
+  return out;
+}
+
+export function trainModel(candles: Candles, request: TrainRequest = {}): ModelResult {
+  const barriers = request.barriers ?? DEFAULT_BARRIERS;
+  return evaluateSamples(buildSamples(candles, barriers, request.symbol ?? ''), {
+    ...request,
+    barriers,
+    symbols: 1,
+  });
+}
+
+/**
+ * Çekirdek: örnek havuzunu alır, purged CV ile katman-dışı tahminler üretir ve
+ * model kartını kurar. Tek sembol de çok sembol de buradan geçer — ölçüm
+ * yöntemi ikisinde AYNI olsun diye.
+ */
+export function evaluateSamples(
+  samples: Samples,
+  request: TrainRequest & { barriers: BarrierOptions; symbols: number },
+): ModelResult {
+  const barriers = request.barriers;
+  const k = request.folds ?? 5;
+  const embargoDays = request.embargoDays ?? Math.ceil(barriers.horizon * 1.4);
+  const threshold = request.threshold ?? 0.55;
+  const symbol = request.symbol ?? '';
+
+  const rows = samples.rows;
+  const y = samples.y;
+  const start = samples.startDay;
+  const end = samples.endDay;
+  const ret = samples.ret;
+  const pooled = request.symbols > 1;
 
   const n = rows.length;
   const positives = y.reduce((a, b) => a + b, 0);
   const positiveRate = n > 0 ? positives / n : NaN;
 
-  const folds = n >= MIN_SAMPLES ? purgedFolds(start, end, { k, embargoBars }) : [];
+  const folds = n >= MIN_SAMPLES ? purgedFolds(start, end, { k, embargoBars: embargoDays }) : [];
 
   const oof = new Float64Array(n).fill(NaN);
-  const weightSums = new Float64Array(features.defs.length);
-  const signCounts = new Int32Array(features.defs.length);
+  const weightSums = new Float64Array(FEATURE_DEFS.length);
+  const signCounts = new Int32Array(FEATURE_DEFS.length);
   let purged = 0;
   let usedFolds = 0;
 
@@ -194,7 +264,7 @@ export function trainModel(candles: Candles, request: TrainRequest = {}): ModelR
     }
   }
 
-  const featureWeights: FeatureWeight[] = features.defs.map((def, d) => ({
+  const featureWeights: FeatureWeight[] = FEATURE_DEFS.map((def, d) => ({
     ...def,
     weight: usedFolds > 0 ? weightSums[d] / usedFolds : NaN,
     stable: usedFolds > 0 && Math.abs(signCounts[d]) === usedFolds,
@@ -228,7 +298,10 @@ export function trainModel(candles: Candles, request: TrainRequest = {}): ModelR
     );
   }
   warnings.push(
-    'Tek sembolde, tek dönemde ölçüldü; işlem maliyeti ve emir gerçekleşmesi modele dahil değil.',
+    pooled
+      ? `${request.symbols} sembolün örnekleri havuzlandı; tek bir dönemde ölçüldü ve işlem ` +
+          'maliyeti ile emir gerçekleşmesi modele dahil değil.'
+      : 'Tek sembolde, tek dönemde ölçüldü; işlem maliyeti ve emir gerçekleşmesi modele dahil değil.',
   );
 
   const verdict: ModelVerdict =
@@ -242,14 +315,15 @@ export function trainModel(candles: Candles, request: TrainRequest = {}): ModelR
 
   const card: ModelCard = {
     symbol,
+    symbols: request.symbols,
     barriers,
     samples: n,
     positiveRate,
     folds: usedFolds,
-    embargoBars,
+    embargoDays,
     purged,
-    firstDay: n > 0 ? Math.floor(candles.time[start[0]] / 86400) : NaN,
-    lastDay: n > 0 ? Math.floor(candles.time[end[n - 1]] / 86400) : NaN,
+    firstDay: n > 0 ? Math.min(...start) : NaN,
+    lastDay: n > 0 ? Math.max(...end) : NaN,
     metrics,
     baseline,
     brierSkill,
@@ -268,18 +342,14 @@ export function trainModel(candles: Candles, request: TrainRequest = {}): ModelR
   // Canlı tahmin yalnızca kart "kullanma" demiyorsa üretilir; üretilse bile
   // UI sözleşmesi kartı yanında göstermeye mecburdur.
   let latest: ModelResult['latest'] = null;
-  if (verdict !== 'kullanma') {
-    const lastIndex = candles.length - 1;
-    const row = features.rows[lastIndex];
-    if (isComplete(row)) {
-      const model = trainLogistic(rows, y);
-      const scores = rows.map((r) => logit(predictProba(model, r)));
-      const platt = fitPlatt(scores, y);
-      latest = {
-        day: Math.floor(candles.time[lastIndex] / 86400),
-        probability: applyPlatt(platt, logit(predictProba(model, row))),
-      };
-    }
+  if (verdict !== 'kullanma' && samples.latest) {
+    const model = trainLogistic(rows, y);
+    const scores = rows.map((r) => logit(predictProba(model, r)));
+    const platt = fitPlatt(scores, y);
+    latest = {
+      day: samples.latest.day,
+      probability: applyPlatt(platt, logit(predictProba(model, samples.latest.row))),
+    };
   }
 
   return { card, latest };

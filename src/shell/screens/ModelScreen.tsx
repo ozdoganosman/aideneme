@@ -63,7 +63,7 @@ export default function ModelScreen({ state, push }: Props) {
           symbol,
           barriers: { horizon, upMult: mult, downMult: mult, volLength: 20 },
           folds: 5,
-          embargoBars: horizon,
+          embargoDays: Math.ceil(horizon * 1.4),
         });
         if (!cancelled) setResult(outcome);
       } catch (err) {
@@ -319,7 +319,7 @@ export default function ModelScreen({ state, push }: Props) {
             <p className="desk__muted">
               Yöntem: üçlü bariyer etiketleme (ufuk {card.barriers.horizon} bar, bariyerler ±
               {card.barriers.upMult}σ), L2 cezalı lojistik regresyon, purged {card.folds}-fold +{' '}
-              {card.embargoBars} bar embargo, Platt kalibrasyonu yalnızca eğitim katmanından
+              {card.embargoDays} bar embargo, Platt kalibrasyonu yalnızca eğitim katmanından
               öğrenildi. Tüm ölçümler katman dışı tahminlerden.
             </p>
             <Button onClick={() => push({ v: 'laboratuvar', s: symbol })}>

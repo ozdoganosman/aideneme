@@ -36,11 +36,12 @@ function candles(n: number): Candles {
 function card(overrides: Partial<ModelCard> = {}): ModelCard {
   return {
     symbol: 'THYAO',
+    symbols: 1,
     barriers: { horizon: 10, upMult: 1.5, downMult: 1.5, volLength: 20 },
     samples: 900,
     positiveRate: 0.5,
     folds: 5,
-    embargoBars: 10,
+    embargoDays: 14,
     purged: 120,
     firstDay: 19000,
     lastDay: 19900,
@@ -145,7 +146,7 @@ describe('Model ekranı', () => {
     expect(modelFn.mock.calls[0][1]).toMatchObject({
       symbol: 'THYAO',
       folds: 5,
-      embargoBars: 10,
+      embargoDays: 14,
       barriers: { horizon: 10, upMult: 1.5, downMult: 1.5 },
     });
   });
