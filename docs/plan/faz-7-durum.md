@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 372 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 387 test)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -19,6 +19,8 @@ piyasa ölçeğinde gösteren görünümdü.
 | Sıralamadan laboratuvara tek tıkla geçiş | `src/shell/screens/labRules.ts` |
 | Derin tarama (en likitler, tam geçmiş) | `WorkerRequest.type = 'rankSeries'` |
 | `prev` operandı (kırılım kuralları için) | `src/core/strategy/dsl.ts` |
+| Sektör bazlı para akışı | `src/core/screen/sectors.ts` |
+| Sektör sınıflandırma üreticisi | `scripts/build_sectors.py` |
 
 ## Kararlar
 
@@ -103,7 +105,32 @@ görünüm.
 Düzeltme sonrası THYAO'nun tam geçmişinde: `breakout-55` 0 → 41 işlem,
 `new-high-momentum` 0 → 29 işlem.
 
+## Sektör bazlı para akışı
+
+Nabız ekranı şimdiye kadar yalnızca **davranış kümelerine** (birlikte hareket
+edenler) bakabiliyordu. Bu iyi bir ölçüdür ama "endüstriden para akışı"
+sorusunun cevabı değildir: bir bankanın çimento şirketiyle aynı kümeye düşmesi
+mümkündür, sektörü değişmez. Artık ikisi ayrı görünüm ve sınıflandırma varsa
+varsayılan olan sektör.
+
+**Eşleşmeyen sembol gizlenmiyor.** "Sınıflandırılmamış" ayrı bir satır ve
+paylar toplam işlem değerinin TAMAMI üzerinden hesaplanıyor; gizleseydik
+kalan sektörlerin payı sessizce şişerdi. Kapsama oranı ("189/200 sembol
+eşleşti") başlıkta yazıyor.
+
+**Sınıflandırma yoksa uydurulmuyor.** `sectors.json` yoksa ekran davranış
+kümelerine düşüyor ve nedenini söylüyor; üretici script kaynağa erişemezse
+dosyayı YAZMIYOR (yarım bir sınıflandırma, olmayan bilgiyi varmış gibi
+gösterirdi). CI adımı bu yüzden `continue-on-error`.
+
+`build_sectors.py`'nin ayrıştırıcısı ağdan bağımsız: `--self-test` sabit örnek
+kayıtlar üzerinde çalışıyor ve doğrulama iş akışına eklendi. **Not:** kaynak uç
+noktası bu geliştirme ortamından erişilemediği için canlı yanıt formatı
+doğrulanamadı; ayrıştırıcı birden çok alan adını (SECTOR/Sektor/…) deniyor ve
+okunamayan kaydı atlıyor. Ekran görüntüleri yerel sentetik sınıflandırmayla
+alındı.
+
 ## Sırada
 
-- Sektör/endüstri bazlı para akışı: şu an davranış kümeleri var, resmî
-  sınıflandırma yok.
+- Sektör bilgisini tarayıcı filtrelerine bağlamak ("yalnızca bankacılık").
+- Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

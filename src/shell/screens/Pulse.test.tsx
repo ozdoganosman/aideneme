@@ -13,6 +13,11 @@ const FAKE_ANALYSIS = {
 };
 vi.mock('../useAnalysis', () => ({ useAnalysis: () => FAKE_ANALYSIS }));
 
+const sectorsFn = vi.fn();
+vi.mock('../../data-client/sectors', () => ({
+  sectorsClient: { map: (...a: unknown[]) => sectorsFn(...a) },
+}));
+
 // Canvas jsdom'da çizilmez.
 vi.mock('../chart/HeatMap', () => ({
   HeatMap: ({ rows, order }: { rows: PulseRow[]; order?: string[] }) => (
@@ -43,6 +48,7 @@ const STATE = { v: 'nabiz', m: 'bist', s: '', tf: 'D', cmp: '' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sectorsFn.mockResolvedValue(null); // varsayılan: sınıflandırma yok
   const rows = [
     row('AAA', 4, 5000),
     row('BBB', 1, 1000),
@@ -121,5 +127,48 @@ describe('Nabız', () => {
     await waitFor(() => expect(screen.getByTestId('heatmap')).toHaveTextContent('4 kutu'));
     expect(screen.getByTestId('heatmap')).toHaveAttribute('data-order', 'yok');
     expect(resolveCorrelate).not.toBeNull();
+  });
+});
+
+describe('Nabız — sektör bazlı para akışı', () => {
+  const SECTORS = {
+    source: 'İş Yatırım',
+    generated: 1,
+    of: { AAA: 'Bankacılık', BBB: 'Bankacılık', CCC: 'Demir Çelik' },
+  };
+
+  it('sınıflandırma varsa varsayılan görünüm sektörler olur', async () => {
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText(/Para akışı — sektörler/)).toBeInTheDocument());
+    expect(screen.getByText('Bankacılık')).toBeInTheDocument();
+    expect(screen.getByText('Demir Çelik')).toBeInTheDocument();
+  });
+
+  it('eşleşmeyen sembolü gizlemez ve kapsamayı yazar', async () => {
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<Pulse state={STATE} push={push} />);
+    // DDD'nin sektörü yok: ayrı satırda görünmeli, toplamdan düşülmemeli.
+    await waitFor(() => expect(screen.getByText('Sınıflandırılmamış')).toBeInTheDocument());
+    expect(screen.getByText(/3\/4 sembol eşleşti/)).toBeInTheDocument();
+  });
+
+  it('sektör payları toplam işlem değerinin tamamı üzerinden', async () => {
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<Pulse state={STATE} push={push} />);
+    // Bankacılık = AAA 5000 + BBB 1000 = 6000 / 15100 = %39,7
+    await waitFor(() => expect(screen.getByText('39.7%')).toBeInTheDocument());
+    // Sınıflandırılmamış = DDD 100 / 15100 = %0,7 — gizlenmiş olsaydı paylar şişerdi.
+    expect(screen.getByText('0.7%')).toBeInTheDocument();
+  });
+
+  it('sınıflandırma yoksa davranış gruplarına düşer ve nedenini söyler', async () => {
+    sectorsFn.mockResolvedValue(null);
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() =>
+      expect(screen.getByText(/Para akışı — davranış grupları/)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Sektör dosyası bu piyasada yok/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Gruplama')).toBeNull();
   });
 });

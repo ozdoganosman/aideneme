@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, EmptyState, Popover, Select, Skeleton, Stat, Toggle } from '../../ui';
 import { Icon } from '../../ui/icons';
 import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
+import { flowBySector, sectorCoverage, type SectorMap } from '../../core/screen/sectors';
+import { sectorsClient } from '../../data-client/sectors';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { HeatMap } from '../chart/HeatMap';
 import { useAnalysis } from '../useAnalysis';
@@ -40,6 +42,8 @@ export default function Pulse({ state, push }: Props) {
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [clusterOrder, setClusterOrder] = useState(true);
+  const [sectors, setSectors] = useState<SectorMap | null>(null);
+  const [grouping, setGrouping] = useState<'cluster' | 'sector'>('cluster');
 
   const clientRef = useRef(analysis.client);
   clientRef.current = analysis.client;
@@ -83,10 +87,36 @@ export default function Pulse({ state, push }: Props) {
     };
   }, [analysis.status, market]);
 
+  useEffect(() => {
+    let cancelled = false;
+    sectorsClient.map(market).then((map) => {
+      if (cancelled) return;
+      setSectors(map);
+      // Sınıflandırma varsa varsayılan görünüm sektör olur: "endüstriden para
+      // akışı" sorusunun doğru cevabı odur. Yoksa kümelerde kalınır.
+      setGrouping(map ? 'sector' : 'cluster');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [market]);
+
   const flows = useMemo(() => {
     if (!pulse || !clusters) return [];
     return flowByCluster(pulse.rows, clusters.clusterOf).slice(0, 8);
   }, [pulse, clusters]);
+
+  const sectorFlows = useMemo(() => {
+    if (!pulse || !sectors) return [];
+    return flowBySector(pulse.rows, sectors);
+  }, [pulse, sectors]);
+
+  const coverage = useMemo(
+    () => sectorCoverage(pulse ? pulse.rows.map((r) => r.symbol) : [], sectors),
+    [pulse, sectors],
+  );
+
+  const bySector = grouping === 'sector' && sectorFlows.length > 0;
 
   if (analysis.status === 'error') {
     return (
@@ -205,26 +235,53 @@ export default function Pulse({ state, push }: Props) {
 
       <section className="pulse__panel" aria-label="Gruplara göre para akışı">
         <header>
-          <h2>Para akışı — davranış grupları</h2>
+          <h2>Para akışı — {bySector ? 'sektörler' : 'davranış grupları'}</h2>
           <span className="desk__muted">
-            Resmî sektör sınıflandırması değil: birlikte hareket eden hisselerin kümeleri, en çok
-            işlem gören üyesiyle etiketli.
+            {bySector ? (
+              <>
+                {sectors?.source} sınıflandırması · {coverage.known}/{coverage.total} sembol
+                eşleşti. Eşleşmeyenler "Sınıflandırılmamış" satırında; paylar toplam işlem değerinin
+                tamamı üzerinden.
+              </>
+            ) : (
+              <>
+                Resmî sektör sınıflandırması değil: birlikte hareket eden hisselerin kümeleri, en
+                çok işlem gören üyesiyle etiketli.
+                {sectors ? '' : ' Sektör dosyası bu piyasada yok.'}
+              </>
+            )}
           </span>
+          {sectors ? (
+            <Select
+              label="Gruplama"
+              value={grouping}
+              onChange={(value) => setGrouping(value as 'cluster' | 'sector')}
+              options={[
+                { value: 'sector', label: 'Sektörler' },
+                { value: 'cluster', label: 'Davranış grupları' },
+              ]}
+            />
+          ) : null}
         </header>
-        {flows.length === 0 ? (
+        {(bySector ? sectorFlows : flows).length === 0 ? (
           <Skeleton count={4} height="20px" />
         ) : (
           <table className="pulse__flows">
             <caption className="visually-hidden">Kümelere göre işlem değeri ve yön</caption>
             <thead>
               <tr>
-                <th scope="col">Grup</th>
+                <th scope="col">{bySector ? 'Sektör' : 'Grup'}</th>
                 <th scope="col" className="num">
                   Hisse
                 </th>
                 <th scope="col" className="num">
                   İşlem değeri
                 </th>
+                {bySector ? (
+                  <th scope="col" className="num">
+                    Pay
+                  </th>
+                ) : null}
                 <th scope="col" className="num">
                   Ağırlıklı değişim
                 </th>
@@ -237,19 +294,27 @@ export default function Pulse({ state, push }: Props) {
               </tr>
             </thead>
             <tbody>
-              {flows.map((flow) => (
-                <tr key={flow.cluster}>
+              {(bySector
+                ? sectorFlows.map((f) => ({ ...f, key: f.sector, target: f.leader }))
+                : flows.map((f) => ({ ...f, key: String(f.cluster), target: f.label }))
+              ).map((flow) => (
+                <tr key={flow.key}>
                   <th scope="row">
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => push({ v: 'sembol', s: flow.label })}
+                      onClick={() => push({ v: 'sembol', s: flow.target })}
                     >
-                      {flow.label} grubu
+                      {bySector ? flow.key : `${flow.label} grubu`}
                     </Button>
                   </th>
                   <td className="num">{flow.symbols}</td>
                   <td className="num">{fmtValue(flow.value)}</td>
+                  {bySector ? (
+                    <td className="num">
+                      {'sharePct' in flow ? `${(flow.sharePct as number).toFixed(1)}%` : '—'}
+                    </td>
+                  ) : null}
                   <td
                     className="num"
                     style={{ color: flow.weightedChangePct >= 0 ? 'var(--up)' : 'var(--down)' }}

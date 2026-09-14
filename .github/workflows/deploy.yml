@@ -70,6 +70,12 @@ jobs:
           python -m pip install --quiet isyatirimhisse pandas
           python scripts/build_fundamentals.py
 
+      # Sektör sınıflandırması. Kaynağa erişilemezse dosya yazılmaz ve arayüz
+      # davranış kümelerine düşer; derleme kırılmaz.
+      - name: Sektör sınıflandırması (İş Yatırım)
+        continue-on-error: true
+        run: python scripts/build_sectors.py
+
       # Verbose JSON → kolonsal .bin + manifest + latest-250 paketi.
       # --verify yazılanı geri okuyup kaynakla bar bar karşılaştırır; uyuşmazlık
       # derlemeyi kırar (bkz. docs/plan/veri-formati.md).

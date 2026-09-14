@@ -37,6 +37,10 @@ jobs:
       - name: Finansal üretici kendi kendine testi
         run: python scripts/build_fundamentals.py --self-test
 
+      # Sektör ayrıştırıcısı: ağ olmadan, sabit örnek kayıtlar üzerinde.
+      - name: Sektör üretici kendi kendine testi
+        run: python scripts/build_sectors.py --self-test
+
       - run: npm ci
 
       - name: Tip kontrolü
