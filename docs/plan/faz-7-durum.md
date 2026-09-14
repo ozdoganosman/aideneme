@@ -999,6 +999,31 @@ Grafik renkleri de ölçüldü (WCAG 1.4.11 metin dışı öğelerde 3:1 ister):
 EMA 50 açık temada 4,54 · koyu temada 6,16; EMA 200 6,15 · 8,71. Hepsi
 geçiyor, değişiklik gerekmedi.
 
+### Türkçe biçim: gözle bakınca kaçanlar çıktı
+
+Bir önceki turda "ekranlarda İngilizce biçimde tek bir yüzde kalmadı" demiştim
+— doğruydu ama **eksikti**: yalnızca yüzdeleri taramıştım. Portföy ekranına
+işlem ekleyip bakınca aynı tabloda `18.24` (ondalık nokta) ile `39.818`
+(binlik nokta) yan yana duruyordu. Yani asıl karışıklık riski hâlâ oradaydı.
+
+Bu kez tarama ondalık NOKTAYA göre yapıldı ve dokuz ekran tek tek geçildi:
+
+| Ekran | Kalan |
+|---|---|
+| Portföy | fiyat, ort. maliyet, kur, etkin pozisyon |
+| Tarayıcı | oran (`1.40×`), seviye (RSI/ADX) |
+| Nabız, Sektör | `16.6 mlr`, `3.1 mlr` kısaltmaları |
+| Sembol Masası | `13.0 yıl`, dört haneli fiyatlar |
+| Model | bariyer katı `±1.5σ` |
+
+Hepsi çevrildi; `Stat` bileşeninin delta rozeti de (Portföy'de `+487.71%`
+yazıyordu) ortak biçimlendiriciye bağlandı.
+
+İki okuma kusuru daha: **"En büyük pozisyon +%95"** — pay bir getiri değil,
+artı işareti onu kazanç gibi gösteriyordu; işaretsiz oldu. Tarih alanının
+`09/14/2026` görünmesi ise kusur değil: `<input type="date">` tarayıcı diline
+göre biçimlenir, Türkçe tarayıcıda `14.09.2026` çıkıyor (ölçüldü).
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

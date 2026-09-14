@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { trNum, trPct } from './format';
 
 type Tone = 'neutral' | 'up' | 'down' | 'warn' | 'info' | 'accent';
 
@@ -47,9 +48,9 @@ export function Stat({ label, value, delta, deltaSuffix = '%', hint, provenance 
         <div className={`ui-stat__delta is-${dir}`}>
           <span aria-hidden="true">{dir === 'up' ? '▲' : dir === 'down' ? '▼' : '■'}</span>
           <span className="num">
-            {delta > 0 ? '+' : ''}
-            {delta.toFixed(2)}
-            {deltaSuffix}
+            {deltaSuffix === '%'
+              ? trPct(delta, 2, true)
+              : `${delta > 0 ? '+' : ''}${trNum(delta, 2)}${deltaSuffix}`}
           </span>
         </div>
       ) : null}

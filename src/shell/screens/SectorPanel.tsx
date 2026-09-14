@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Badge, Button, EmptyState, Skeleton, Stat, trPct } from '../../ui';
+import { Badge, Button, EmptyState, Skeleton, Stat, trPct, trNum } from '../../ui';
 import { Icon } from '../../ui/icons';
 import { sectorPeers, type PeerRow, type SectorMap } from '../../core/screen/sectors';
 import { dataClient } from '../../data-client/client';
@@ -14,10 +14,10 @@ interface Props {
 
 const fmtValue = (v: number): string => {
   if (!Number.isFinite(v)) return '—';
-  if (v >= 1e9) return `${(v / 1e9).toFixed(1)} mlr`;
-  if (v >= 1e6) return `${(v / 1e6).toFixed(1)} mn`;
-  if (v >= 1e3) return `${(v / 1e3).toFixed(1)} b`;
-  return v.toFixed(0);
+  if (v >= 1e9) return `${trNum(v / 1e9, 1)} mlr`;
+  if (v >= 1e6) return `${trNum(v / 1e6, 1)} mn`;
+  if (v >= 1e3) return `${trNum(v / 1e3, 1)} b`;
+  return trNum(v, 0);
 };
 
 const fmtPct = (v: number, digits = 2): string => trPct(v, digits, true);

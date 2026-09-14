@@ -292,7 +292,7 @@ export default function ModelScreen({ state, push }: Props) {
                 <Stat
                   label={`${symbol} · ${day(result.latest.day)} sonrası ${card.barriers.horizon} bar`}
                   value={pct(result.latest.probability, 0)}
-                  hint={`üst bariyere (+${card.barriers.upMult}σ) önce değme olasılığı`}
+                  hint={`üst bariyere (+${trNum(card.barriers.upMult, 1)}σ) önce değme olasılığı`}
                 />
               </div>
             ) : null}
@@ -533,8 +533,8 @@ export default function ModelScreen({ state, push }: Props) {
             </ul>
             <p className="desk__muted">
               Yöntem: üçlü bariyer etiketleme (ufuk {card.barriers.horizon} bar, bariyerler ±
-              {card.barriers.upMult}σ), L2 cezalı lojistik regresyon, purged {card.folds}-fold +{' '}
-              {card.embargoDays} bar embargo, Platt kalibrasyonu yalnızca eğitim katmanından
+              {trNum(card.barriers.upMult, 1)}σ), L2 cezalı lojistik regresyon, purged {card.folds}
+              -fold + {card.embargoDays} bar embargo, Platt kalibrasyonu yalnızca eğitim katmanından
               öğrenildi. Tüm ölçümler katman dışı tahminlerden.
             </p>
             <Button onClick={() => push({ v: 'laboratuvar', s: symbol })}>

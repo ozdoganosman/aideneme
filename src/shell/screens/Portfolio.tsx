@@ -13,6 +13,7 @@ import {
   VirtualTable,
   type Column,
   trPct,
+  trNum,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { Candles } from '../../core/data/types';
@@ -248,7 +249,7 @@ export default function Portfolio({ state, push }: Props) {
       { key: 'symbol', header: 'Sembol', render: (t) => t.symbol, sortValue: (t) => t.symbol },
       { key: 'side', header: 'İşlem', render: (t) => (t.side === 'buy' ? 'Alış' : 'Satış') },
       { key: 'shares', header: 'Adet', numeric: true, render: (t) => t.shares },
-      { key: 'price', header: 'Fiyat', numeric: true, render: (t) => t.price.toFixed(2) },
+      { key: 'price', header: 'Fiyat', numeric: true, render: (t) => trNum(t.price, 2) },
       { key: 'total', header: 'Tutar', numeric: true, render: (t) => money(t.shares * t.price) },
       {
         key: 'remove',
@@ -280,8 +281,8 @@ export default function Portfolio({ state, push }: Props) {
         render: (r) => r.shares,
         sortValue: (r) => r.shares,
       },
-      { key: 'avg', header: 'Ort. maliyet', numeric: true, render: (r) => r.avgCost.toFixed(2) },
-      { key: 'price', header: 'Fiyat', numeric: true, render: (r) => r.price.toFixed(2) },
+      { key: 'avg', header: 'Ort. maliyet', numeric: true, render: (r) => trNum(r.avgCost, 2) },
+      { key: 'price', header: 'Fiyat', numeric: true, render: (r) => trNum(r.price, 2) },
       {
         key: 'value',
         header: 'Değer',
@@ -420,7 +421,7 @@ export default function Portfolio({ state, push }: Props) {
                 !fx
                   ? 'kur serisi yok'
                   : fxReturn
-                    ? `${fxReturn.rateFrom.toFixed(2)} → ${fxReturn.rateTo.toFixed(2)} · ${fx.source}`
+                    ? `${trNum(fxReturn.rateFrom, 2)} → ${trNum(fxReturn.rateTo, 2)} · ${fx.source}`
                     : 'ilk işlem kur serisinden eski'
               }
             />
@@ -521,15 +522,15 @@ export default function Portfolio({ state, push }: Props) {
               />
               <Stat
                 label="En büyük pozisyon"
-                value={pct(conc.top1Pct, 0)}
-                hint={`ilk üç ${pct(conc.top3Pct, 0)}`}
+                // PAY işaretsiz: "+%95" bir getiri gibi okunuyordu, oysa bu
+                // portföyün ne kadarının tek pozisyonda olduğunu söylüyor.
+                value={trPct(conc.top1Pct, 0)}
+                hint={`ilk üç ${trPct(conc.top3Pct, 0)}`}
               />
               <Stat
                 label="Etkin pozisyon"
                 value={
-                  Number.isFinite(conc.effectivePositions)
-                    ? conc.effectivePositions.toFixed(1)
-                    : '—'
+                  Number.isFinite(conc.effectivePositions) ? trNum(conc.effectivePositions, 1) : '—'
                 }
                 hint={`${valuation.rows.length} pozisyon açık`}
               />

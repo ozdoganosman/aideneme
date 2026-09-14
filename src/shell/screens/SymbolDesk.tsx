@@ -13,6 +13,7 @@ import {
   Tabs,
   Toggle,
   trPct,
+  trNum,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
 import type { HealthReport } from '../../core/data/health';
@@ -72,9 +73,9 @@ function fmt(metric: Metric): string {
     case 'pct':
       return trPct(v, 2, !!metric.signed);
     case 'price':
-      return v.toLocaleString('tr-TR', { maximumFractionDigits: v < 10 ? 4 : 2 });
+      return trNum(v, v < 10 ? 4 : 2);
     case 'years':
-      return `${v.toFixed(1)} yıl`;
+      return `${trNum(v, 1)} yıl`;
     case 'volume':
       return v.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
     default:

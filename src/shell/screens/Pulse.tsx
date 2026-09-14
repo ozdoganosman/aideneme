@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct } from '../../ui';
+import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct, trNum } from '../../ui';
 import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
 import {
   flowBySector,
@@ -25,10 +25,10 @@ interface Props {
 
 const fmtValue = (v: number): string => {
   if (!Number.isFinite(v)) return '—';
-  if (v >= 1e9) return `${(v / 1e9).toFixed(1)} mlr`;
-  if (v >= 1e6) return `${(v / 1e6).toFixed(1)} mn`;
-  if (v >= 1e3) return `${(v / 1e3).toFixed(1)} b`;
-  return v.toFixed(0);
+  if (v >= 1e9) return `${trNum(v / 1e9, 1)} mlr`;
+  if (v >= 1e6) return `${trNum(v / 1e6, 1)} mn`;
+  if (v >= 1e3) return `${trNum(v / 1e3, 1)} b`;
+  return trNum(v, 0);
 };
 
 const fmtPct = (v: number, digits = 1): string => trPct(v, digits, true);
