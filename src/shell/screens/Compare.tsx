@@ -16,6 +16,7 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { NormalizedChart } from '../chart/NormalizedChart';
 import { useAnalysis } from '../useAnalysis';
 import { LoadNote } from '../LoadNote';
+import { DataError } from '../DataError';
 import type { UrlState } from '../urlState';
 
 interface Props {
@@ -79,6 +80,8 @@ export default function Compare({ state, push }: Props) {
     ms: number;
   } | null>(null);
   const [corrBusy, setCorrBusy] = useState(false);
+  /** Korelasyon hesabının kendi hatası — "en az iki sembol seç" demek yanlış olurdu. */
+  const [corrError, setCorrError] = useState<string | null>(null);
 
   // İlk açılışta boşsa piyasanın ilk üç sembolüyle başla — boş ekran yerine
   // çalışan bir örnek.
@@ -126,13 +129,17 @@ export default function Compare({ state, push }: Props) {
     if (analysis.status !== 'ready' || !client) return;
     let cancelled = false;
     setCorrBusy(true);
+    setCorrError(null);
     client
       .correlate(market, { lookback: Number(lookback) || 0 })
       .then((result) => {
         if (!cancelled) setCorr(result);
       })
-      .catch(() => {
-        if (!cancelled) setCorr(null);
+      .catch((err: unknown) => {
+        // Sessizce null'a düşmek iskeleti SONSUZA KADAR açık bırakıyordu.
+        if (cancelled) return;
+        setCorr(null);
+        setCorrError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setCorrBusy(false);
@@ -306,6 +313,10 @@ export default function Compare({ state, push }: Props) {
           </table>
         ) : corrBusy ? (
           <Skeleton height="120px" />
+        ) : corrError ? (
+          // Hesap çöktüğünde "en az iki sembol seç" demek kullanıcıyı yanlış
+          // yere bakmaya gönderiyordu: seçim zaten yapılmıştı.
+          <DataError title="Korelasyon hesaplanamadı" detail={corrError} />
         ) : (
           <EmptyState title="En az iki sembol seç" />
         )}

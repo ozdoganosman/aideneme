@@ -543,3 +543,14 @@ describe('Tarayıcı — kayıtlı taramada ne değişti', () => {
     expect(stored['bist|Tarama 1'].symbols).toEqual(['AAA', 'CCC']);
   });
 });
+
+describe('Tarayıcı — hesap çökerse', () => {
+  it('"sonuç yok" demez, hatayı gösterir', async () => {
+    // Boş sonuç ile ÇÖKEN hesap aynı şey değil: ilkinde kullanıcı filtresini
+    // gevşetir, ikincisinde bekler. İkisini aynı ekranla anlatmak yanıltıyordu.
+    screenFn.mockRejectedValue(new Error('worker çöktü'));
+    render(<ScreenerScreen state={STATE} push={push} />);
+    expect(await screen.findByText('Tarama hesaplanamadı')).toBeInTheDocument();
+    expect(screen.getByText(/worker çöktü/)).toBeInTheDocument();
+  });
+});

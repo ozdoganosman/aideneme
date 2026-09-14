@@ -802,6 +802,26 @@ analiz hatası `catch(() => setAnalysisResult(null))` ile yutuluyordu. Ekranda
 araç çubuğu ve sekmeler duruyor, altında hiçbir şey yok — grafik yok, metrik
 yok, hata da yok. Artık nedenini yazıyor ve teste bağlı.
 
+### Kalıbı aramak: "boş sonuç" ile "çöken hesap" aynı şey değil
+
+Dördüncüsü çıkınca kalıp sistematik olarak arandı (`catch` içinde yalnızca
+null/boş atayan yerler). Üç tane daha vardı ve üçü de **yanlış bir hikâye
+anlatıyordu**:
+
+| Ekran | Hesap çöktüğünde görünen | Kullanıcı ne yapardı |
+|---|---|---|
+| Tarayıcı | "Kriterlere uyan sembol yok" | Filtresini gevşetirdi |
+| Karşılaştır | "En az iki sembol seç" | Zaten seçmişti, şaşırırdı |
+| Nabız | İskelet, sonsuza kadar | Beklerdi |
+
+Boş sonuç ile çöken hesap aynı ekranla anlatılamaz: ilkinde kullanıcı
+filtresini değiştirir, ikincisinde bekler ya da sayfayı yeniler. Üçü de artık
+"… hesaplanamadı" diyip worker'ın hatasını gösteriyor; üçü de teste bağlandı.
+
+Bu, veri İNMEME hatasından (zaten kapatılmıştı) ayrı bir yol: paket inmiş ama
+hesap çökmüş. İki durum ayrı ayrı ele alınıyor çünkü kullanıcının yapacağı
+şey de farklı.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

@@ -256,3 +256,14 @@ describe('Pulse — veri gelmezse', () => {
     }
   });
 });
+
+describe('Nabız — hesap çökerse', () => {
+  it('"sonuç yok" demez, hatayı gösterir', async () => {
+    // Boş sonuç ile ÇÖKEN hesap aynı şey değil: ilkinde kullanıcı filtresini
+    // gevşetir, ikincisinde bekler. İkisini aynı ekranla anlatmak yanıltıyordu.
+    pulseFn.mockRejectedValue(new Error('worker çöktü'));
+    render(<Pulse state={STATE} push={push} />);
+    expect(await screen.findByText('Piyasa özeti hesaplanamadı')).toBeInTheDocument();
+    expect(screen.getByText(/worker çöktü/)).toBeInTheDocument();
+  });
+});

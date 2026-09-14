@@ -46,6 +46,7 @@ import { fundamentalsClient } from '../../data-client/fundamentals';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { useAnalysis } from '../useAnalysis';
 import { LoadNote } from '../LoadNote';
+import { DataError } from '../DataError';
 import { CopyLink } from '../CopyLink';
 import type { UrlState } from '../urlState';
 
@@ -131,6 +132,8 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
   const [params, setParams] = useState<ScreenParams>(shared.state?.params ?? DEFAULT_SCREEN_PARAMS);
   const [rules, setRules] = useState<Rule[]>(shared.state?.rules ?? DEFAULT_RULES);
   const [rows, setRows] = useState<ScreenRow[]>([]);
+  /** Tarama hesabının kendi hatası (paket indi ama worker çöktü). */
+  const [screenError, setScreenError] = useState<string | null>(null);
   const [timing, setTiming] = useState<{ ms: number; count: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({
@@ -219,6 +222,7 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
     if (analysis.status !== 'ready' || !client) return;
     let cancelled = false;
     setBusy(true);
+    setScreenError(null);
     client
       .screen(market, params)
       .then((result) => {
@@ -226,8 +230,13 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
         setRows(result.rows);
         setTiming({ ms: result.ms, count: result.rows.length });
       })
-      .catch(() => {
-        if (!cancelled) setRows([]);
+      .catch((err: unknown) => {
+        // Boş satır listesi ekranda "kriterlere uyan sembol yok" diye
+        // görünüyordu: hesap ÇÖKTÜĞÜNDE kullanıcı filtresini gevşetmeye
+        // çalışırdı. Hata artık hata olarak görünüyor.
+        if (cancelled) return;
+        setRows([]);
+        setScreenError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setBusy(false);
@@ -827,7 +836,9 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
         ) : null}
       </Dialog>
 
-      {analysis.status === 'loading' ? (
+      {screenError ? (
+        <DataError title="Tarama hesaplanamadı" detail={screenError} />
+      ) : analysis.status === 'loading' ? (
         <Skeleton height="320px" />
       ) : (
         <div className="screener__results">

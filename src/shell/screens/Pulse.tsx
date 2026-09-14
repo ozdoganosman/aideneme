@@ -62,6 +62,8 @@ export default function Pulse({ state, push }: Props) {
     count: number;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Nabız hesabının kendi hatası (paket indi, worker çöktü). */
+  const [pulseError, setPulseError] = useState<string | null>(null);
   const [clusterOrder, setClusterOrder] = useState(true);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
   const [grouping, setGrouping] = useState<'cluster' | 'sector'>('cluster');
@@ -74,6 +76,7 @@ export default function Pulse({ state, push }: Props) {
     if (analysis.status !== 'ready' || !client) return;
     let cancelled = false;
     setBusy(true);
+    setPulseError(null);
 
     // Nabız hızlı (tek geçiş), kümeleme yavaş (~0,5 sn) — ikisini ayrı isteyip
     // ısı haritasını nabız gelir gelmez çiziyoruz, sıralama sonra oturuyor.
@@ -82,8 +85,12 @@ export default function Pulse({ state, push }: Props) {
       .then((result) => {
         if (!cancelled) setPulse(result);
       })
-      .catch(() => {
-        if (!cancelled) setPulse(null);
+      .catch((err: unknown) => {
+        // Yalnızca null'a düşmek iskeleti sonsuza kadar açık bırakıyordu:
+        // paket indi ama hesap çöktüyse kullanıcı yüklenmeyi bekliyor sanıyor.
+        if (cancelled) return;
+        setPulse(null);
+        setPulseError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (!cancelled) setBusy(false);
@@ -176,8 +183,11 @@ export default function Pulse({ state, push }: Props) {
         </div>
       </section>
 
-      {analysis.status === 'error' ? (
-        <DataError title="Piyasa verisi yüklenemedi" detail={analysis.error} />
+      {analysis.status === 'error' || pulseError ? (
+        <DataError
+          title={pulseError ? 'Piyasa özeti hesaplanamadı' : 'Piyasa verisi yüklenemedi'}
+          detail={pulseError ?? analysis.error}
+        />
       ) : !s ? (
         <Skeleton height="96px" />
       ) : (
