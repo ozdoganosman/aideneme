@@ -152,6 +152,16 @@ export default function Pulse({ state, push }: Props) {
           onChange={(value) => push({ m: value })}
           options={MARKETS.map((m) => ({ value: m, label: MARKET_LABEL[m] }))}
         />
+        {/*
+          İki yerleşim İKİ AYRI SORUYA cevap veriyor, biri ötekinin yerine
+          geçmiyor:
+            - Para akışı (ağaç haritası): alan işlem değeri → para nerede?
+            - Kümeleme sırası (ızgara): yan yana olanlar birlikte hareket
+              ediyor → hangi grup taşıyor?
+          Ağaç haritası kutuları büyüklüğe göre sıraladığı için kümeleme
+          sırasını koruyamıyor; anahtarı sessizce işlevsiz bırakmak yerine
+          yerleşimi seçtiriyoruz.
+        */}
         <Toggle
           label="Kümeleme sırası"
           checked={clusterOrder}
@@ -159,11 +169,13 @@ export default function Pulse({ state, push }: Props) {
           // "Hesaplanıyor" yanlıştı: paket inerken henüz hesaplanacak bir şey
           // yok. Kullanıcıya beklediği şeyin ne olduğunu söylüyoruz.
           description={
-            clusters
-              ? `${clusters.count} küme`
-              : analysis.status === 'loading'
-                ? 'veri bekleniyor'
-                : 'hesaplanıyor…'
+            clusterOrder
+              ? clusters
+                ? `${clusters.count} küme · eşit kutu`
+                : analysis.status === 'loading'
+                  ? 'veri bekleniyor'
+                  : 'hesaplanıyor…'
+              : 'kapalı: kutu alanı işlem değeri'
           }
         />
         <div className="pulse__status">
@@ -270,7 +282,10 @@ export default function Pulse({ state, push }: Props) {
       <section className="pulse__panel" aria-label="Isı haritası">
         <header>
           <h2>Isı haritası</h2>
-          <span className="desk__muted">Renk: son bar değişimi · Sıra: davranış kümeleri</span>
+          <span className="desk__muted">
+            Renk: son bar değişimi ·{' '}
+            {clusterOrder ? 'Sıra: davranış kümeleri' : 'Alan: işlem değeri'}
+          </span>
         </header>
         {!pulse ? (
           <Skeleton height="320px" />
@@ -278,6 +293,7 @@ export default function Pulse({ state, push }: Props) {
           <HeatMap
             rows={pulse.rows}
             order={clusterOrder && clusters ? clusters.order : undefined}
+            layout={clusterOrder ? 'grid' : 'treemap'}
             onSelect={(symbol) => push({ v: 'sembol', s: symbol })}
           />
         )}

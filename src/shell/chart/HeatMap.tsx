@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { trPct } from '../../ui';
+import { squarify } from '../../core/chart/treemap';
 import type { PulseRow } from '../../core/screen/pulse';
 import { useChartColors } from './useThemeColors';
 
@@ -9,6 +10,14 @@ export interface HeatMapProps {
   order?: string[];
   /** Renk doygunluğunun doyduğu değişim (%). */
   scale?: number;
+  /**
+   * 'treemap' — alan işlem değerine orantılı (para nerede?).
+   * 'grid'    — eşit kutular, verilen sırada (hangi grup birlikte hareket ediyor?).
+   *
+   * İki yerleşim iki ayrı soruya cevap veriyor; ağaç haritası kutuları
+   * büyüklüğe göre sıraladığı için kümeleme sırasını KORUYAMAZ.
+   */
+  layout?: 'treemap' | 'grid';
   height?: number;
   onSelect?: (symbol: string) => void;
 }
@@ -30,7 +39,14 @@ interface Tile {
  * Canvas: 600+ kutu DOM'da düğüm başına ~1 KB tutar ve her tema değişiminde
  * yeniden stillenir; burada tek bir çizim yeterli.
  */
-export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: HeatMapProps) {
+export function HeatMap({
+  rows,
+  order,
+  scale = 4,
+  height = 320,
+  layout = 'treemap',
+  onSelect,
+}: HeatMapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tilesRef = useRef<Tile[]>([]);
   const [hover, setHover] = useState<PulseRow | null>(null);
@@ -56,26 +72,40 @@ export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: Heat
         .filter((r): r is PulseRow => !!r);
       if (ordered.length === 0) return;
 
-      // Kutular kare kalsın: sütun sayısını alan oranından türet.
-      const cols = Math.max(1, Math.round(Math.sqrt((ordered.length * width) / height)));
-      const rowsCount = Math.ceil(ordered.length / cols);
-      const w = width / cols;
-      const h = height / rowsCount;
-
       const tiles: Tile[] = [];
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'center';
 
-      ordered.forEach((row, i) => {
-        const x = (i % cols) * w;
-        const y = Math.floor(i / cols) * h;
+      // Alan İŞLEM DEĞERİNE orantılı. Düzgün ızgarada her sembol eşit kutu
+      // alıyordu: günde 50 milyon TL dönen bir sembol ile 50 milyar TL dönen
+      // bir sembol aynı büyüklükte görünüyor, yani "Piyasada bugün ne
+      // oluyor?" başlığı altındaki resim paranın NEREDE olduğunu
+      // söylemiyordu. Renk yönü taşıyor; alan büyüklüğü taşıyınca harita
+      // gerçekten bir para akışı haritası oluyor.
+      //
+      // İşlem değeri hiç yoksa (ölçülmemiş veri) eşit ağırlığa düşülüyor —
+      // o durumda düzgün ızgara doğru cevaptır, sahte bir büyüklük sıralaması
+      // uydurmaktan iyidir.
+      const olculen = ordered.filter((r) => Number.isFinite(r.value) && r.value > 0).length;
+      const rects =
+        layout === 'grid' || olculen === 0
+          ? gridRects(ordered.length, width, height)
+          : squarify(
+              ordered.map((r) => r.value),
+              width,
+              height,
+            );
+
+      for (const rect of rects) {
+        const row = ordered[rect.index];
+        const { x, y, w, h } = rect;
         tiles.push({ row, x, y, w, h });
 
         const change = Number.isFinite(row.changePct) ? row.changePct : 0;
         const intensity = Math.min(1, Math.abs(change) / scale);
         const base = change >= 0 ? colors.up : colors.down;
         ctx.fillStyle = mix(colors.surface, base, 0.12 + intensity * 0.8);
-        ctx.fillRect(x, y, w - 1, h - 1);
+        ctx.fillRect(x, y, Math.max(0, w - 1), Math.max(0, h - 1));
 
         // Etiket kutu okunur büyüklükteyse yazılır: iki satır sığıyorsa sembol +
         // değişim, yalnızca bir satır sığıyorsa sembol. Eşikler ölçüldü: 200
@@ -84,14 +114,14 @@ export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: Heat
         const oneLine = w >= 28 && h >= 14;
         if (oneLine) {
           ctx.fillStyle = intensity > 0.55 ? '#fff' : colors.text;
-          ctx.font = `600 ${Math.max(8, Math.min(11, w / 4.5))}px system-ui, sans-serif`;
+          ctx.font = `600 ${Math.max(8, Math.min(13, w / 4.5))}px system-ui, sans-serif`;
           ctx.fillText(row.symbol, x + w / 2, y + h / 2 + (twoLines ? -5 : 0), w - 4);
           if (twoLines) {
-            ctx.font = `${Math.max(8, Math.min(10, w / 5.5))}px system-ui, sans-serif`;
+            ctx.font = `${Math.max(8, Math.min(11, w / 5.5))}px system-ui, sans-serif`;
             ctx.fillText(trPct(change, 1, true), x + w / 2, y + h / 2 + 7, w - 4);
           }
         }
-      });
+      }
 
       tilesRef.current = tiles;
     };
@@ -100,7 +130,7 @@ export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: Heat
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [rows, order, scale, height, colors]);
+  }, [rows, order, scale, height, layout, colors]);
 
   const tileAt = (event: { clientX: number; clientY: number }): PulseRow | null => {
     const canvas = canvasRef.current;
@@ -120,7 +150,7 @@ export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: Heat
         ref={canvasRef}
         style={{ width: '100%', height }}
         role="img"
-        aria-label={`Isı haritası: ${rows.length} sembolün son bar değişimi`}
+        aria-label={`Isı haritası: ${rows.length} sembol · kutu alanı işlem değeri, rengi son bar değişimi`}
         onMouseMove={(e) => setHover(tileAt(e))}
         onMouseLeave={() => setHover(null)}
         onClick={(e) => {
@@ -137,11 +167,33 @@ export function HeatMap({ rows, order, scale = 4, height = 320, onSelect }: Heat
             {hover.newHigh ? ' · yeni zirve' : hover.newLow ? ' · yeni dip' : ''}
           </>
         ) : (
-          'Kutular kümeleme sırasına göre dizili — yan yana olanlar birlikte hareket ediyor. Üzerine gel, tıkla.'
+          'Kutu ALANI işlem değeri, rengi son bar değişimi. Üzerine gel, tıkla.'
         )}
       </p>
     </div>
   );
+}
+
+/**
+ * Eşit kutulu ızgara — kümeleme sırası korunur.
+ *
+ * İşlem değeri hiç ölçülmemişse de buraya düşülüyor: sahte bir büyüklük
+ * sıralaması uydurmaktansa eşit kutu doğru cevaptır.
+ */
+function gridRects(count: number, width: number, height: number) {
+  if (count <= 0 || !(width > 0) || !(height > 0)) return [];
+  // Kutular kare kalsın: sütun sayısını alan oranından türet.
+  const cols = Math.max(1, Math.round(Math.sqrt((count * width) / height)));
+  const rowsCount = Math.ceil(count / cols);
+  const w = width / cols;
+  const h = height / rowsCount;
+  return Array.from({ length: count }, (_, i) => ({
+    index: i,
+    x: (i % cols) * w,
+    y: Math.floor(i / cols) * h,
+    w,
+    h,
+  }));
 }
 
 /** İki rengi karıştır (her ikisi de #rgb/#rrggbb ya da rgb() olabilir). */
