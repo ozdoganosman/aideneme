@@ -47,6 +47,84 @@ export function annualSeries(
   return { labels, values };
 }
 
+/**
+ * AKIŞ kalemleri: kaynak bunları YIL BAŞINDAN BUGÜNE kümülatif veriyor.
+ *
+ * Bilanço kalemleri (özkaynak, varlıklar, stok, nakit) kümülatif değil,
+ * o anın fotoğrafı. İkisini aynı işlemden geçirmek sessizce yanlış sayı
+ * üretir — nitekim TTM hesabında da ayrı ele alınıyorlar.
+ */
+const AKIS_KALEMLERI: ReadonlySet<string> = new Set([
+  'revenue',
+  'grossProfit',
+  'operatingProfit',
+  'netIncome',
+  'operatingCashFlow',
+  'capex',
+]);
+
+/**
+ * Tablonun dönem ADIMI (ay): çeyreklik 3, altı aylık 6, yıllık 12.
+ *
+ * Kaynağı sabit "3 ay" saymak yanlış: örnek veride ASELS gibi şirketlerin
+ * tablosu yalnızca /6 ve /12 satırlarından oluşuyor. Sabit adımla bu
+ * tablolarda bir önceki dönem HİÇ bulunamıyor ve kolon grafiği tamamen boş
+ * çiziliyordu — veri var, görünen yok.
+ *
+ * Adım, tabloda geçen en küçük ay: {3,6,9,12} → 3, {6,12} → 6, {12} → 12.
+ * Yıllık yayımlayan bir tabloda adım 12'dir ve her satır kendi dönemidir.
+ */
+export function reportStep(periods: string[]): number {
+  const aylar = periods
+    .map((p) => Number(p.split('/')[1]))
+    .filter((m) => Number.isFinite(m) && m > 0);
+  return aylar.length === 0 ? 12 : Math.min(...aylar);
+}
+
+/**
+ * Dönemsel seri — akış kalemlerinde kümülatif fark alınır.
+ *
+ * Kaynak "2026/6" satırında yılın İLK ALTI AYINI veriyor, ikinci çeyreği
+ * değil. Kümülatif değerleri olduğu gibi kolon grafiğine çizmek her çubuğu
+ * bir öncekini İÇEREN, sürekli büyüyen bir merdivene çevirir ve yılın son
+ * dönemi her zaman en büyük görünür — mevsimsellik tamamen kaybolur.
+ *
+ * Yılın İLK dönemi (ay = adım) kümülatifin kendisidir; sonrakiler aynı yılın
+ * bir önceki döneminden çıkarılır. O dönem yoksa değer ÜRETİLMEZ (null):
+ * eksik veriyi sıfır saymak, olmayan bir çöküş gösterirdi.
+ */
+export function quarterlySeries(
+  fin: Financials,
+  field: FieldId,
+  limit?: number,
+): { labels: string[]; values: (number | null)[] } {
+  const akis = AKIS_KALEMLERI.has(field);
+  const adim = reportStep(fin.periods);
+  const labels: string[] = [];
+  const values: (number | null)[] = [];
+
+  fin.periods.forEach((period, i) => {
+    const [yil, ay] = period.split('/');
+    const deger = fin.fields[field][i] ?? null;
+    labels.push(`${yil}/${ay}`);
+
+    if (!akis || Number(ay) === adim) {
+      values.push(deger);
+      return;
+    }
+    // Önceki dönem AYNI yılın bir öncesi olmalı; yıl atlarsa çıkarma anlamsız
+    // olur (geçen yılın kümülatifinden bu yılınkini çıkarmak).
+    const j = fin.periods.indexOf(`${yil}/${Number(ay) - adim}`);
+    const onceki = j >= 0 ? (fin.fields[field][j] ?? null) : null;
+    values.push(deger === null || onceki === null ? null : deger - onceki);
+  });
+
+  if (limit !== undefined && limit > 0 && labels.length > limit) {
+    return { labels: labels.slice(-limit), values: values.slice(-limit) };
+  }
+  return { labels, values };
+}
+
 /** Son değeri olan (stok kalemi) — bilanço satırları için. */
 export function latest(fin: Financials, field: FieldId): number | null {
   const values = fin.fields[field];
@@ -133,8 +211,20 @@ export interface Quality {
   /** Değerlendirilebilen ölçüt sayısı (veri eksikse 9'dan küçük olur). */
   available: number;
   /** Ölçüt ölçüt sonuç — UI listeler, kara kutu olmaz. */
-  checks: { id: string; label: string; passed: boolean | null }[];
+  checks: { id: string; label: string; passed: boolean | null; group: KarneGrubu }[];
 }
+
+/**
+ * Karne başlıkları. Üç soru, üç ayrı cevap:
+ *   kârlılık  — para kazanıyor mu, kazandığı gerçek nakit mi?
+ *   büyüme    — büyüyor mu?
+ *   borçluluk — bunu borçlanarak mı yapıyor?
+ *
+ * Tek bir "9 üzerinden 4" sayısı bunları birbirine karıştırıyordu: kârlı ama
+ * küçülen bir şirket ile zarar eden ama borcunu azaltan bir şirket aynı
+ * skoru alabilir, oysa ikisi çok farklı şeyler.
+ */
+export type KarneGrubu = 'kârlılık' | 'büyüme' | 'borçluluk';
 
 /**
  * Piotroski F-skoru benzeri kalite ölçütleri (9 madde).
@@ -168,48 +258,121 @@ export function qualityScore(fin: Financials): Quality {
   const caPrev = value('currentAssets', prevYear);
   const clPrev = value('currentLiabilities', prevYear);
 
+  const buyume = growth(fin);
   const roaNow = ratio(netIncome, assetsNow);
   const roaPrev = ratio(value('netIncome', prevYear), assetsPrev);
 
   const checks: Quality['checks'] = [
-    { id: 'profit', label: 'Net kâr pozitif', passed: bool(netIncome, (v) => v > 0) },
-    { id: 'ocf', label: 'Faaliyet nakit akışı pozitif', passed: bool(ocf, (v) => v > 0) },
+    {
+      id: 'profit',
+      label: 'Net kâr pozitif',
+      passed: bool(netIncome, (v) => v > 0),
+      group: 'kârlılık',
+    },
+    {
+      id: 'ocf',
+      label: 'Faaliyet nakit akışı pozitif',
+      passed: bool(ocf, (v) => v > 0),
+      group: 'kârlılık',
+    },
     {
       id: 'accrual',
       label: 'Nakit akışı net kârdan büyük (tahakkuk kalitesi)',
       passed: ocf !== null && netIncome !== null ? ocf > netIncome : null,
+      group: 'kârlılık',
     },
-    { id: 'roaUp', label: 'Aktif kârlılığı arttı', passed: cmp(roaNow, roaPrev) },
+    {
+      id: 'roaUp',
+      label: 'Aktif kârlılığı arttı',
+      passed: cmp(roaNow, roaPrev),
+      group: 'kârlılık',
+    },
     {
       id: 'leverage',
       label: 'Borç/özkaynak azaldı',
       passed: cmp(ratio(liabPrev, equityPrev), ratio(liabNow, equityNow)),
+      group: 'borçluluk',
     },
     {
       id: 'liquidity',
       label: 'Cari oran arttı',
       passed: cmp(ratio(caNow, clNow), ratio(caPrev, clPrev)),
+      group: 'borçluluk',
     },
     {
       id: 'margin',
       label: 'Brüt marj arttı',
       passed: cmp(ratio(grossNow, revNow), ratio(grossPrev, revPrev)),
+      group: 'kârlılık',
     },
     {
       id: 'turnover',
       label: 'Aktif devir hızı arttı',
       passed: cmp(ratio(revNow, assetsNow), ratio(revPrev, assetsPrev)),
+      group: 'büyüme',
     },
     {
       id: 'equity',
       label: 'Özkaynak büyüdü',
       passed: cmp(equityNow, equityPrev),
+      group: 'büyüme',
+    },
+    // Büyüme başlığı iki ölçütle "aktif devir hızı" ve "özkaynak" üzerinden
+    // dolaylı okunuyordu; asıl sorulan şey ciro ve kârın kendisi. TTM bazlı,
+    // yani mevsimsellik karışmıyor.
+    //
+    // NOMİNAL: enflasyondan arındırılmamış. Yüksek enflasyonda nominal büyüme
+    // reel küçülmeyi gizler — ölçütün adı bunu söylüyor.
+    {
+      id: 'revGrowth',
+      label: 'Ciro büyüdü (nominal, son 12 ay)',
+      passed: buyume.revenueYoyPct === null ? null : buyume.revenueYoyPct > 0,
+      group: 'büyüme',
+    },
+    {
+      id: 'niGrowth',
+      label: 'Net kâr büyüdü (nominal, son 12 ay)',
+      passed: buyume.netIncomeYoyPct === null ? null : buyume.netIncomeYoyPct > 0,
+      group: 'büyüme',
     },
   ];
 
   const available = checks.filter((c) => c.passed !== null).length;
   const score = checks.filter((c) => c.passed === true).length;
   return { score, available, checks };
+}
+
+export interface KarneBasligi {
+  grup: KarneGrubu;
+  /** Karşılanan ölçüt. */
+  score: number;
+  /** Değerlendirilebilen ölçüt — veri eksikse payda KÜÇÜLÜR, uydurulmaz. */
+  available: number;
+  checks: Quality['checks'];
+}
+
+/**
+ * Karne: kalite ölçütlerini üç başlıkta toplar.
+ *
+ * Tek bir "9 üzerinden 4" sayısı üç ayrı soruyu birbirine karıştırıyordu.
+ * Kârlı ama küçülen bir şirket ile zarar eden ama borcunu azaltan bir şirket
+ * aynı toplam skoru alabilir — oysa kullanıcının sorduğu şey hangisi olduğu.
+ *
+ * Veri eksikse madde değerlendirilmiyor ve o başlığın PAYDASI küçülüyor:
+ * "2/2" ile "2/5" aynı şey değil ve ikisi de gösteriliyor.
+ */
+export function karne(fin: Financials): KarneBasligi[] {
+  const q = qualityScore(fin);
+  const gruplar: KarneGrubu[] = ['kârlılık', 'büyüme', 'borçluluk'];
+  return gruplar.map((grup) => {
+    const checks = q.checks.filter((c) => c.group === grup);
+    return {
+      grup,
+      score: checks.filter((c) => c.passed === true).length,
+      available: checks.filter((c) => c.passed !== null).length,
+      checks,
+    };
+  });
 }
 
 function sum(a: number | null, b: number | null): number | null {

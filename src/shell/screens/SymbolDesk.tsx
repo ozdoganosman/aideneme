@@ -456,6 +456,7 @@ export default function SymbolDesk({ state, push }: Props) {
             market={market}
             symbol={symbol}
             price={candles.close[candles.length - 1]}
+            candles={candles}
           />
         </Suspense>
       ) : null}

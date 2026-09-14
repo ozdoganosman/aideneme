@@ -5,7 +5,10 @@ import {
   growth,
   latest,
   percentileRank,
+  karne,
   qualityScore,
+  quarterlySeries,
+  reportStep,
   ttm,
 } from './metrics';
 import { FUNDAMENTAL_FIELDS, type FieldId, type Financials, type SnapshotRow } from './types';
@@ -134,14 +137,17 @@ describe('qualityScore', () => {
       longLiabilities: [300, 250, 200],
     });
     const quality = qualityScore(fin);
-    expect(quality.available).toBe(9);
-    expect(quality.score).toBeGreaterThanOrEqual(8);
+    // 11 ölçüt: dokuz Piotroski benzeri madde + iki büyüme maddesi (ciro ve
+    // net kâr). Büyüme başlığı önce "aktif devir hızı" ve "özkaynak"
+    // üzerinden DOLAYLI okunuyordu; asıl sorulan şey ciro ve kârın kendisi.
+    expect(quality.available).toBe(11);
+    expect(quality.score).toBeGreaterThanOrEqual(10);
   });
 
   it('eksik veride madde değerlendirilmez, payda küçülür', () => {
     const fin = financials(periods, { netIncome: [10, 20, 30] });
     const quality = qualityScore(fin);
-    expect(quality.available).toBeLessThan(9);
+    expect(quality.available).toBeLessThan(11);
     expect(quality.checks.filter((c) => c.passed === null).length).toBeGreaterThan(0);
   });
 
@@ -195,5 +201,126 @@ describe('percentileRank', () => {
   it('evren küçükse yüzdelik üretilmez', () => {
     expect(percentileRank([1, 2, 3], 2)).toBeNull();
     expect(percentileRank(universe, null)).toBeNull();
+  });
+});
+
+describe('karne', () => {
+  const periods = ['2022/12', '2023/12', '2024/12'];
+
+  // Tek bir "9 üzerinden 4" sayısı üç ayrı soruyu karıştırıyordu: kârlı ama
+  // küçülen bir şirket ile zarar eden ama borcunu azaltan bir şirket aynı
+  // toplam skoru alabilir — oysa kullanıcının sorduğu şey hangisi olduğu.
+  it('üç başlık ayrı ayrı puanlanır', () => {
+    const fin = financials(periods, {
+      netIncome: [50, 80, 120],
+      operatingCashFlow: [60, 100, 150],
+      assets: [900, 950, 1000],
+      equity: [400, 500, 650],
+      revenue: [700, 900, 1200],
+      grossProfit: [200, 280, 400],
+      currentAssets: [300, 400, 500],
+      currentLiabilities: [200, 220, 210],
+      longLiabilities: [300, 250, 200],
+    });
+    const k = karne(fin);
+    expect(k.map((b) => b.grup)).toEqual(['kârlılık', 'büyüme', 'borçluluk']);
+    for (const b of k) {
+      expect(b.available).toBeGreaterThan(0);
+      expect(b.score).toBeLessThanOrEqual(b.available);
+    }
+    // İyileşen şirkette üç başlık da dolu.
+    expect(k.every((b) => b.score >= b.available - 1)).toBe(true);
+  });
+
+  it('kârlı ama KÜÇÜLEN şirket ile borcunu azaltan zararlı şirket ayrışır', () => {
+    const karli = financials(periods, {
+      netIncome: [200, 150, 120],
+      revenue: [1500, 1200, 900],
+      assets: [1000, 1000, 1000],
+      equity: [600, 580, 560],
+      grossProfit: [500, 380, 300],
+    });
+    const borcunuAzaltan = financials(periods, {
+      netIncome: [-50, -40, -30],
+      revenue: [700, 900, 1200],
+      assets: [1000, 1000, 1000],
+      equity: [300, 400, 500],
+      currentAssets: [200, 350, 500],
+      currentLiabilities: [400, 300, 200],
+      longLiabilities: [500, 400, 300],
+    });
+    const kar = (f: ReturnType<typeof financials>, g: string) =>
+      karne(f).find((b) => b.grup === g)!;
+
+    // Kârlı olan kârlılıkta önde, büyümede geride.
+    expect(kar(karli, 'kârlılık').score).toBeGreaterThan(kar(borcunuAzaltan, 'kârlılık').score);
+    expect(kar(borcunuAzaltan, 'büyüme').score).toBeGreaterThan(kar(karli, 'büyüme').score);
+    // Tek toplam skor bu ayrımı gizlerdi.
+    expect(kar(borcunuAzaltan, 'borçluluk').score).toBeGreaterThan(0);
+  });
+
+  it('veri eksikse payda küçülür, ölçüt uydurulmaz', () => {
+    const fin = financials(periods, { netIncome: [10, 20, 30] });
+    const k = karne(fin);
+    const toplam = k.reduce((s, b) => s + b.available, 0);
+    expect(toplam).toBeLessThan(11);
+    expect(toplam).toBeGreaterThan(0);
+  });
+});
+
+describe('quarterlySeries', () => {
+  // ÖLÇÜLDÜ: örnek veri setinde ASELS'in tablosu yalnızca /6 ve /12
+  // satırlarından oluşuyor. Adımı sabit "3 ay" saymak bu tablolarda bir
+  // önceki dönemi HİÇ bulamıyor ve üç kolon grafiğinin üçü de boş çiziliyordu
+  // — veri var, ekranda hiçbir şey yok.
+  it('altı aylık tabloda adımı verinin kendisinden okur', () => {
+    const fin = financials(['2024/6', '2024/12', '2025/6'], { revenue: [100, 260, 130] });
+    // İlk yarı kümülatifin kendisi; ikinci yarı = yıl − ilk yarı.
+    expect(quarterlySeries(fin, 'revenue').values).toEqual([100, 160, 130]);
+  });
+
+  it('yalnızca yıl sonu yayımlayan tabloda adım 12, değer olduğu gibi', () => {
+    const fin = financials(['2023/12', '2024/12'], { revenue: [500, 700] });
+    expect(reportStep(fin.periods)).toBe(12);
+    expect(quarterlySeries(fin, 'revenue').values).toEqual([500, 700]);
+  });
+
+  // Kaynak "2026/6" satırında yılın İLK ALTI AYINI veriyor, ikinci çeyreği
+  // değil. Kümülatifi olduğu gibi çizmek her çubuğu bir öncekini İÇEREN,
+  // sürekli büyüyen bir merdivene çevirir ve mevsimsellik kaybolur.
+  it('akış kaleminde kümülatif farkı alır', () => {
+    const fin = financials(['2024/3', '2024/6', '2024/9', '2024/12'], {
+      revenue: [100, 250, 420, 600],
+    });
+    expect(quarterlySeries(fin, 'revenue').values).toEqual([100, 150, 170, 180]);
+  });
+
+  it('bilanço kalemini OLDUĞU GİBİ bırakır (kümülatif değil)', () => {
+    const fin = financials(['2024/3', '2024/6'], { equity: [500, 520] });
+    expect(quarterlySeries(fin, 'equity').values).toEqual([500, 520]);
+  });
+
+  it('yıl atlayınca çıkarma yapmaz', () => {
+    // 2025/3 bir SONRAKİ yılın ilk çeyreği: 2024/12'den çıkarılırsa negatif
+    // saçmalık çıkar. Ayrıca 2024/12 tek başına YIL kümülatifidir — kendi
+    // çeyreği için 2024/9 gerekir, yoksa hesaplanamaz ve null kalır.
+    // 600'ü çizmek tam da kaçınılan "merdiven" kusuru olurdu.
+    const fin = financials(['2024/12', '2025/3', '2025/6'], { revenue: [600, 120, 260] });
+    expect(quarterlySeries(fin, 'revenue').values).toEqual([null, 120, 140]);
+  });
+
+  it('önceki dönem eksikse çeyrek üretmez (sıfır saymaz)', () => {
+    const fin = financials(['2024/3', '2024/6'], { revenue: [null, 250] });
+    // Eksik veriyi sıfır saymak 250'lik olmayan bir sıçrama gösterirdi.
+    expect(quarterlySeries(fin, 'revenue').values).toEqual([null, null]);
+  });
+
+  it('limit son N dönemi verir', () => {
+    const fin = financials(['2024/3', '2024/6', '2024/9', '2024/12'], {
+      revenue: [100, 250, 420, 600],
+    });
+    const out = quarterlySeries(fin, 'revenue', 2);
+    expect(out.labels).toEqual(['2024/9', '2024/12']);
+    expect(out.values).toEqual([170, 180]);
   });
 });

@@ -1679,3 +1679,176 @@
   color: var(--text-primary);
   background: var(--surface-2);
 }
+
+/* ── Karne ─────────────────────────────────────────────────────────────── */
+/* Tek bir toplam skor üç ayrı soruyu karıştırıyordu; başlıklar ayrı. */
+.fin__karne {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fin__karne-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.fin__karne-score {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fin__karne-label {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+/* Çubuk: oranı RENKTEN BAĞIMSIZ da okunur kılıyor (renk körlüğü, gri baskı). */
+.fin__karne-bar {
+  position: absolute;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: var(--sp-2);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.fin__karne-bar::after {
+  content: '';
+  display: block;
+  width: var(--oran, 0%);
+  height: 100%;
+  background: currentColor;
+}
+.fin__karne-item.is-up {
+  color: var(--up);
+}
+.fin__karne-item.is-warn {
+  color: var(--warn);
+}
+.fin__karne-item.is-down {
+  color: var(--down);
+}
+.fin__karne-item.is-unknown {
+  color: var(--text-muted);
+}
+/* Sayı ve etiket metin renginde kalsın; renk yalnızca çubukta ve kenarda. */
+.fin__karne-score,
+.fin__karne-label {
+  color: var(--text-primary);
+}
+.fin__karne-label {
+  color: var(--text-secondary);
+}
+
+/* ── Finansal: üst satır (karne + dar fiyat grafiği) ───────────────────── */
+/* Kullanıcı isteği: grafik ve finansallar ayrı panel kalsın, finansal
+   sekmesinde de grafik olsun ama DAR. Dar ekranda alt alta düşüyor —
+   sabit iki kolon, telefonda iki grafiği de okunmaz kılardı. */
+.fin__ust {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .fin__ust {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.fin__mini {
+  min-width: 0;
+}
+
+/* ── Finansal: dönemsel kolonlar ──────────────────────────────────────── */
+.fin__kontrol {
+  display: flex;
+  gap: var(--sp-3);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.fin__kolonlar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-4);
+}
+
+/* Kolon grafiği: SVG esnetiliyor, etiketler dışarıda (yazı esnemesin). */
+/* Izgara: solda ölçek kolonu, sağda grafik ve ALTINDA dönem etiketleri.
+   Ölçeği ayrı bir satır kabına koymak etiketleri çubuk merkezlerinden
+   kaydırıyordu — etiketler grafikle AYNI kolonda olmak zorunda. */
+.barseries {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sp-2);
+  margin: 0;
+  min-width: 0;
+}
+.barseries__olcek {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.barseries__svg {
+  grid-row: 1;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.barseries__labels {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), 1fr);
+  text-align: center;
+  gap: 2px;
+  margin-top: var(--sp-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.barseries__labels .is-hidden {
+  visibility: hidden;
+}
+.barseries__table {
+  grid-column: 1 / -1;
+}
+.barseries__empty {
+  margin: 0;
+  padding: var(--sp-4) 0;
+  font-size: var(--fs-sm);
+}
+
+/* ── Finansal: şirket detayları ───────────────────────────────────────── */
+.fin__detay {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+.fin__detay dt {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.fin__detay dd {
+  margin: 2px 0 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

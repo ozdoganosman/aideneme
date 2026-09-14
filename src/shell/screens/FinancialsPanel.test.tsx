@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { FUNDAMENTAL_FIELDS, type FieldId, type Financials } from '../../core/fundamentals/types';
 
 const snapshotFn = vi.fn();
@@ -11,6 +12,10 @@ vi.mock('../../data-client/fundamentals', () => ({
     financials: (...a: unknown[]) => financialsFn(...a),
     noStatementSymbols: (...a: unknown[]) => noStatementFn(...a),
   },
+}));
+const sectorMapFn = vi.fn();
+vi.mock('../../data-client/sectors', () => ({
+  sectorsClient: { map: (...a: unknown[]) => sectorMapFn(...a) },
 }));
 vi.mock('../chart/LineChart', () => ({
   LineChart: ({ series, zeroLine }: { series: { label: string }[]; zeroLine?: boolean }) => (
@@ -28,6 +33,19 @@ function financials(overrides: Partial<Record<FieldId, (number | null)[]>>): Fin
   const fields = {} as Record<FieldId, (number | null)[]>;
   for (const field of FUNDAMENTAL_FIELDS) fields[field] = overrides[field] ?? [null, null, null];
   return { symbol: 'THYAO', periods, fields, missing: ['capex'] };
+}
+
+/** Çeyreklik (KÜMÜLATİF) tablo — kaynak verisiyle aynı biçimde. */
+const ceyrekDonemler = ['2024/12', '2025/3', '2025/6', '2025/9', '2025/12'];
+function ceyreklikFinansal(): Financials {
+  const fields = {} as Record<FieldId, (number | null)[]>;
+  for (const field of FUNDAMENTAL_FIELDS) fields[field] = ceyrekDonemler.map(() => null);
+  // Yıl içinde kümülatif: 100 → 100/300/600/1000 (yani 100, 200, 300, 400).
+  fields.revenue = [900, 100, 300, 600, 1000];
+  fields.netIncome = [90, 10, 30, 60, 100];
+  fields.operatingProfit = [45, 5, 15, 30, 50];
+  fields.equity = [800, 810, 830, 860, 900];
+  return { symbol: 'THYAO', periods: ceyrekDonemler, fields, missing: [], group: '1' };
 }
 
 const snapshot = {
@@ -57,6 +75,7 @@ const snapshot = {
 beforeEach(() => {
   vi.clearAllMocks();
   noStatementFn.mockResolvedValue(new Set<string>());
+  sectorMapFn.mockResolvedValue({ of: { THYAO: 'Ulaştırma' }, source: 'test', generated: 1 });
   snapshotFn.mockResolvedValue(snapshot);
   financialsFn.mockResolvedValue(
     financials({
@@ -110,6 +129,27 @@ describe('Finansallar paneli', () => {
     expect(zero).toEqual(['yok', 'var', 'yok']);
   });
 
+  // Tek bir toplam skor üç ayrı soruyu karıştırıyordu: kârlı ama küçülen bir
+  // şirket ile zarar eden ama borcunu azaltan bir şirket aynı skoru alabilir.
+  it('karne üç başlığı ayrı gösterir', async () => {
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    const karne = await screen.findByRole('region', { name: 'Karne' });
+
+    for (const grup of ['kârlılık', 'büyüme', 'borçluluk']) {
+      expect(within(karne).getByText(grup)).toBeInTheDocument();
+    }
+    // Payda uydurulmuyor: her başlık "x/y" biçiminde ve y > 0.
+    const skorlar = within(karne)
+      .getAllByText(/^\d+\/\d+$/)
+      .map((e) => e.textContent!);
+    expect(skorlar).toHaveLength(3);
+    for (const s of skorlar) {
+      const [x, y] = s.split('/').map(Number);
+      expect(y).toBeGreaterThan(0);
+      expect(x).toBeLessThanOrEqual(y);
+    }
+  });
+
   it('bulunamayan kalemleri açıkça söyler', async () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
     await waitFor(() =>
@@ -147,5 +187,134 @@ describe('Finansallar paneli', () => {
     );
     expect(screen.queryByText('Bu sembol için finansal veri yok')).not.toBeInTheDocument();
     expect(screen.queryByText(/build_fundamentals\.py/)).not.toBeInTheDocument();
+  });
+});
+
+// Kullanıcı isteği: "kolon grafikleri ayarlanabilir olsun daha fazla veya
+// dönem olarak" — hem dönem TABANI (çeyrek/yıl) hem de dönem SAYISI.
+describe('Finansallar — dönemsel kolonlar', () => {
+  function sayilar(): string[] {
+    const bolum = screen.getByRole('region', { name: 'Dönemsel kolonlar' });
+    // Kolon grafiği bir resim; okunabilir veri ekran okuyucu tablosunda.
+    return within(bolum)
+      .getAllByRole('row')
+      .map((r) => r.textContent!.trim());
+  }
+
+  // ASIL TUZAK: kaynak "2025/6" satırında yılın İLK ALTI AYINI verir. Ham
+  // hâliyle çizmek her çubuğu bir öncekini içeren, sürekli büyüyen bir
+  // merdivene çevirir ve yılın son çeyreği HER ZAMAN en büyük görünür.
+  it('çeyreklik kolonlarda kümülatif fark alınıyor', async () => {
+    financialsFn.mockResolvedValue(ceyreklikFinansal());
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+
+    const satirlar = sayilar();
+    // Satış: 100 / 300 / 600 / 1000 kümülatifinden 100 / 200 / 300 / 400.
+    expect(satirlar).toContain('2025/3100');
+    expect(satirlar).toContain('2025/6200');
+    expect(satirlar).toContain('2025/9300');
+    expect(satirlar).toContain('2025/12400');
+    // Kümülatif değerin kendisi ÇİZİLMEMELİ.
+    expect(satirlar).not.toContain('2025/6600');
+  });
+
+  // Önceki dönem yoksa çeyrek üretilmiyor: eksik veriyi sıfır saymak olmayan
+  // bir çöküş, kümülatifi olduğu gibi çizmek olmayan bir sıçrama gösterirdi.
+  it('öncesi olmayan dönem "veri yok" kalır, uydurulmaz', async () => {
+    financialsFn.mockResolvedValue(ceyreklikFinansal());
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+    // 2024/12 tek başına: 2024/9 elde olmadığı için çeyreği hesaplanamaz.
+    expect(sayilar()).toContain('2024/12veri yok');
+  });
+
+  it('dönem sayısı değişince kolon sayısı değişir', async () => {
+    const user = userEvent.setup();
+    financialsFn.mockResolvedValue(ceyreklikFinansal());
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+
+    const bolum = screen.getByRole('region', { name: 'Dönemsel kolonlar' });
+    // Varsayılan 8 dönem; veride 5 var, hepsi görünür (3 kalem × 5 satır).
+    expect(within(bolum).getAllByRole('row')).toHaveLength(15);
+
+    await user.selectOptions(screen.getByLabelText('Dönem sayısı'), '5');
+    expect(within(bolum).getAllByRole('row')).toHaveLength(15);
+
+    await user.selectOptions(screen.getByLabelText('Dönem sayısı'), '12');
+    expect(within(bolum).getAllByRole('row')).toHaveLength(15);
+  });
+
+  it('yıllık tabana geçilince yıl sonu dönemleri çizilir', async () => {
+    const user = userEvent.setup();
+    financialsFn.mockResolvedValue(ceyreklikFinansal());
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+
+    await user.selectOptions(screen.getByLabelText('Dönem tabanı'), 'yil');
+    const satirlar = sayilar();
+    // Yıl sonu: 2024/12 → 900, 2025/12 → 1000 (kümülatifin kendisi, doğru).
+    expect(satirlar).toContain('2024900');
+    expect(satirlar).toContain('20251,0 b');
+    expect(satirlar.some((x) => x.startsWith('2025/'))).toBe(false);
+  });
+
+  // Yalnızca yıl sonu yayımlanan şirkette "çeyreklik" görünüm üç boş panel
+  // demek olurdu — kullanıcı hatası gibi görünen, aslında veri olan bir durum.
+  it('çeyreği olmayan tabloda varsayılan yıllık', async () => {
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+    expect(screen.getByLabelText('Dönem tabanı')).toHaveValue('yil');
+    expect(sayilar()).toContain('20241,0 b');
+  });
+});
+
+describe('Finansallar — şirket detayları ve dar grafik', () => {
+  it('detayları gösterir, olmayan alanı uydurmaz', async () => {
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    const bolum = await screen.findByRole('region', { name: 'Şirket detayları' });
+
+    expect(within(bolum).getByText('Ulaştırma')).toBeInTheDocument();
+    // Hisse başına kâr: 200 TTM ÷ 100 ödenmiş sermaye.
+    expect(within(bolum).getByText('2,00')).toBeInTheDocument();
+    // Hisse başına defter değeri: 800 ÷ 100.
+    expect(within(bolum).getByText('8,00')).toBeInTheDocument();
+    // Fiili dolaşım oranı veri setinde YOK — tahminle doldurulmadığı yazıyor.
+    expect(
+      within(bolum).getByText(/Fiili dolaşım oranı bu veri setinde bulunmuyor/),
+    ).toBeInTheDocument();
+  });
+
+  // Sınıflandırma dosyası yoksa panel çalışmaya devam etmeli; sektör "—" olur.
+  it('sektör dosyası yoksa panel yine çalışır', async () => {
+    sectorMapFn.mockResolvedValue(null);
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    const bolum = await screen.findByRole('region', { name: 'Şirket detayları' });
+    expect(within(bolum).getByText('Sektör').nextSibling).toHaveTextContent('—');
+  });
+
+  // Kullanıcı isteği: finansallarda da grafik olsun "ama böyle dar".
+  it('fiyat serisi verilince dar grafik çizilir', async () => {
+    const time = new Float64Array([1, 2, 3]);
+    const close = new Float64Array([10, 11, 12]);
+    const candles = {
+      time,
+      open: close,
+      high: close,
+      low: close,
+      close,
+      volume: close,
+      length: 3,
+    };
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={12} candles={candles} />);
+    const bolum = await screen.findByRole('region', { name: 'Fiyat (dar grafik)' });
+    expect(within(bolum).getByTestId('fin-chart')).toHaveTextContent('THYAO');
+  });
+
+  it('fiyat serisi yoksa dar grafik bölümü hiç çizilmez', async () => {
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await screen.findByRole('region', { name: 'Karne' });
+    expect(screen.queryByRole('region', { name: 'Fiyat (dar grafik)' })).toBeNull();
   });
 });

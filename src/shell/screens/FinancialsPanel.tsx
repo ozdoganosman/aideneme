@@ -5,20 +5,45 @@ import {
   annualSeries,
   computeRatios,
   growth,
+  karne,
   qualityScore,
+  quarterlySeries,
+  reportStep,
   type Ratios,
 } from '../../core/fundamentals/metrics';
-import type { Financials, FundamentalsSnapshot } from '../../core/fundamentals/types';
+import type { FieldId, Financials, FundamentalsSnapshot } from '../../core/fundamentals/types';
 import { fundamentalsClient } from '../../data-client/fundamentals';
+import { sectorsClient } from '../../data-client/sectors';
 import type { Market } from '../../data-client/markets';
+import type { Candles } from '../../core/data/types';
 import { LineChart } from '../chart/LineChart';
+import { BarSeries } from '../chart/BarSeries';
+import { Select } from '../../ui';
 
 interface Props {
   market: Market;
   symbol: string;
   /** Son kapanış — çarpanlar bununla hesaplanır. */
   price: number;
+  /**
+   * Fiyat serisi — finansal sekmesindeki DAR grafik için.
+   *
+   * Grafik ve finansallar ayrı panel olarak kalıyor; buradaki küçük fiyat
+   * grafiği "hangi tarihte neye baktığımı" göstermek için, grafik sekmesinin
+   * yerine geçmek için değil. Verilmezse bölüm hiç çizilmiyor.
+   */
+  candles?: Candles;
 }
+
+/** Kolon grafiklerinde gösterilecek dönem sayısı seçenekleri. */
+const DONEM_SAYILARI = ['5', '8', '12', '20', 'hepsi'] as const;
+
+/** Kolon grafiği kalemleri — üçü de AKIŞ kalemi, yani kümülatiften arındırılıyor. */
+const KOLONLAR: { field: FieldId; label: string }[] = [
+  { field: 'revenue', label: 'Satış' },
+  { field: 'operatingProfit', label: 'Faaliyet kârı' },
+  { field: 'netIncome', label: 'Net kâr' },
+];
 
 const fmtRatio = (v: number | null, digits = 2): string => (v === null ? '—' : trNum(v, digits));
 
@@ -55,11 +80,22 @@ function prov(title: string, body: string) {
 }
 
 /** Sembol Masası'nın finansal sekmesi: çarpanlar, kalite, büyüme, tablolar. */
-export function FinancialsPanel({ market, symbol, price }: Props) {
+export function FinancialsPanel({ market, symbol, price, candles }: Props) {
   const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
   const [fin, setFin] = useState<Financials | null>(null);
   const [noStatement, setNoStatement] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sector, setSector] = useState<string | null>(null);
+  /**
+   * Kolon grafikleri: dönem tabanı ve kaç dönem gösterileceği.
+   *
+   * Taban `null` iken VERİDEN karar veriliyor. Çeyreği olmayan bir şirkette
+   * (kaynak yalnızca yıl sonu yayımlamışsa) "çeyreklik" görünüm üç tane boş
+   * panel demek olurdu — kullanıcı hatası gibi görünen, aslında veri olan bir
+   * durum. Seçim yapıldığı anda kullanıcının dediği geçerli.
+   */
+  const [tabanSecim, setTabanSecim] = useState<'ceyrek' | 'yil' | null>(null);
+  const [adet, setAdet] = useState<string>('8');
 
   useEffect(() => {
     let cancelled = false;
@@ -85,12 +121,30 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
     };
   }, [market, symbol]);
 
+  // Sektör AYRI yükleniyor: dosya yoksa (sınıflandırma üretilmediyse) finansal
+  // panelin tamamı boş kalmamalı — detay satırı "—" der, panel çalışmaya devam
+  // eder. Aynı sebeple hata yutuluyor, sektör UYDURULMUYOR.
+  useEffect(() => {
+    let cancelled = false;
+    setSector(null);
+    sectorsClient
+      .map(market)
+      .then((m) => {
+        if (!cancelled) setSector(m?.of[symbol] ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [market, symbol]);
+
   const row = snapshot?.symbols[symbol] ?? null;
   const ratios: Ratios | null = useMemo(
     () => (row ? computeRatios({ row, price }) : null),
     [row, price],
   );
   const quality = useMemo(() => (fin ? qualityScore(fin) : null), [fin]);
+  const karneler = useMemo(() => (fin ? karne(fin) : null), [fin]);
   const g = useMemo(() => (fin ? growth(fin) : null), [fin]);
 
   const charts = useMemo(() => {
@@ -149,6 +203,59 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
     };
   }, [fin]);
 
+  /**
+   * Kolon grafiği verisi — taban (çeyrek/yıl) ve dönem sayısı kullanıcıda.
+   *
+   * Çeyreklik seride kümülatif farkı `quarterlySeries` alıyor: kaynak
+   * "2026/6" satırında yılın İLK ALTI AYINI veriyor, ikinci çeyreği değil.
+   * Ham hâliyle çizmek her çubuğu bir öncekini içeren bir merdivene çevirir.
+   */
+  // Tablonun kendi adımı: çeyreklik 3, altı aylık 6, yıllık 12. Yıllık
+  // yayımlayan bir tabloda "çeyreklik" görünüm yıllığın aynısı olurdu.
+  const ceyrekVar = useMemo(() => !!fin && reportStep(fin.periods) < 12, [fin]);
+  const taban: 'ceyrek' | 'yil' = tabanSecim ?? (ceyrekVar ? 'ceyrek' : 'yil');
+
+  const kolonlar = useMemo(() => {
+    if (!fin) return null;
+    const limit = adet === 'hepsi' ? undefined : Number(adet);
+    const dizi = KOLONLAR.map(({ field, label }) => {
+      if (taban === 'ceyrek') return { field, label, ...quarterlySeries(fin, field, limit) };
+      const { labels, values } = annualSeries(fin, field);
+      return limit && labels.length > limit
+        ? { field, label, labels: labels.slice(-limit), values: values.slice(-limit) }
+        : { field, label, labels, values };
+    });
+    return dizi[0].labels.length > 0 ? dizi : null;
+  }, [fin, taban, adet]);
+
+  /**
+   * Finansal sekmesinin DAR fiyat grafiği.
+   *
+   * Son 500 bar: tam geçmiş bu genişlikte okunmuyor, üstelik dar grafiğin işi
+   * "şu an nerede" sorusunu cevaplamak — derin inceleme grafik sekmesinde.
+   */
+  const mini = useMemo(() => {
+    if (!candles || candles.length < 2) return null;
+    const from = Math.max(0, candles.length - 500);
+    return { time: candles.time.subarray(from), values: candles.close.subarray(from) };
+  }, [candles]);
+
+  /**
+   * Şirket detayları.
+   *
+   * Fiili dolaşım oranı KASITLI olarak yok: veri setinde böyle bir alan
+   * bulunmuyor ve tahminle doldurmak, üstelik bir "detay" başlığı altında,
+   * uydurma sayıyı gerçek gibi gösterirdi. Panelin altındaki not bunu söylüyor.
+   */
+  const detaylar = useMemo(() => {
+    if (!row) return null;
+    const sermaye = row.paidCapital;
+    const hbk =
+      sermaye && sermaye > 0 && row.netIncomeTtm !== null ? row.netIncomeTtm / sermaye : null;
+    const dd = sermaye && sermaye > 0 && row.equity !== null ? row.equity / sermaye : null;
+    return { sermaye, hbk, dd };
+  }, [row]);
+
   if (loading) return <Skeleton count={4} height="60px" />;
 
   if (!row && !fin) {
@@ -185,6 +292,77 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
 
   return (
     <div className="fin">
+      {/*
+        ÜST SATIR: karne + DAR fiyat grafiği.
+
+        Kullanıcı isteği: grafik ve finansallar ayrı panel kalsın, ama finansal
+        sekmesinde de bir grafik olsun — "ama böyle dar". Buradaki grafik
+        kapanış çizgisi; mum, indikatör ve çizim araçları grafik sekmesinde.
+        Amaç finansal tabloya bakarken fiyatın nerede olduğunu kaybetmemek.
+      */}
+      <div className="fin__ust">
+        {/*
+          KARNE. Tek bir "11 üzerinden 4" sayısı üç ayrı soruyu birbirine
+          karıştırıyordu: kârlı ama küçülen bir şirket ile zarar eden ama
+          borcunu azaltan bir şirket aynı toplam skoru alabilir — oysa
+          kullanıcının sorduğu şey hangisi olduğu. Ölçüt listesi altta
+          duruyor: karne bir özet, kara kutu değil.
+        */}
+        {karneler ? (
+          <section className="fin__panel" aria-label="Karne">
+            <header>
+              <h3>Karne</h3>
+              <span className="desk__muted">
+                Her başlık kendi ölçütleri üzerinden; veri eksikse madde değerlendirilmez ve PAYDA
+                küçülür ("2/2" ile "2/5" aynı şey değil).
+              </span>
+            </header>
+            <ul className="fin__karne">
+              {karneler.map((b) => {
+                const oran = b.available > 0 ? b.score / b.available : null;
+                const tone =
+                  oran === null ? 'unknown' : oran >= 0.7 ? 'up' : oran >= 0.4 ? 'warn' : 'down';
+                return (
+                  <li key={b.grup} className={`fin__karne-item is-${tone}`}>
+                    <span className="fin__karne-score">
+                      {b.available > 0 ? `${b.score}/${b.available}` : '—'}
+                    </span>
+                    <span className="fin__karne-label">{b.grup}</span>
+                    {/* Halka: oranı renkten BAĞIMSIZ da okunur kılıyor. */}
+                    <span
+                      className="fin__karne-bar"
+                      aria-hidden="true"
+                      style={{ ['--oran' as string]: `${Math.round((oran ?? 0) * 100)}%` }}
+                    />
+                    <span className="visually-hidden">
+                      {b.available > 0
+                        ? `${b.grup}: ${b.available} ölçütün ${b.score} tanesi karşılandı`
+                        : `${b.grup}: değerlendirilebilecek veri yok`}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+        {mini ? (
+          <section className="fin__panel fin__mini" aria-label="Fiyat (dar grafik)">
+            <header>
+              <h3>Fiyat</h3>
+              <span className="desk__muted">son {mini.values.length} işlem günü · kapanış</span>
+            </header>
+            <LineChart
+              series={[
+                { label: symbol, color: 'var(--accent)', time: mini.time, values: mini.values },
+              ]}
+              height={150}
+              unit="compact"
+              ariaLabel={`${symbol} kapanış fiyatı, son ${mini.values.length} işlem günü`}
+            />
+          </section>
+        ) : null}
+      </div>
+
       <section className="fin__stats" aria-label="Çarpanlar">
         <Stat
           label="F/K"
@@ -292,6 +470,47 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
         </section>
       ) : null}
 
+      {kolonlar ? (
+        <section className="fin__panel" aria-label="Dönemsel kolonlar">
+          <header>
+            <h3>{taban === 'ceyrek' ? 'Çeyreklik' : 'Yıllık'} satış, kâr ve net kâr</h3>
+            <span className="desk__muted">
+              {taban === 'ceyrek'
+                ? 'Kümülatif dönemlerden ARINDIRILDI: kaynak "2026/6" satırında yılın ilk altı ayını verir, ikinci çeyreği değil. Önceki dönem eksikse çubuk çizilmez.'
+                : 'Yıl sonu (/12) dönemleri.'}
+            </span>
+            <div className="fin__kontrol">
+              <Select
+                label="Dönem tabanı"
+                value={taban}
+                onChange={(v) => setTabanSecim(v === 'yil' ? 'yil' : 'ceyrek')}
+                options={[
+                  { value: 'ceyrek', label: 'Çeyreklik' },
+                  { value: 'yil', label: 'Yıllık' },
+                ]}
+              />
+              <Select
+                label="Dönem sayısı"
+                value={adet}
+                onChange={setAdet}
+                options={DONEM_SAYILARI.map((d) => ({
+                  value: d,
+                  label: d === 'hepsi' ? 'Hepsi' : `${d} dönem`,
+                }))}
+              />
+            </div>
+          </header>
+          <div className="fin__kolonlar">
+            {kolonlar.map((k) => (
+              <div key={k.field} className="fin__serie">
+                <span className="fin__serie-label">{k.label}</span>
+                <BarSeries labels={k.labels} values={k.values} label={`${symbol} ${k.label}`} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {charts ? (
         <section className="fin__panel" aria-label="Yıllık seriler">
           <header>
@@ -326,10 +545,54 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
         </section>
       ) : null}
 
+      {detaylar ? (
+        <section className="fin__panel" aria-label="Şirket detayları">
+          <header>
+            <h3>Şirket detayları</h3>
+            {row ? <span className="desk__muted">bilanço dönemi {row.period}</span> : null}
+          </header>
+          <dl className="fin__detay">
+            <div>
+              <dt>Sektör</dt>
+              <dd>{sector ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Ödenmiş sermaye</dt>
+              <dd>{fmtMoney(detaylar.sermaye)}</dd>
+            </div>
+            <div>
+              <dt>Hisse başına kâr</dt>
+              <dd>{fmtRatio(detaylar.hbk)}</dd>
+            </div>
+            <div>
+              <dt>Hisse başına defter değeri</dt>
+              <dd>{fmtRatio(detaylar.dd)}</dd>
+            </div>
+            <div>
+              <dt>Piyasa değeri</dt>
+              <dd>{fmtMoney(ratios?.marketCap ?? null)}</dd>
+            </div>
+            <div>
+              <dt>Tablo tipi</dt>
+              <dd>{fin?.group === '2' ? 'Banka' : fin?.group ? 'Sanayi/hizmet' : '—'}</dd>
+            </div>
+          </dl>
+          {/*
+            Fiili dolaşım oranı burada YOK çünkü veri setinde yok. Bir "detay"
+            başlığı altında tahmin yazmak, uydurma sayıyı gerçek gibi gösterirdi.
+          */}
+          <p className="desk__muted">
+            Hisse başına değerler ödenmiş sermayeye bölünerek bulunur; BIST'te nominal değer 1 TL
+            olduğu için bu pay adedine yakındır, nominali farklı şirketlerde sapar. Fiili dolaşım
+            oranı bu veri setinde bulunmuyor — tahminle doldurulmadı.
+          </p>
+        </section>
+      ) : null}
+
       {quality ? (
         <section className="fin__panel" aria-label="Kalite ölçütleri">
           <header>
-            <h3>Kalite</h3>
+            <h3>Ölçütler</h3>
             <Badge
               tone={
                 quality.score >= quality.available * 0.7
@@ -354,7 +617,7 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
                 <span aria-hidden="true">
                   {check.passed === null ? '–' : check.passed ? '✓' : '✕'}
                 </span>{' '}
-                {check.label}
+                {check.label} <span className="desk__muted">· {check.group}</span>
                 {check.passed === null ? <span className="desk__muted"> (veri yok)</span> : null}
               </li>
             ))}
