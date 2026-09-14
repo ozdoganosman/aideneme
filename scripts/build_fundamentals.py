@@ -235,6 +235,10 @@ def group_order(symbol: str) -> list[str]:
 # ('1' XI_29, '2' UFRS, '3' UFRS_K) — yani denenecek dördüncü bir tablo yok.
 _VERI_YOK = "no financial data was fetched"
 
+# Ağın çalıştığını sınamak için kullanılan kontrol sembolü: finansal tablosu
+# kesin olan, kotasyondan düşme ihtimali düşük bir sembol.
+CANARY_SYMBOL = "THYAO"
+
 
 def fetch_one(
     symbol: str, start_year: int, end_year: int, fetch=None
@@ -682,7 +686,39 @@ def self_test() -> None:
             out2 = Path(tmp2)
             _, f2, b2 = build_all(["AAA", "BBB"], out2, lambda s: (None, "veriyok"))
             assert (f2, b2) == (0, 2), (f2, b2)
-            assert read_nostatement(out2) == set(), "ağ şüpheliyken kalıcı yargı verilmemeli"
+            assert read_nostatement(out2) == set(), "kanıt yokken kalıcı yargı verilmemeli"
+
+        # KONTROL SEMBOLÜ. "Bu turda bir şey indiyse ağ iyidir" ölçütü tek
+        # başına yetmiyor: kalan listede YALNIZCA tablosuz semboller kalınca
+        # tur boyunca hiçbir şey inmiyor ve hiçbir yargı verilemiyor.
+        # Ölçüldü — 96 sembollük tur başarıyla bitti, tek sembol bile
+        # işaretlenemedi. Kontrol sembolü bu tavuk-yumurtayı kırıyor.
+        with tempfile.TemporaryDirectory() as tmp3:
+            out3 = Path(tmp3)
+            sorgu = {"n": 0}
+
+            def iyi_kontrol():
+                sorgu["n"] += 1
+                return {"symbol": "THYAO", "periods": ["2024/6"], "fields": {}}, "ok"
+
+            _, f3, b3 = build_all(
+                ["XU100", "XBANK"], out3, lambda s: (None, "veriyok"), canary=iyi_kontrol
+            )
+            assert (f3, b3) == (0, 0), (f3, b3)
+            assert read_nostatement(out3) == {"XU100", "XBANK"}, read_nostatement(out3)
+            assert sorgu["n"] == 1, f"kontrol sembolü bir kez sorulmalı, {sorgu['n']}"
+
+        # Kontrol sembolü de gelmiyorsa suçlu ağdır: hiçbir yargı verilmez.
+        with tempfile.TemporaryDirectory() as tmp4:
+            out4 = Path(tmp4)
+            _, f4, b4 = build_all(
+                ["XU100", "XBANK"],
+                out4,
+                lambda s: (None, "veriyok"),
+                canary=lambda: (None, "hata"),
+            )
+            assert (f4, b4) == (0, 2), (f4, b4)
+            assert read_nostatement(out4) == set(), "ağ çökükken hiçbir sembol işaretlenmemeli"
 
         # Kaynak düzelirse "tablosuz" kaydı kalkıyor.
         build_all(["XU100"], out, lambda s: ({"symbol": s, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}, "ok"))
@@ -942,6 +978,7 @@ def build_all(
     max_seconds: float | None = None,
     now=time.monotonic,
     workers: int = 1,
+    canary=None,
 ) -> tuple[list[dict], int, int]:
     # `fetch` sözleşmesi: sembol → (kayıt | None, "ok" | "tablosuz" | "hata").
     """
@@ -981,6 +1018,35 @@ def build_all(
             )
         return True
 
+    # AĞIN ÇALIŞTIĞININ KANITI.
+    #
+    # İlk denemem "bu turda en az bir sembol indiyse ağ iyidir" idi ve
+    # çalışmadı: kalan listede YALNIZCA tablosuz semboller kalınca tur
+    # boyunca hiçbir şey inmiyor, dolayısıyla hiçbir yargı verilemiyor.
+    # Ölçüldü — 96 sembollük tur başarıyla bitti ve tek bir sembolü bile
+    # işaretleyemedi. Tavuk-yumurta.
+    #
+    # Kanıt artık bir KONTROL SEMBOLÜ: tablosu kesin olan bir sembol
+    # çekiliyor. Geldiyse ağ çalışıyor, "veri yok" kaynağın cevabıdır.
+    # Gelmediyse suçlu ağdır ve hiçbir sembol kalıcı işaretlenmez.
+    # Bir kez çekiliyor, sonucu saklanıyor.
+    ag = {"soruldu": False, "iyi": False}
+
+    def ag_iyi() -> bool:
+        if fetched > 0:
+            return True
+        if canary is None:
+            return False
+        if not ag["soruldu"]:
+            ag["soruldu"] = True
+            kayit, _ = canary()
+            ag["iyi"] = kayit is not None
+            print(
+                "[fund] kontrol sembolü: "
+                + ("geldi, ağ çalışıyor" if ag["iyi"] else "GELMEDİ — ağ şüpheli")
+            )
+        return ag["iyi"]
+
     i = 0
     for symbol, (record, sonuc) in _fetch_stream(pending, fetch, workers, should_stop):
         i += 1
@@ -991,7 +1057,8 @@ def build_all(
             # aynı "veri yok" hatasına çeviriyor (ölçüldü). Aynı turda başka
             # semboller indiyse ağ çalışıyor demektir; hiçbiri inmediyse
             # suçlu büyük olasılıkla ağ ve sembol sıradan bir başarısızlık.
-            if sonuc == "veriyok" and fetched > 0:
+            # Kanıt: bu turda inen bir sembol, ya da kontrol sembolü.
+            if sonuc == "veriyok" and ag_iyi():
                 tablosuz += 1
                 nostatement.add(symbol)
                 write_nostatement(nostatement, out_dir)
@@ -1099,6 +1166,8 @@ def main() -> None:
         lambda sym: fetch_one(sym, args.start_year, args.end_year),
         max_seconds=args.max_seconds,
         workers=max(1, args.workers),
+        # Tablosu kesin olan, BIST'in en çok işlem gören sembollerinden biri.
+        canary=lambda: fetch_one(CANARY_SYMBOL, args.start_year, args.end_year),
     )
 
     if not records:
