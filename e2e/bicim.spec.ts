@@ -39,11 +39,16 @@ for (const [name, query, ready] of SCREENS) {
       // `12.3` / `12.34` kalıpları. Böylece binlik ayırıcı (12.345) ve
       // tarih (14.09.2026) elenir.
       const ondalik = [...text.matchAll(/(?<![.\d])\d+\.\d{1,2}(?![.\d])/g)].map((m) => m[0]);
-      // Sondan yüzde: rakamdan hemen sonra gelen % işareti. DİKKAT: iki
-      // doğru yazılmış yüzde yan yana gelince ("-%2,37 %18") araya düşen
-      // "7 %" yanlış alarm üretiyordu — işaretin ardından rakam geliyorsa
-      // o zaten bir sonraki sayının başıdır.
-      const sondanYuzde = [...text.matchAll(/\d\s?%(?!\d)/g)].map((m) => m[0]);
+      // Sondan yüzde: rakamdan hemen sonra gelen % işareti.
+      //
+      // İki yanlış alarm sınıfı elendi, ikisi de ölçütün kendi kusuruydu:
+      //   1. İki doğru yüzde yan yana gelince ("-%2,37 %18") araya düşen
+      //      "7 %" — işaretin ardından RAKAM geliyorsa o zaten bir sonraki
+      //      sayının başıdır.
+      //   2. Ardından HARF gelen % (".. > 50 %R 14 > 50"). Strateji adları
+      //      Williams %R içeriyor; Türkçede yüzde her zaman % + rakamdır,
+      //      "%R" bir yüzde değil indikatör adıdır.
+      const sondanYuzde = [...text.matchAll(/\d\s?%(?![\d\p{L}])/gu)].map((m) => m[0]);
       return { ondalik: [...new Set(ondalik)], sondanYuzde: [...new Set(sondanYuzde)] };
     });
 
