@@ -101,7 +101,9 @@ export function VirtualTable<T>({
                         </span>
                       </button>
                     ) : (
-                      c.header
+                      // Sıralanamayan başlıklar da aynı iç boşluğu almalı; yoksa
+                      // komşu sütunun başlığına yapışıyor.
+                      <span className="ui-vtable__label">{c.header}</span>
                     )}
                   </th>
                 );

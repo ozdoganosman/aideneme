@@ -1,0 +1,604 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Badge,
+  Button,
+  Combobox,
+  EmptyState,
+  IconButton,
+  NumberField,
+  Popover,
+  Select,
+  Skeleton,
+  Stat,
+  VirtualTable,
+  type Column,
+} from '../../ui';
+import { Icon } from '../../ui/icons';
+import type { Candles } from '../../core/data/types';
+import { DEFAULT_COSTS, type Trade } from '../../core/backtest/engine';
+import type { Badge as ValidationBadge } from '../../core/backtest/validate';
+import {
+  describeCondition,
+  type Condition,
+  type Operand,
+  type Strategy,
+} from '../../core/strategy/dsl';
+import { dataClient } from '../../data-client/client';
+import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
+import type { BacktestOutcome } from '../../workers/analysisClient';
+import { LineChart } from '../chart/LineChart';
+import { useAnalysis } from '../useAnalysis';
+import type { UrlState } from '../urlState';
+
+interface Props {
+  state: UrlState;
+  push: (patch: UrlState) => void;
+}
+
+type SimpleOp = 'gt' | 'lt' | 'crossAbove' | 'crossBelow';
+
+interface SimpleRule {
+  left: Operand;
+  op: SimpleOp;
+  right: Operand;
+}
+
+const OP_LABEL: Record<SimpleOp, string> = {
+  gt: '>',
+  lt: '<',
+  crossAbove: 'yukarı keser',
+  crossBelow: 'aşağı keser',
+};
+
+const OPERAND_KINDS = [
+  { value: 'close', label: 'Kapanış' },
+  { value: 'open', label: 'Açılış' },
+  { value: 'volume', label: 'Hacim' },
+  { value: 'const', label: 'Sabit' },
+  { value: 'ema', label: 'EMA' },
+  { value: 'sma', label: 'SMA' },
+  { value: 'rsi', label: 'RSI' },
+  { value: 'adx', label: 'ADX' },
+  { value: 'atr', label: 'ATR' },
+  { value: 'roc', label: 'ROC' },
+  { value: 'highest', label: 'En yüksek' },
+  { value: 'lowest', label: 'En düşük' },
+];
+
+interface Preset {
+  id: string;
+  label: string;
+  entry: SimpleRule[];
+  exit: SimpleRule[];
+  stopLossPct?: number;
+  takeProfitPct?: number;
+}
+
+const PRESETS: Preset[] = [
+  {
+    id: 'ema',
+    label: 'EMA kesişimi (20/50)',
+    entry: [
+      { left: { kind: 'ema', length: 20 }, op: 'crossAbove', right: { kind: 'ema', length: 50 } },
+    ],
+    exit: [
+      { left: { kind: 'ema', length: 20 }, op: 'crossBelow', right: { kind: 'ema', length: 50 } },
+    ],
+  },
+  {
+    id: 'rsi',
+    label: 'RSI aşırı satım dönüşü',
+    entry: [
+      { left: { kind: 'rsi', length: 14 }, op: 'crossAbove', right: { kind: 'const', value: 30 } },
+    ],
+    exit: [
+      { left: { kind: 'rsi', length: 14 }, op: 'crossBelow', right: { kind: 'const', value: 65 } },
+    ],
+    stopLossPct: 8,
+  },
+  {
+    id: 'trend',
+    label: 'Trend filtreli momentum',
+    entry: [
+      { left: { kind: 'close' }, op: 'gt', right: { kind: 'ema', length: 200 } },
+      { left: { kind: 'roc', length: 20 }, op: 'gt', right: { kind: 'const', value: 5 } },
+    ],
+    exit: [{ left: { kind: 'close' }, op: 'crossBelow', right: { kind: 'ema', length: 50 } }],
+    stopLossPct: 10,
+    takeProfitPct: 25,
+  },
+];
+
+const BADGE_TONE: Record<ValidationBadge['level'], 'up' | 'warn' | 'down' | 'neutral'> = {
+  pass: 'up',
+  warn: 'warn',
+  fail: 'down',
+  unknown: 'neutral',
+};
+
+const BADGE_ICON: Record<ValidationBadge['level'], string> = {
+  pass: '✓',
+  warn: '!',
+  fail: '✕',
+  unknown: '?',
+};
+
+function toCondition(rules: SimpleRule[]): Condition {
+  return { op: 'all', of: rules.map((r) => ({ op: r.op, left: r.left, right: r.right })) };
+}
+
+function fmt(v: number, digits = 2, suffix = ''): string {
+  if (!Number.isFinite(v)) return v === Infinity ? '∞' : '—';
+  return `${v > 0 && suffix === '%' ? '+' : ''}${v.toFixed(digits)}${suffix}`;
+}
+
+/** Strateji Laboratuvarı — kural kur, maliyetli sına, doğrulamayı gör. */
+export default function Lab({ state, push }: Props) {
+  const market = (MARKETS.includes(state.m as Market) ? state.m : 'bist') as Market;
+  const analysis = useAnalysis(market);
+  const symbol = state.s || analysis.symbols[0] || '';
+
+  const [preset, setPreset] = useState('ema');
+  const [entryRules, setEntryRules] = useState<SimpleRule[]>(PRESETS[0].entry);
+  const [exitRules, setExitRules] = useState<SimpleRule[]>(PRESETS[0].exit);
+  const [stopLossPct, setStopLossPct] = useState(0);
+  const [takeProfitPct, setTakeProfitPct] = useState(0);
+  const [commissionBps, setCommissionBps] = useState(DEFAULT_COSTS.commissionBps);
+  const [slippageBps, setSlippageBps] = useState(DEFAULT_COSTS.slippageBps);
+  const [cashAnnualPct, setCashAnnualPct] = useState(0);
+
+  const [candles, setCandles] = useState<Candles | null>(null);
+  const [outcome, setOutcome] = useState<BacktestOutcome | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const clientRef = useRef(analysis.client);
+  clientRef.current = analysis.client;
+
+  const strategy: Strategy = useMemo(
+    () => ({
+      entry: toCondition(entryRules),
+      exit: exitRules.length ? toCondition(exitRules) : undefined,
+      stopLossPct: stopLossPct > 0 ? stopLossPct : undefined,
+      takeProfitPct: takeProfitPct > 0 ? takeProfitPct : undefined,
+    }),
+    [entryRules, exitRules, stopLossPct, takeProfitPct],
+  );
+
+  const options = useMemo(
+    () => ({
+      costs: { commissionBps, slippageBps, volumeCapPct: DEFAULT_COSTS.volumeCapPct },
+      cashAnnualPct,
+    }),
+    [commissionBps, slippageBps, cashAnnualPct],
+  );
+
+  // Sembol serisi (tam geçmiş).
+  useEffect(() => {
+    if (!symbol) return;
+    let cancelled = false;
+    setCandles(null);
+    dataClient
+      .series(market, symbol)
+      .then((r) => {
+        if (!cancelled) setCandles(r.candles);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [market, symbol]);
+
+  // Hızlı backtest: kural/maliyet değişince otomatik (doğrulama hariç).
+  useEffect(() => {
+    const client = clientRef.current;
+    if (!client || !candles || analysis.status !== 'ready') return;
+    let cancelled = false;
+    setBusy(true);
+    setError(null);
+    client
+      .backtest(candles, strategy, options, false)
+      .then((result) => {
+        if (!cancelled) setOutcome(result);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [candles, strategy, options, analysis.status]);
+
+  async function runValidation() {
+    const client = clientRef.current;
+    if (!client || !candles) return;
+    setValidating(true);
+    setError(null);
+    try {
+      const result = await client.backtest(candles, strategy, options, {
+        permutationRuns: 150,
+        folds: 4,
+        trials: 1,
+        seed: 7,
+      });
+      setOutcome(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  function applyPreset(id: string) {
+    const found = PRESETS.find((p) => p.id === id);
+    if (!found) return;
+    setPreset(id);
+    setEntryRules(found.entry);
+    setExitRules(found.exit);
+    setStopLossPct(found.stopLossPct ?? 0);
+    setTakeProfitPct(found.takeProfitPct ?? 0);
+  }
+
+  const metrics = outcome?.metrics;
+  const tradeColumns: Column<Trade>[] = useMemo(
+    () => [
+      {
+        key: 'entry',
+        header: 'Giriş',
+        width: '110px',
+        render: (t) => new Date(t.entryTime * 1000).toISOString().slice(0, 10),
+        sortValue: (t) => t.entryTime,
+      },
+      {
+        key: 'exit',
+        header: 'Çıkış',
+        width: '110px',
+        render: (t) => new Date(t.exitTime * 1000).toISOString().slice(0, 10),
+      },
+      {
+        key: 'bars',
+        header: 'Bar',
+        numeric: true,
+        render: (t) => t.bars,
+        sortValue: (t) => t.bars,
+      },
+      {
+        key: 'net',
+        header: 'Net %',
+        numeric: true,
+        sortValue: (t) => t.netPct,
+        render: (t) => (
+          <span style={{ color: t.netPct >= 0 ? 'var(--up)' : 'var(--down)' }}>
+            {fmt(t.netPct, 2, '%')}
+          </span>
+        ),
+      },
+      { key: 'mae', header: 'MAE %', numeric: true, render: (t) => fmt(t.maePct, 1, '%') },
+      { key: 'mfe', header: 'MFE %', numeric: true, render: (t) => fmt(t.mfePct, 1, '%') },
+      {
+        key: 'reason',
+        header: 'Çıkış nedeni',
+        render: (t) =>
+          ({ signal: 'kural', stop: 'stop', target: 'hedef', end: 'seri sonu' })[t.reason],
+      },
+    ],
+    [],
+  );
+
+  if (analysis.status === 'error') {
+    return (
+      <EmptyState
+        tone="error"
+        icon={<Icon name="alert" size={28} />}
+        title="Laboratuvar verisi yüklenemedi"
+        description={analysis.error ?? ''}
+      />
+    );
+  }
+
+  return (
+    <div className="lab">
+      <section className="lab__panel" aria-label="Strateji tanımı">
+        <div className="lab__row">
+          <Select
+            label="Piyasa"
+            value={market}
+            onChange={(value) => push({ m: value, s: '' })}
+            options={MARKETS.map((m) => ({ value: m, label: MARKET_LABEL[m] }))}
+          />
+          <Combobox
+            label="Sembol"
+            value={symbol}
+            onChange={(value) => push({ s: value })}
+            options={analysis.symbols.map((s) => ({ value: s, label: s }))}
+            placeholder={symbol || 'Sembol ara…'}
+          />
+          <Select
+            label="Hazır strateji"
+            value={preset}
+            onChange={applyPreset}
+            options={PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+          />
+        </div>
+
+        <RuleList title="Giriş kuralları" rules={entryRules} onChange={setEntryRules} />
+        <RuleList title="Çıkış kuralları" rules={exitRules} onChange={setExitRules} />
+
+        <div className="lab__row">
+          <NumberField
+            label="Stop %"
+            value={stopLossPct}
+            min={0}
+            max={50}
+            step={0.5}
+            onChange={setStopLossPct}
+            hint="0 = yok"
+          />
+          <NumberField
+            label="Hedef %"
+            value={takeProfitPct}
+            min={0}
+            max={200}
+            step={0.5}
+            onChange={setTakeProfitPct}
+            hint="0 = yok"
+          />
+          <NumberField
+            label="Komisyon (bps)"
+            value={commissionBps}
+            min={0}
+            max={100}
+            onChange={setCommissionBps}
+          />
+          <NumberField
+            label="Slipaj (bps)"
+            value={slippageBps}
+            min={0}
+            max={100}
+            onChange={setSlippageBps}
+          />
+          <NumberField
+            label="Nakit getirisi %"
+            value={cashAnnualPct}
+            min={0}
+            max={100}
+            onChange={setCashAnnualPct}
+            hint="pozisyonsuzken"
+          />
+        </div>
+
+        <p className="desk__muted">
+          Kural: {describeCondition(strategy.entry)}
+          {strategy.exit ? ` · Çıkış: ${describeCondition(strategy.exit)}` : ''}
+        </p>
+
+        <div className="lab__actions">
+          <Button variant="primary" busy={validating} onClick={runValidation}>
+            Doğrulamayı çalıştır
+          </Button>
+          {busy ? <Badge tone="warn">Hesaplanıyor…</Badge> : null}
+          {outcome ? <span className="desk__muted">worker {outcome.ms.toFixed(0)} ms</span> : null}
+        </div>
+      </section>
+
+      {error ? (
+        <EmptyState
+          tone="error"
+          icon={<Icon name="alert" size={28} />}
+          title="Backtest çalışmadı"
+          description={error}
+        />
+      ) : null}
+
+      {!outcome || !metrics ? (
+        <Skeleton height="240px" />
+      ) : (
+        <>
+          <section className="lab__badges" aria-label="Doğrulama rozetleri">
+            {outcome.badges.length === 0 ? (
+              <p className="desk__muted">
+                Sonuç <strong>doğrulanmadı</strong>: maliyet dahil ama OOS, sağlamlık, tesadüf ve
+                çoklu test sınamaları çalıştırılmadı. "Doğrulamayı çalıştır" ile sına.
+              </p>
+            ) : (
+              outcome.badges.map((badge) => (
+                <Popover
+                  key={badge.id}
+                  title={badge.label}
+                  trigger={(p) => (
+                    <button type="button" className="lab__badge" {...p}>
+                      <Badge tone={BADGE_TONE[badge.level]} icon={BADGE_ICON[badge.level]}>
+                        {badge.label}
+                      </Badge>
+                    </button>
+                  )}
+                >
+                  {badge.detail}
+                </Popover>
+              ))
+            )}
+          </section>
+
+          <section className="lab__stats" aria-label="Performans">
+            <Stat
+              label="Yıllık (CAGR)"
+              value={fmt(metrics.cagrPct, 1, '%')}
+              hint={`al-tut ${fmt(metrics.buyHoldCagrPct, 1, '%')}`}
+            />
+            <Stat
+              label="Al-tut farkı"
+              value={fmt(metrics.excessCagrPct, 1, '%')}
+              hint="yıllık puan"
+            />
+            <Stat
+              label="Maks. düşüş"
+              value={fmt(-metrics.maxDrawdownPct, 1, '%')}
+              hint={`${metrics.maxDrawdownBars} bar sürdü`}
+            />
+            <Stat
+              label="Sharpe / Sortino"
+              value={`${fmt(metrics.sharpe, 2)} / ${fmt(metrics.sortino, 2)}`}
+            />
+            <Stat
+              label="Calmar / Ulcer"
+              value={`${fmt(metrics.calmar, 2)} / ${fmt(metrics.ulcer, 1)}`}
+            />
+            <Stat
+              label="İşlem"
+              value={String(metrics.trades)}
+              hint={`kazanma %${metrics.winRatePct.toFixed(0)} · ort. ${metrics.avgBars.toFixed(0)} bar`}
+            />
+            <Stat
+              label="Profit factor"
+              value={fmt(metrics.profitFactor, 2)}
+              hint={`beklenti ${fmt(metrics.expectancyPct, 2, '%')}`}
+            />
+            <Stat
+              label="Maliyet yükü"
+              value={fmt(metrics.costDragPct, 1, '%')}
+              hint={`piyasada %${metrics.exposurePct.toFixed(0)} kalındı`}
+            />
+          </section>
+
+          <section className="lab__panel" aria-label="Sermaye eğrisi">
+            <header className="lab__header">
+              <h2>Sermaye eğrisi</h2>
+              <span className="desk__muted">Strateji ve al-tut, aynı maliyet modeliyle</span>
+            </header>
+            <LineChart
+              normalize
+              height={260}
+              ariaLabel="Strateji ve al-tut sermaye eğrisi"
+              series={[
+                {
+                  label: 'Strateji',
+                  color: 'var(--accent)',
+                  time: outcome.time.slice(outcome.warmup),
+                  values: outcome.equity.slice(outcome.warmup),
+                },
+                {
+                  label: 'Al-tut',
+                  color: 'var(--text-muted)',
+                  dashed: true,
+                  time: outcome.time.slice(outcome.warmup),
+                  values: outcome.buyHold.slice(outcome.warmup),
+                },
+              ]}
+            />
+          </section>
+
+          <section className="lab__panel lab__trades" aria-label="İşlemler">
+            <header className="lab__header">
+              <h2>İşlemler</h2>
+              <span className="desk__muted">{outcome.trades.length} işlem</span>
+            </header>
+            <VirtualTable
+              rows={outcome.trades}
+              columns={tradeColumns}
+              rowKey={(t) => `${t.entryIndex}-${t.exitIndex}`}
+              label="İşlem listesi"
+              height={280}
+              empty={<EmptyState title="Bu kurallarla hiç işlem açılmadı" />}
+            />
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RuleList({
+  title,
+  rules,
+  onChange,
+}: {
+  title: string;
+  rules: SimpleRule[];
+  onChange: (rules: SimpleRule[]) => void;
+}) {
+  const update = (index: number, patch: Partial<SimpleRule>) =>
+    onChange(rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
+
+  return (
+    <div className="lab__rules">
+      <h3>{title}</h3>
+      {rules.map((rule, i) => (
+        <div className="lab__rule" key={i}>
+          <OperandEditor value={rule.left} onChange={(left) => update(i, { left })} />
+          <Select
+            label="Koşul"
+            value={rule.op}
+            onChange={(value) => update(i, { op: value as SimpleOp })}
+            options={(Object.keys(OP_LABEL) as SimpleOp[]).map((op) => ({
+              value: op,
+              label: OP_LABEL[op],
+            }))}
+          />
+          <OperandEditor value={rule.right} onChange={(right) => update(i, { right })} />
+          <IconButton
+            label="Kuralı kaldır"
+            onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
+          >
+            <Icon name="close" size={14} />
+          </IconButton>
+        </div>
+      ))}
+      <Button
+        size="sm"
+        onClick={() =>
+          onChange([
+            ...rules,
+            { left: { kind: 'close' }, op: 'gt', right: { kind: 'ema', length: 50 } },
+          ])
+        }
+      >
+        + Kural
+      </Button>
+    </div>
+  );
+}
+
+function OperandEditor({ value, onChange }: { value: Operand; onChange: (o: Operand) => void }) {
+  const kind = value.kind;
+  const hasLength = 'length' in value;
+  const isConst = kind === 'const';
+
+  return (
+    <div className="lab__operand">
+      <Select
+        label="Veri"
+        value={kind}
+        onChange={(next) => {
+          if (next === 'const') onChange({ kind: 'const', value: 50 });
+          else if (['close', 'open', 'high', 'low', 'volume'].includes(next))
+            onChange({ kind: next as 'close' });
+          else onChange({ kind: next as 'ema', length: 20 });
+        }}
+        options={OPERAND_KINDS}
+      />
+      {hasLength ? (
+        <NumberField
+          label="Uzunluk"
+          value={(value as { length: number }).length}
+          min={2}
+          max={1000}
+          onChange={(length) => onChange({ ...(value as { kind: 'ema'; length: number }), length })}
+        />
+      ) : null}
+      {isConst ? (
+        <NumberField
+          label="Değer"
+          value={(value as { value: number }).value}
+          step={0.5}
+          onChange={(v) => onChange({ kind: 'const', value: v })}
+        />
+      ) : null}
+    </div>
+  );
+}

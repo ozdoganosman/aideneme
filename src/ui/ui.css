@@ -553,6 +553,10 @@
 .ui-vtable__table thead th.num {
   text-align: right;
 }
+.ui-vtable__label {
+  display: block;
+  padding: var(--sp-2) var(--sp-3);
+}
 .ui-vtable__sort {
   width: 100%;
   padding: var(--sp-2) var(--sp-3);

@@ -55,11 +55,18 @@ planına göre yeniden kuruluyor. İlk iki faz yayında:
   taramalar; korelasyon matrisi + ortalama bağlantılı hiyerarşik kümeleme ve
   bağımlılıksız canvas ile normalize getiri karşılaştırması.
 
+- **Strateji Laboratuvarı** (Faz 4): JSON'a serileşen kural DSL'i, look-ahead'i
+  yapısal olarak engelleyen olay güdümlü backtest (komisyon + slipaj + likidite
+  tavanı, T+1 emir), Sortino/Calmar/Ulcer/MAE-MFE metrikleri ve **beş doğrulama
+  rozeti**: maliyet · OOS (walk-forward) · parametre platosu · permütasyon
+  p-değeri · deflated Sharpe. Her rozet tıklanınca gerekçesini gösterir.
+
 Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
 (`index.html`) tüm ekranlar taşınana kadar yayında kalıyor.
 Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),
 [`docs/plan/faz-2-durum.md`](docs/plan/faz-2-durum.md),
-[`docs/plan/faz-3-durum.md`](docs/plan/faz-3-durum.md).
+[`docs/plan/faz-3-durum.md`](docs/plan/faz-3-durum.md),
+[`docs/plan/faz-4-durum.md`](docs/plan/faz-4-durum.md).
 
 ## Çalıştırma
 

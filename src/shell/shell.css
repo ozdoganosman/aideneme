@@ -687,3 +687,110 @@
   vertical-align: middle;
   opacity: 0.7;
 }
+
+/* ── Strateji Laboratuvarı ────────────────────────────────────────────── */
+.lab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.lab__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.lab__row {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.lab__row > * {
+  min-width: 110px;
+}
+.lab__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+}
+.lab__rules h3 {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.lab__rule {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.lab__operand {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-end;
+}
+.lab__operand > :first-child {
+  min-width: 120px;
+}
+.lab__operand .ui-field {
+  max-width: 110px;
+}
+.lab__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.lab__badges {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.lab__badge {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.lab__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-3);
+}
+.lab__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.lab__header h2 {
+  font-size: var(--fs-md);
+}
+.lab__trades {
+  min-height: 320px;
+}
+.linechart {
+  display: block;
+}
+
+@media (max-width: 760px) {
+  .lab__operand {
+    flex-wrap: wrap;
+  }
+  .lab__rule {
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}

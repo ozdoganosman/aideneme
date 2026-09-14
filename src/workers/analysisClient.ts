@@ -1,7 +1,16 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
-import type { CorrelateResponse, PulseResponse, WorkerResponse } from './protocol';
+import type {
+  BacktestResponse,
+  CorrelateResponse,
+  PulseResponse,
+  WorkerResponse,
+} from './protocol';
+import type { Candles } from '../core/data/types';
+import type { Strategy } from '../core/strategy/dsl';
+import type { BacktestOptions } from '../core/backtest/engine';
+import type { ValidationOptions } from '../core/backtest/validate';
 
 /**
  * Uygulamanın analiz servisi: paketi bir kez indirir, worker'lara dağıtır,
@@ -23,6 +32,7 @@ export interface ScreenOutcome {
 
 export type CorrelateOutcome = Omit<CorrelateResponse, 'id' | 'ok' | 'type'>;
 export type PulseOutcome = Omit<PulseResponse, 'id' | 'ok' | 'type'>;
+export type BacktestOutcome = Omit<BacktestResponse, 'id' | 'ok' | 'type'>;
 
 function defaultSize(): number {
   const cores = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency ?? 4) : 4;
@@ -99,6 +109,25 @@ export class AnalysisClient {
       ms = Math.max(ms, ok.ms);
     }
     return { rows, ms };
+  }
+
+  /**
+   * Tek sembolde backtest (+ istenirse doğrulama katmanı).
+   * Mumlar ana iş parçacığından kopyalanarak gider; worker'daki paket 250 barla
+   * sınırlı, backtest ise tam geçmişi ister.
+   */
+  async backtest(
+    candles: Candles,
+    strategy: Strategy,
+    options: BacktestOptions = {},
+    validate: ValidationOptions | false = false,
+  ): Promise<BacktestOutcome> {
+    const response = unwrap(
+      await this.pool.run((id) => ({ id, type: 'backtest', candles, strategy, options, validate })),
+    );
+    if (response.type !== 'backtest') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = response;
+    return rest;
   }
 
   /** Piyasa nabzı: genişlik + para akışı (tek worker). */

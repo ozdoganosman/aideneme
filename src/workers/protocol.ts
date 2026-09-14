@@ -1,5 +1,10 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { PulseRow, PulseSummary } from '../core/screen/pulse';
+import type { Strategy } from '../core/strategy/dsl';
+import type { BacktestOptions, Trade } from '../core/backtest/engine';
+import type { BacktestMetrics } from '../core/backtest/metrics';
+import type { Badge, ValidationOptions, ValidationReport } from '../core/backtest/validate';
+import type { Candles } from '../core/data/types';
 
 /**
  * Ana thread ↔ Worker sözleşmesi. Tek dosyada tutuluyor ki iki uç tip düzeyinde
@@ -46,7 +51,19 @@ export interface PulseRequest {
   minBars?: number;
 }
 
-export type WorkerRequest = InitRequest | ScreenRequest | CorrelateRequest | PulseRequest;
+export interface BacktestRequest {
+  id: number;
+  type: 'backtest';
+  /** Sembolün tam geçmişi; ana iş parçacığından kopyalanarak gelir. */
+  candles: Candles;
+  strategy: Strategy;
+  options: BacktestOptions;
+  /** Doğrulama katmanı da çalıştırılsın mı (ağır). */
+  validate?: ValidationOptions | false;
+}
+
+export type WorkerRequest =
+  InitRequest | ScreenRequest | CorrelateRequest | PulseRequest | BacktestRequest;
 
 export interface InitResponse {
   id: number;
@@ -92,5 +109,26 @@ export interface PulseResponse {
   ms: number;
 }
 
+export interface BacktestResponse {
+  id: number;
+  ok: true;
+  type: 'backtest';
+  metrics: BacktestMetrics;
+  trades: Trade[];
+  /** Sermaye eğrisi ve al-tut karşılaştırması (bar başına). */
+  equity: Float64Array;
+  buyHold: Float64Array;
+  time: Float64Array;
+  warmup: number;
+  badges: Badge[];
+  report?: Omit<ValidationReport, 'badges' | 'metrics'>;
+  ms: number;
+}
+
 export type WorkerResponse =
-  InitResponse | ScreenResponse | CorrelateResponse | PulseResponse | ErrorResponse;
+  | InitResponse
+  | ScreenResponse
+  | CorrelateResponse
+  | PulseResponse
+  | BacktestResponse
+  | ErrorResponse;

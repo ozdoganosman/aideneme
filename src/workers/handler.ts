@@ -2,6 +2,9 @@ import { decodeBundle, type Bundle } from '../core/data/pack';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
 import { pulseRow, summarizePulse, type PulseRow } from '../core/screen/pulse';
 import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
+import { runBacktest } from '../core/backtest/engine';
+import { computeMetrics } from '../core/backtest/metrics';
+import { validateStrategy } from '../core/backtest/validate';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 /**
@@ -54,6 +57,44 @@ export function createHandler() {
             type: 'pulse',
             rows,
             summary: summarizePulse(rows),
+            ms: now() - started,
+          };
+        }
+
+        case 'backtest': {
+          const started = now();
+          const candles = req.candles;
+          const result = runBacktest(candles, req.strategy, req.options);
+          const metrics = computeMetrics(result, candles);
+
+          let badges: ReturnType<typeof validateStrategy>['badges'] = [];
+          let report: Omit<ReturnType<typeof validateStrategy>, 'badges' | 'metrics'> | undefined;
+          if (req.validate) {
+            const validation = validateStrategy(candles, req.strategy, {
+              ...req.options,
+              ...req.validate,
+            });
+            badges = validation.badges;
+            report = {
+              walkForward: validation.walkForward,
+              plateau: validation.plateau,
+              permutation: validation.permutation,
+              deflatedSharpe: validation.deflatedSharpe,
+            };
+          }
+
+          return {
+            id: req.id,
+            ok: true,
+            type: 'backtest',
+            metrics,
+            trades: result.trades,
+            equity: result.equity,
+            buyHold: result.buyHold,
+            time: candles.time,
+            warmup: result.warmup,
+            badges,
+            report,
             ms: now() - started,
           };
         }
