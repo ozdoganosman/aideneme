@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { trPct } from '../../ui';
+import { trPct, axisLabel } from '../../ui';
 import { useChartColors } from './useThemeColors';
 
 export interface LineSeries {
@@ -19,6 +19,13 @@ export interface LineChartProps {
   height?: number;
   /** Y ekseni biçimi: yüzde, ham sayı ya da kısaltılmış (1,2 mlr). */
   unit?: 'pct' | 'raw' | 'compact';
+  /**
+   * Sıfır çizgisi çiz ve ölçeğe sıfırı DAHİL ET.
+   *
+   * Negatife geçebilen seriler için (net kâr): sıfır görünmeden "küçüldü"
+   * ile "zarara döndü" aynı görünür — ikisi aynı şey değil.
+   */
+  zeroLine?: boolean;
   ariaLabel?: string;
 }
 
@@ -34,6 +41,7 @@ export function LineChart({
   normalize = false,
   height = 280,
   unit = 'pct',
+  zeroLine = false,
   ariaLabel,
 }: LineChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -91,6 +99,12 @@ export function LineChart({
         }
       }
       if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+      // Sıfır ölçeğin içinde kalmalı: aksi hâlde tamamı negatif bir seri
+      // grafikte yükseliyormuş gibi görünür ve sıfır çizgisi hiç çizilmez.
+      if (zeroLine) {
+        if (min > 0) min = 0;
+        if (max < 0) max = 0;
+      }
       if (max - min < 1e-9) {
         min -= 1;
         max += 1;
@@ -103,20 +117,29 @@ export function LineChart({
       const toY = (y: number) => padT + (1 - (y - min) / (max - min)) * plotH;
       const fmt = (v: number) => {
         if (unit === 'pct') return trPct(v, 0, true);
-        if (unit === 'compact') {
-          // Milyar/milyon ölçeğindeki finansal kalemler eksende okunur kalsın.
-          const abs = Math.abs(v);
-          if (abs >= 1e9) return `${(v / 1e9).toFixed(1)} mlr`;
-          if (abs >= 1e6) return `${(v / 1e6).toFixed(1)} mn`;
-          if (abs >= 1e3) return `${(v / 1e3).toFixed(0)} b`;
-          return v.toFixed(0);
-        }
+        // Ondalık basamak ARALIKTAN geliyor, büyüklükten değil. Sabit tek
+        // basamakla 1.900–2.500 b aralığında beş ızgara çizgisinin beşi de
+        // "2 b" yazıyordu; aynı şeyi yazan eksen serinin yatay olduğu
+        // izlenimini verir. Ayrıca biçim tek kaynağa bağlandı — yerel kopya
+        // Türkçe ondalık ayıracını da kullanmıyordu ("2.5 mlr").
+        if (unit === 'compact') return axisLabel(v, max - min);
         return v.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
       };
 
       ctx.strokeStyle = colors.grid;
       ctx.fillStyle = colors.muted;
       ctx.font = '10px system-ui, sans-serif';
+      if (zeroLine && min <= 0 && max >= 0) {
+        const y0 = Math.round(toY(0)) + 0.5;
+        ctx.save();
+        ctx.strokeStyle = colors.muted;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(padL, y0);
+        ctx.lineTo(padL + plotW, y0);
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.lineWidth = 1;
       for (let i = 0; i <= 4; i++) {
         const value = min + ((max - min) * i) / 4;
@@ -181,7 +204,7 @@ export function LineChart({
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [series, normalize, height, unit, colors]);
+  }, [series, normalize, height, unit, zeroLine, colors]);
 
   return (
     <canvas

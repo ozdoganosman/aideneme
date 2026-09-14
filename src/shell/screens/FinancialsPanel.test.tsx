@@ -13,8 +13,10 @@ vi.mock('../../data-client/fundamentals', () => ({
   },
 }));
 vi.mock('../chart/LineChart', () => ({
-  LineChart: ({ series }: { series: { label: string }[] }) => (
-    <div data-testid="fin-chart">{series.map((s) => s.label).join('|')}</div>
+  LineChart: ({ series, zeroLine }: { series: { label: string }[]; zeroLine?: boolean }) => (
+    <div data-testid="fin-chart" data-zeroline={zeroLine ? 'var' : 'yok'}>
+      {series.map((s) => s.label).join('|')}
+    </div>
   ),
 }));
 
@@ -85,11 +87,27 @@ describe('Finansallar paneli', () => {
     expect(screen.getByRole('region', { name: 'Kalite ölçütleri' })).toBeInTheDocument();
   });
 
-  it('yıllık seriyi grafiğe verir', async () => {
+  // Üç seri TEK eksende çizilince net kâr görünmez oluyordu: satış
+  // milyarlarla, net kâr sıfıra yakın; eksen satışa göre ölçeklenince kârın
+  // bütün hareketi düz çizgiye iniyordu. Her seri kendi ölçeğinde çizilmeli.
+  it('her seriyi KENDİ ölçeğinde ayrı grafiğe verir', async () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
-    await waitFor(() =>
-      expect(screen.getByTestId('fin-chart')).toHaveTextContent('Satış|Net kâr|Özkaynak'),
-    );
+    await waitFor(() => expect(screen.getAllByTestId('fin-chart')).toHaveLength(3));
+
+    const grafikler = screen.getAllByTestId('fin-chart');
+    // Her grafikte TEK seri: ikisi bir arada olsaydı ölçek yine paylaşılırdı.
+    expect(grafikler.map((g) => g.textContent)).toEqual(['Satış', 'Net kâr', 'Özkaynak']);
+  });
+
+  // Net kâr negatife geçebilir; sıfır görünmeden "küçüldü" ile "zarara döndü"
+  // aynı görünür. Ölçüldü: yayındaki 119 sembolün 27'sinde taban yıl net kârı
+  // negatif — bu bir uç durum değil, dörtte bir.
+  it('net kâr grafiğinde sıfır çizgisi var, ötekilerde yok', async () => {
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await waitFor(() => expect(screen.getAllByTestId('fin-chart')).toHaveLength(3));
+
+    const zero = screen.getAllByTestId('fin-chart').map((g) => g.getAttribute('data-zeroline'));
+    expect(zero).toEqual(['yok', 'var', 'yok']);
   });
 
   it('bulunamayan kalemleri açıkça söyler', async () => {

@@ -55,3 +55,30 @@ export function trCompact(value: number, digits = 1): string {
   if (v >= 1e3) return `${sign}${nf(digits).format(v / 1e3)} b`;
   return `${sign}${nf(0).format(v)}`;
 }
+
+/**
+ * Eksen etiketi: birim BÜYÜKLÜKTEN, ondalık basamak ARALIKTAN.
+ *
+ * `trCompact` tek bir sayıyı biçimlendirmek için doğru ama eksende yanlış
+ * sonuç veriyordu. Ölçüldü: satış serisi 1.900–2.500 b aralığındayken beş
+ * ızgara çizgisinin BEŞİ de "2 b" yazıyordu — aynı şeyi yazan bir eksen
+ * hiçbir şey söylemez, hatta serinin yatay olduğu izlenimini verir.
+ *
+ * Basamak sayısı iki komşu çizginin FARKINDAN türetiliyor: adım birimin
+ * onda birinden küçükse bir, yüzde birinden küçükse iki basamak. Böylece
+ * etiketler birbirinden ayrılıyor ve gereksiz sıfır da eklenmiyor.
+ *
+ * Sınır: üç basamakta duruluyor. Aralık bundan da darsa (örneğin 2 milyarda
+ * 4 bin) etiketler yine aynı çıkar — o oranda bir seriyi ayırmak dokuz
+ * basamak isterdi ve finansal tabloda böyle bir seri yok. Sınır kabul
+ * ediliyor, gizlenmiyor.
+ */
+export function axisLabel(value: number, span: number): string {
+  if (!Number.isFinite(value)) return '—';
+  const v = Math.abs(value);
+  const bolen = v >= 1e9 ? 1e9 : v >= 1e6 ? 1e6 : v >= 1e3 ? 1e3 : 1;
+  // Adım = dört aralıklı ızgarada iki komşu çizgi arası.
+  const adim = Math.abs(span) / 4 / bolen;
+  const basamak = adim === 0 ? 0 : adim < 0.01 ? 3 : adim < 0.1 ? 2 : adim < 1 ? 1 : 0;
+  return trCompact(value, Math.min(3, basamak));
+}

@@ -1581,3 +1581,23 @@
     display: none;
   }
 }
+
+/* ── Yıllık seriler: küçük çoklu ───────────────────────────────────────── */
+/* Üç seri tek eksende çizilince net kâr görünmez oluyordu (satış milyarlarla,
+   kâr sıfıra yakın). Her seri kendi ölçeğinde; sahte karşılaştırma yok. */
+.fin__series {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-3);
+}
+.fin__serie {
+  min-width: 0;
+}
+.fin__serie-label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}

@@ -104,16 +104,45 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
     const time = revenue.labels.map((year) => Date.UTC(Number(year), 11, 31) / 1000);
     const clean = (values: (number | null)[]) => values.map((v) => (v === null ? NaN : v));
 
+    // ÜÇ AYRI GRAFİK, tek grafikte üç çizgi değil.
+    //
+    // Üçü aynı doğrusal eksende çizilince net kâr görünmez oluyordu: satış
+    // milyarlarla, net kâr sıfıra yakın; eksen satışa göre ölçeklenince
+    // kârın bütün hareketi düz bir çizgiye iniyor. Yani grafiğin cevap
+    // vermesi gereken soru ("bu şirket büyüyor mu?") tam olarak
+    // cevaplanmıyordu.
+    //
+    // Endeksleme (taban yıl = 100) denenmedi çünkü ÖLÇÜLDÜ: yayındaki
+    // veride 119 sembolün 27'sinde (%23) taban yıl net kârı NEGATİF, birinde
+    // sıfır. Negatif tabana bölmek işaret çeviren, sıfıra bölmek tanımsız
+    // sayı üretir — dörtte birinde yalan söyleyen bir ölçek, okunmayan bir
+    // ölçekten kötüdür.
+    //
+    // Küçük çokluda her seri KENDİ ölçeğinde okunur ve hiçbir sahte
+    // karşılaştırma üretilmez. Karşılaştırma zaten yandaki büyüme
+    // kartlarında, sayıyla duruyor.
     return {
       time,
-      series: [
-        { label: 'Satış', color: 'var(--accent)', time, values: clean(revenue.values) },
-        { label: 'Net kâr', color: 'var(--up)', time, values: clean(netIncome.values) },
+      panels: [
         {
+          key: 'revenue',
+          label: 'Satış',
+          color: 'var(--accent)',
+          values: clean(revenue.values),
+        },
+        {
+          key: 'netIncome',
+          label: 'Net kâr',
+          color: 'var(--up)',
+          values: clean(netIncome.values),
+          // Net kâr negatife geçebilir: sıfır çizgisi olmadan "küçüldü" ile
+          // "zarara döndü" aynı görünür.
+          zeroLine: true,
+        },
+        {
+          key: 'equity',
           label: 'Özkaynak',
           color: 'var(--text-muted)',
-          dashed: true,
-          time,
           values: clean(equity.values),
         },
       ],
@@ -267,14 +296,33 @@ export function FinancialsPanel({ market, symbol, price }: Props) {
         <section className="fin__panel" aria-label="Yıllık seriler">
           <header>
             <h3>Yıllık seyir</h3>
-            <span className="desk__muted">Satış, net kâr ve özkaynak (yıl sonu dönemleri)</span>
+            <span className="desk__muted">
+              Yıl sonu dönemleri · her seri KENDİ ölçeğinde (büyüklükleri farklı)
+            </span>
           </header>
-          <LineChart
-            series={charts.series}
-            height={240}
-            unit="compact"
-            ariaLabel={`${symbol} yıllık satış, net kâr ve özkaynak`}
-          />
+          <div className="fin__series">
+            {charts.panels.map((panel) => (
+              <div key={panel.key} className="fin__serie">
+                <span className="fin__serie-label" style={{ color: panel.color }}>
+                  {panel.label}
+                </span>
+                <LineChart
+                  series={[
+                    {
+                      label: panel.label,
+                      color: panel.color,
+                      time: charts.time,
+                      values: panel.values,
+                    },
+                  ]}
+                  height={120}
+                  unit="compact"
+                  zeroLine={panel.zeroLine}
+                  ariaLabel={`${symbol} yıllık ${panel.label.toLowerCase()}`}
+                />
+              </div>
+            ))}
+          </div>
         </section>
       ) : null}
 

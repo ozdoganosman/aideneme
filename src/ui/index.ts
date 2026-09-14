@@ -25,4 +25,4 @@ export {
   useDebounced,
   useAutoId,
 } from './hooks';
-export { trNum, trPct, trAmount, trCompact } from './format';
+export { trNum, trPct, trAmount, trCompact, axisLabel } from './format';
