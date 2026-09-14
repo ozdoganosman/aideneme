@@ -314,3 +314,29 @@ export function applyScreen(rows: ScreenRow[], spec: ScreenSpec): ScreenRow[] {
     return (a - b) * sign;
   });
 }
+
+/**
+ * Hiçbir sembolde verisi olmayan kural metrikleri.
+ *
+ * NaN'ın hiçbir kuralı geçmemesi doğru bir ilke ama tek başına yanıltıcı bir
+ * ekran üretiyor: metriğin verisi HİÇ yoksa sonuç boş çıkıyor ve arayüz
+ * "Kriterlere uyan sembol yok" diyor — yani kullanıcıyı kendi eşiğini
+ * gevşetmeye yönlendiriyor, oysa gevşetmek de işe yaramayacak.
+ *
+ * Ölçüldü: yayındaki 559 sembolün TAMAMINDA `currentAssets` ve
+ * `operatingCashFlow` boş (kaynak bu kalemleri vermiyor). Yani "Cari oran"
+ * filtresi hangi eşikle kurulursa kurulsun sıfır sonuç döndürüyor ve neden
+ * olduğunu söylemiyor.
+ *
+ * Ayrım önemli: "hiçbir sembolde yok" ile "bu eşiği geçen yok" ayrı şeyler.
+ * Birincisi veri boşluğu, ikincisi kullanıcının kararı.
+ */
+export function metricsWithoutData(rows: ScreenRow[], rules: Rule[]): string[] {
+  if (rows.length === 0) return [];
+  const out: string[] = [];
+  for (const rule of rules) {
+    if (out.includes(rule.metric)) continue;
+    if (!rows.some((r) => Number.isFinite(r.values[rule.metric]))) out.push(rule.metric);
+  }
+  return out;
+}

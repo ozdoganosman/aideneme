@@ -20,6 +20,7 @@ import {
   DEFAULT_SCREEN_PARAMS,
   METRIC_DEFS,
   applyScreen,
+  metricsWithoutData,
   type MetricDef,
   type Operator,
   type Rule,
@@ -284,6 +285,16 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
         sectors: pickedSectors,
       }),
     [enriched, rules, sort, pickedSectors],
+  );
+
+  // Veri boşluğu mu, kullanıcının eşiği mi? İkisi aynı ekranla anlatılıyordu.
+  // Ölçüldü: yayındaki 559 sembolün TAMAMINDA `currentAssets` ve
+  // `operatingCashFlow` boş — yani "Cari oran" filtresi hangi eşikle kurulursa
+  // kurulsun sıfır sonuç veriyor ve arayüz "kuralları gevşet" diyor.
+  // Gevşetmek işe yaramayacak; söylenmesi gereken şey veri olmadığı.
+  const dataless = useMemo(
+    () => metricsWithoutData(enriched, rules).map((id) => METRIC_BY_ID.get(id)?.label ?? id),
+    [enriched, rules],
   );
 
   /** Sonuç hazır mı — hazır olmadan anlık görüntü alınmaz, fark gösterilmez. */
@@ -872,6 +883,18 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
                 <EmptyState
                   title="Sektör sınıflandırması yükleniyor"
                   description="Seçili sektör filtresi, sınıflandırma dosyası indikten sonra uygulanacak."
+                />
+              ) : dataless.length > 0 ? (
+                <EmptyState
+                  title={`Veri yok: ${dataless.join(', ')}`}
+                  description={`Bu ${
+                    dataless.length > 1 ? 'metriklerin' : 'metriğin'
+                  } hiçbir sembolde değeri yok, bu yüzden eşik ne olursa olsun sonuç boş kalır. Kaynak bu kalemi yayımlamıyor — kuralı gevşetmek işe yaramaz, kaldırmak gerekir.`}
+                  action={
+                    <Button size="sm" onClick={() => setRules([])}>
+                      Kuralları temizle
+                    </Button>
+                  }
                 />
               ) : (
                 <EmptyState

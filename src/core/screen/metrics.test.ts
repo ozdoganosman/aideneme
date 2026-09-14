@@ -4,7 +4,9 @@ import {
   METRIC_DEFS,
   applyScreen,
   metricsFor,
+  metricsWithoutData,
   passes,
+  type Rule,
   type ScreenRow,
 } from './metrics';
 import { DAY_SECONDS } from '../data/pack';
@@ -280,5 +282,42 @@ describe('işlem değeri metriği', () => {
       minBars: 0,
     });
     expect(out.map((r) => r.symbol)).toEqual(['LIKIT']);
+  });
+});
+
+describe('metricsWithoutData', () => {
+  const row = (values: Record<string, number>): ScreenRow => ({
+    symbol: 'X',
+    bars: 100,
+    values,
+  });
+
+  it('hiçbir sembolde verisi olmayan metriği bildirir', () => {
+    const rows = [row({ rsi: 40, currentRatio: NaN }), row({ rsi: 60, currentRatio: NaN })];
+    const rules: Rule[] = [
+      { metric: 'rsi', op: 'gt', a: 90 },
+      { metric: 'currentRatio', op: 'gt', a: 1.5 },
+    ];
+    // rsi verisi VAR ama eşiği geçen yok — bu kullanıcının kararı, bildirilmez.
+    // currentRatio hiçbir sembolde yok — eşik ne olursa olsun sonuç boş.
+    expect(metricsWithoutData(rows, rules)).toEqual(['currentRatio']);
+  });
+
+  it('tek sembolde bile veri varsa metrik "veri yok" sayılmaz', () => {
+    const rows = [row({ pe: NaN }), row({ pe: 12 })];
+    expect(metricsWithoutData(rows, [{ metric: 'pe', op: 'lt', a: 5 }])).toEqual([]);
+  });
+
+  it('satır yoksa hüküm vermez', () => {
+    expect(metricsWithoutData([], [{ metric: 'pe', op: 'lt', a: 5 }])).toEqual([]);
+  });
+
+  it('aynı metrik iki kuralda geçse de bir kez bildirilir', () => {
+    const rows = [row({ ocf: NaN })];
+    const rules: Rule[] = [
+      { metric: 'ocf', op: 'gt', a: 0 },
+      { metric: 'ocf', op: 'lt', a: 9 },
+    ];
+    expect(metricsWithoutData(rows, rules)).toEqual(['ocf']);
   });
 });

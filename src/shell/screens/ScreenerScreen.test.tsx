@@ -115,6 +115,24 @@ describe('Tarayıcı', () => {
     await waitFor(() => expect(screen.getByText('Kriterlere uyan sembol yok')).toBeInTheDocument());
   });
 
+  // "Bu eşiği geçen yok" ile "bu metriğin verisi hiç yok" ayrı şeyler. İkincisinde
+  // kullanıcıyı eşiğini gevşetmeye yönlendirmek yanlış — gevşetmek işe yaramaz.
+  // Ölçüldü: yayındaki 559 sembolün TAMAMINDA `currentAssets` boş, yani "Cari
+  // oran" filtresi hangi eşikle kurulursa kurulsun sıfır sonuç veriyordu.
+  it('metriğin verisi hiç yoksa "gevşet" demez, veri yok der', async () => {
+    const kod = encodeScreen({
+      rules: [{ metric: 'currentRatio', op: 'gt', a: 1.5 }],
+      params: DEFAULT_SCREEN_PARAMS,
+      sectors: [],
+      sort: { metric: 'chg21', dir: 'desc' },
+    });
+    render(<ScreenerScreen state={{ ...STATE, f: kod }} push={push} />);
+
+    await waitFor(() => expect(screen.getByText(/Veri yok: Cari oran/)).toBeInTheDocument());
+    expect(screen.queryByText('Kriterlere uyan sembol yok')).toBeNull();
+    expect(screen.getByText(/eşik ne olursa olsun sonuç boş kalır/)).toBeInTheDocument();
+  });
+
   it('satıra tıklamak sembol masasına götürür', async () => {
     const user = userEvent.setup();
     render(<ScreenerScreen state={STATE} push={push} />);

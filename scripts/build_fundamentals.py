@@ -143,6 +143,70 @@ def normalize(name: str) -> str:
     return text.lower()
 
 
+def fold(text: str) -> str:
+    """
+    Karşılaştırma için büyüt ve NOKTALI/NOKTASIZ i ayrımını kaldır.
+
+    `str.upper()` Türkçe bilmiyor: "Nakit".upper() → "NAKIT" (noktasız I),
+    yani "NAKİT" anahtarı HİÇ eşleşmiyor. Teşhis anahtarlarını düz `.upper()`
+    ile aramak bu yüzden sessizce boş sonuç veriyordu — banka tablolarında
+    fark edilmedi çünkü oradaki adlar zaten tamamı büyük harfti ("I. FAİZ
+    GELİRLERİ"), ama karışık yazılan adlarda ("Nakit ve Nakit Benzerleri")
+    tutmuyor. Teşhis için noktayı tamamen yok saymak en güvenlisi.
+    """
+    return text.upper().replace("İ", "I")
+
+
+# Eksik alan → gelen kalem adlarında aranacak anahtarlar. Teşhis içindir:
+# hangi adın hangi alana karşılık geldiğini TAHMİN etmemek için.
+_EKSIK_ANAHTAR = {
+    "currentAssets": ("DÖNEN", "CARİ"),
+    "currentLiabilities": ("KISA VADELİ", "CARİ"),
+    "longLiabilities": ("UZUN VADELİ",),
+    "operatingCashFlow": ("NAKİT", "FAALİYET"),
+    "capex": ("YATIRIM", "DURAN VARLIK", "ALIM"),
+    "inventory": ("STOK",),
+    "cash": ("NAKİT",),
+    "equity": ("ÖZKAYNAK",),
+    "paidCapital": ("SERMAYE",),
+    "grossProfit": ("BRÜT",),
+    "operatingProfit": ("FAALİYET",),
+    "revenue": ("SATIŞ", "HASILAT", "GELİR"),
+    "netIncome": ("NET", "DÖNEM"),
+    "assets": ("VARLIK", "AKTİF"),
+}
+
+# Teşhis tur başına BİR kez basılıyor: 655 sembolde her seferinde basmak
+# kaydı okunamaz hale getirir, bir örnek ise soruyu cevaplamaya yetiyor.
+_eksik_basildi: set[str] = set()
+
+
+def missing_candidates(df, name_col: str, missing: list[str], limit: int = 30) -> list[str]:
+    """
+    Eksik alanlarla İLGİLİ olabilecek gelen kalem adları.
+
+    Var olan teşhis yalnızca HİÇBİR kalem tanınmadığında çalışıyordu; oysa
+    asıl sık durum kısmî eksiklik. Ölçüldü: 559 sembolün TAMAMINDA
+    `currentAssets`, `operatingCashFlow` ve `capex` boş — tablo geliyor,
+    öteki kalemler tanınıyor, yalnızca bu üçü tutmuyor. Hiçbir teşhis
+    satırı çıkmadığı için gelen adın ne olduğu görünmüyordu ve FIELD_ITEMS'a
+    ne ekleneceği tahmine kalıyordu.
+    """
+    anahtarlar = tuple(k for alan in missing for k in _EKSIK_ANAHTAR.get(alan, ()))
+    if not anahtarlar:
+        return []
+    adlar: list[str] = []
+    for _, row in df.iterrows():
+        ad = str(row.get(name_col, "")).strip()
+        if not ad or ad in adlar:
+            continue
+        if any(fold(k) in fold(ad) for k in anahtarlar):
+            adlar.append(ad)
+        if len(adlar) >= limit:
+            break
+    return adlar
+
+
 def extract(df, symbol: str) -> dict | None:
     """DataFrame → {periods, fields} (yalnızca ihtiyaç duyulan kalemler)."""
     if df is None or getattr(df, "empty", True):
@@ -195,7 +259,7 @@ def extract(df, symbol: str) -> dict | None:
             ad = str(row.get(name_col, "")).strip()
             if not ad or ad in gelen:
                 continue
-            if any(k in ad.upper() for k in ilgi):
+            if any(fold(k) in fold(ad) for k in ilgi):
                 gelen.append(ad)
             if len(gelen) >= 40:
                 break
@@ -205,11 +269,21 @@ def extract(df, symbol: str) -> dict | None:
         )
         return None
 
+    missing = sorted(set(FIELDS) - seen)
+    if missing and not _eksik_basildi:
+        # Tur başına tek örnek: hangi adların geldiğini görmek için yeterli.
+        _eksik_basildi.add(symbol)
+        adaylar = missing_candidates(df, name_col, missing)
+        print(
+            f"[fund] {symbol}: eksik alan {missing} · ilgili gelen adlar: {adaylar}",
+            file=sys.stderr,
+        )
+
     return {
         "symbol": symbol,
         "periods": [str(c) for c in period_cols],
         "fields": fields,
-        "missing": sorted(set(FIELDS) - seen),
+        "missing": missing,
     }
 
 
@@ -655,6 +729,33 @@ def self_test() -> None:
 
     kayit, sonuc = fetch_one("THYAO", 2024, 2024, fetch=hep_patla)
     assert kayit is None and sonuc == "hata", sonuc
+
+    # KISMÎ EKSİKLİK teşhisi. Var olan teşhis yalnızca HİÇBİR kalem
+    # tanınmadığında çalışıyordu; asıl sık durum ise kısmî eksiklik.
+    # Ölçüldü: 559 sembolün tamamında currentAssets/operatingCashFlow/capex
+    # boş — tablo geliyor, öteki kalemler tanınıyor, yalnızca bu üçü
+    # tutmuyor ve hiçbir teşhis satırı çıkmıyordu.
+    tablo = SahteTablo(
+        [
+            {"FINANCIAL_ITEM_NAME_TR": "TOPLAM DÖNEN VARLIKLAR", "2024/6": 5.0},
+            {"FINANCIAL_ITEM_NAME_TR": "Stoklar", "2024/6": 1.0},
+            {"FINANCIAL_ITEM_NAME_TR": "A. İşletme Faaliyetlerinden Nakit Akışları", "2024/6": 2.0},
+            {"FINANCIAL_ITEM_NAME_TR": "Ana Ortaklık Payları", "2024/6": 3.0},
+        ]
+    )
+    adaylar = missing_candidates(tablo, "FINANCIAL_ITEM_NAME_TR", ["currentAssets"])
+    assert adaylar == ["TOPLAM DÖNEN VARLIKLAR"], adaylar
+    nakit = missing_candidates(tablo, "FINANCIAL_ITEM_NAME_TR", ["operatingCashFlow"])
+    assert nakit == ["A. İşletme Faaliyetlerinden Nakit Akışları"], nakit
+    # Eksik alan için anahtar tanımlı değilse tahmin üretilmiyor.
+    assert missing_candidates(tablo, "FINANCIAL_ITEM_NAME_TR", ["bilinmeyen"]) == []
+
+    # TÜRKÇE BÜYÜTME TUZAĞI: "Nakit".upper() → "NAKIT" (noktasız I), yani
+    # "NAKİT" anahtarı düz upper() ile HİÇ eşleşmiyor. Banka tablolarında
+    # fark edilmedi çünkü oradaki adlar zaten büyük harfti.
+    assert "NAKİT" not in "Nakit".upper(), "tuzağın kendisi kaybolduysa test anlamsız"
+    assert fold("Nakit") == fold("NAKİT") == "NAKIT"
+    assert fold("İşletme") == fold("işletme") == fold("IŞLETME")
 
     # ...ve build_all ikisini ayrı kovalara koymalı.
     with tempfile.TemporaryDirectory() as tmp:
