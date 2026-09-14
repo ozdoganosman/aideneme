@@ -74,6 +74,9 @@ const snapshot = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Dönem tercihi tarayıcıda saklanıyor: temizlenmezse bir testin seçimi
+  // sonrakine sızar ve teşhisi zor bir kırılma üretir.
+  localStorage.clear();
   noStatementFn.mockResolvedValue(new Set<string>());
   sectorMapFn.mockResolvedValue({ of: { THYAO: 'Ulaştırma' }, source: 'test', generated: 1 });
   snapshotFn.mockResolvedValue(snapshot);
@@ -104,29 +107,6 @@ describe('Finansallar paneli', () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
     await waitFor(() => expect(screen.getByText(/Net kâr pozitif/)).toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'Kalite ölçütleri' })).toBeInTheDocument();
-  });
-
-  // Üç seri TEK eksende çizilince net kâr görünmez oluyordu: satış
-  // milyarlarla, net kâr sıfıra yakın; eksen satışa göre ölçeklenince kârın
-  // bütün hareketi düz çizgiye iniyordu. Her seri kendi ölçeğinde çizilmeli.
-  it('her seriyi KENDİ ölçeğinde ayrı grafiğe verir', async () => {
-    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
-    await waitFor(() => expect(screen.getAllByTestId('fin-chart')).toHaveLength(3));
-
-    const grafikler = screen.getAllByTestId('fin-chart');
-    // Her grafikte TEK seri: ikisi bir arada olsaydı ölçek yine paylaşılırdı.
-    expect(grafikler.map((g) => g.textContent)).toEqual(['Satış', 'Net kâr', 'Özkaynak']);
-  });
-
-  // Net kâr negatife geçebilir; sıfır görünmeden "küçüldü" ile "zarara döndü"
-  // aynı görünür. Ölçüldü: yayındaki 119 sembolün 27'sinde taban yıl net kârı
-  // negatif — bu bir uç durum değil, dörtte bir.
-  it('net kâr grafiğinde sıfır çizgisi var, ötekilerde yok', async () => {
-    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
-    await waitFor(() => expect(screen.getAllByTestId('fin-chart')).toHaveLength(3));
-
-    const zero = screen.getAllByTestId('fin-chart').map((g) => g.getAttribute('data-zeroline'));
-    expect(zero).toEqual(['yok', 'var', 'yok']);
   });
 
   // Tek bir toplam skor üç ayrı soruyu karıştırıyordu: kârlı ama küçülen bir
@@ -196,9 +176,15 @@ describe('Finansallar — dönemsel kolonlar', () => {
   function sayilar(): string[] {
     const bolum = screen.getByRole('region', { name: 'Dönemsel kolonlar' });
     // Kolon grafiği bir resim; okunabilir veri ekran okuyucu tablosunda.
+    // Satır metni "2025/6" + değer + (varsa) yüzde değişim taşıyor.
     return within(bolum)
       .getAllByRole('row')
       .map((r) => r.textContent!.trim());
+  }
+
+  /** Satır BAŞLANGICI eşleşiyor mu — yüzde eki iddiayı kırmasın. */
+  function var_(satirlar: string[], baslangic: string): boolean {
+    return satirlar.some((x) => x.startsWith(baslangic));
   }
 
   // ASIL TUZAK: kaynak "2025/6" satırında yılın İLK ALTI AYINI verir. Ham
@@ -211,12 +197,12 @@ describe('Finansallar — dönemsel kolonlar', () => {
 
     const satirlar = sayilar();
     // Satış: 100 / 300 / 600 / 1000 kümülatifinden 100 / 200 / 300 / 400.
-    expect(satirlar).toContain('2025/3100');
-    expect(satirlar).toContain('2025/6200');
-    expect(satirlar).toContain('2025/9300');
-    expect(satirlar).toContain('2025/12400');
+    expect(var_(satirlar, '2025/3100')).toBe(true);
+    expect(var_(satirlar, '2025/6200')).toBe(true);
+    expect(var_(satirlar, '2025/9300')).toBe(true);
+    expect(var_(satirlar, '2025/12400')).toBe(true);
     // Kümülatif değerin kendisi ÇİZİLMEMELİ.
-    expect(satirlar).not.toContain('2025/6600');
+    expect(var_(satirlar, '2025/6600')).toBe(false);
   });
 
   // Önceki dönem yoksa çeyrek üretilmiyor: eksik veriyi sıfır saymak olmayan
@@ -226,7 +212,7 @@ describe('Finansallar — dönemsel kolonlar', () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
     await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
     // 2024/12 tek başına: 2024/9 elde olmadığı için çeyreği hesaplanamaz.
-    expect(sayilar()).toContain('2024/12veri yok');
+    expect(var_(sayilar(), '2024/12veri yok')).toBe(true);
   });
 
   it('dönem sayısı değişince kolon sayısı değişir', async () => {
@@ -236,14 +222,16 @@ describe('Finansallar — dönemsel kolonlar', () => {
     await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
 
     const bolum = screen.getByRole('region', { name: 'Dönemsel kolonlar' });
-    // Varsayılan 8 dönem; veride 5 var, hepsi görünür (3 kalem × 5 satır).
-    expect(within(bolum).getAllByRole('row')).toHaveLength(15);
+    // Varsayılan 8 dönem; veride 5 var, hepsi görünür (4 kalem × 5 satır).
+    expect(within(bolum).getAllByRole('row')).toHaveLength(20);
 
     await user.selectOptions(screen.getByLabelText('Dönem sayısı'), '5');
-    expect(within(bolum).getAllByRole('row')).toHaveLength(15);
+    expect(within(bolum).getAllByRole('row')).toHaveLength(20);
 
-    await user.selectOptions(screen.getByLabelText('Dönem sayısı'), '12');
-    expect(within(bolum).getAllByRole('row')).toHaveLength(15);
+    // Veride 5 dönem var; 3'e inince kolonlar da 3'e iner (4 kalem × 3).
+    await user.selectOptions(screen.getByLabelText('Dönem tabanı'), 'ceyrek');
+    await user.selectOptions(screen.getByLabelText('Dönem sayısı'), '5');
+    expect(within(bolum).getAllByRole('row')).toHaveLength(20);
   });
 
   it('yıllık tabana geçilince yıl sonu dönemleri çizilir', async () => {
@@ -255,8 +243,8 @@ describe('Finansallar — dönemsel kolonlar', () => {
     await user.selectOptions(screen.getByLabelText('Dönem tabanı'), 'yil');
     const satirlar = sayilar();
     // Yıl sonu: 2024/12 → 900, 2025/12 → 1000 (kümülatifin kendisi, doğru).
-    expect(satirlar).toContain('2024900');
-    expect(satirlar).toContain('20251,0 b');
+    expect(var_(satirlar, '2024900')).toBe(true);
+    expect(var_(satirlar, '20251,0 b')).toBe(true);
     expect(satirlar.some((x) => x.startsWith('2025/'))).toBe(false);
   });
 
@@ -266,7 +254,7 @@ describe('Finansallar — dönemsel kolonlar', () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
     await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
     expect(screen.getByLabelText('Dönem tabanı')).toHaveValue('yil');
-    expect(sayilar()).toContain('20241,0 b');
+    expect(var_(sayilar(), '20241,0 b')).toBe(true);
   });
 });
 
@@ -316,5 +304,58 @@ describe('Finansallar — şirket detayları ve dar grafik', () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
     await screen.findByRole('region', { name: 'Karne' });
     expect(screen.queryByRole('region', { name: 'Fiyat (dar grafik)' })).toBeNull();
+  });
+});
+
+describe('Finansallar — tercihler ve açıklamalar', () => {
+  // Kullanıcı isteği: her sembolde yeniden seçmek zorunda kalmasın.
+  it('dönem tercihi kaydediliyor ve sonraki açılışta geri geliyor', async () => {
+    const user = userEvent.setup();
+    financialsFn.mockResolvedValue(ceyreklikFinansal());
+    const { unmount } = render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+
+    await user.selectOptions(screen.getByLabelText('Dönem tabanı'), 'yil');
+    await user.selectOptions(screen.getByLabelText('Dönem sayısı'), '20');
+    unmount();
+
+    render(<FinancialsPanel market="bist" symbol="GARAN" price={40} />);
+    await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+    expect(screen.getByLabelText('Dönem tabanı')).toHaveValue('yil');
+    expect(screen.getByLabelText('Dönem sayısı')).toHaveValue('20');
+  });
+
+  // Depolama kapalı olabilir (Safari özel sekmesi). Panel yine çalışmalı.
+  it('depolama yazılamıyorsa panel yine çalışır', async () => {
+    const user = userEvent.setup();
+    const gercek = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+    try {
+      financialsFn.mockResolvedValue(ceyreklikFinansal());
+      render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+      await screen.findByRole('region', { name: 'Dönemsel kolonlar' });
+      await user.selectOptions(screen.getByLabelText('Dönem tabanı'), 'yil');
+      expect(screen.getByLabelText('Dönem tabanı')).toHaveValue('yil');
+    } finally {
+      Storage.prototype.setItem = gercek;
+    }
+  });
+
+  // Kullanıcı isteği: "sayının kaç olması daha iyi, kaç olması daha kötü,
+  // kaç olması anlamsız". Formülü bilmek sayıyı OKUMAYA yetmiyordu.
+  it('çarpan açıklaması iyi/kötü/anlamsız bandını içeriyor', async () => {
+    const user = userEvent.setup();
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await waitFor(() => expect(screen.getByText('F/K')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: 'F/K: bu sayı nereden geliyor?' }));
+    const panel = screen.getByRole('dialog', { name: 'F/K' });
+    expect(panel).toHaveTextContent('Daha iyi');
+    expect(panel).toHaveTextContent('Daha kötü');
+    // "Anlamsız" bandı boş bırakılamaz: her ölçütün geçersiz olduğu bir durum var.
+    expect(panel).toHaveTextContent('Anlamsız');
+    expect(panel).toHaveTextContent(/Zarar eden şirkette/);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { BarSeries } from './BarSeries';
 
 /**
@@ -41,5 +42,39 @@ describe('BarSeries', () => {
   it('hiç değer yoksa boş grafik yerine cümle kurar', () => {
     render(<BarSeries labels={['2024/3']} values={[null]} label="Satış" />);
     expect(screen.getByRole('img', { name: 'Satış: veri yok' })).toBeInTheDocument();
+  });
+
+  // Kullanıcı isteği: "barlara hover yapınca dönem, yüzde, miktar görünsün".
+  // jsdom'da düzen yok; kabın genişliği taklit ediliyor, yoksa her imleç
+  // konumu 0 genişliğe düşer ve ipucu hiç açılmaz.
+  it('çubuğun üzerine gelince dönem, miktar ve yüzde gösterir', async () => {
+    const user = userEvent.setup();
+    render(
+      <BarSeries labels={['2024/3', '2024/6', '2024/9']} values={[100, 150, 120]} label="Satış" />,
+    );
+    const kap = document.querySelector('.barseries__kap') as HTMLElement;
+    kap.getBoundingClientRect = () => ({ left: 0, width: 300, top: 0, height: 100 }) as DOMRect;
+
+    await user.pointer({ target: kap, coords: { clientX: 150, clientY: 10 } });
+
+    const ipucu = document.querySelector('.barseries__ipucu')!;
+    expect(ipucu.textContent).toContain('2024/6');
+    expect(ipucu.textContent).toContain('150');
+    // Bir önceki döneme göre: 100 → 150.
+    expect(ipucu.textContent).toContain('+%50,0');
+  });
+
+  // Taban negatifse ya da önceki dönem yoksa yüzde ANLAMSIZDIR; boş bırakmak
+  // "değişmedi" gibi okunurdu.
+  it('ilk dönemde yüzde yerine neden yazıyor', async () => {
+    const user = userEvent.setup();
+    render(<BarSeries labels={['2024/3', '2024/6']} values={[100, 150]} label="Satış" />);
+    const kap = document.querySelector('.barseries__kap') as HTMLElement;
+    kap.getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 100 }) as DOMRect;
+
+    await user.pointer({ target: kap, coords: { clientX: 50, clientY: 10 } });
+    expect(document.querySelector('.barseries__ipucu')!.textContent).toContain(
+      'önceki döneme göre —',
+    );
   });
 });

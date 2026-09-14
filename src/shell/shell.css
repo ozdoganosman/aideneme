@@ -1804,11 +1804,35 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.barseries__svg {
+.barseries__kap {
   grid-row: 1;
+  position: relative;
+  min-width: 0;
+}
+.barseries__svg {
   display: block;
   width: 100%;
   min-width: 0;
+}
+/* İpucu: çubuğun ÜSTÜNDE değil grafiğin üst kenarında — çubuk boyuna göre
+   yer değiştiren bir kutu okurken göz takip edemiyordu. */
+.barseries__ipucu {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
 }
 .barseries__labels {
   grid-column: 2;
@@ -1851,4 +1875,38 @@
   font-size: var(--fs-md);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Provenance: "kaç iyi, kaç kötü, kaç anlamsız" ─────────────────────── */
+/* Formülü bilmek sayıyı okumaya yetmiyordu: PD/Satış 0,56 iyi mi kötü mü?
+   Bantlar KABA ve sektöre bağlı; her birinin yanında geçersizleştiği koşul
+   yazıyor — kesin eşik vermek olmayan bir kesinlik uydurmak olurdu. */
+.prov__govde {
+  margin: 0 0 var(--sp-3);
+}
+.prov__bant {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+}
+.prov__bant dt {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.prov__bant dd {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+}
+.prov__bant .is-up dt {
+  color: var(--up);
+}
+.prov__bant .is-down dt {
+  color: var(--down);
+}
+.prov__bant .is-unknown dt {
+  color: var(--text-muted);
 }
