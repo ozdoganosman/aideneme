@@ -684,6 +684,33 @@ tanımda (bir önceki kapanış). Nabız'ın kendi `fromHigh` alanı KAPANIŞ
 zirvesine bakıyor ama hiçbir yerde gösterilmiyor — üçüncü bir "zirveden"
 tanımı ekrana sızmıyor.
 
+## Yeni kabuğa giden yol yoktu
+
+Bütün bu iş `next.html` içinde duruyordu ve siteye gelen kullanıcı oraya
+**hiçbir yerden ulaşamıyordu**: `index.html` (yayındaki uygulama) yeni
+kabuktan haberdar değildi, yeni kabukta da geri dönüş yolu yoktu. Yapılan
+işin kullanıcıya ulaşmaması, yapılmamış olmasıyla aynı kapıya çıkar.
+
+İki bağlantı eklendi — varsayılan giriş noktası DEĞİŞTİRİLMEDİ, bu bir ürün
+kararı ve tek taraflı alınmamalı:
+
+- Eski araç çubuğunda **"Yeni arayüz"** (dar ekranda da gizlenmiyor;
+  keşfedilmesi gereken tek şey bu).
+- Yeni kabuğun üst çubuğunda **"Eski arayüz"** — yeni kabukta henüz olmayan
+  bir şeye ihtiyacı olan kullanıcı geri dönebilmeli.
+
+Bağlantı uçtan uca teste bağlandı: kopsa kimse fark etmezdi.
+
+### Yol boyunca: eski sayfada iki kusur
+
+- `index.html` yakınlaştırmayı **engelliyordu** (`maximum-scale=1.0,
+  user-scalable=no`). Bu WCAG 1.4.4'e aykırı ve az gören kullanıcıyı
+  uygulamanın dışında bırakıyor. Kaldırıldı; grafiğin kendi dokunma
+  hareketleri etkilenmiyor.
+- Sayfanın ikonu yoktu, yani her ziyarette `/favicon.ico` için bir **404**
+  ve konsolda bir hata. Yeni kabuktaki satır içi SVG ikon buraya da
+  eklendi — ek istek yok.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

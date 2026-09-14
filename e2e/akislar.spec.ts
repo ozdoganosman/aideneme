@@ -69,6 +69,17 @@ test('nabız → tarayıcı: sektör satırı o sektör seçili taramayı açıy
   expect(f.split('|')[3]).toBe(sector);
 });
 
+test('eski arayüz ile yeni kabuk birbirine bağlı', async ({ page }) => {
+  // Yeni kabuk ikinci bir giriş noktasında duruyor; bağlantı kopsa siteye
+  // gelen kullanıcı varlığını hiç öğrenemez.
+  await page.goto('/index.html', { waitUntil: 'networkidle' });
+  await page.getByRole('link', { name: 'Yeni arayüz' }).click();
+  await expect(page.locator('.shell-topbar')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Eski arayüz' }).click();
+  await expect(page.locator('.toolbar')).toBeVisible();
+});
+
 test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor', async ({ page }) => {
   await open(page, 'v=tarayici');
   await expect(page.locator('.ui-vtable')).toBeVisible();

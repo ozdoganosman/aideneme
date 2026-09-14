@@ -471,6 +471,12 @@ export default function App() {
           ☰
         </button>
         <span className="brand">⚡ Borsa</span>
+        {/* Yeni kabuk ikinci bir giriş noktasında duruyordu ve HİÇBİR yerden
+            bağlantısı yoktu: buraya gelen kullanıcı varlığını öğrenemezdi.
+            Dar ekranda da gizlenmiyor — keşfedilmesi gereken tek şey bu. */}
+        <a className="ctl newui" href="next.html">
+          Yeni arayüz
+        </a>
 
         <select
           className="ctl"

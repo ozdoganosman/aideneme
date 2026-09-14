@@ -139,6 +139,11 @@ export function App() {
               >
                 <Icon name={THEME_ICON[theme]} />
               </IconButton>
+              {/* Geri dönüş yolu: yeni kabukta henüz olmayan bir şeye ihtiyacı
+                  olan kullanıcı eski arayüze dönebilmeli. */}
+              <a className="shell-topbar__legacy" href="index.html">
+                Eski arayüz
+              </a>
               <IconButton
                 label="UI kitaplığı"
                 active={screen.id === 'kitaplik'}

@@ -123,6 +123,19 @@
   font-size: var(--fs-xs);
 }
 
+.shell-topbar__legacy {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+}
+.shell-topbar__legacy:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
 .shell-content {
   flex: 1;
   min-height: 0;
