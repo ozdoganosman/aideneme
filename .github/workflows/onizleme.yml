@@ -87,41 +87,49 @@ jobs:
       - name: gh-pages'e yayımla
         run: |
           set -e
-          # Uygulama alt klasöre; kendi data/ kopyası atılıyor (kökten okunuyor).
-          rm -rf _site/onizleme
-          mkdir -p _site/onizleme
-          cp -r dist/. _site/onizleme/
-          rm -rf _site/onizleme/data
+          W="${GITHUB_WORKSPACE}"
+          url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
 
-          # Paket köke: eski arayüzün JSON'ları duruyor, yanına pack/ ekleniyor.
-          mkdir -p _site/data/bist
-          rm -rf _site/data/bist/pack
-          cp -r public/data/bist/pack _site/data/bist/pack
-          for f in sectors.json fx.json; do
-            if [ -f "public/data/bist/$f" ]; then cp "public/data/bist/$f" "_site/data/bist/$f"; fi
-          done
-          # Finansal tablolara dokunulmuyor: onları `finansallar` işi yazıyor
-          # ve buradaki kopya o işin klonu alındığı andan eski olabilir.
+          # Yayımlanacak her şeyi klonun ÜSTÜNE kopyalar. Ayrı bir kabuk
+          # fonksiyonu, çünkü push reddedilirse en yeni gh-pages alınıp bu
+          # kopyalama baştan yapılıyor — rebase yerine üstüne yazma.
+          # Rebase denendi ve çakıştı: aynı yolu iki iş yazdığında git bunu
+          # add/add çakışması sayıyor, oysa içerik çakışması yok.
+          yayimla() {
+            # Uygulama alt klasöre; kendi data/ kopyası atılıyor (kökten okunuyor).
+            rm -rf _site/onizleme
+            mkdir -p _site/onizleme
+            cp -r dist/. _site/onizleme/
+            rm -rf _site/onizleme/data
 
-          cd _site
-          touch .nojekyll
+            # Paket köke: eski arayüzün JSON'ları duruyor, yanına pack/ ekleniyor.
+            mkdir -p _site/data/bist
+            rm -rf _site/data/bist/pack
+            cp -r public/data/bist/pack _site/data/bist/pack
+            for f in sectors.json fx.json; do
+              if [ -f "public/data/bist/$f" ]; then cp "public/data/bist/$f" "_site/data/bist/$f"; fi
+            done
+            # Finansal tablolara dokunulmuyor: onları `finansallar` işi yazıyor
+            # ve buradaki kopya o işin klonu alındığı andan eski olabilir.
+            touch _site/.nojekyll
+          }
+
+          cd "$W/_site"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "Değişiklik yok — yayımlanacak bir şey yok."
-            exit 0
-          fi
-          git commit -q -m "onizleme ${GITHUB_SHA}"
 
-          # `finansallar` işi aynı dala yazıyor; yollar ayrık olduğu için
-          # rebase temiz uygulanır, çakışma yalnızca zamanlamadandır.
-          url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
           for deneme in 1 2 3 4 5; do
+            cd "$W" && yayimla && cd "$W/_site"
+            git add -A
+            if git diff --cached --quiet; then
+              echo "Değişiklik yok — yayımlanacak bir şey yok."
+              exit 0
+            fi
+            git commit -q -m "onizleme ${GITHUB_SHA}"
             if git push "$url" gh-pages; then exit 0; fi
-            echo "push reddedildi ($deneme), yeniden tabanlanıyor"
+            echo "push reddedildi ($deneme), en yeni gh-pages alınıp üstüne yazılıyor"
             git fetch "$url" gh-pages
-            git rebase FETCH_HEAD || { git rebase --abort; exit 1; }
+            git reset --hard FETCH_HEAD
             sleep $((deneme * 3))
           done
           exit 1

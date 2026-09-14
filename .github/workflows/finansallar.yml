@@ -86,31 +86,33 @@ jobs:
       - name: gh-pages'e yayımla
         run: |
           set -e
-          mkdir -p _site/data/bist
-          rm -rf _site/data/bist/fundamentals
-          cp -r public/data/bist/fundamentals _site/data/bist/fundamentals
-
-          cd _site
+          W="${GITHUB_WORKSPACE}"
+          url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          cd "$W/_site"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # YALNIZCA finansal tablolar. Önizleme işi aynı dalın başka
-          # klasörlerini (onizleme/, data/bist/pack/) yazıyor; `git add -A`
-          # onun işini geri almaya çalışırdı.
-          git add data/bist/fundamentals
-          if git diff --cached --quiet; then
-            echo "Yeni finansal tablo yok."
-            exit 0
-          fi
-          git commit -q -m "finansallar ${GITHUB_RUN_ID}"
 
-          # İki iş aynı dala yazıyor. Yollar ayrık olduğu için rebase temiz
-          # uygulanır; çakışma yalnızca zamanlamadandır, içerikten değil.
-          url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+          # Yeniden TABANLAMA değil, ÜSTÜNE YAZMA. Rebase denendi ve çakıştı:
+          # başka bir iş bu klon alındıktan sonra aynı sembollerin dosyalarını
+          # eklemişti, git bunu add/add çakışması sayıyor (ölçüldü: 26 dosya).
+          # İçerik çakışması diye bir şey yok — iki taraf da aynı kaynaktan
+          # aynı tabloyu yazıyor. Reddedilen push'ta yapılacak doğru şey en
+          # yeni gh-pages'i alıp KENDİ dosyalarımı üstüne kopyalamak: benim
+          # taramadığım semboller (silinmiyor, sadece üzerine yazılmıyor)
+          # yerinde kalıyor, benimkiler tazeleniyor.
           for deneme in 1 2 3 4 5; do
+            mkdir -p data/bist/fundamentals
+            cp -r "$W/public/data/bist/fundamentals/." data/bist/fundamentals/
+            git add data/bist/fundamentals
+            if git diff --cached --quiet; then
+              echo "Yeni finansal tablo yok."
+              exit 0
+            fi
+            git commit -q -m "finansallar ${GITHUB_RUN_ID}"
             if git push "$url" gh-pages; then exit 0; fi
-            echo "push reddedildi ($deneme), yeniden tabanlanıyor"
+            echo "push reddedildi ($deneme), en yeni gh-pages alınıp üstüne yazılıyor"
             git fetch "$url" gh-pages
-            git rebase FETCH_HEAD || { git rebase --abort; exit 1; }
+            git reset --hard FETCH_HEAD
             sleep $((deneme * 3))
           done
           exit 1
