@@ -120,7 +120,21 @@ def extract(df, symbol: str) -> dict | None:
                 continue
 
     if "revenue" not in seen and "netIncome" not in seen:
-        return None  # tanınan hiçbir kalem yok → şablon uyuşmuyor
+        # Şablon uyuşmuyor. Hangi kalem adlarının geldiğini YAZ: aksi hâlde
+        # neyin eksik olduğunu tahmin etmek gerekiyor. Ölçüldü — AKBNK ve
+        # ALBRK'de tablo GELİYOR ama tanınan kalem yok, yani sorun tablo
+        # şablonu değil banka bilançosunun satır adları. Kaydı okuyup
+        # FIELD_ITEMS'a doğru adı eklemek, ada körlemesine tahmin etmekten
+        # iyidir.
+        gelen = []
+        for _, row in df.iterrows():
+            ad = str(row.get(name_col, "")).strip()
+            if ad and ad not in gelen:
+                gelen.append(ad)
+            if len(gelen) >= 15:
+                break
+        print(f"[fund] {symbol}: tanınan kalem yok · gelen adlar: {gelen}", file=sys.stderr)
+        return None
 
     return {
         "symbol": symbol,
@@ -400,6 +414,21 @@ def self_test() -> None:
     assert record is not None, "üçüncü şablonda bulunmalıydı"
     assert record["group"] == "3", record["group"]
     assert denenen == ["1", "2", "3"], denenen
+
+    # Şablon uymadığında GELEN kalem adları kayda yazılmalı. Ölçüldü:
+    # AKBNK/ALBRK'de tablo geliyor ama tanınan kalem yok; hangi adların
+    # geldiğini görmeden FIELD_ITEMS'a ne ekleneceği tahmin olurdu.
+    import io
+
+    tanimsiz = SahteTablo([{"FINANCIAL_ITEM_NAME_TR": "FAİZ GELİRLERİ", "2024/6": 1.0}])
+    yakala = io.StringIO()
+    gercek_stderr, sys.stderr = sys.stderr, yakala
+    try:
+        bos = extract(tanimsiz, "AKBNK")
+    finally:
+        sys.stderr = gercek_stderr
+    assert bos is None, "tanınan kalem yokken kayıt üretilmemeli"
+    assert "FAİZ GELİRLERİ" in yakala.getvalue(), yakala.getvalue()
 
     print("[fund] self-test tamam")
 

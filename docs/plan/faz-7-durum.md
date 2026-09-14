@@ -1397,6 +1397,33 @@ bir tahmin değil yalnızca SIRALAMA ipucu. Bir şablon boş tablo döndürürse
 sıradakine geçiliyor. Test sahte bir kaynakla üçüncü şablonda bulmayı ve
 sıranın doğru olmasını sınıyor.
 
+**Sonuç ölçüldü — yarısı tuttu.**
+
+| | Önce | Sonra |
+|---|---|---|
+| Sigortalar (AGESA, AKGRT, ANHYT, ANSGR) | başarısız | anlık görüntüde |
+| Bankalar (AKBNK, ALBRK) | başarısız | **hâlâ başarısız** |
+| Başarısız kayıt | 12 | 8 |
+
+Kayıt, banka sorununun şablon OLMADIĞINI söyledi:
+
+```
+[fund] AKBNK: grup 2 boş döndü, sıradaki şablon
+[fund] AKBNK: grup 3 boş döndü, sıradaki şablon
+[fund] AKBNK: grup 1 çekilemedi (No financial data was fetched…)
+```
+
+"Boş döndü" = tablo GELİYOR ama `extract` tanıdığı hiçbir kalemi bulamıyor.
+Yani eksik olan şey `FIELD_ITEMS`'taki satır adları: banka bilançosu başka
+adlar kullanıyor. Hangi adlar olduğunu tahmin etmek yerine betiğe kendi
+teşhisini bastırdım — şablon uymadığında gelen ilk 15 kalem adı kayda
+yazılıyor. Bir sonraki tur hangi adın ekleneceğini söyleyecek.
+
+Aynı kayıt hızın asıl suçlusunu da verdi: `Read timed out. (read
+timeout=10)` uyarıları dönem dönem tekrarlanıyor. O turda 5 sembol /
+420 saniye işlendi ve üçü başarısızdı — yani başarısızları atlamak,
+ilk tahminimden çok daha değerli bir düzeltmeymiş.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
