@@ -40,7 +40,12 @@ function prov(title: string, body: string) {
     <Popover
       title={title}
       trigger={(p) => (
-        <button type="button" className="desk__prov" aria-label="Bu sayı nereden geliyor?" {...p}>
+        <button
+          type="button"
+          className="desk__prov"
+          aria-label={`${title}: bu sayı nereden geliyor?`}
+          {...p}
+        >
           ?
         </button>
       )}

@@ -114,8 +114,13 @@ describe('SymbolDesk', () => {
     render(<SymbolDesk state={STATE} push={push} />);
     await screen.findByTestId('chart');
 
-    const buttons = screen.getAllByRole('button', { name: 'Bu sayı nereden geliyor?' });
+    // Etiket metriğin ADINI taşımalı: dokuz özdeş "Bu sayı nereden geliyor?"
+    // düğmesi ekran okuyucuda ayırt edilemezdi.
+    const buttons = screen.getAllByRole('button', { name: /bu sayı nereden geliyor\?$/i });
     expect(buttons.length).toBeGreaterThan(4);
+    expect(
+      screen.getByRole('button', { name: 'Son kapanış: bu sayı nereden geliyor?' }),
+    ).toBeInTheDocument();
 
     await user.click(buttons[0]);
     const panel = screen.getByRole('dialog', { name: 'Son kapanış' });

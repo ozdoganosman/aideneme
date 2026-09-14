@@ -339,7 +339,7 @@ export default function SymbolDesk({ state, push }: Props) {
                         type="button"
                         className="desk__prov"
                         {...p}
-                        aria-label="Bu sayı nereden geliyor?"
+                        aria-label={`${metric.label}: bu sayı nereden geliyor?`}
                       >
                         ?
                       </button>

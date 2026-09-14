@@ -571,7 +571,7 @@ function RuleList({
           />
           <OperandEditor value={rule.right} onChange={(right) => update(i, { right })} />
           <IconButton
-            label="Kuralı kaldır"
+            label={`${title}: ${i + 1}. kuralı kaldır`}
             onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
           >
             <Icon name="close" size={14} />
@@ -580,6 +580,7 @@ function RuleList({
       ))}
       <Button
         size="sm"
+        aria-label={`${title}: kural ekle`}
         onClick={() =>
           onChange([
             ...rules,

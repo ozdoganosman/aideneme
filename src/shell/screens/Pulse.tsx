@@ -172,7 +172,7 @@ export default function Pulse({ state, push }: Props) {
                   <button
                     type="button"
                     className="desk__prov"
-                    aria-label="Bu sayı nereden geliyor?"
+                    aria-label="Genişlik: bu sayı nereden geliyor?"
                     {...p}
                   >
                     ?
@@ -195,7 +195,7 @@ export default function Pulse({ state, push }: Props) {
                   <button
                     type="button"
                     className="desk__prov"
-                    aria-label="Bu sayı nereden geliyor?"
+                    aria-label="Para akışı: bu sayı nereden geliyor?"
                     {...p}
                   >
                     ?

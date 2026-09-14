@@ -434,7 +434,7 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
                   <button
                     type="button"
                     className="desk__prov screener__prov"
-                    aria-label="Bu metrik nasıl hesaplanıyor?"
+                    aria-label={`${METRIC_BY_ID.get(rule.metric)?.label ?? rule.metric}: bu metrik nasıl hesaplanıyor?`}
                     {...p}
                   >
                     ?
@@ -444,7 +444,7 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
                 {METRIC_BY_ID.get(rule.metric)?.formula(params)}
               </Popover>
               <IconButton
-                label="Kuralı kaldır"
+                label={`${i + 1}. kuralı kaldır (${METRIC_BY_ID.get(rule.metric)?.label ?? rule.metric})`}
                 onClick={() => setRules((prev) => prev.filter((_, idx) => idx !== i))}
               >
                 <Icon name="close" size={14} />

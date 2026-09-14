@@ -435,7 +435,7 @@ export default function Portfolio({ state, push }: Props) {
                     <button
                       type="button"
                       className="desk__prov"
-                      aria-label="Bu sayı nereden geliyor?"
+                      aria-label="Reel getiri: bu sayı nereden geliyor?"
                       {...p}
                     >
                       ?
@@ -464,7 +464,7 @@ export default function Portfolio({ state, push }: Props) {
                     <button
                       type="button"
                       className="desk__prov"
-                      aria-label="Bu sayı nereden geliyor?"
+                      aria-label="Para ağırlıklı getiri (IRR): bu sayı nereden geliyor?"
                       {...p}
                     >
                       ?

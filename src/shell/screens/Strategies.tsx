@@ -472,6 +472,7 @@ export default function Strategies({ state, push }: Props) {
                       type="button"
                       className="rank__open"
                       onClick={() => push({ v: 'laboratuvar', s: symbol, st: row.id })}
+                      aria-label={`${row.name} stratejisini laboratuvarda aç`}
                     >
                       Laboratuvarda aç
                     </button>

@@ -408,6 +408,30 @@ Yol boyunca küçük bir düzeltme: araç çubuğundaki ve pencere içindeki iki
 de "İçe aktar" diyordu. Aynı ada sahip iki düğme ekran okuyucuda ayırt
 edilemez; dıştaki "Koleksiyonu içe aktar" oldu.
 
+## Bütünsel gözden geçirme: aynı adlı düğmeler
+
+Dokuz ekran bir kullanıcı gibi gezildi. Konsol temiz, her ekranda tek ve doğru
+bir `h1`, adsız düğme ya da etiketsiz giriş alanı yok. Ama denetim lint'in
+göremediği bir kusuru buldu: **aynı adı taşıyan düğmeler.**
+
+| Ekran | Tekrar |
+|---|---|
+| Stratejiler | "Laboratuvarda aç" ×8 |
+| Sembol Masası | "Bu sayı nereden geliyor?" ×9 |
+| Tarayıcı | "Bu metrik nasıl hesaplanıyor?" ×2, "Kuralı kaldır" ×2 |
+| Laboratuvar | "Kuralı kaldır" ×2, "+ Kural" ×2 |
+| Nabız, Portföy | "Bu sayı nereden geliyor?" ×2 |
+
+Lint bunları göremez çünkü teknik olarak hepsi etiketli. Ama sekiz satırda
+sekiz kez "Laboratuvarda aç" duyan bir ekran okuyucu kullanıcısı hangisinin
+hangi strateji olduğunu bilemez. Hepsi bağlamıyla yeniden adlandırıldı
+("EMA 20/50 kesişimi stratejisini laboratuvarda aç", "Son kapanış: bu sayı
+nereden geliyor?", "Giriş kuralları: 2. kuralı kaldır").
+
+Denetim kalıcı bir teste bağlandı (`e2e/erisilebilirlik.spec.ts`): dokuz ekranın
+her biri için h1 sayısı, adsız düğme, etiketsiz giriş ve **tekrar eden düğme
+adı** sıfır olmalı. Bu kusur artık sessizce geri gelemez.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.

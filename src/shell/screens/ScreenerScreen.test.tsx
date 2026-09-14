@@ -114,7 +114,8 @@ describe('Tarayıcı', () => {
     render(<ScreenerScreen state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
 
-    await user.click(screen.getAllByRole('button', { name: 'Bu metrik nasıl hesaplanıyor?' })[0]);
+    // Etiket metriğin adıyla başlar; aynı adlı iki düğme ayırt edilebilir olmalı.
+    await user.click(screen.getByRole('button', { name: 'RSI: bu metrik nasıl hesaplanıyor?' }));
     expect(screen.getByRole('dialog', { name: 'RSI' })).toHaveTextContent(/Wilder RSI/);
   });
 });
