@@ -1024,6 +1024,26 @@ artı işareti onu kazanç gibi gösteriyordu; işaretsiz oldu. Tarih alanının
 `09/14/2026` görünmesi ise kusur değil: `<input type="date">` tarayıcı diline
 göre biçimlenir, Türkçe tarayıcıda `14.09.2026` çıkıyor (ölçüldü).
 
+### Elle tarama iki kez eksik kaldı → teste taşındı
+
+Aynı işi iki turda iki kez elle yaptım ve ikisinde de bir şeyler kaçtı. Yeni
+bir kart eklenince üçüncüsü de kaçardı. `e2e/bicim.spec.ts` sekiz ekranda iki
+kuralı denetliyor: ondalık ayırıcı nokta olmamalı, yüzde işareti sayıdan önce
+gelmeli.
+
+Denetimi yazarken **ölçütün kendisi iki kez yanlış alarm verdi** — ikisi de
+kaydedilmeye değer:
+
+- Türkçe binlik ayırıcı (`39.818`) ve tarih (`14.09.2026`) ondalık nokta
+  sanılıyordu. Kalıp, önünde/ardında nokta ya da rakam olmayan `12.3`
+  biçimine daraltıldı.
+- Doğru yazılmış iki yüzde yan yana gelince (`-%2,37 %18`) aradaki `7 %`
+  parçası "sondan yüzde" sanılıyordu. İşaretin ardından rakam geliyorsa o
+  zaten bir sonraki sayının başıdır.
+
+Testin gerçekten koruduğu kanıtlandı: tarayıcıdaki bir biçim bilerek
+bozulunca kırılıyor, geri alınınca geçiyor.
+
 ## Sırada
 
 - Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
