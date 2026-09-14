@@ -19,6 +19,7 @@ import { DEFAULT_COSTS, type Trade } from '../../core/backtest/engine';
 import type { Badge as ValidationBadge } from '../../core/backtest/validate';
 import { describeCondition, type Operand, type Strategy } from '../../core/strategy/dsl';
 import { STRATEGY_PRESETS } from '../../core/strategy/presets';
+import { decodeStrategy, encodeStrategy } from '../../core/strategy/share';
 import {
   baseOf,
   factorOf,
@@ -40,6 +41,8 @@ import type { UrlState } from '../urlState';
 interface Props {
   state: UrlState;
   push: (patch: UrlState) => void;
+  /** Kural düzenlerken geçmişi kirletmemek için. */
+  replace?: (patch: UrlState) => void;
 }
 
 const OP_LABEL: Record<SimpleOp, string> = {
@@ -86,16 +89,35 @@ function fmt(v: number, digits = 2, suffix = ''): string {
 }
 
 /** Strateji Laboratuvarı — kural kur, maliyetli sına, doğrulamayı gör. */
-export default function Lab({ state, push }: Props) {
+export default function Lab({ state, push, replace }: Props) {
   const market = (MARKETS.includes(state.m as Market) ? state.m : 'bist') as Market;
   const analysis = useAnalysis(market);
   const symbol = state.s || analysis.symbols[0] || '';
 
-  // URL'den gelen strateji kimliği (sıralama ekranından "laboratuvarda aç").
+  /**
+   * İlk durum üç kaynaktan gelebilir, öncelik sırasıyla:
+   *   1. `str=` — bağlantıyla paylaşılmış tam kural
+   *   2. `st=`  — sıralama ekranından gelen hazır strateji kimliği
+   *   3. kitaplığın ilk stratejisi
+   */
   const initial = useMemo(() => {
+    const link = decodeStrategy(state.str ?? '');
+    if (link.strategy) {
+      const converted = toForm(link.strategy);
+      if (converted.form) {
+        return { id: '', form: converted.form, dropped: link.dropped };
+      }
+      return {
+        id: '',
+        form: toForm(STRATEGY_PRESETS[0].strategy).form!,
+        dropped: [...link.dropped, ...converted.unsupported],
+      };
+    }
     const wanted = STRATEGY_PRESETS.find((p) => p.id === state.st) ?? STRATEGY_PRESETS[0];
-    return { id: wanted.id, form: toForm(wanted.strategy).form! };
-  }, [state.st]);
+    return { id: wanted.id, form: toForm(wanted.strategy).form!, dropped: link.dropped };
+    // Yalnızca ilk okumada; sonraki URL yazımları bizim yazımlarımız.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [preset, setPreset] = useState(initial.id);
   const [entryRules, setEntryRules] = useState<SimpleRule[]>(initial.form.entry);
@@ -104,7 +126,7 @@ export default function Lab({ state, push }: Props) {
   const [takeProfitPct, setTakeProfitPct] = useState(initial.form.takeProfitPct);
   const [atrStopLength, setAtrStopLength] = useState(initial.form.atrStopLength);
   const [atrStopMult, setAtrStopMult] = useState(initial.form.atrStopMult);
-  const [unsupported, setUnsupported] = useState<string[]>([]);
+  const [unsupported, setUnsupported] = useState<string[]>(initial.dropped);
   const [commissionBps, setCommissionBps] = useState(DEFAULT_COSTS.commissionBps);
   const [slippageBps, setSlippageBps] = useState(DEFAULT_COSTS.slippageBps);
   const [cashAnnualPct, setCashAnnualPct] = useState(0);
@@ -138,6 +160,15 @@ export default function Lab({ state, push }: Props) {
     }),
     [commissionBps, slippageBps, cashAnnualPct],
   );
+
+  // Kural değişince URL'i güncelle (replace: her düzenleme geçmiş girdisi olmasın).
+  const encoded = useMemo(() => encodeStrategy(strategy), [strategy]);
+  useEffect(() => {
+    if (!replace || encoded.text === '' || encoded.text === state.str) return;
+    replace({ str: encoded.text, st: '' });
+    // state.str bağımlılık değil: kendi yazdığımızı geri okuyup döngü kurmayalım.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encoded, replace]);
 
   // Sembol serisi (tam geçmiş).
   useEffect(() => {
@@ -301,8 +332,9 @@ export default function Lab({ state, push }: Props) {
 
         <p className="desk__muted">{STRATEGY_PRESETS.find((p) => p.id === preset)?.detail}</p>
         {unsupported.length > 0 ? (
-          <p className="lab__warn">
-            Bu strateji editöre tam sığmıyor ({unsupported.join(', ')}); kurallar değiştirilmedi.
+          <p className="lab__warn" role="status">
+            Kuralın bir kısmı uygulanamadı ({unsupported.join(', ')}); görünen strateji
+            paylaşılandan farklı olabilir.
           </p>
         ) : null}
 

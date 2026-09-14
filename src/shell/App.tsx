@@ -25,7 +25,16 @@ const Strategies = lazy(() => import('./screens/Strategies'));
  * URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa>&cmp=<sembol,sembol>
  * Varsayılan değerler yazılmaz — link kısa kalır.
  */
-const URL_DEFAULTS = { v: DEFAULT_SCREEN, s: '', tf: 'D', m: 'bist', cmp: '', st: '', f: '' };
+const URL_DEFAULTS = {
+  v: DEFAULT_SCREEN,
+  s: '',
+  tf: 'D',
+  m: 'bist',
+  cmp: '',
+  st: '',
+  f: '',
+  str: '',
+};
 
 const THEME_ICON: Record<ThemePreference, IconName> = {
   system: 'auto',
@@ -153,7 +162,7 @@ export function App() {
                 ) : screen.id === 'nabiz' ? (
                   <Pulse state={state} push={push} />
                 ) : screen.id === 'laboratuvar' ? (
-                  <Lab state={state} push={push} />
+                  <Lab state={state} push={push} replace={replace} />
                 ) : screen.id === 'portfoy' ? (
                   <Portfolio state={state} push={push} />
                 ) : screen.id === 'stratejiler' ? (

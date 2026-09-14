@@ -1,7 +1,7 @@
 # Faz 7 — Strateji sıralaması (plan sonrası)
 
 **Tarih:** 2026-09-14
-**Durum:** Sürüyor — `npm run verify` yeşil (338 → 418 test)
+**Durum:** Sürüyor — `npm run verify` yeşil (338 → 430 test)
 
 Plandaki yedi faz bittikten sonra kullanıcı isteğinin son maddesi kaldı:
 "en doğru stratejilere sunan bir sistem". Laboratuvar tek sembol × tek
@@ -179,6 +179,33 @@ bırakıyordu (o sürümde yalnızca dört alan saklanıyordu); bağlantı kodla
 nesneyi görünce çöküyordu. İki uçtan düzeltildi: geri yükleme varsayılanla
 birleştiriyor, kodlama da eksik alanı varsayılana düşürüyor. İkisi de test
 altında.
+
+## Paylaşılabilir strateji
+
+Laboratuvarda kurulan kural da artık URL'de:
+
+    ?v=laboratuvar&s=THYAO&str=1|c~g~highest55@1|c~l~lowest20@1|0_0_14_3
+                               ^sürüm ^giriş      ^çıkış        ^stop_hedef_atrUzunluk_atrKat
+
+Operand dili kısa: `c` kapanış, `ema50` gösterge, `k30` sabit, `@1` bir bar
+geri, `*0.97` ölçek. Kodlanamayan bir kural (VEYA/DEĞİL bağlacı gibi)
+**sessizce basitleştirilmiyor** — kodlayıcı metin yerine gerekçe döndürüyor,
+çünkü yanlış bir bağlantı paylaşmak hiç paylaşmamaktan kötü. Bozuk bir
+bağlantı da sessizce başka bir strateji çalıştırmıyor, ekranda uyarı çıkıyor.
+
+Uçtan uca doğrulandı: `st=breakout-55` ile açılan ekran URL'i tam kurala
+çeviriyor ve o bağlantı yeni bir sekmede birebir aynı sonucu veriyor.
+
+### Yol boyunca yakalanan iki kusur
+
+1. **Ayırıcı çakışması:** stop alanları nokta ile ayrılıyordu, ATR katı `2.5`
+   ise kendi içinde nokta taşıyor — alanlara bölünüp sessizce `2`ye düşüyordu.
+   Ayırıcı `_` oldu.
+2. **Operatör kodu gösterge adının içinde:** `adx14gk25` çözülürken "adx"
+   içindeki `x` operatör sanılıp kural yanlış bölünüyordu. Operatör artık `~`
+   ile ayrılıyor (`adx14~g~k25`).
+
+İkisi de test altında; ikisi de gerçek veriyle karşılaşmadan önce yakalandı.
 
 ## Sırada
 

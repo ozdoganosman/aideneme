@@ -190,3 +190,44 @@ describe('Strateji Laboratuvarı', () => {
     });
   });
 });
+
+describe('Laboratuvar — paylaşılabilir strateji', () => {
+  it('bağlantıdaki kuralı yükler', async () => {
+    render(
+      <Lab
+        state={{ ...STATE, str: '1|c~g~ema200!rsi14~l~k35|rsi14~g~k65|7_0_14_0' }}
+        push={push}
+      />,
+    );
+    await waitFor(() => expect(backtestFn).toHaveBeenCalledTimes(1));
+    const strategy = backtestFn.mock.calls[0][1];
+    expect(strategy.entry.of).toHaveLength(2);
+    expect(strategy.stopLossPct).toBe(7);
+    expect(JSON.stringify(strategy)).toContain('ema');
+  });
+
+  it('kural değişince URL replace ile güncellenir', async () => {
+    const user = userEvent.setup();
+    const replace = vi.fn();
+    render(<Lab state={STATE} push={push} replace={replace} />);
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+
+    replace.mockClear();
+    const stop = screen.getByLabelText('Stop %');
+    await user.clear(stop);
+    await user.type(stop, '9');
+    await waitFor(() => {
+      const last = replace.mock.calls[replace.mock.calls.length - 1]?.[0];
+      expect(last?.str).toContain('9_');
+    });
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('bozuk bağlantı sessizce başka bir strateji çalıştırmaz', async () => {
+    render(<Lab state={{ ...STATE, str: '1|bozuk||' }} push={push} />);
+    await waitFor(() =>
+      expect(screen.getByText(/Kuralın bir kısmı uygulanamadı/)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/giriş kuralı okunamadı/)).toBeInTheDocument();
+  });
+});
