@@ -22,7 +22,7 @@ import { expect, test } from '@playwright/test';
 const SCREENS: [string, string, string, string?][] = [
   ['Nabız', 'v=nabiz', '.pulse__flows'],
   ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__health'],
+  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
   ['Sembol Masası — Finansallar', 'v=sembol&s=X001', '.fin', 'Finansallar'],
   ['Sembol Masası — Sektör', 'v=sembol&s=X001', '.desk__sector', 'Sektör'],
   ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix'],
@@ -108,7 +108,7 @@ for (const [name, query, ready, tab] of SCREENS) {
 const DUYURU: [string, string, string, RegExp][] = [
   ['Nabız', 'v=nabiz', '.pulse__flows', /Piyasa nabzı hazır: \d+ sembol/],
   ['Tarayıcı', 'v=tarayici', '.ui-vtable', /Tarama tamamlandı: \d+ sembolden \d+/],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__health', /X001 hazır: \d+ bar/],
+  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart', /X001 hazır: \d+ bar/],
   ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix', /Korelasyon hazır/],
   [
     'Strateji Laboratuvarı',

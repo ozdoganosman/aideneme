@@ -58,6 +58,31 @@ export class LodController {
   // fit=true frames the latest bars; fit=false keeps the SAME zoom when only the
   // symbol changes — same visible bar count AND the same gap from the right edge,
   // including any whitespace the user left on either side.
+  /**
+   * Görünürlüğü AÇILAN seriye veri yaz.
+   *
+   * Gizli seriler seyreltilmiyor (bkz. `isVisible`) ve bu doğru bir
+   * optimizasyon — ama tek başına bir kusur üretiyordu: anahtar açılınca
+   * seri "görünür" oluyor, oysa gizliyken hiçbir çizimde veri ALMAMIŞ
+   * olduğu için çizilecek bir şeyi yok. Ölçüldü: EMA 200 anahtarı açık
+   * olmasına rağmen grafikte hiç görünmüyordu; renk, veri ve seri doğruydu,
+   * eksik olan yalnızca `setData` çağrısıydı.
+   *
+   * Görünürlük değiştiğinde çağrılmalı. Kendisi de `isVisible` süzgecini
+   * kullanıyor, yani kapatılan seri boşuna seyreltilmiyor.
+   */
+  refreshExtras() {
+    if (!this.full || !this.hasView) return;
+    const { i0, i1, stride } = this.win;
+    for (let k = 0; k < this.extras.length; k++) {
+      const vals = this.extraVals[k];
+      if (!vals || !this.isVisible(k)) continue;
+      this.extras[k].series.setData(
+        buildExtra(this.full, vals, i0, i1, stride, this.extras[k]) as never,
+      );
+    }
+  }
+
   setData(full: Candles, extraVals: Float64Array[], fit = true) {
     // New dataset → drop any P&L bands from the previous symbol/strategy.
     this.bandSegs = [];

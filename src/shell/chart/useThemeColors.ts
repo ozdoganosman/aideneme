@@ -14,6 +14,7 @@ export interface ChartColors {
   up: string;
   down: string;
   accent: string;
+  warn: string;
   surface: string;
   muted: string;
 }
@@ -28,6 +29,7 @@ function read(): ChartColors {
     up: v('--up', '#0f8a5f'),
     down: v('--down', '#d13c36'),
     accent: v('--accent', '#2f6df5'),
+    warn: v('--warn', '#b06a00'),
     surface: v('--surface-0', '#ffffff'),
     muted: v('--text-muted', '#78808f'),
   };

@@ -1,9 +1,9 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useChartColors } from '../chart/useThemeColors';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { Announce } from '../Announce';
 import {
-  Badge,
   Button,
   Combobox,
   EmptyState,
@@ -51,9 +51,16 @@ const TF_ITEMS = [
   { id: 'M', label: 'Aylık' },
 ];
 
+// Renk TOKEN ADI olarak duruyor, `var(--x)` olarak değil.
+//
+// Kusur buydu: renk grafiğe düz metin `'var(--accent)'` olarak gidiyordu ve
+// grafik canvas'a çiziyor — canvas CSS değişkeni ÇÖZEMEZ. Kütüphane geçersiz
+// rengi yutup varsayılana (siyah) düşüyordu; yani EMA 50 yanlış renkte
+// çiziliyor, EMA 200 de mumların üstünde ayırt edilemiyordu. Token artık
+// `useChartColors` üzerinden GERÇEK değere çevriliyor.
 const OVERLAY_DEFS = [
-  { key: 'ema50', label: 'EMA 50', length: 50, color: 'var(--accent)' },
-  { key: 'ema200', label: 'EMA 200', length: 200, color: 'var(--warn)' },
+  { key: 'ema50', label: 'EMA 50', length: 50, token: 'accent' as const },
+  { key: 'ema200', label: 'EMA 200', length: 200, token: 'warn' as const },
 ];
 
 type LoadState =
@@ -220,18 +227,19 @@ export default function SymbolDesk({ state, push }: Props) {
 
   const candles = analysisResult?.candles ?? null;
   const metrics = analysisResult?.metrics ?? [];
-  const health = analysisResult?.health ?? null;
+
+  const chartColors = useChartColors();
 
   const overlays = useMemo(
     () =>
       OVERLAY_DEFS.map((def, i) => ({
         key: def.key,
         label: def.label,
-        color: def.color,
+        color: chartColors[def.token],
         values: analysisResult?.overlayValues[i] ?? new Float64Array(0),
         visible: !!enabled[def.key],
       })),
-    [analysisResult, enabled],
+    [analysisResult, enabled, chartColors],
   );
 
   return (
@@ -385,10 +393,6 @@ export default function SymbolDesk({ state, push }: Props) {
               />
             ))}
           </section>
-
-          {health ? (
-            <HealthPanel health={health} generated={load.generated} cached={load.fromCache} />
-          ) : null}
         </>
       ) : null}
     </div>
@@ -400,39 +404,5 @@ function ChartPanel(props: ComponentProps<typeof LazyPriceChart>) {
     <Suspense fallback={<Skeleton height="320px" />}>
       <LazyPriceChart {...props} />
     </Suspense>
-  );
-}
-
-function HealthPanel({
-  health,
-  generated,
-  cached,
-}: {
-  health: HealthReport;
-  generated: number;
-  cached: boolean;
-}) {
-  const tone = health.level === 'error' ? 'down' : health.level === 'warn' ? 'warn' : 'up';
-  const label = health.level === 'error' ? 'Sorunlu' : health.level === 'warn' ? 'Dikkat' : 'Temiz';
-  return (
-    <section className="desk__health" aria-label="Veri sağlığı">
-      <header>
-        <h2>Veri sağlığı</h2>
-        <Badge tone={tone}>{label}</Badge>
-        <span className="desk__muted">
-          {health.bars} bar · üretim {new Date(generated * 1000).toLocaleString('tr-TR')}
-          {cached ? ' · önbellekten' : ''}
-        </span>
-      </header>
-      <ul>
-        {health.findings.map((finding) => (
-          <li key={finding}>{finding}</li>
-        ))}
-      </ul>
-      <p className="desk__muted">
-        Bulgular düzeltilmez, yalnızca görünür kılınır — düzeltme kararı veriyi üreten katmana
-        aittir.
-      </p>
-    </section>
   );
 }

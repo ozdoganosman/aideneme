@@ -11,7 +11,7 @@ import { expect, test } from '@playwright/test';
 const SCREENS: [string, string, string][] = [
   ['Nabız', 'v=nabiz', '.pulse__flows'],
   ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__health'],
+  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
   ['Strateji Laboratuvarı', 'v=laboratuvar&s=X001', '.lab__stats'],
   ['Stratejiler', 'v=stratejiler', '.rank__table'],
   ['Rapor', 'v=rapor&s=X001', '.report__sheet'],

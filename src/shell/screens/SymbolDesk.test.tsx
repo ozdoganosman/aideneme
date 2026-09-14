@@ -91,13 +91,21 @@ beforeEach(() => {
 });
 
 describe('SymbolDesk', () => {
-  it('veri gelince grafik, metrikler ve veri sağlığı gösterilir', async () => {
+  it('veri gelince grafik ve metrikler gösterilir', async () => {
     render(<SymbolDesk state={STATE} push={push} />);
 
     expect(await screen.findByTestId('chart')).toHaveTextContent('300 bar');
     expect(screen.getByText('Son kapanış')).toBeInTheDocument();
     expect(screen.getByText('Yıllık bileşik (CAGR)')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Veri sağlığı' })).toBeInTheDocument();
+  });
+
+  // Veri sağlığı paneli KALDIRILDI (kullanıcı isteği): grafik bu ekranın asıl
+  // işi ve panel dikey alanı yiyordu. Bulgular kayıp değil — paket üretimi
+  // sırasında ölçülüyor ve `core/data/health.ts` testleri yerinde duruyor.
+  it('veri sağlığı paneli artık ekranda değil', async () => {
+    render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+    expect(screen.queryByRole('region', { name: 'Veri sağlığı' })).toBeNull();
   });
 
   it('BIST için reel getiri kartı var, kripto için yok', async () => {

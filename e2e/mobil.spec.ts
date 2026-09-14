@@ -15,7 +15,7 @@ test.use({ viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true
 const SCREENS: [string, string, string][] = [
   ['Nabız', 'v=nabiz', '.pulse__flows'],
   ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__health'],
+  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
   ['Stratejiler', 'v=stratejiler', '.rank__table'],
   ['Model', 'v=model&s=X001', '.model__verdict'],
   ['Rapor', 'v=rapor&s=X001', '.report__sheet'],

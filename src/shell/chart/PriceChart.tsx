@@ -202,6 +202,9 @@ export function PriceChart({
     for (const overlay of overlays) {
       overlayRef.current.get(overlay.key)?.applyOptions({ visible: overlay.visible });
     }
+    // Görünürlüğü açılan seriye veri YAZILMALI: gizliyken seyreltme atlandığı
+    // için elinde çizilecek bir şey yok (bkz. lod.refreshExtras).
+    lodRef.current?.refreshExtras();
   }, [overlays]);
 
   return <div className="chart-host" ref={hostRef} style={{ height }} />;

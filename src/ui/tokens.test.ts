@@ -54,6 +54,21 @@ function tanimlar(cssYollari: string[]): Set<string> {
   return out;
 }
 
+/**
+ * Satır ve blok YORUMLARINI çıkar.
+ *
+ * Tarama yorumları da okuyordu: bir kod yorumunda örnek olarak yazılan
+ * `var(--x)` gerçek bir kullanım sanılıp yanlış alarm verdi. Yorumda yazan
+ * şey ekrana hiçbir şey boyamaz; taramanın onu görmemesi gerekir.
+ *
+ * Tam bir ayrıştırıcı değil — dize içindeki `//` de kırpılabilir. Bu tarama
+ * için zararsız: sonuçta yalnızca `var(--x)` aranıyor ve bir URL'in içinde
+ * token kullanımı olmuyor.
+ */
+export function yorumsuz(metin: string): string {
+  return metin.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+}
+
 /** `var(` sonrası dengeli parantezle kapanan içerik ve bittiği konum. */
 function icerik(metin: string, acilis: number): { govde: string; son: number } | null {
   let derinlik = 0;
@@ -106,7 +121,8 @@ export function cozulur(govde: string, tanimli: ReadonlySet<string>): boolean {
  * Yalnızca ÜST DÜZEY ifadeler: iç içe `var()` zaten dıştakinin yedek zinciri
  * olarak çözülüyor, ayrıca raporlamak aynı kusuru iki kez saymak olurdu.
  */
-export function bozukVarlar(metin: string, tanimli: ReadonlySet<string>): string[] {
+export function bozukVarlar(ham: string, tanimli: ReadonlySet<string>): string[] {
+  const metin = yorumsuz(ham);
   const out: string[] = [];
   let i = metin.indexOf('var(');
   while (i !== -1) {
@@ -172,6 +188,15 @@ describe('cozulur — yedek zinciri', () => {
   // Ve bu yanlış alarm veriyordu: düz yedek boyar.
   it('düz yedek değeri boyar', () => {
     expect(cozulur('--yok, #1f2937', tanimli)).toBe(true);
+  });
+
+  // Yorumda yazan bir örnek ekrana hiçbir şey boyamaz; tarama onu görmemeli.
+  // Bu yanlış alarmı bizzat kendi kodum üretti.
+  it('yorumdaki örnek kullanım sayılmaz', () => {
+    expect(bozukVarlar('// `var(--yok)` olarak değil\ncolor: var(--var);', tanimli)).toEqual([]);
+    expect(bozukVarlar('/* var(--yok) */ color: var(--var);', tanimli)).toEqual([]);
+    // Ama yorumun DIŞINDAKİ gerçek kusur hâlâ yakalanıyor.
+    expect(bozukVarlar('// not\ncolor: var(--yok);', tanimli)).toEqual(['var(--yok)']);
   });
 
   it('iç içe var() üst düzey virgülü şaşırtmaz', () => {

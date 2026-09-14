@@ -361,6 +361,11 @@
   flex-direction: column;
   gap: var(--sp-4);
   min-height: 0;
+  /* Grafik sekmesinin kalan yüksekliği ALABİLMESİ için kabın kendisinin
+     belirli bir yüksekliği olmalı; yoksa `flex: 1` içerik kadar kalır.
+     `min-height` (height değil): finansallar sekmesi içeriği taştığında
+     kap büyümeye devam ediyor. */
+  min-height: 100%;
 }
 .desk__bar {
   display: flex;
@@ -397,19 +402,46 @@
   gap: var(--sp-3);
 }
 .desk__chart {
-  height: 420px;
+  /* Grafik ekranın ASIL işi; sabit 420 px ekranın yarısını boş bırakıyordu.
+     Kalan dikey alanın tamamını alıyor, altındaki kartlar için taban bir
+     yükseklik bırakarak. `min-height` şart: flex çocuğu varsayılan olarak
+     içeriğinden küçülemez ve grafik kabı taşardı. */
+  flex: 1;
+  min-height: 460px;
+  /* Grafik kabı da flex: içindeki `.chart-host`'un yüksekliği `height: 100%`
+     ile çözülemez, çünkü `flex: 1` düzenin verdiği yüksekliği HESAPLANAN
+     `height` özelliğine yazmaz ve yüzde yükseklik `auto` ebeveynde `auto`ya
+     düşer. Ölçüldü: kap 553 px iken grafik ~30 px kalıyor, mumlar en üstte
+     ince bir şeride sıkışıyordu. Flex çocuğu olarak esneyince sorun yok. */
+  display: flex;
+  flex-direction: column;
   padding: var(--sp-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   background: var(--surface-0);
 }
 .chart-host {
+  flex: 1;
+  min-height: 0;
   width: 100%;
 }
+/* Sayı kartları TEK ŞERİT. Grafik bu ekranın asıl işi; dokuz kart iki
+   satıra sarıp ~230 px yiyordu ve grafiğe büyüyecek yer kalmıyordu.
+   Şerit yatay kayıyor, kartlar küçülüyor — sayı ve provenance duruyor. */
 .desk__metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: var(--sp-3);
+  display: flex;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  padding-bottom: var(--sp-1);
+  scrollbar-width: thin;
+}
+.desk__metrics > * {
+  flex: 0 0 auto;
+  min-width: 128px;
+  padding: var(--sp-2) var(--sp-3);
+}
+.desk__metrics .ui-stat__value {
+  font-size: var(--fs-lg);
 }
 .desk__prov {
   /* Görsel daire 16 px kalıyor ama dokunma hedefi 24×24 (WCAG 2.5.8):

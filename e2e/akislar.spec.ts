@@ -211,7 +211,6 @@ test('tarama → stratejiler: bulunan semboller strateji testine gidiyor', async
 
 test('sembol masası: grafik, finansallar ve sektör sekmeleri', async ({ page }) => {
   await open(page, 'v=sembol&s=X001');
-  await expect(page.locator('.desk__health')).toBeVisible();
   await expect(page.locator('.chart-host canvas').first()).toBeVisible();
 
   // Grafik ayarları yalnızca grafik sekmesinde.
