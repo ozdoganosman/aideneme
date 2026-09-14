@@ -99,6 +99,17 @@ Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),
 
 ## Çalıştırma
 
+Depoda veri YOK (`public/data` gitignore'da). Yeni bir klonda önce örnek veri
+seti üretin — tohum sabit olduğu için herkeste aynı baytlar oluşur:
+
+```bash
+python scripts/make_sample_data.py          # 60 sembol × 1200 bar
+python scripts/make_sample_data.py --symbols 200 --bars 3400   # daha büyük
+```
+
+Veri sentetiktir ve öyle etiketlenir (semboller `X000…`, sektör kaynağı
+"Sentetik (yerel)"); gerçek piyasa verisiyle karışmaz.
+
 ```bash
 npm install
 npm run dev      # http://localhost:5173

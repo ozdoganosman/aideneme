@@ -41,6 +41,10 @@ jobs:
       - name: Sektör üretici kendi kendine testi
         run: python scripts/build_sectors.py --self-test
 
+      # Örnek veri üreticisi: ürettiğini geri okuyup alan alan karşılaştırır.
+      - name: Örnek veri üretici kendi kendine testi
+        run: python scripts/make_sample_data.py --self-test
+
       - run: npm ci
 
       - name: Tip kontrolü
