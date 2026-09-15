@@ -130,9 +130,18 @@ export function VirtualTable<T>({
                     }
                   >
                     {c.sortValue && onSortChange ? (
+                      /*
+                        Erişilebilir ad TABLOYU da söylüyor.
+
+                        Ölçüldü: radar tablosunun "Sektör" sütun başlığı ile
+                        Sembol Masası'nın "Sektör" SEKMESİ aynı adı taşıyordu
+                        ve ekran okuyucu kullanıcısı iki düğmeyi ayırt
+                        edemiyordu. Görünen metin kısa kalıyor; ad uzun.
+                      */
                       <button
                         type="button"
                         className="ui-vtable__sort"
+                        aria-label={`${label}: ${c.header} sütununa göre sırala`}
                         onClick={() => toggleSort(c)}
                       >
                         {c.header}

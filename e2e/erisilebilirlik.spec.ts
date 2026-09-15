@@ -19,23 +19,61 @@ import { expect, test } from '@playwright/test';
  * denetim o sekmeyi hiç açmadığı için yeşil kalıyordu. Ölçülmemiş durum,
  * denetlenmemiş durumdur.
  */
-const SCREENS: [string, string, string, string?][] = [
-  ['Nabız', 'v=nabiz', '.pulse__flows'],
-  ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
-  ['Sembol Masası — Finansallar', 'v=sembol&s=X001', '.fin', 'Finansallar'],
-  ['Sembol Masası — Sektör', 'v=sembol&s=X001', '.desk__sector', 'Sektör'],
-  ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix'],
-  ['Strateji Laboratuvarı', 'v=laboratuvar&s=X001', '.lab__stats'],
-  ['Stratejiler', 'v=stratejiler', '.rank__table'],
-  ['Model', 'v=model&s=X001', '.model__verdict'],
-  ['Portföy', 'v=portfoy', '.ui-field'],
-  ['Rapor', 'v=rapor&s=X001', '.report__sheet'],
+type Ekran = {
+  ad: string;
+  url: string;
+  hazir: string;
+  /** Açılışta tıklanacak sekme. */
+  sekme?: string;
+  /** Sekmeyle açılmayan yüzeyler (radar, rotasyon) için. */
+  ac?: (page: import('@playwright/test').Page) => Promise<void>;
+};
+
+const SCREENS: Ekran[] = [
+  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
+  {
+    // Rotasyon görünümü yalnızca dönem 1 barın üstündeyken çiziliyor:
+    // varsayılan durumda denetlenmemiş kalırdı.
+    ad: 'Nabız — sektör rotasyonu',
+    url: 'v=nabiz',
+    hazir: '.pulse__rotasyon',
+    ac: async (page) => {
+      await page.getByLabel('Dönem').selectOption('21');
+    },
+  },
+  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
+  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
+  {
+    // Radar varsayılan KAPALI: açılmadan denetlenmiş sayılmaz.
+    ad: 'Sembol Masası — Radar',
+    url: 'v=sembol&s=X001',
+    hazir: '.radar__tablo',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
+    },
+  },
+  {
+    ad: 'Sembol Masası — Finansallar',
+    url: 'v=sembol&s=X001',
+    hazir: '.fin',
+    sekme: 'Finansallar',
+  },
+  { ad: 'Sembol Masası — Sektör', url: 'v=sembol&s=X001', hazir: '.desk__sector', sekme: 'Sektör' },
+  { ad: 'Karşılaştır', url: 'v=karsilastir&cmp=X001,X002,X003', hazir: '.compare__matrix' },
+  { ad: 'Strateji Laboratuvarı', url: 'v=laboratuvar&s=X001', hazir: '.lab__stats' },
+  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
+  { ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
+  { ad: 'Portföy', url: 'v=portfoy', hazir: '.ui-field' },
+  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
 ];
 
-for (const [name, query, ready, tab] of SCREENS) {
+for (const { ad: name, url: query, hazir: ready, sekme: tab, ac } of SCREENS) {
   test(`${name}: etiketler eksiksiz ve ayırt edici`, async ({ page }) => {
     await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
+    if (ac) await ac(page);
     if (tab) {
       await page.getByRole('tab', { name: tab }).click();
       await page.waitForSelector(ready, { timeout: 90_000 });

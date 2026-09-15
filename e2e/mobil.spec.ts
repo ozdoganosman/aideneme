@@ -12,18 +12,39 @@ import { expect, test } from '@playwright/test';
 
 test.use({ viewport: { width: 390, height: 780 }, isMobile: true, hasTouch: true });
 
-const SCREENS: [string, string, string][] = [
-  ['Nabız', 'v=nabiz', '.pulse__flows'],
-  ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
-  ['Stratejiler', 'v=stratejiler', '.rank__table'],
-  ['Model', 'v=model&s=X001', '.model__verdict'],
-  ['Rapor', 'v=rapor&s=X001', '.report__sheet'],
+type Ekran = {
+  ad: string;
+  url: string;
+  hazir: string;
+  /** Varsayılan kapalı yüzeyler (radar) için açma adımı. */
+  ac?: (page: import('@playwright/test').Page) => Promise<void>;
+};
+
+const SCREENS: Ekran[] = [
+  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
+  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
+  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
+  {
+    // Radar dar ekranda grafiğin ALTINA iniyor; tam genişlik alan bir tablo
+    // sayfayı yatay kaydırılabilir yapabilir. Kapalıyken denetlenmiş sayılmaz.
+    ad: 'Sembol Masası (radar)',
+    url: 'v=sembol&s=X001',
+    hazir: '.radar__tablo',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+    },
+  },
+  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
+  { ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
+  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
 ];
 
-for (const [name, query, ready] of SCREENS) {
+for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
   test(`${name}: telefon genişliğinde yatay taşma yok`, async ({ page }) => {
     await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
+    if (ac) await ac(page);
     await page.waitForSelector(ready, { timeout: 90_000 });
     await page.waitForTimeout(300);
 

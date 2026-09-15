@@ -10,16 +10,68 @@ import { expect, test } from '@playwright/test';
  * düğme de eşiği tutturmuyordu.
  */
 
-const SCREENS: [string, string, string][] = [
-  ['Nabız', 'v=nabiz', '.pulse__flows'],
-  ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
-  ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix'],
-  ['Laboratuvar', 'v=laboratuvar&s=X001', '.lab__stats'],
-  ['Stratejiler', 'v=stratejiler', '.rank__table'],
-  ['Model', 'v=model&s=X001', '.model__verdict'],
-  ['Portföy', 'v=portfoy', '.ui-field'],
-  ['Rapor', 'v=rapor&s=X001', '.report__sheet'],
+/**
+ * Ekran listesi — bazıları AÇILMASI gereken yüzeyler.
+ *
+ * Denetimin kör noktası buydu: radar, finansal sekmesi, sektör paneli ve
+ * rotasyon görünümü varsayılan olarak KAPALI. Adrese gidip beklemek onları
+ * hiç görmüyor — daha önce finansallar sekmesinde 12 karttan 8'i tam bu
+ * yüzden denetimsiz kalmıştı. `ac` verilen satırlarda denetim yüzeyi önce
+ * açıyor.
+ */
+type Ekran = {
+  ad: string;
+  url: string;
+  hazir: string;
+  ac?: (page: import('@playwright/test').Page) => Promise<void>;
+};
+
+const SCREENS: Ekran[] = [
+  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
+  {
+    ad: 'Nabız (sektör rotasyonu)',
+    url: 'v=nabiz',
+    hazir: '.pulse__rotasyon',
+    ac: async (page) => {
+      await page.getByLabel('Dönem').selectOption('21');
+    },
+  },
+  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
+  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
+  {
+    ad: 'Sembol Masası (radar)',
+    url: 'v=sembol&s=X001',
+    hazir: '.radar__tablo',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
+    },
+  },
+  {
+    ad: 'Sembol Masası (finansallar)',
+    url: 'v=sembol&s=X001',
+    hazir: '.fin__karne',
+    ac: async (page) => {
+      await page.getByRole('tab', { name: 'Finansallar' }).click();
+    },
+  },
+  {
+    ad: 'Sembol Masası (sektör)',
+    url: 'v=sembol&s=X001',
+    hazir: '.desk__sector-table',
+    ac: async (page) => {
+      await page.getByRole('tab', { name: 'Sektör' }).click();
+      await page.getByRole('button', { name: 'Akranları yükle' }).click();
+    },
+  },
+  { ad: 'Karşılaştır', url: 'v=karsilastir&cmp=X001,X002,X003', hazir: '.compare__matrix' },
+  { ad: 'Laboratuvar', url: 'v=laboratuvar&s=X001', hazir: '.lab__stats' },
+  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
+  { ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
+  { ad: 'Portföy', url: 'v=portfoy', hazir: '.ui-field' },
+  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
 ];
 
 /** Sayfada çalışır: her metin düğümünün rengini zeminine karşı ölçer. */
@@ -77,10 +129,11 @@ const AUDIT = () => {
 for (const tema of ['light', 'dark'] as const) {
   test.describe(`${tema} tema`, () => {
     test.use({ colorScheme: tema });
-    for (const [name, query, ready] of SCREENS) {
-      test(`${name}: metin kontrastı AA`, async ({ page }) => {
-        await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
-        await page.waitForSelector(ready, { timeout: 90_000 });
+    for (const ekran of SCREENS) {
+      test(`${ekran.ad}: metin kontrastı AA`, async ({ page }) => {
+        await page.goto(`/next.html?m=bist&${ekran.url}`, { waitUntil: 'networkidle' });
+        if (ekran.ac) await ekran.ac(page);
+        await page.waitForSelector(ekran.hazir, { timeout: 90_000 });
         await page.waitForTimeout(300);
         expect(await page.evaluate(AUDIT), 'WCAG AA altında kalan metin').toEqual([]);
       });
