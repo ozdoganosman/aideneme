@@ -20,20 +20,70 @@ bir dizüstü) her ekran için şunları ölçer:
 Tek ölçüm %30'a varan sapma gösterebildiği için varsayılan **3 tekrarın
 medyanı** raporlanır.
 
+## GERÇEK VERİ (584 sembol, tam geçmiş) — 15 Eylül 2026
+
+Bu tablo bu tarihe kadar HİÇ ÖLÇÜLMEMİŞTİ ve sebebi araçtaydı: hazır
+ölçütlerinin URL'leri `s=X001` yazıyordu, o sembol yalnızca sentetik sette
+var. Gerçek veride araç grafiği 120 saniye bekleyip düşüyordu. Yani "zayıf
+makinede akışkan" iddiası, asıl önemli veri setinde doğrulanmamıştı. Sembol
+artık argüman:
+
+    node scripts/measure-perf.mjs 6 3 THYAO,GARAN,AKBNK
+
+6× yavaşlatma (≈ düşük güçlü dizüstü), 3 tekrarın medyanı:
+
+| Ekran              | Hazır  | En kötü blok | Toplam blok | Etkileşim                             |
+| ------------------ | ------ | ------------ | ----------- | ------------------------------------- |
+| Nabız              | 2,7 sn | 179 ms       | 791 ms      | —                                     |
+| Tarayıcı           | 2,3 sn | 380 ms       | 645 ms      | parametre→sonuç 952 ms                |
+| Sembol Masası      | 2,3 sn | 505 ms       | 977 ms      | periyot 527 ms · yakınlaştırma 655 ms |
+| Laboratuvar        | 2,4 sn | 353 ms       | 656 ms      | doğrulama 813 ms                      |
+| Karşılaştır        | 3,0 sn | 135 ms       | 526 ms      | —                                     |
+| Stratejiler        | 2,9 sn | 587 ms       | 885 ms      | kapsam 332 ms                         |
+| Model              | 2,0 sn | 120 ms       | 195 ms      | —                                     |
+| Rapor              | 1,5 sn | 126 ms       | 187 ms      | —                                     |
+| Sektör akranları   | 2,3 sn | 494 ms       | 937 ms      | akran yükleme 1047 ms                 |
+| Radar (tüm piyasa) | 2,4 sn | 488 ms       | 932 ms      | açılış 2141 ms                        |
+| Portföy            | 1,1 sn | 141 ms       | 226 ms      | —                                     |
+
+Gerçek veri sentetikten yaklaşık 1,5 kat ağır: hazır süreleri 1,3–1,9 sn'den
+1,1–3,0 sn'ye, en kötü blok 342 ms'den 587 ms'ye çıkıyor. 6× yavaşlatma bir
+EMÜLASYON — normal bir makinede bu sayıların altıda birine karşılık geliyor.
+Zayıf bir makinede ekranlar 1,5–3 saniyede açılıyor ve ara sıra yarım
+saniyelik takılmalar oluyor.
+
+### Kaydırma ölçümü SESSİZCE yapılmamış hâldeydi
+
+Sentetik sette "40 adım 61 ms" yazıyordu; gerçek veride aynı ölçüm 670 ms
+verdi. On kat fark koddan gelmiyordu — ölçümün kendisinden geliyordu.
+
+Adım 120 px sabitti. Sentetik sette tablonun kaydırılabilir mesafesi yalnızca
+~1.040 px, yani dokuzuncu adımda dibe varılıyor ve kalan 31 adım hiçbir şey
+yapmıyordu. Araç bunu güzel bir sayı olarak raporluyordu: yapılmamış bir
+ölçümün sayısı.
+
+Adım artık içeriğe göre (`mesafe / 40`) ve KAT EDİLEN MESAFE de raporlanıyor
+— sıfıra yakınsa sayı yorumlanmamalı. Aynı ölçüm düzeltildikten sonra
+sentetik sette 79 ms / 1.040 px, yani tablonun tamamı kat ediliyor.
+
+Sanal tablo doğru çalışıyor: gerçek veride DOM'da 24 satır ve 15 sütun var,
+toplam yükseklik 5.745 px. Kaydırma maliyeti satır sayısından değil, her
+adımda görünen pencerenin yeniden çizilmesinden geliyor.
+
 ## Sonuçlar (200 sembol × 3400 barlık sentetik set, 2 tekrarın medyanı)
 
-| Ekran | Normal makine (1×) | Zayıf makine (6×) |
-|---|---|---|
-| Nabız + ısı haritası | hazır 336 ms · blok **0** | hazır 1,3 sn · en kötü 118 ms |
-| Tarayıcı | hazır 403 ms · blok **0** · parametre→sonuç 84 ms | hazır 1,5 sn · en kötü 182 ms · parametre→sonuç 468 ms |
-| Sembol Masası | hazır 311 ms · blok **0** · periyot 146 ms | hazır 1,7 sn · en kötü **319 ms** · periyot 486 ms |
-| Laboratuvar | hazır 350 ms · blok **0** · doğrulama 370 ms | hazır 1,7 sn · en kötü 195 ms · doğrulama 585 ms |
-| Karşılaştır | hazır 415 ms · blok **0** | hazır 1,7 sn · en kötü 185 ms |
-| Stratejiler (1600 backtest) | hazır 439 ms · blok **0** · kapsam 62 ms | hazır 1,5 sn · en kötü 118 ms · kapsam 230 ms |
-| Model (purged CV) | hazır 926 ms · blok **0** | hazır 1,9 sn · en kötü 108 ms |
-| Rapor | hazır 272 ms · blok **0** | hazır 1,4 sn · en kötü 121 ms |
-| Sektör akranları | hazır 270 ms · blok **0** · akran yükleme 198 ms | hazır 1,8 sn · en kötü **342 ms** · akran yükleme 787 ms |
-| Portföy | hazır 159 ms · blok **0** | hazır 0,9 sn · en kötü 135 ms |
+| Ekran                       | Normal makine (1×)                                | Zayıf makine (6×)                                        |
+| --------------------------- | ------------------------------------------------- | -------------------------------------------------------- |
+| Nabız + ısı haritası        | hazır 336 ms · blok **0**                         | hazır 1,3 sn · en kötü 118 ms                            |
+| Tarayıcı                    | hazır 403 ms · blok **0** · parametre→sonuç 84 ms | hazır 1,5 sn · en kötü 182 ms · parametre→sonuç 468 ms   |
+| Sembol Masası               | hazır 311 ms · blok **0** · periyot 146 ms        | hazır 1,7 sn · en kötü **319 ms** · periyot 486 ms       |
+| Laboratuvar                 | hazır 350 ms · blok **0** · doğrulama 370 ms      | hazır 1,7 sn · en kötü 195 ms · doğrulama 585 ms         |
+| Karşılaştır                 | hazır 415 ms · blok **0**                         | hazır 1,7 sn · en kötü 185 ms                            |
+| Stratejiler (1600 backtest) | hazır 439 ms · blok **0** · kapsam 62 ms          | hazır 1,5 sn · en kötü 118 ms · kapsam 230 ms            |
+| Model (purged CV)           | hazır 926 ms · blok **0**                         | hazır 1,9 sn · en kötü 108 ms                            |
+| Rapor                       | hazır 272 ms · blok **0**                         | hazır 1,4 sn · en kötü 121 ms                            |
+| Sektör akranları            | hazır 270 ms · blok **0** · akran yükleme 198 ms  | hazır 1,8 sn · en kötü **342 ms** · akran yükleme 787 ms |
+| Portföy                     | hazır 159 ms · blok **0**                         | hazır 0,9 sn · en kötü 135 ms                            |
 
 **Normal makinede hiçbir ekranda 50 ms'yi aşan tek bir görev yok** — sonradan
 eklenen altı ekranda da değişmedi. Zayıf makinede en kötü iki blok (319 ms ve
@@ -83,12 +133,12 @@ olarak sayılmıyor.
 
 **CPU profiliyle ayrıştırıldı (6× kısma, gezinme anından itibaren):**
 
-| Kalem | Süre |
-|---|---|
-| `(program)` — betik ayrıştırma/derleme | 1119 ms |
-| `lod` yığınının modül değerlendirmesi | 152 ms |
-| Sembol Masası bileşen kodu | 142 ms |
-| `useBitmapCoordinateSpace` (canvas çizimi) | 48 ms |
+| Kalem                                      | Süre    |
+| ------------------------------------------ | ------- |
+| `(program)` — betik ayrıştırma/derleme     | 1119 ms |
+| `lod` yığınının modül değerlendirmesi      | 152 ms  |
+| Sembol Masası bileşen kodu                 | 142 ms  |
+| `useBitmapCoordinateSpace` (canvas çizimi) | 48 ms   |
 
 Tek uzun blok (372 ms) grafiğin KURULMASI; ayrıştırma ondan önce, ayrı
 görevlerde oluyor. İki azaltma denendi ve **ikisi de ölçülebilir kazanç
@@ -127,12 +177,12 @@ yenilenme hızıydı.
 
 Doğru ölçüt, kaydırmanın ana thread'de kaç ms tuttuğu:
 
-| | 1× | 6× (zayıf) |
-|---|---|---|
-| Kaydırma adımı (medyan) | 0,1 ms | 16 ms |
-| Kaydırma adımı (p90) | 2,5 ms | 22 ms |
-| 40 adımın toplamı | 37 ms | ~425 ms |
-| Uzun görev (>50 ms) | 0 | 0 |
+|                         | 1×     | 6× (zayıf) |
+| ----------------------- | ------ | ---------- |
+| Kaydırma adımı (medyan) | 0,1 ms | 16 ms      |
+| Kaydırma adımı (p90)    | 2,5 ms | 22 ms      |
+| 40 adımın toplamı       | 37 ms  | ~425 ms    |
+| Uzun görev (>50 ms)     | 0      | 0          |
 
 Zayıf makinede bile kaydırma sırasında **tek bir uzun görev yok**; iş 16 ms'lik
 kare bütçesine sığıyor. Ölçüm `npm run perf` çıktısına kalıcı olarak eklendi
@@ -159,10 +209,10 @@ LOD seyreltmesi yazıldı ama ETKİLEŞİM sırasında ne kazandırdığı hiç
 ölçülmemişti. 3.400 barlık seride, 6× yavaşlatmayla, 20 tekerlek adımı
 (uzaklaştırma) ve 20 sürükleme adımı (kaydırma):
 
-| | Ana thread bloğu |
-|---|---|
-| Yakınlaştırma (20 adım) | ~600–820 ms |
-| Kaydırma (20 adım) | 0–50 ms |
+|                         | Ana thread bloğu |
+| ----------------------- | ---------------- |
+| Yakınlaştırma (20 adım) | ~600–820 ms      |
+| Kaydırma (20 adım)      | 0–50 ms          |
 
 Kaydırma pratikte bedava; yakınlaştırma adım başına ~20–40 ms tutuyor (1×'te
 ~4–7 ms). Profil, maliyetin **kütüphanenin canvas boyaması** olduğunu
@@ -194,11 +244,11 @@ etkileşimden ÖNCE alınıyor, yoksa "açılışta kaç blok var" sorusunun cev
 Şimdiye kadar hep CPU ölçüldü; AĞ hiç ölçülmemişti. Yavaş 3G (400 kbit/sn,
 400 ms gecikme) taklidiyle ilk açılış:
 
-| Süre | Kullanıcının gördüğü (önce) |
-|---|---|
-| 2 sn | boş |
-| 5 sn | araç çubuğu + iskelet, "hesaplanıyor…" |
-| 20 sn | hâlâ iskelet, hâlâ "hesaplanıyor…" |
+| Süre  | Kullanıcının gördüğü (önce)            |
+| ----- | -------------------------------------- |
+| 2 sn  | boş                                    |
+| 5 sn  | araç çubuğu + iskelet, "hesaplanıyor…" |
+| 20 sn | hâlâ iskelet, hâlâ "hesaplanıyor…"     |
 
 1 MB'lık paket bu hızda ~20 saniye sürüyor ve ekran bu sürenin tamamında
 **yanlış** bir şey söylüyordu: "hesaplanıyor". Hesaplanan bir şey yok, veri
@@ -208,7 +258,7 @@ iniyor. Kullanıcı ne beklediğini de ne kadar bekleyeceğini de bilmiyor.
 
 1. Paket artık **gövdesi akıtılarak** iniyor (`res.arrayBuffer()` yerine
    okuyucu döngüsü) ve her 64 KB'de ilerleme bildiriliyor. Ekranlarda:
-   *"Veri paketi indiriliyor — 259 KB / 979 KB (%26)"*. Toplam boyut
+   _"Veri paketi indiriliyor — 259 KB / 979 KB (%26)"_. Toplam boyut
    manifest'ten geliyor, tahmin değil. Akış yoksa tek parça okumaya düşüyor:
    ilerleme gösterilmez ama indirme çalışır — **sahte çubuk çizilmiyor.**
 2. Nabız'daki "hesaplanıyor…" yazısı, veri beklenirken "veri bekleniyor"
@@ -246,9 +296,9 @@ da atılmayan bir grafik, sekmeyi yavaş yavaş boğar.
 Ölçüm: CDP `HeapProfiler.collectGarbage` ile zorlanmış çöp toplamadan sonra
 `Performance.getMetrics` (yığın, DOM düğümü, JS olay dinleyicisi).
 
-| Senaryo | Yığın | Düğüm | Dinleyici |
-|---|---|---|---|
-| 9 ekran × 14 tur (126 geçiş) | 5,20 → 6,70 MB | 417 → 417 | 184 → 184 |
+| Senaryo                         | Yığın          | Düğüm     | Dinleyici |
+| ------------------------------- | -------------- | --------- | --------- |
+| 9 ekran × 14 tur (126 geçiş)    | 5,20 → 6,70 MB | 417 → 417 | 184 → 184 |
 | 19 sembol × 8 tur (152 değişim) | 4,24 → 4,38 MB | 242 → 242 | 191 → 191 |
 
 Yığın artışı **duruyor**: ekran turunda 11 → 14. turlar arası toplam
@@ -274,17 +324,17 @@ korunuyor, hazır süreleri %10–25 fazla) — yani makine biraz yavaş ama idd
 ayakta. Sonra aynı makinede A/B: `6277f42` (değişikliklerden önce) derlenip
 ölçüldü.
 
-| Ekran | Eski en kötü blok | Yeni | Eski toplam | Yeni |
-|---|---|---|---|---|
-| **nabız** | 200 ms | **406 ms** | 708 ms | **1194 ms** |
-| tarayıcı | 244 | 225 | 520 | 450 |
-| sembol masası | 420 | 370 | 928 | 697 |
-| laboratuvar | 483 | 355 | 742 | 634 |
-| stratejiler | 170 | 134 | 361 | 185 |
-| model | 170 | 129 | 316 | 223 |
-| rapor | 153 | 125 | 370 | 199 |
-| sektör akranları | 412 | 369 | 960 | 669 |
-| portföy | 171 | 143 | 215 | 165 |
+| Ekran            | Eski en kötü blok | Yeni       | Eski toplam | Yeni        |
+| ---------------- | ----------------- | ---------- | ----------- | ----------- |
+| **nabız**        | 200 ms            | **406 ms** | 708 ms      | **1194 ms** |
+| tarayıcı         | 244               | 225        | 520         | 450         |
+| sembol masası    | 420               | 370        | 928         | 697         |
+| laboratuvar      | 483               | 355        | 742         | 634         |
+| stratejiler      | 170               | 134        | 361         | 185         |
+| model            | 170               | 129        | 316         | 223         |
+| rapor            | 153               | 125        | 370         | 199         |
+| sektör akranları | 412               | 369        | 960         | 669         |
+| portföy          | 171               | 143        | 215         | 165         |
 
 On ekranın dokuzu iyileşmiş, biri iki katına çıkmış görünüyordu. Tek bir
 ekranın tersine gitmesi ya gerçek bir gerileme ya da gürültüdür; karar

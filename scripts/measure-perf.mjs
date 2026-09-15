@@ -173,23 +173,41 @@ results.push(
     );
     const paramMs = Date.now() - t;
 
-    // Kaydırma akıcılığı: 40 adım, her adımda düzen okuması zorlanarak
-    // kaydırmanın ANA THREAD'de kaç ms tuttuğu ölçülür. Kare süresini
-    // ölçmek yanıltıcıydı: çift rAF'ın tabanı zaten iki vsync (≈33 ms).
-    const scrollMs = await page.evaluate(async () => {
+    /*
+      Kaydırma akıcılığı: 40 adım, her adımda düzen okuması zorlanarak
+      kaydırmanın ANA THREAD'de kaç ms tuttuğu ölçülür. Kare süresini ölçmek
+      yanıltıcıydı: çift rAF'ın tabanı zaten iki vsync (≈33 ms).
+
+      ADIM İÇERİĞE GÖRE, sabit 120 px değil. Sabit adım ölçümü SESSİZCE
+      yapılmamış hâle getiriyordu: sentetik veride tablonun kaydırılabilir
+      mesafesi ~690 px, yani altıncı adımda dibe varılıyor ve kalan 34 adım
+      hiçbir şey yapmıyordu. Araç bunu "40 adım 61 ms" diye raporluyordu —
+      güzel bir sayı, ama ölçülmemiş bir şeyin sayısı. Aynı ölçüm gerçek
+      veride 670 ms; fark kodda değil, ölçümün kendisindeydi.
+
+      Kat edilen mesafe de raporlanıyor: sıfıra yakınsa sayı yorumlanmamalı.
+    */
+    const kaydirma = await page.evaluate(async () => {
       const el = document.querySelector('.ui-vtable__scroll');
-      if (!el) return 0;
+      if (!el) return { ms: 0, px: 0 };
+      const mesafe = Math.max(0, el.scrollHeight - el.clientHeight);
+      const adim = Math.max(8, Math.floor(mesafe / 40));
+      const basla = el.scrollTop;
       let total = 0;
       for (let i = 0; i < 40; i++) {
         const t0 = performance.now();
-        el.scrollTop += 120;
+        el.scrollTop += adim;
         void el.offsetHeight;
         total += performance.now() - t0;
         await new Promise((r) => setTimeout(r, 20));
       }
-      return Math.round(total);
+      return { ms: Math.round(total), px: Math.round(el.scrollTop - basla) };
     });
-    return { 'parametre→sonuç_ms': paramMs, kaydırma_40_adım_ms: scrollMs };
+    return {
+      'parametre→sonuç_ms': paramMs,
+      kaydırma_40_adım_ms: kaydirma.ms,
+      kaydırma_kat_edilen_px: kaydirma.px,
+    };
   }),
 );
 
