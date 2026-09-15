@@ -467,7 +467,43 @@ test('sektör endeksleri: sınıflandırma olmadan sektör getirisi', async ({ p
   await page.getByLabel('Getiri penceresi').selectOption('5');
   await expect(page.locator('.sektor__tablo thead')).toContainText(/1 hafta/i);
 
-  // Sektör adına tıklayınca o endeks grafikte açılıyor.
-  await satir.first().getByRole('button').click();
+  // Sektör adına tıklayınca o endeks grafikte açılıyor. Satır başlığındaki
+  // düğme: aynı satırda "N hisse →" düğmesi de var ve o stratejilere gidiyor.
+  await satir.first().locator('th button').click();
   await expect(page).toHaveURL(/v=sembol/);
+});
+
+/**
+ * SEKTÖR → HİSSE → STRATEJİ zinciri.
+ *
+ * Hedef cümlenin son halkası: "endüstriden para akışına ... hisse arayıp en
+ * doğru stratejilere". Sektör endeksinden o sektörle birlikte hareket eden
+ * hisselere, oradan strateji testine geçilebiliyor mu?
+ *
+ * Eşleşme RESMÎ SEKTÖR DEĞİL, ölçülen bir davranış: hissenin günlük getirisi
+ * hangi sektör endeksine en çok benziyor. Gerçek BIST verisinde bilinen 15
+ * ismin 15'i doğru eşleşti; eşiği geçemeyen (PETKM) hiç bildirilmedi.
+ *
+ * Örnek veride üç hisse endeksi İZLEYECEK şekilde üretiliyor; bağımsız
+ * serilerde hiçbiri eşiği geçmiyordu ve bu yol hiç koşmuyordu.
+ */
+test('sektör endeksi → birlikte hareket eden hisseler → stratejiler', async ({ page }) => {
+  await open(page, 'v=nabiz');
+  await expect(page.locator('.sektor__tablo')).toBeVisible();
+
+  // Eşleşme worker'da hesaplanıyor; sütun hazır olunca geliyor.
+  const baslik = page.locator('.sektor__tablo thead');
+  await expect(baslik).toContainText(/birlikte hareket/i);
+
+  // Kapsama AÇIKÇA yazılı olmalı: eşik yüksek, hisselerin küçük bir kısmı
+  // eşleşiyor. Bunu söylemezsek boş satır "o sektörde hisse yok" diye okunur.
+  await expect(page.locator('.sektor__ozet').last()).toContainText(/bir sektöre YAZILMADI/);
+
+  const bagli = page.locator('.sektor__tablo tbody button', { hasText: /hisse/ });
+  expect(await bagli.count(), 'hiçbir sektörde eşleşen hisse yok').toBeGreaterThan(0);
+
+  await bagli.first().click();
+  await expect(page).toHaveURL(/v=stratejiler/);
+  // Sembol listesi gerçekten taşındı: stratejiler "liste" kapsamında açılıyor.
+  await expect(page.getByText(/o kriterlere koşulludur/)).toBeVisible();
 });

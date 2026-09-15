@@ -1,4 +1,5 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
+import type { SektorEslesmesi } from '../core/screen/sectorIndices';
 import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
 import type {
@@ -100,6 +101,29 @@ export class AnalysisClient {
 
   isLoaded(market: Market): boolean {
     return this.loaded.has(market);
+  }
+
+  /**
+   * Her hissenin en çok birlikte hareket ettiği sektör endeksi.
+   *
+   * TEK worker'da: iş bölünebilir değil (her hisse tüm endekslere bakıyor) ve
+   * endeks paketini üç worker'a dağıtmak kazandığından çok kopyalama maliyeti
+   * getirirdi. Ölçüldü: 599 hisse × 23 endeks 246 ms — worker'da olduğu için
+   * ana iş parçacığı bu sürede serbest.
+   */
+  async sectorMatch(
+    market: Market,
+    indexBuffer: ArrayBuffer,
+    esik?: number,
+  ): Promise<{ matches: SektorEslesmesi[]; evaluated: number; ms: number }> {
+    if (!this.loaded.has(market)) throw new Error(`${market}: paket yüklenmedi`);
+    const res = await this.pool.run(
+      (id) => ({ id, type: 'sectorMatch', market, indexBuffer: indexBuffer.slice(0), esik }),
+      (req) => (req.type === 'sectorMatch' ? [req.indexBuffer] : []),
+    );
+    const out = unwrap(res);
+    if (out.type !== 'sectorMatch') throw new Error('beklenmeyen yanıt');
+    return { matches: out.matches, evaluated: out.evaluated, ms: out.ms };
   }
 
   /** Tüm sembolleri worker'lara bölerek tarar. */

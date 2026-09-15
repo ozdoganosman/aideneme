@@ -64,6 +64,34 @@ def tohum(s: str) -> int:
     """
     return zlib.crc32(s.encode("utf-8")) & 0xFFFF
 
+def endeksi_izle(
+    endeks: list[tuple[int, float, float, float, float, float]], seed: int
+) -> list[tuple[int, float, float, float, float, float]]:
+    """
+    Endeksin GÜNLÜK GETİRİSİNİ izleyen, üstüne kendi gürültüsü binen seri.
+
+    Takvim endeksle AYNI: korelasyon ortak günler üzerinden hesaplanıyor, gün
+    ekseni kayarsa ortak gözlem sayısı düşer ve eşleşme kendiliğinden elenir.
+
+    Gürültü katsayısı 0,35: korelasyon ~0,94 çıkıyor, yani eşiğin (0,70)
+    rahatça üstünde ama 1,0 değil — kopya seri gerçekçi olmazdı.
+    """
+    rnd = random.Random(seed)
+    fiyat = 20 + rnd.random() * 120
+    out = []
+    for i, bar in enumerate(endeks):
+        gun = bar[0]
+        if i > 0 and endeks[i - 1][4] > 0:
+            getiri = endeks[i][4] / endeks[i - 1][4] - 1
+            fiyat *= 1 + getiri + rnd.gauss(0, 0.012) * 0.35
+        fiyat = max(fiyat, 0.01)
+        yuksek = fiyat * (1 + abs(rnd.gauss(0, 0.004)))
+        dusuk = fiyat * (1 - abs(rnd.gauss(0, 0.004)))
+        acilis = dusuk + (yuksek - dusuk) * rnd.random()
+        out.append((gun, acilis, yuksek, dusuk, fiyat, float(rnd.randint(50_000, 900_000))))
+    return out
+
+
 def synth(seed: int, bars: int, start_day: int) -> list[tuple[int, float, float, float, float, float]]:
     """Geometrik Brownian hareketi + hafif momentum rejimi."""
     rnd = random.Random(seed)
@@ -143,8 +171,18 @@ def main() -> int:
         "XGIDA",
         "XKMYA",
     ]
+    # Endeksi TAKİP EDEN hisseler. Sektör eşleşmesi (hangi hisse hangi sektör
+    # endeksiyle birlikte hareket ediyor) korelasyon eşiğine bakıyor; tamamen
+    # bağımsız üretilmiş serilerde HİÇBİRİ eşiği geçmiyor. Ölçüldü: örnek
+    # veride 60 hissenin 0'ı eşleşiyordu, yani o yol uçtan uca hiç koşmuyordu.
+    TAKIPCILER = {"B001": "XBANK", "B002": "XBANK", "G001": "XGIDA"}
+    symbols += list(TAKIPCILER)
+
     start_day = 19000 - args.bars
     series = {s: synth(tohum(s), args.bars, start_day) for s in symbols}
+
+    for takipci, endeks in TAKIPCILER.items():
+        series[takipci] = endeksi_izle(series[endeks], tohum(takipci))
 
     manifest = {
         "version": PACK_VERSION,

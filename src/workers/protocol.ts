@@ -1,6 +1,7 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
 import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
+import type { SektorEslesmesi } from '../core/screen/sectorIndices';
 import type { Strategy } from '../core/strategy/dsl';
 import type { BacktestOptions, Trade } from '../core/backtest/engine';
 import type { BacktestMetrics } from '../core/backtest/metrics';
@@ -64,6 +65,22 @@ export interface PulseRequest {
    * boşuna ödemesin.
    */
   rotationBars?: number;
+}
+
+/**
+ * Sektör eşleşmesi: her hissenin en çok birlikte hareket ettiği sektör
+ * endeksi. Worker'da, çünkü gerçek veride ölçüldü — 599 hisse × 23 endeks
+ * 246 ms sürüyor ve bu ana iş parçacığında zayıf makinede ~1,5 saniyelik
+ * donma demek.
+ */
+export interface SectorMatchRequest {
+  id: number;
+  type: 'sectorMatch';
+  market: string;
+  /** Sektör endeksi paketinin ham baytları (ayrı ve küçük paket). */
+  indexBuffer: ArrayBuffer;
+  /** Bu korelasyonun altındaki eşleşme BİLDİRİLMEZ. */
+  esik?: number;
 }
 
 export interface BacktestRequest {
@@ -147,6 +164,7 @@ export type WorkerRequest =
   | ScreenRequest
   | CorrelateRequest
   | PulseRequest
+  | SectorMatchRequest
   | BacktestRequest
   | SymbolRequest
   | ModelRequest
@@ -276,8 +294,19 @@ export interface PooledModelResponse {
   ms: number;
 }
 
+export interface SectorMatchResponse {
+  id: number;
+  ok: true;
+  type: 'sectorMatch';
+  matches: SektorEslesmesi[];
+  /** Eşiği geçen / değerlendirilen hisse sayısı — kapsama şeffaf olsun. */
+  evaluated: number;
+  ms: number;
+}
+
 export type WorkerResponse =
   | InitResponse
+  | SectorMatchResponse
   | SymbolResponse
   | ScreenResponse
   | CorrelateResponse

@@ -35,6 +35,7 @@ export class DataClient {
   private readonly manifests = new Map<Market, Promise<Manifest>>();
   private readonly bundles = new Map<Market, Promise<Bundle>>();
   private readonly indexBundles = new Map<Market, Promise<Bundle>>();
+  private readonly indexBuffers = new Map<Market, Promise<ArrayBuffer>>();
 
   constructor(options: DataClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? ((...args) => fetch(...args));
@@ -117,8 +118,8 @@ export class DataClient {
    * ~140 KB. Paket üretilmemişse (endeksi olmayan piyasa) `null` döner —
    * çağıran "sektör endeksi yok" diyebilsin diye hata DEĞİL.
    */
-  async indexBundle(market: Market, signal?: AbortSignal): Promise<Bundle | null> {
-    const existing = this.indexBundles.get(market);
+  async indexBundleBuffer(market: Market, signal?: AbortSignal): Promise<ArrayBuffer | null> {
+    const existing = this.indexBuffers.get(market);
     if (existing) return existing;
 
     const manifest = await this.manifest(market, signal);
@@ -129,15 +130,32 @@ export class DataClient {
     const key = `${prefix}${info.hash}`;
     const promise = (async () => {
       const cached = await this.cache.get(key);
-      if (cached) return decodeBundle(cached);
+      if (cached) return cached;
       const buf = await this.fetchBinary(packPath(market, `${info.file}?h=${info.hash}`), signal);
       await this.cache.put(key, buf, prefix);
-      return decodeBundle(buf);
+      return buf;
     })().catch((err) => {
-      this.indexBundles.delete(market);
+      this.indexBuffers.delete(market);
       throw err;
     });
 
+    this.indexBuffers.set(market, promise);
+    return promise;
+  }
+
+  async indexBundle(market: Market, signal?: AbortSignal): Promise<Bundle | null> {
+    const existing = this.indexBundles.get(market);
+    if (existing) return existing;
+
+    const buffer = await this.indexBundleBuffer(market, signal);
+    if (!buffer) return null;
+
+    // Çözülmüş hâli AYRI belleniyor: aynı paketi hem panel (getiri hesabı)
+    // hem worker (eşleşme hesabı) istiyor; ikinci kez çözmek boşuna iş.
+    const promise = Promise.resolve(decodeBundle(buffer)).catch((err) => {
+      this.indexBundles.delete(market);
+      throw err;
+    });
     this.indexBundles.set(market, promise);
     return promise;
   }

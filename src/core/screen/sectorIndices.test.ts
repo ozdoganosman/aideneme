@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Candles } from '../data/types';
-import { BIST_SEKTOR_ENDEKSLERI, sektorAdi, sektorGetirileri, sektorOzeti } from './sectorIndices';
+import {
+  BIST_SEKTOR_ENDEKSLERI,
+  sektorAdi,
+  sektorEslesmeleri,
+  sektorGetirileri,
+  sektorOzeti,
+  sektorunHisseleri,
+} from './sectorIndices';
 
 /** Verilen kapanışlardan seri kurar; diğer kolonlar testi ilgilendirmiyor. */
 function seri(kapanislar: number[]): Candles {
@@ -98,5 +105,75 @@ describe('sektorOzeti', () => {
   // bir şeyi ölçmüş gibi göstermek olurdu.
   it('boş listede cümle uydurmuyor', () => {
     expect(sektorOzeti([])).toBeNull();
+  });
+});
+
+describe('sektorEslesmeleri', () => {
+  /** Seriyi verilen günlük getirilerden kurar (zaman ekseni ortak). */
+  function getiriSerisi(getiriler: number[], baslangic = 100): Candles {
+    const kapanis = [baslangic];
+    for (const g of getiriler) kapanis.push(kapanis[kapanis.length - 1] * (1 + g));
+    return seri(kapanis);
+  }
+
+  // 120 barlık gürültü; iki seri AYNI gürültüyü paylaşınca korelasyon 1'e yakın.
+  const gurultu = Array.from({ length: 120 }, (_, i) => Math.sin(i * 1.7) * 0.02);
+  const baska = Array.from({ length: 120 }, (_, i) => Math.cos(i * 0.9) * 0.02);
+
+  it('hisseyi en çok birlikte hareket ettiği endeksle eşleştirir', () => {
+    const endeksler = new Map<string, Candles>([
+      ['XBANK', getiriSerisi(gurultu)],
+      ['XGIDA', getiriSerisi(baska)],
+    ]);
+    const hisseler = new Map<string, Candles>([
+      ['AAA', getiriSerisi(gurultu.map((g) => g * 1.3))], // XBANK ile aynı ritim
+      ['BBB', getiriSerisi(baska.map((g) => g * 0.8))], // XGIDA ile aynı ritim
+    ]);
+    const r = sektorEslesmeleri(hisseler, endeksler, { minOrtak: 50 });
+    const eslesme = Object.fromEntries(r.map((e) => [e.symbol, e.kod]));
+    expect(eslesme).toEqual({ AAA: 'XBANK', BBB: 'XGIDA' });
+    expect(r.every((e) => e.korelasyon > 0.9)).toBe(true);
+  });
+
+  // Eşiğin ALTINDA kalan hisse bildirilmiyor: zayıf bir benzerliğe sektör
+  // etiketi yapıştırmak, ölçmediğimiz bir şeyi ölçmüş gibi göstermek olurdu.
+  it('eşiğin altındaki eşleşmeyi bildirmiyor', () => {
+    const endeksler = new Map<string, Candles>([['XBANK', getiriSerisi(gurultu)]]);
+    const hisseler = new Map<string, Candles>([['AAA', getiriSerisi(baska)]]);
+    expect(sektorEslesmeleri(hisseler, endeksler, { minOrtak: 50 })).toEqual([]);
+    // Eşik düşürülünce aynı hisse görünüyor — eleyen şey eşik, hesap değil.
+    const gevsek = sektorEslesmeleri(hisseler, endeksler, { minOrtak: 50, esik: -1 });
+    expect(gevsek).toHaveLength(1);
+    expect(Math.abs(gevsek[0].korelasyon)).toBeLessThan(0.7);
+  });
+
+  it('ortak gün sayısı yetersizse eşleştirmiyor', () => {
+    const endeksler = new Map<string, Candles>([['XBANK', getiriSerisi(gurultu)]]);
+    const hisseler = new Map<string, Candles>([['AAA', getiriSerisi(gurultu)]]);
+    expect(sektorEslesmeleri(hisseler, endeksler, { minOrtak: 500 })).toEqual([]);
+  });
+
+  it('endeks yoksa boş döner, patlamaz', () => {
+    const hisseler = new Map<string, Candles>([['AAA', getiriSerisi(gurultu)]]);
+    expect(sektorEslesmeleri(hisseler, new Map(), { minOrtak: 50 })).toEqual([]);
+  });
+
+  it('sektörün hisselerini kodla süzer', () => {
+    const endeksler = new Map<string, Candles>([
+      ['XBANK', getiriSerisi(gurultu)],
+      ['XGIDA', getiriSerisi(baska)],
+    ]);
+    const hisseler = new Map<string, Candles>([
+      ['AAA', getiriSerisi(gurultu.map((g) => g * 1.3))],
+      ['BBB', getiriSerisi(baska.map((g) => g * 0.8))],
+      ['CCC', getiriSerisi(gurultu.map((g) => g * 0.7))],
+    ]);
+    const hepsi = sektorEslesmeleri(hisseler, endeksler, { minOrtak: 50 });
+    expect(
+      sektorunHisseleri(hepsi, 'XBANK')
+        .map((e) => e.symbol)
+        .sort(),
+    ).toEqual(['AAA', 'CCC']);
+    expect(sektorunHisseleri(hepsi, 'XGIDA').map((e) => e.symbol)).toEqual(['BBB']);
   });
 });

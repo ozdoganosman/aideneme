@@ -1,5 +1,6 @@
 import { computeIndicators } from '../core/indicators/calc';
 import { decodeBundle, type Bundle } from '../core/data/pack';
+import type { Candles } from '../core/data/types';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
 import {
   pulseRow,
@@ -9,6 +10,7 @@ import {
   type WindowRow,
 } from '../core/screen/pulse';
 import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
+import { sektorEslesmeleri } from '../core/screen/sectorIndices';
 import { runBacktest } from '../core/backtest/engine';
 import { computeMetrics, type BacktestMetrics } from '../core/backtest/metrics';
 import { validateStrategy } from '../core/backtest/validate';
@@ -52,6 +54,35 @@ export function createHandler() {
             if (row) rows.push(row);
           }
           return { id: req.id, ok: true, type: 'screen', rows, ms: now() - started };
+        }
+
+        case 'sectorMatch': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const endeksPaketi = decodeBundle(req.indexBuffer);
+
+          // Haritalar burada kuruluyor: paket zaten worker'da, seriyi ana iş
+          // parçacığına taşıyıp geri göndermek kopyalama masrafı olurdu.
+          const hisseler = new Map<string, Candles>();
+          for (const ad of bundle.names) {
+            const c = bundle.seriesOf(ad);
+            if (c) hisseler.set(ad, c);
+          }
+          const endeksler = new Map<string, Candles>();
+          for (const ad of endeksPaketi.names) {
+            const c = endeksPaketi.seriesOf(ad);
+            if (c) endeksler.set(ad, c);
+          }
+
+          const matches = sektorEslesmeleri(hisseler, endeksler, { esik: req.esik });
+          return {
+            id: req.id,
+            ok: true,
+            type: 'sectorMatch',
+            matches,
+            evaluated: hisseler.size,
+            ms: now() - started,
+          };
         }
 
         case 'pulse': {

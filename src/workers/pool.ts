@@ -33,15 +33,28 @@ export interface Pool {
     make: (id: number) => WorkerRequest,
     transfer?: (req: WorkerRequest) => Transferable[],
   ) => Promise<WorkerResponse[]>;
-  /** İsteği boştaki bir worker'a verir. */
-  run: (make: (id: number) => WorkerRequest) => Promise<WorkerResponse>;
+  /**
+   * İsteği boştaki bir worker'a verir.
+   *
+   * `transfer`: isteğin içindeki tamponu KLONLAMADAN aktarır. Aktarım olmadan
+   * `postMessage` tamponu bir kez daha kopyalar; sektör paketi gibi yüz
+   * kilobaytlık yükler için bu ana iş parçacığında boşa giden iştir.
+   */
+  run: (
+    make: (id: number) => WorkerRequest,
+    transfer?: (req: WorkerRequest) => Transferable[],
+  ) => Promise<WorkerResponse>;
   terminate: () => void;
 }
 
 export function createPool(size: number, spawn: () => WorkerLike): Pool {
   const slots: Slot[] = [];
   const pending = new Map<number, Pending>();
-  const queue: { make: (id: number) => WorkerRequest; p: Pending }[] = [];
+  const queue: {
+    make: (id: number) => WorkerRequest;
+    p: Pending;
+    transfer?: (req: WorkerRequest) => Transferable[];
+  }[] = [];
   let nextId = 1;
 
   for (let i = 0; i < Math.max(1, size); i++) {
@@ -68,14 +81,14 @@ export function createPool(size: number, spawn: () => WorkerLike): Pool {
     slot: Slot,
     make: (id: number) => WorkerRequest,
     p: Pending,
-    transfer?: Transferable[],
+    transfer?: (req: WorkerRequest) => Transferable[],
   ) {
     const id = nextId++;
     const req = make(id);
     pending.set(id, p);
     slot.busy = true;
     try {
-      slot.worker.postMessage(req, transfer);
+      slot.worker.postMessage(req, transfer?.(req));
     } catch (err) {
       pending.delete(id);
       slot.busy = false;
@@ -88,7 +101,7 @@ export function createPool(size: number, spawn: () => WorkerLike): Pool {
       const slot = slots.find((s) => !s.busy);
       if (!slot) return;
       const next = queue.shift()!;
-      send(slot, next.make, next.p);
+      send(slot, next.make, next.p, next.transfer);
     }
   }
 
@@ -114,12 +127,12 @@ export function createPool(size: number, spawn: () => WorkerLike): Pool {
       );
     },
 
-    run(make) {
+    run(make, transfer) {
       return new Promise<WorkerResponse>((resolve, reject) => {
         const p = { resolve, reject };
         const slot = slots.find((s) => !s.busy);
-        if (slot) send(slot, make, p);
-        else queue.push({ make, p });
+        if (slot) send(slot, make, p, transfer);
+        else queue.push({ make, p, transfer });
       });
     },
 

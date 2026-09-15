@@ -111,3 +111,121 @@ export function sektorOzeti(liste: readonly SektorGetirisi[]): string | null {
   if (liste.length === 1) return `Tek ölçülebilen sektör: ${en.ad}.`;
   return `${liste.length} sektörün ${artan} tanesi artıda. Başta ${en.ad}, sonda ${son.ad}.`;
 }
+
+export interface SektorEslesmesi {
+  symbol: string;
+  /** En yüksek korelasyonlu sektör endeksi. */
+  kod: string;
+  ad: string;
+  /** Günlük getiri korelasyonu (−1…1). */
+  korelasyon: number;
+  /** Korelasyonda kullanılan ortak gün sayısı. */
+  ortak: number;
+}
+
+/**
+ * Eşik — bu değerin ALTINDAKİ eşleşme bildirilmiyor.
+ *
+ * Gerçek BIST verisiyle ölçüldü (25 bilinen hisse, 250 barlık pencere):
+ *   korelasyon ≥ 0,70 → 16 tahminin 15'i doğru (%94)
+ *   korelasyon < 0,70 →  9 tahminin 6'sı doğru (%67)
+ * Tek "yanlış" yüksek eşleşme SAHOL → XBANK'tı; Sabancı Holding'in değerini
+ * Akbank belirlediği için bu aslında doğru bir DAVRANIŞ gözlemi.
+ *
+ * Yani eşleşme, korelasyon yüksekken güvenilir. Düşükken sessiz kalmak,
+ * yanlış bir sektör etiketi yapıştırmaktan iyidir.
+ */
+export const ESLESME_ESIGI = 0.7;
+
+/**
+ * Her hissenin EN ÇOK BİRLİKTE HAREKET ETTİĞİ sektör endeksi.
+ *
+ * DİKKAT — bu RESMÎ SEKTÖR DEĞİL. Ölçülen şey davranış: hissenin günlük
+ * getirisi hangi sektör endeksinin getirisine en çok benziyor. Resmî
+ * sınıflandırma başka bir şeydir ve onu üretemiyoruz (kaynak 401 döndürüyor).
+ * Arayüz de "sektörü şu" değil "şu sektörle birlikte hareket ediyor" diyor.
+ *
+ * Korelasyon FİYAT değil GETİRİ üzerinden: iki trendli seri seviye
+ * korelasyonunda her zaman ~1 çıkar ve hiçbir şey ayırt edilmez.
+ */
+export function sektorEslesmeleri(
+  hisseler: ReadonlyMap<string, Candles>,
+  endeksler: ReadonlyMap<string, Candles>,
+  opts: { esik?: number; minOrtak?: number } = {},
+): SektorEslesmesi[] {
+  const esik = opts.esik ?? ESLESME_ESIGI;
+  const minOrtak = opts.minOrtak ?? 100;
+
+  /** Zaman → günlük getiri. Fiyatı geçersiz olan gün ATILIR, sıfır sayılmaz. */
+  const getiriHaritasi = (c: Candles): Map<number, number> => {
+    const m = new Map<number, number>();
+    for (let i = 1; i < c.length; i++) {
+      const onceki = c.close[i - 1];
+      const simdi = c.close[i];
+      if (onceki > 0 && simdi > 0 && Number.isFinite(onceki) && Number.isFinite(simdi)) {
+        m.set(c.time[i], Math.log(simdi / onceki));
+      }
+    }
+    return m;
+  };
+
+  const endeksGetirileri: { kod: string; ad: string; g: Map<number, number> }[] = [];
+  for (const { kod, ad } of BIST_SEKTOR_ENDEKSLERI) {
+    const c = endeksler.get(kod);
+    if (!c || c.length < 2) continue;
+    endeksGetirileri.push({ kod, ad, g: getiriHaritasi(c) });
+  }
+  if (endeksGetirileri.length === 0) return [];
+
+  const out: SektorEslesmesi[] = [];
+  for (const [symbol, c] of hisseler) {
+    if (!c || c.length < 2) continue;
+    const hg = getiriHaritasi(c);
+    if (hg.size < minOrtak) continue;
+
+    let enIyi: SektorEslesmesi | null = null;
+    for (const { kod, ad, g } of endeksGetirileri) {
+      // Küçük olanın üzerinde dönmek: 250 barlık endeks haritasında 3.400
+      // barlık hisseyi aramak boşuna iş olurdu.
+      const [kucuk, buyuk] = hg.size <= g.size ? [hg, g] : [g, hg];
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      let sxx = 0;
+      let syy = 0;
+      let sxy = 0;
+      for (const [t, a] of kucuk) {
+        const b = buyuk.get(t);
+        if (b === undefined) continue;
+        const x = kucuk === hg ? a : b;
+        const y = kucuk === hg ? b : a;
+        n++;
+        sx += x;
+        sy += y;
+        sxx += x * x;
+        syy += y * y;
+        sxy += x * y;
+      }
+      if (n < minOrtak) continue;
+      const pay = n * sxy - sx * sy;
+      const payda = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+      if (!(payda > 0)) continue;
+      const r = pay / payda;
+      if (!Number.isFinite(r)) continue;
+      if (!enIyi || r > enIyi.korelasyon) {
+        enIyi = { symbol, kod, ad, korelasyon: r, ortak: n };
+      }
+    }
+    if (enIyi && enIyi.korelasyon >= esik) out.push(enIyi);
+  }
+  out.sort((a, b) => b.korelasyon - a.korelasyon);
+  return out;
+}
+
+/** Bir sektör endeksiyle birlikte hareket eden hisseler, korelasyona göre. */
+export function sektorunHisseleri(
+  eslesmeler: readonly SektorEslesmesi[],
+  kod: string,
+): SektorEslesmesi[] {
+  return eslesmeler.filter((e) => e.kod === kod);
+}

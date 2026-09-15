@@ -664,7 +664,12 @@ export default function Pulse({ state, push }: Props) {
         kaynak erişilemezken de "hangi sektör kazandırdı" sorusu cevaplanıyor.
         Ayrı panel, çünkü ölçtüğü şey farklı: getiri, akış değil.
       */}
-      <SektorEndeksleri market={market} onSelect={(symbol) => push({ v: 'sembol', s: symbol })} />
+      <SektorEndeksleri
+        market={market}
+        client={analysis.status === 'ready' ? analysis.client : null}
+        onSelect={(symbol) => push({ v: 'sembol', s: symbol })}
+        onTest={(symbols) => push({ v: 'stratejiler', sy: symbols.join(',') })}
+      />
     </div>
   );
 }
