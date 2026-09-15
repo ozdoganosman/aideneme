@@ -149,6 +149,11 @@ def normalize(name: str) -> str:
     gönderiyor — listemizde yalnızca büyük harfli yazım vardı. Ürüne yansıması
     somut: "Cari oran" süzgeci hiçbir sonuç veremiyordu.
 
+    DÜZELTME SONRASI ÖLÇÜLDÜ (zorlamalı tazeleme, 559 sembol): `currentAssets`
+    522 sembolde dolu (%93,4) ve cari oran aynı sayıda sembolde hesaplanabilir
+    hâle geldi; medyanı 1,43. Kalan 37 sembol banka ve benzeri — onların
+    bilançosunda dönen/duran ayrımı yok, yani boş kalmaları doğru.
+
     `currentLiabilities` bu tuzağa düşmemişti, çünkü listede HEM büyük harfli
     HEM başlık yazımı vardı; yani kusur, her ada iki yazım eklemeyi unutmakla
     gizleniyordu. Kökü düzeltmek, listeye ikinci yazım eklemekten iyidir.

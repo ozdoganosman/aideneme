@@ -10,18 +10,18 @@ piyasa ölçeğinde gösteren görünümdü.
 
 ## Yapılanlar
 
-| Madde | Nerede |
-|---|---|
-| Hazır strateji kitaplığı (8 kural) | `src/core/strategy/presets.ts` |
-| Piyasa geneli sıralama + çoklu test düzeltmesi | `src/core/strategy/rank.ts` |
-| Worker'da sembol aralığına bölünmüş backtest | `WorkerRequest.type = 'rank'` |
-| Stratejiler ekranı (iki kapsam) | `src/shell/screens/Strategies.tsx` |
-| Sıralamadan laboratuvara tek tıkla geçiş | `src/shell/screens/labRules.ts` |
-| Derin tarama (en likitler, tam geçmiş) | `WorkerRequest.type = 'rankSeries'` |
-| `prev` operandı (kırılım kuralları için) | `src/core/strategy/dsl.ts` |
-| Sektör bazlı para akışı | `src/core/screen/sectors.ts` |
-| Sektör sınıflandırma üreticisi | `scripts/build_sectors.py` |
-| Tarayıcıda sektör filtresi | `ScreenSpec.sectors` |
+| Madde                                          | Nerede                              |
+| ---------------------------------------------- | ----------------------------------- |
+| Hazır strateji kitaplığı (8 kural)             | `src/core/strategy/presets.ts`      |
+| Piyasa geneli sıralama + çoklu test düzeltmesi | `src/core/strategy/rank.ts`         |
+| Worker'da sembol aralığına bölünmüş backtest   | `WorkerRequest.type = 'rank'`       |
+| Stratejiler ekranı (iki kapsam)                | `src/shell/screens/Strategies.tsx`  |
+| Sıralamadan laboratuvara tek tıkla geçiş       | `src/shell/screens/labRules.ts`     |
+| Derin tarama (en likitler, tam geçmiş)         | `WorkerRequest.type = 'rankSeries'` |
+| `prev` operandı (kırılım kuralları için)       | `src/core/strategy/dsl.ts`          |
+| Sektör bazlı para akışı                        | `src/core/screen/sectors.ts`        |
+| Sektör sınıflandırma üreticisi                 | `scripts/build_sectors.py`          |
+| Tarayıcıda sektör filtresi                     | `ScreenSpec.sectors`                |
 
 ## Kararlar
 
@@ -145,10 +145,10 @@ uygulansaydı Bilişim'deki 35 hisse hem XBLSM hem XUTEK üyesi olduğu için
 
 **ÖLÇÜLEN SONUÇ** (yayındaki veri, 584 hisse):
 
-| | korelasyon vekili | yalnız alt sektör | + üst grup |
-|---|---|---|---|
-| sınıflandırılan sembol | 35 | 496 | **541** |
-| sınıflandırılmamış işlem değeri payı | — | %9,7 | **%0,1** |
+|                                      | korelasyon vekili | yalnız alt sektör | + üst grup |
+| ------------------------------------ | ----------------- | ----------------- | ---------- |
+| sınıflandırılan sembol               | 35                | 496               | **541**    |
+| sınıflandırılmamış işlem değeri payı | —                 | %9,7              | **%0,1**   |
 
 Vekilin kapsamı %6'ydı. Alt sektör tabakası tek başına 496 sembolü bağladı
 ama dışarıda kalan %9,7'nin neredeyse tamamı TEK hisseydi: ASELS, piyasanın
@@ -272,13 +272,13 @@ Faz 0'da erişilebilirlik kuralları yeni kodda **hata**, devralınan ekranlarda
 46 uyarı vardı, şimdi sıfır — ve o geçici blok kaldırıldı, yani eski ekranlarda
 da geri gidiş artık derlemeyi kırar.
 
-| Kalıp | Sayı | Ne yapıldı |
-|---|---|---|
-| Modallar (yalnızca fareyle kapanıyordu) | 4 | Ortak `ModalShell`: Escape, odak tuzağı, `role="dialog"` |
-| Tıklanabilir kart/satırlar | 8 | Ortak `clickable()`: `role="button"`, sekme sırası, Enter/Space |
-| Otomatik tamamlama listeleri | 2 | APG birleşik kutu: `aria-expanded`, `aria-activedescendant`, `role="listbox"` |
-| Sarmalayan etiketler | 5 | Kural düzeltildi: `label-has-for` kullanımdan kalkmış, yerine `label-has-associated-control` |
-| Boş tablo başlığı | 1 | Görsel olarak gizli metin |
+| Kalıp                                   | Sayı | Ne yapıldı                                                                                   |
+| --------------------------------------- | ---- | -------------------------------------------------------------------------------------------- |
+| Modallar (yalnızca fareyle kapanıyordu) | 4    | Ortak `ModalShell`: Escape, odak tuzağı, `role="dialog"`                                     |
+| Tıklanabilir kart/satırlar              | 8    | Ortak `clickable()`: `role="button"`, sekme sırası, Enter/Space                              |
+| Otomatik tamamlama listeleri            | 2    | APG birleşik kutu: `aria-expanded`, `aria-activedescendant`, `role="listbox"`                |
+| Sarmalayan etiketler                    | 5    | Kural düzeltildi: `label-has-for` kullanımdan kalkmış, yerine `label-has-associated-control` |
+| Boş tablo başlığı                       | 1    | Görsel olarak gizli metin                                                                    |
 
 Kazanç gerçek, kozmetik değil: modallar artık Escape ile kapanıyor ve odak
 içeri girip çıkışta geldiği yere dönüyor; kartlar sekme ile geziliyor ve Enter
@@ -373,14 +373,14 @@ Plan "5 kritik akış için Playwright" diyordu; bu turlar boyunca o akışları
 değişiklikten sonra ELLE doğruluyordum. Elle yapılan doğrulama regresyonu
 yakalamaz — artık altısı da otomatik:
 
-| Akış | Neyi koruyor |
-|---|---|
-| Nabız | ısı haritası + sektör akışı gerçek worker'da; "Sınıflandırılmamış" gizlenmiyor |
-| Tarama | filtre → sonuç → **paylaşılan bağlantı aynı sonucu veriyor** |
-| Tarama → Stratejiler | semboller taşınıyor, ağır iş onaysız başlamıyor |
-| Sembol masası | grafik/finansal/sektör sekmeleri; paket izinsiz inmiyor; ayarlar diğer sekmelerde gizli |
-| Laboratuvar | sıralamadan gelen kural URL'de, beş doğrulama rozeti çıkıyor |
-| Model | hüküm "kullanma" ise ekranda olasılık YOK |
+| Akış                 | Neyi koruyor                                                                            |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| Nabız                | ısı haritası + sektör akışı gerçek worker'da; "Sınıflandırılmamış" gizlenmiyor          |
+| Tarama               | filtre → sonuç → **paylaşılan bağlantı aynı sonucu veriyor**                            |
+| Tarama → Stratejiler | semboller taşınıyor, ağır iş onaysız başlamıyor                                         |
+| Sembol masası        | grafik/finansal/sektör sekmeleri; paket izinsiz inmiyor; ayarlar diğer sekmelerde gizli |
+| Laboratuvar          | sıralamadan gelen kural URL'de, beş doğrulama rozeti çıkıyor                            |
+| Model                | hüküm "kullanma" ise ekranda olasılık YOK                                               |
 
 Her test konsol hatası biriktiren bir akışı da düşürüyor: sessiz bir istisna
 "geçti" sayılmamalı.
@@ -449,13 +449,13 @@ Dokuz ekran bir kullanıcı gibi gezildi. Konsol temiz, her ekranda tek ve doğr
 bir `h1`, adsız düğme ya da etiketsiz giriş alanı yok. Ama denetim lint'in
 göremediği bir kusuru buldu: **aynı adı taşıyan düğmeler.**
 
-| Ekran | Tekrar |
-|---|---|
-| Stratejiler | "Laboratuvarda aç" ×8 |
-| Sembol Masası | "Bu sayı nereden geliyor?" ×9 |
-| Tarayıcı | "Bu metrik nasıl hesaplanıyor?" ×2, "Kuralı kaldır" ×2 |
-| Laboratuvar | "Kuralı kaldır" ×2, "+ Kural" ×2 |
-| Nabız, Portföy | "Bu sayı nereden geliyor?" ×2 |
+| Ekran          | Tekrar                                                 |
+| -------------- | ------------------------------------------------------ |
+| Stratejiler    | "Laboratuvarda aç" ×8                                  |
+| Sembol Masası  | "Bu sayı nereden geliyor?" ×9                          |
+| Tarayıcı       | "Bu metrik nasıl hesaplanıyor?" ×2, "Kuralı kaldır" ×2 |
+| Laboratuvar    | "Kuralı kaldır" ×2, "+ Kural" ×2                       |
+| Nabız, Portföy | "Bu sayı nereden geliyor?" ×2                          |
 
 Lint bunları göremez çünkü teknik olarak hepsi etiketli. Ama sekiz satırda
 sekiz kez "Laboratuvarda aç" duyan bir ekran okuyucu kullanıcısı hangisinin
@@ -505,11 +505,11 @@ ekranın da `scrollWidth` değeri 390 ve yatay taşma yok.
 
 WCAG 2.5.8 en az 24×24 px istiyor. Ölçüm üç kusur buldu:
 
-| Öğe | Önce | Sonra |
-|---|---|---|
+| Öğe                       | Önce  | Sonra                       |
+| ------------------------- | ----- | --------------------------- |
 | Tablo satır düğmesi (×97) | 86×20 | satırın tamamı, en az 32 px |
-| Tablo sıralama başlığı | 24×33 | en az 32 px yükseklik |
-| Veri kaynağı rozeti | 16×16 | 24×24 |
+| Tablo sıralama başlığı    | 24×33 | en az 32 px yükseklik       |
+| Veri kaynağı rozeti       | 16×16 | 24×24                       |
 
 Rozet görsel olarak hâlâ 16 px'lik bir daire: büyüme saydam kenarlıkla
 (`border: 4px solid transparent; background-clip: content-box`) yapıldı,
@@ -535,10 +535,10 @@ sektörü elle seçmek zorundaydı.
 
 Artık her sektör satırında iki geçiş var:
 
-| Tıklanan | Gidilen |
-|---|---|
+| Tıklanan   | Gidilen                               |
+| ---------- | ------------------------------------- |
 | Sektör adı | O sektörün en çok işlem gören sembolü |
-| **Tara** | Tarayıcı, o sektör seçili |
+| **Tara**   | Tarayıcı, o sektör seçili             |
 
 Tarayıcıya **kuralsız** geçiliyor. Kullanıcı adına bir filtre varsaymak
 (ör. "RSI 40–70") sektörün hisselerinin bir kısmını daha ilk ekranda
@@ -582,12 +582,12 @@ her biri sembol masasına götüren bir düğme.
 Farkın anlamlı olması iki şarta bağlı ve ikisi de `core/screen/watch.ts`
 içinde **kontrol ediliyor** (`diffScreen`):
 
-| Durum | Ne yapılır |
-|---|---|
-| Anlık görüntü yok | Fark uydurulmaz; "işaretle" önerilir |
-| Veri paketi aynı (hash eşit) | Fark **aranmaz** — çıkacak fark piyasadan değil bizim hatamızdan gelirdi |
+| Durum                          | Ne yapılır                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------- |
+| Anlık görüntü yok              | Fark uydurulmaz; "işaretle" önerilir                                                      |
+| Veri paketi aynı (hash eşit)   | Fark **aranmaz** — çıkacak fark piyasadan değil bizim hatamızdan gelirdi                  |
 | Kayıt başka bir kural setinden | Fark **gösterilmez** — "yeni giren" piyasa hareketi değil kullanıcının değişikliği olurdu |
-| Paket yeni, kural aynı | Giren/çıkan/kalan |
+| Paket yeni, kural aynı         | Giren/çıkan/kalan                                                                         |
 
 İki ayrıntı bilinçli:
 
@@ -614,12 +614,12 @@ kullanıcının beklediğinden başka bir şey yapar.
 Laboratuvar artık işlemleri **giriş barındaki** rejime göre dört kovaya
 ayırıyor (X001, hazır kural):
 
-| Rejim | Bar payı | İşlem | Medyan | İsabet |
-|---|---|---|---|---|
-| Düşük oynaklık · yatay | 25% | 11 | −4,86% | 18% |
-| Düşük oynaklık · trend | 23% | 9 | −5,93% | 33% |
-| Yüksek oynaklık · yatay | 22% | 6 | −1,34% | 33% |
-| Yüksek oynaklık · trend | 30% | 4 | *yetersiz örnek* | — |
+| Rejim                   | Bar payı | İşlem | Medyan           | İsabet |
+| ----------------------- | -------- | ----- | ---------------- | ------ |
+| Düşük oynaklık · yatay  | 25%      | 11    | −4,86%           | 18%    |
+| Düşük oynaklık · trend  | 23%      | 9     | −5,93%           | 33%    |
+| Yüksek oynaklık · yatay | 22%      | 6     | −1,34%           | 33%    |
+| Yüksek oynaklık · trend | 30%      | 4     | _yetersiz örnek_ | —      |
 
 Üç karar, üçü de dürüstlük gereği:
 
@@ -648,11 +648,11 @@ dizilerini aktarsaydık her kural değişikliğinde onlarca kilobayt taşınırd
 Ekranlar tek tek doğruydu ama hiç YAN YANA koyulmamıştı. X140 sembolüyle
 aynı sayıyı üç ekrandan okudum:
 
-| Ekran | "1 ay" |
-|---|---|
-| Tarayıcı | **+17,53%** |
+| Ekran         | "1 ay"      |
+| ------------- | ----------- |
+| Tarayıcı      | **+17,53%** |
 | Sembol Masası | **+18,67%** |
-| Rapor | +18,67% |
+| Rapor         | +18,67%     |
 
 Kusur gerçekti: tarayıcı **21 bar**, masa ve rapor **30 takvim günü** geriye
 bakıyordu. Her ikisinin de formül katmanı doğruyu yazıyordu, yani hiçbiri
@@ -678,9 +678,9 @@ Sembol Masası'nın `r1m` metriği birbirinden ayrılırsa test kırılıyor.
 Denetim sürünce ikinci bir çift çıktı — ama bu kez sayılar HAKLI olarak
 farklıydı:
 
-| Ekran | Metrik | X140 |
-|---|---|---|
-| Tarayıcı | Zirveden (son 250 barın en **yükseği**) | −10,65% |
+| Ekran         | Metrik                                             | X140    |
+| ------------- | -------------------------------------------------- | ------- |
+| Tarayıcı      | Zirveden (son 250 barın en **yükseği**)            | −10,65% |
 | Sembol Masası | Tepeden uzaklık (tüm geçmişin **kapanış** zirvesi) | −59,96% |
 
 İkisi farklı sorular: biri "son bir yılın zirvesine göre neredeyiz" (klasik
@@ -739,7 +739,7 @@ Bağlantı uçtan uca teste bağlandı: kopsa kimse fark etmezdi.
 ### Yol boyunca: eski sayfada iki kusur
 
 - `index.html` yakınlaştırmayı **engelliyordu** (`maximum-scale=1.0,
-  user-scalable=no`). Bu WCAG 1.4.4'e aykırı ve az gören kullanıcıyı
+user-scalable=no`). Bu WCAG 1.4.4'e aykırı ve az gören kullanıcıyı
   uygulamanın dışında bırakıyor. Kaldırıldı; grafiğin kendi dokunma
   hareketleri etkilenmiyor.
 - Sayfanın ikonu yoktu, yani her ziyarette `/favicon.ico` için bir **404**
@@ -752,11 +752,11 @@ Bütün veri istekleri kesilerek (çevrimdışı taklidi) dokuz ekran tek tek
 açıldı. Altısı doğru davrandı — "Piyasa verisi yüklenemedi · Failed to
 fetch" gibi net bir mesaj. **Üçü yanlış davrandı:**
 
-| Ekran | Hata durumunda görünen |
-|---|---|
+| Ekran       | Hata durumunda görünen   |
+| ----------- | ------------------------ |
 | Stratejiler | 7 iskelet, sonsuza kadar |
-| Model | 6 iskelet, sonsuza kadar |
-| Rapor | 6 iskelet, sonsuza kadar |
+| Model       | 6 iskelet, sonsuza kadar |
+| Rapor       | 6 iskelet, sonsuza kadar |
 
 Rapor ekranında hata zaten yakalanıyor ve `error` durumuna yazılıyordu —
 ama hiçbir yerde GÖSTERİLMİYORDU. Kullanıcı yüklenmeyi bekliyor sanıyor,
@@ -778,13 +778,13 @@ alındığında test kırılıyor.
 Kesilmiş bağlantının yanında BOZUK veri de denendi — yavaş mobil bağlantıda
 yarım inen dosya gerçek bir durumdur:
 
-| Senaryo | Kullanıcının gördüğü |
-|---|---|
-| Manifest bozuk JSON | "Piyasa verisi yüklenemedi · Expected property name…" |
-| Manifest yanlış şema | "bist: manifest biçimi tanınmadı" |
-| Paket çöp bayt | "pack: sihirli sayı tutmuyor" |
-| Sembol serisi kırpılmış | "pack: beklenen 81632 bayt, gelen 120" |
-| **Paket kırpılmış** | **"Invalid typed array length: 1000"** ← motor hatası |
+| Senaryo                 | Kullanıcının gördüğü                                  |
+| ----------------------- | ----------------------------------------------------- |
+| Manifest bozuk JSON     | "Piyasa verisi yüklenemedi · Expected property name…" |
+| Manifest yanlış şema    | "bist: manifest biçimi tanınmadı"                     |
+| Paket çöp bayt          | "pack: sihirli sayı tutmuyor"                         |
+| Sembol serisi kırpılmış | "pack: beklenen 81632 bayt, gelen 120"                |
+| **Paket kırpılmış**     | **"Invalid typed array length: 1000"** ← motor hatası |
 
 Son satır kusurdu: paket çözücüsünde uzunluk kontrolü, tipli dizi
 görünümleri KURULDUKTAN sonra geliyordu; yarım inen dosyada JavaScript
@@ -826,11 +826,11 @@ geri alındığında test kırılıyor, geri konduğunda geçiyor.
   Önbellek katmanı zaten sessizce devre dışı kalıyor; tek fark her ziyarette
   yeniden indirmek.
 - **Worker kurulamıyor** (katı içerik güvenliği politikası, eklenti): ekranlar
-  hata veriyordu ama mesaj tarayıcının ham istisnasıydı — *"Worker blocked"*.
-  Kullanıcıya hiçbir şey anlatmıyor. Artık alan diliyle: *"Bu tarayıcıda arka
+  hata veriyordu ama mesaj tarayıcının ham istisnasıydı — _"Worker blocked"_.
+  Kullanıcıya hiçbir şey anlatmıyor. Artık alan diliyle: _"Bu tarayıcıda arka
   plan işçisi (Web Worker) başlatılamadı; analiz çalıştırılamıyor. Katı bir
   içerik güvenliği politikası ya da bir tarayıcı eklentisi engelliyor
-  olabilir."* Ham istisna parantez içinde duruyor — teşhis için gerekli.
+  olabilir."_ Ham istisna parantez içinde duruyor — teşhis için gerekli.
 
 Aynı denemede **dördüncü bir sessiz başarısızlık** çıktı: Sembol Masası'nda
 analiz hatası `catch(() => setAnalysisResult(null))` ile yutuluyordu. Ekranda
@@ -843,11 +843,11 @@ Dördüncüsü çıkınca kalıp sistematik olarak arandı (`catch` içinde yaln
 null/boş atayan yerler). Üç tane daha vardı ve üçü de **yanlış bir hikâye
 anlatıyordu**:
 
-| Ekran | Hesap çöktüğünde görünen | Kullanıcı ne yapardı |
-|---|---|---|
-| Tarayıcı | "Kriterlere uyan sembol yok" | Filtresini gevşetirdi |
-| Karşılaştır | "En az iki sembol seç" | Zaten seçmişti, şaşırırdı |
-| Nabız | İskelet, sonsuza kadar | Beklerdi |
+| Ekran       | Hesap çöktüğünde görünen     | Kullanıcı ne yapardı      |
+| ----------- | ---------------------------- | ------------------------- |
+| Tarayıcı    | "Kriterlere uyan sembol yok" | Filtresini gevşetirdi     |
+| Karşılaştır | "En az iki sembol seç"       | Zaten seçmişti, şaşırırdı |
+| Nabız       | İskelet, sonsuza kadar       | Beklerdi                  |
 
 Boş sonuç ile çöken hesap aynı ekranla anlatılamaz: ilkinde kullanıcı
 filtresini değiştirir, ikincisinde bekler ya da sayfayı yeniler. Üçü de artık
@@ -862,13 +862,13 @@ hesap çökmüş. İki durum ayrı ayrı ele alınıyor çünkü kullanıcının
 Plan §11 "her yayınlanan metriğin provenance popover'ı var (kapsam %100)"
 diyordu. Dokuz ekranın sayı kartları tek tek sayıldı:
 
-| Ekran | Kart | Provenance'ı olan |
-|---|---|---|
-| Sembol Masası | 9 | 9 |
-| Nabız | 4 | **2** |
-| Laboratuvar | 8 | **0** |
-| Model | 9 | **0** |
-| Stratejiler | 3 | **0** |
+| Ekran         | Kart | Provenance'ı olan |
+| ------------- | ---- | ----------------- |
+| Sembol Masası | 9    | 9                 |
+| Nabız         | 4    | **2**             |
+| Laboratuvar   | 8    | **0**             |
+| Model         | 9    | **0**             |
+| Stratejiler   | 3    | **0**             |
 
 Yani Sembol Masası'nda yapısal olan şey (metrik formülünü kendisi taşıyor)
 öteki ekranlara hiç taşınmamıştı. En kötüsü Laboratuvar: Sharpe'ın hangi
@@ -883,11 +883,11 @@ açıklamanın sessizce eskimesi demekti.
 
 Birkaç katman yalnızca formül değil, **sınır** da söylüyor:
 
-- *Doğruluk:* "%80'i pozitif olan veride hep 'olur' demek %80 doğruluk verir
+- _Doğruluk:_ "%80'i pozitif olan veride hep 'olur' demek %80 doğruluk verir
   ve hiçbir şey öğrenmemiştir."
-- *Sinyal ortalaması:* "Maliyet dahil değil ve kesişen pencereler bağımsız
+- _Sinyal ortalaması:_ "Maliyet dahil değil ve kesişen pencereler bağımsız
   değil — bir strateji sonucu olarak okunamaz."
-- *Sharpe:* "Risksiz oran 0 kabul edilir — mutlak yorum için değil."
+- _Sharpe:_ "Risksiz oran 0 kabul edilir — mutlak yorum için değil."
 
 Ölçüm kalıcı: `e2e/erisilebilirlik.spec.ts` artık provenance'sız bir sayı
 kartı görürse CI'yı kırıyor. İddia, iddia olmaktan çıktı.
@@ -915,11 +915,11 @@ kalır. Testler kurgu serilerle yazıldı — şekil biliniyor, doğru cevap da:
 
 Sonuç:
 
-| Dosya | Önce | Sonra |
-|---|---|---|
-| `calc.ts` | %58 | **%98** |
-| `patterns.ts` | %0 | **%81** |
-| `stats.ts` | %0 | **%100** |
+| Dosya           | Önce  | Sonra     |
+| --------------- | ----- | --------- |
+| `calc.ts`       | %58   | **%98**   |
+| `patterns.ts`   | %0    | **%81**   |
+| `stats.ts`      | %0    | **%100**  |
 | Tüm `src/core/` | %76,8 | **%89,2** |
 
 İndikatörler artık kapsam kapısının **içinde**: dışarıda kalan tek şey eski
@@ -959,13 +959,13 @@ Erişilebilirlik denetimleri şimdiye kadar etiketlere, klavyeye ve dokunma
 hedeflerine baktı; **renge hiç bakmamıştı.** Dokuz ekranın her metin düğümü,
 zeminine karşı ölçüldü (WCAG AA: normal metin 4,5:1, büyük metin 3:1).
 
-| Kusur | Açık | Koyu |
-|---|---|---|
-| İkincil metin (`--text-muted`) | 3,98 | 4,27 |
-| Rozet: yükseliş / düşüş / uyarı | 3,85 / 4,17 / 3,98 | ✓ |
-| Yeşil–kırmızı sayılar | 4,36 | ✓ |
-| Birincil düğme metni | ✓ | **3,13** |
-| Bağlantı görünümlü düğmeler | 4,27 | ✓ |
+| Kusur                           | Açık               | Koyu     |
+| ------------------------------- | ------------------ | -------- |
+| İkincil metin (`--text-muted`)  | 3,98               | 4,27     |
+| Rozet: yükseliş / düşüş / uyarı | 3,85 / 4,17 / 3,98 | ✓        |
+| Yeşil–kırmızı sayılar           | 4,36               | ✓        |
+| Birincil düğme metni            | ✓                  | **3,13** |
+| Bağlantı görünümlü düğmeler     | 4,27               | ✓        |
 
 En can alıcısı ilk satır: **açıklama metinlerinin çoğu bu tokenı kullanıyor.**
 Yani ürünün ayırt edici özelliği olan "neden böyle" yazısı, tam da onu okumaya
@@ -1043,13 +1043,13 @@ işlem ekleyip bakınca aynı tabloda `18.24` (ondalık nokta) ile `39.818`
 
 Bu kez tarama ondalık NOKTAYA göre yapıldı ve dokuz ekran tek tek geçildi:
 
-| Ekran | Kalan |
-|---|---|
-| Portföy | fiyat, ort. maliyet, kur, etkin pozisyon |
-| Tarayıcı | oran (`1.40×`), seviye (RSI/ADX) |
-| Nabız, Sektör | `16.6 mlr`, `3.1 mlr` kısaltmaları |
-| Sembol Masası | `13.0 yıl`, dört haneli fiyatlar |
-| Model | bariyer katı `±1.5σ` |
+| Ekran         | Kalan                                    |
+| ------------- | ---------------------------------------- |
+| Portföy       | fiyat, ort. maliyet, kur, etkin pozisyon |
+| Tarayıcı      | oran (`1.40×`), seviye (RSI/ADX)         |
+| Nabız, Sektör | `16.6 mlr`, `3.1 mlr` kısaltmaları       |
+| Sembol Masası | `13.0 yıl`, dört haneli fiyatlar         |
+| Model         | bariyer katı `±1.5σ`                     |
 
 Hepsi çevrildi; `Stat` bileşeninin delta rozeti de (Portföy'de `+487.71%`
 yazıyordu) ortak biçimlendiriciye bağlandı.
@@ -1160,10 +1160,10 @@ bir döngü.
 
 Ölçüldü (serisi indirilemeyen tek bir pozisyon, 8 saniye):
 
-| | X001.bin isteği | "Fiyatlar yükleniyor…" |
-|---|---|---|
-| Önce | **1.827** | hâlâ açık |
-| Sonra | 1 | kapandı |
+|       | X001.bin isteği | "Fiyatlar yükleniyor…" |
+| ----- | --------------- | ---------------------- |
+| Önce  | **1.827**       | hâlâ açık              |
+| Sonra | 1               | kapandı                |
 
 Saniyede ~228 istek. Zayıf makinede ve mobil veride bu yalnızca yavaşlık
 değil, kotanın yenmesi demek. Kullanıcının gördüğü tek belirti "Fiyatlar
@@ -1192,9 +1192,9 @@ bir kanıt.
 Duyuru işi bittikten sonra aynı gözle belleğe bakıldı, çünkü "zayıf
 makinede akıcı" iddiası uzun oturumu da kapsıyor.
 
-| Senaryo | Yığın | Düğüm | Dinleyici |
-|---|---|---|---|
-| 9 ekran × 14 tur (126 geçiş) | 5,20 → 6,70 MB | 417 → 417 | 184 → 184 |
+| Senaryo                         | Yığın          | Düğüm     | Dinleyici |
+| ------------------------------- | -------------- | --------- | --------- |
+| 9 ekran × 14 tur (126 geçiş)    | 5,20 → 6,70 MB | 417 → 417 | 184 → 184 |
 | 19 sembol × 8 tur (152 değişim) | 4,24 → 4,38 MB | 242 → 242 | 191 → 191 |
 
 Yığın artışı son turlarda duruyor (11 → 14. tur arası toplam +0,04 MB):
@@ -1219,7 +1219,7 @@ veri yaşı bilgisi YOK : diğer yedisi
 ```
 
 Aynı anda manifest okundu: örnek veri setinin **en yeni barı 2025-09-28**,
-"bugün" 2026-09-14. Yani Nabız ekranı *"Piyasada bugün ne oluyor?"* başlığı
+"bugün" 2026-09-14. Yani Nabız ekranı _"Piyasada bugün ne oluyor?"_ başlığı
 altında **251 iş günü eski** veri gösteriyor ve bunu hiçbir yerde
 söylemiyordu. Bir finans aracında bu, yanlış sayı göstermenin bir adım
 gerisindeki kusurdur: sayılar doğru, ama hangi tarihe ait olduğu gizli.
@@ -1227,11 +1227,11 @@ gerisindeki kusurdur: sayılar doğru, ama hangi tarihe ait olduğu gizli.
 Rozet ölçülen hâline çevrildi (`core/data/freshness.ts`, saf; "bugün"
 çağırandan gelir):
 
-| Durum | Eşik (hafta içi gün) | Rozet |
-|---|---|---|
-| taze | ≤ 1 | `Veri 14 Eyl 2026` (yeşil) |
-| gecikmeli | ≤ 3 | `Veri 11 Eyl 2026` (sarı) |
-| bayat | > 3 | `Veri 251 iş günü eski` (kırmızı) |
+| Durum     | Eşik (hafta içi gün) | Rozet                             |
+| --------- | -------------------- | --------------------------------- |
+| taze      | ≤ 1                  | `Veri 14 Eyl 2026` (yeşil)        |
+| gecikmeli | ≤ 3                  | `Veri 11 Eyl 2026` (sarı)         |
+| bayat     | > 3                  | `Veri 251 iş günü eski` (kırmızı) |
 
 Üç karar:
 
@@ -1328,7 +1328,7 @@ Terminate orphan process: pid (2132) (python)
 `timeout-minutes` **süreci öldürmüyor.** Adımın kabuğunu kesip "tamamlandı"
 diyor, python öksüz süreç olarak çalışmaya devam ediyor; runner onu ancak
 işin en sonunda topluyor. Yani zaman sınırı işi durdurmadı, yalnızca
-*beklemeyi* bıraktı — ve sonraki adımlar hâlâ dosya yazan bir süreçle
+_beklemeyi_ bıraktı — ve sonraki adımlar hâlâ dosya yazan bir süreçle
 YARIŞTI. Yayımlama o anki yarım klasörü kopyaladı, anlık görüntü yazımı o
 ana yetişmedi.
 
@@ -1434,11 +1434,11 @@ sıranın doğru olmasını sınıyor.
 
 **Sonuç ölçüldü — yarısı tuttu.**
 
-| | Önce | Sonra |
-|---|---|---|
-| Sigortalar (AGESA, AKGRT, ANHYT, ANSGR) | başarısız | anlık görüntüde |
-| Bankalar (AKBNK, ALBRK) | başarısız | **hâlâ başarısız** |
-| Başarısız kayıt | 12 | 8 |
+|                                         | Önce      | Sonra              |
+| --------------------------------------- | --------- | ------------------ |
+| Sigortalar (AGESA, AKGRT, ANHYT, ANSGR) | başarısız | anlık görüntüde    |
+| Bankalar (AKBNK, ALBRK)                 | başarısız | **hâlâ başarısız** |
+| Başarısız kayıt                         | 12        | 8                  |
 
 Kayıt, banka sorununun şablon OLMADIĞINI söyledi:
 
@@ -1459,6 +1459,51 @@ timeout=10)` uyarıları dönem dönem tekrarlanıyor. O turda 5 sembol /
 420 saniye işlendi ve üçü başarısızdı — yani başarısızları atlamak,
 ilk tahminimden çok daha değerli bir düzeltmeymiş.
 
+## Üç alan boştu; ikisi kusur, biri gerçek yokluk (15 Eylül 2026)
+
+Yayımlanan 561 sembolün TAMAMINI taradım. On bir alan %96–100 dolu, üç alan
+tamamen boştu: `currentAssets`, `operatingCashFlow`, `capex`. İkisi ürüne
+doğrudan yansıyordu — "Nakde dönüşüm" kartı her şirkette boş ve "Cari oran"
+süzgeci (radar + tarayıcı) hiçbir sonuç veremiyordu. Kullanıcı o ölçütle bir
+tarama kurup sessizce sıfır satır alıyordu.
+
+Doğru kalem adını TAHMİN ETMEDİM. Teşhis zaten vardı ama stderr'e basıyordu
+ve iş kaydı dört yüz satır, satır da kaydın başında. Teşhis
+`fundamentals/_tani.json` olarak yayımlanır hâle getirildi: alan başına kaç
+sembolde dolu olduğu ve eksik alanlar için kaynakta görülen ilgili kalem
+adları. Cevap bir turda geldi ve iki farklı arıza olduğunu söyledi.
+
+**`currentAssets` — Türkçe küçültme tuzağı.** Kaynak o satırı "Dönen
+Varlıklar" diye gönderiyor; `normalize()` düz `.lower()` kullanıyordu:
+
+    "DÖNEN VARLIKLAR".lower() → "dönen varliklar"   (noktalı i)
+    "Dönen Varlıklar".lower() → "dönen varlıklar"   (noktasız ı)
+
+Eşit değiller. Tuzak bu dosyada ZATEN belgelenmişti — ama yalnızca teşhis
+yolunda (`fold`); eşleşme yolu güncellenmemişti. `currentLiabilities` tuzağa
+düşmemişti çünkü listede iki yazım da vardı, yani kusur "her ada iki yazım
+eklemeyi unutmak" ile gizleniyordu.
+
+**`operatingCashFlow` ve `capex` — gerçekten yok.** Teşhisin getirdiği aday
+adların hiçbiri nakit akış kalemi değil; bu şablonda o tablo bulunmuyor. Boş
+kartın boş kalması doğru davranış.
+
+**Üçüncü kusur: zorlamalı tazeleme yakınsamıyordu.** `force_all` her turda
+aynı sırayla tüm sembolleri veriyordu; bütçe 559'un yarısına yetiyor ve her
+tur baştan başlıyor, yani kuyruk hiç tazelenmiyordu. Üreticide yapılan hiçbir
+düzeltme mevcut verinin yarısına ulaşamazdı — bu düzeltme dahil. Kayıtlara
+`fetched` damgası eklendi, tazeleme en eskiden başlıyor.
+
+ÖLÇÜLEN SONUÇ (zorlamalı tazeleme sonrası, 559 sembol):
+
+|                          | önce | sonra     |
+| ------------------------ | ---- | --------- |
+| `currentAssets` dolu     | 0    | **522**   |
+| Cari oran hesaplanabilir | %0   | **%93,4** |
+| Medyan cari oran         | —    | 1,43      |
+
+Kalan 37 sembol banka ve benzeri: bilançolarında dönen/duran ayrımı yok.
+
 ## Sırada
 
-- Sektör kaynağının canlı yanıt formatını CI'da ilk çalıştırmada doğrulamak.
+- Nakit akış tablosu için başka bir kaynak/şablon var mı — bu şablonda yok.
