@@ -1097,7 +1097,13 @@ MAX_ATTEMPTS = 3
 # sınıflandırmaya hiç sıra gelmedi (ölçüldü: tur yeşil bitti, tablosuz.json
 # boş kaldı). Sayaçları sıfırlamak bir "yeniden dene" değil, kuralın
 # değiştiğini kabul etmek.
-EXTRACT_VERSION = 3
+#
+# v4: `normalize` Türkçe-güvenli katlamaya geçti ("Dönen Varlıklar" artık
+# "DÖNEN VARLIKLAR" ile eşleşiyor). ÜÇÜNCÜ KEZ aynı tuzak: kuralı değiştirdim
+# ama sürümü artırmayı atladım, oysa bu notun kendisi bunu söylüyordu.
+# Atlama listesindeki 25 gerçek şirket (finansal kiralama, faktoring, sigorta,
+# varlık yönetimi) yeni kuralla bir kez bile denenmeyecekti.
+EXTRACT_VERSION = 4
 
 
 def read_failures(out_dir: Path) -> dict[str, int]:
