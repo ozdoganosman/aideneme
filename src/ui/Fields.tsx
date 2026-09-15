@@ -6,13 +6,14 @@ interface FieldShellProps {
   label: string;
   hint?: string;
   error?: string;
+  hideLabel?: boolean;
   children: ReactNode;
 }
 
-function FieldShell({ id, label, hint, error, children }: FieldShellProps) {
+function FieldShell({ id, label, hint, error, hideLabel = false, children }: FieldShellProps) {
   return (
     <div className={`ui-field ${error ? 'is-invalid' : ''}`}>
-      <label className="ui-field__label" htmlFor={id}>
+      <label className={hideLabel ? 'visually-hidden' : 'ui-field__label'} htmlFor={id}>
         {label}
       </label>
       {children}
@@ -36,13 +37,29 @@ export interface SelectProps {
   options: { value: string; label: string }[];
   hint?: string;
   disabled?: boolean;
+  /**
+   * Etiketi görsel olarak gizler (erişilebilir ad KALIR).
+   *
+   * Dar panellerde her alanın üstünde büyük harfli bir etiket satırı dikey
+   * alanı yiyor ve seçeneğin kendisi zaten ne olduğunu söylüyor. Etiketi
+   * silmek ekran okuyucuda adsız bir kutu bırakırdı.
+   */
+  hideLabel?: boolean;
 }
 
 /** Seçim kutusu. Native <select>: mobil klavye/tekerlek davranışı taklit edilemez. */
-export function Select({ label, value, onChange, options, hint, disabled }: SelectProps) {
+export function Select({
+  label,
+  value,
+  onChange,
+  options,
+  hint,
+  disabled,
+  hideLabel = false,
+}: SelectProps) {
   const id = useAutoId('select');
   return (
-    <FieldShell id={id} label={label} hint={hint}>
+    <FieldShell id={id} label={label} hint={hint} hideLabel={hideLabel}>
       <div className="ui-select">
         <select
           id={id}

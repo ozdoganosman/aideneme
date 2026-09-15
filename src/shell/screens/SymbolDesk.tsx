@@ -628,6 +628,9 @@ export default function SymbolDesk({ state, push }: Props) {
                     <LazyRadar
                       market={market}
                       symbol={symbol}
+                      // Havuz paylaşılıyor: radar açıldığında paketi bu
+                      // havuza yüklüyor ve taramayı worker'da yapıyor.
+                      client={analysis.client}
                       onSelect={(next) => push({ s: next })}
                       onClose={() => setRadarAcik(false)}
                     />

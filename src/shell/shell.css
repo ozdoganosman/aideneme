@@ -1996,39 +1996,97 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--sp-2);
+  align-items: center;
 }
-/* Tablo dar panelde YATAY kayıyor: sütunları kırpmak sayıyı okunmaz yapardı
-   (aynı kusur tarayıcı tablosunda ölçülmüştü: "+%18,67" → "+%18,…"). */
-.radar__tablo {
+.radar__ara {
+  min-width: 0;
+}
+/* Araç satırı: filtre, hazırlar ve ekleme yan yana — üç tam genişlik form
+   alanı dar panelin dikey alanını yiyordu. */
+.radar__araclar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.radar__araclar .ui-combobox {
   flex: 1;
-  min-height: 0;
-  overflow: auto;
+  min-width: 0;
 }
-.radar__tablo .ui-vtable__scroll {
-  overflow-x: auto;
-}
-.radar__ad.is-aktif {
-  color: var(--accent);
-  font-weight: 700;
+.radar__bas .radar__sayac {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ── Radar filtreleri ─────────────────────────────────────────────────── */
-/* Dar panele sığması için kur-ekle biçimi: seçilen filtreler altta çip. */
-.radar__filtre {
+/* Filtre paneli: ölçütler gruplu, her biri "en az / en çok". Koşul seçtiren
+   eski akış tek filtre için dört etkileşim istiyordu. */
+.radar__panel {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-3);
+  width: min(360px, 78vw);
+  max-height: min(60vh, 460px);
+  overflow: auto;
+}
+.radar__grup h4 {
+  margin: 0 0 var(--sp-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.radar__olcut {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 5.5rem 5.5rem;
+  align-items: center;
   gap: var(--sp-2);
+  padding: 2px 0;
+}
+.radar__olcut-ad {
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radar__olcut .ui-input {
+  padding: 4px var(--sp-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hazır filtreler: bir tıkla kurulan soru. */
+.radar__hazirlar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(320px, 76vw);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.radar__hazirlar button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
   padding: var(--sp-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.radar__hazirlar button:hover {
   background: var(--surface-1);
 }
-.radar__filtre-kur {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) auto;
-  align-items: end;
-  gap: var(--sp-2);
+.radar__hazirlar .desk__muted {
+  font-size: var(--fs-xs);
 }
+
+/* Etkin filtre çipleri. */
 .radar__cipler {
   display: flex;
   flex-wrap: wrap;
@@ -2048,9 +2106,34 @@
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
-.radar__sayac {
-  margin: 0;
+.radar__cip-temizle {
+  border: none !important;
+  background: none !important;
+  padding: 0 !important;
+}
+.radar__cip-temizle button {
+  padding: 2px var(--sp-2);
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
   font-size: var(--fs-xs);
+  cursor: pointer;
+  text-decoration: underline;
+}
+/* Tablo dar panelde YATAY kayıyor: sütunları kırpmak sayıyı okunmaz yapardı
+   (aynı kusur tarayıcı tablosunda ölçülmüştü: "+%18,67" → "+%18,…"). */
+.radar__tablo {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.radar__tablo .ui-vtable__scroll {
+  overflow-x: auto;
+}
+.radar__ad.is-aktif {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* ── Nabız: sektör rotasyonu ──────────────────────────────────────────── */
