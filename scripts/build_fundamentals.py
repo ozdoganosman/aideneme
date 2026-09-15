@@ -86,6 +86,26 @@ FIELD_ITEMS: dict[str, list[str]] = {
     ],
 }
 
+# KALEM KODU ile eşleşme — addan ÖNCE denenir.
+#
+# Neden kod: ad kararsız, kod kararlı. Nakit akış kalemleri listede
+# "İŞLETME FAALİYETLERİNDEN NAKİT AKIŞLARI" diye aranıyordu; kaynak o satıra
+# "İşletme Faaliyetlerinden Kaynaklanan Net Nakit" diyor. Ad tutmadığı için
+# `operatingCashFlow` 559 sembolün hiçbirinde doldurulamadı ve "Nakde
+# dönüşüm" kartı her şirkette boş kaldı.
+#
+# BU SONUCU BİR KEZ YANLIŞ OKUDUM: teşhis, aday adları satır sırasıyla
+# tarayıp alan başına on ikide kesiyordu ve bilanço satırları önce geldiği
+# için kapak nakit akış satırlarına hiç ulaşmıyordu. "Kaynak bu tabloyu
+# vermiyor" diye yazdım — yanlıştı. Kod önekiyle sorunca 25 nakit akış satırı
+# geldi.
+#
+# Kodlar TAM eşleşiyor, önek değil: "4C" ile "4CA" farklı kalemler.
+FIELD_CODES: dict[str, tuple[str, ...]] = {
+    "operatingCashFlow": ("4C",),   # İşletme Faaliyetlerinden Kaynaklanan Net Nakit
+    "capex": ("4CAI",),             # Sabit Sermaye Yatırımları
+}
+
 FIELDS = list(FIELD_ITEMS)
 
 
@@ -266,8 +286,16 @@ def extract(df, symbol: str) -> dict | None:
     if name_col is None:
         return None
 
+    # Kod sütunu her şablonda olmayabilir; yoksa ada düşülüyor.
+    code_col = "FINANCIAL_ITEM_CODE" if "FINANCIAL_ITEM_CODE" in df.columns else None
+    wanted_code = {kod: alan for alan, kodlar in FIELD_CODES.items() for kod in kodlar}
+
     for _, row in df.iterrows():
-        field = wanted.get(normalize(row.get(name_col, "")))
+        field = None
+        if code_col is not None:
+            field = wanted_code.get(str(row.get(code_col, "")).strip())
+        if field is None:
+            field = wanted.get(normalize(row.get(name_col, "")))
         if not field or field in seen:
             continue
         seen.add(field)
@@ -1014,6 +1042,42 @@ def self_test() -> None:
     assert kayit["fields"]["currentAssets"] == [7.0], kayit["fields"]["currentAssets"]
     assert kayit["fields"]["currentLiabilities"] == [4.0], kayit["fields"]["currentLiabilities"]
 
+    # KALEM KODU İLE EŞLEŞME. Gerçek cevapta doğrulandı:
+    #   4C   = "İşletme Faaliyetlerinden Kaynaklanan Net Nakit"
+    #   4CAI = "Sabit Sermaye Yatırımları"
+    # Listemizdeki adlar ("İŞLETME FAALİYETLERİNDEN NAKİT AKIŞLARI") kaynakta
+    # HİÇ geçmiyor, o yüzden bu iki alan 559 sembolün hiçbirinde dolmuyordu.
+    kodlu_gercek = SahteTablo(
+        [
+            {"FINANCIAL_ITEM_CODE": "3C", "FINANCIAL_ITEM_NAME_TR": "Hasılat", "2024/6": 9.0},
+            {
+                "FINANCIAL_ITEM_CODE": "4C",
+                "FINANCIAL_ITEM_NAME_TR": "İşletme Faaliyetlerinden Kaynaklanan Net Nakit",
+                "2024/6": 12.0,
+            },
+            {
+                "FINANCIAL_ITEM_CODE": "4CAI",
+                "FINANCIAL_ITEM_NAME_TR": "Sabit Sermaye Yatırımları",
+                "2024/6": -3.0,
+            },
+            # TAM eşleşme: "4CA" ile "4C" farklı kalemler, önek eşleşmesi
+            # ikisini birbirine karıştırırdı.
+            {"FINANCIAL_ITEM_CODE": "4CA", "FINANCIAL_ITEM_NAME_TR": "Düzeltme Öncesi Kar", "2024/6": 99.0},
+        ]
+    )
+    kayit = extract(kodlu_gercek, "KOD")
+    assert kayit["fields"]["operatingCashFlow"] == [12.0], kayit["fields"]["operatingCashFlow"]
+    assert kayit["fields"]["capex"] == [-3.0], kayit["fields"]["capex"]
+
+    # KOD SÜTUNU YOKSA ada düşülmeli: her şablonda kod gelmiyor.
+    adli = SahteTablo(
+        [
+            {"FINANCIAL_ITEM_NAME_TR": "Hasılat", "2024/6": 9.0},
+            {"FINANCIAL_ITEM_NAME_TR": "Dönen Varlıklar", "2024/6": 5.0},
+        ]
+    )
+    assert extract(adli, "AD")["fields"]["currentAssets"] == [5.0]
+
     # KOD ÖNEKİ TEŞHİSİ. "Nakit akış tablosu yok" sonucunu ilk turda kendi
     # teşhisimin KAPAĞINDAN çıkarmış olabilirim: adaylar satır sırasıyla
     # taranıp alan başına on ikide kesiliyor ve bilanço satırları önce
@@ -1098,12 +1162,16 @@ MAX_ATTEMPTS = 3
 # boş kaldı). Sayaçları sıfırlamak bir "yeniden dene" değil, kuralın
 # değiştiğini kabul etmek.
 #
+# v5: kalem KODU ile eşleşme eklendi (4C = işletme nakit akışı, 4CAI = sabit
+# sermaye yatırımları). Ayıklama kuralı değişti, sürüm de artıyor — bu notu
+# bir kez atladığım için hemen sonrasında uygulanıyor.
+#
 # v4: `normalize` Türkçe-güvenli katlamaya geçti ("Dönen Varlıklar" artık
 # "DÖNEN VARLIKLAR" ile eşleşiyor). ÜÇÜNCÜ KEZ aynı tuzak: kuralı değiştirdim
 # ama sürümü artırmayı atladım, oysa bu notun kendisi bunu söylüyordu.
 # Atlama listesindeki 25 gerçek şirket (finansal kiralama, faktoring, sigorta,
 # varlık yönetimi) yeni kuralla bir kez bile denenmeyecekti.
-EXTRACT_VERSION = 4
+EXTRACT_VERSION = 5
 
 
 def read_failures(out_dir: Path) -> dict[str, int]:
