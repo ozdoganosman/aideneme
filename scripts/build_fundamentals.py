@@ -129,7 +129,7 @@ _MADDE_NO = re.compile(r"^(?:[IVXLCDM]+\.|\d+(?:\.\d+)*\.?)\s+")
 def normalize(name: str) -> str:
     """
     Kalem adını eşleştirmeye hazırlar: boşlukları sadeleştirir, MADDE
-    NUMARASINI soyar, küçük harfe çevirir.
+    NUMARASINI soyar, TÜRKÇE-GÜVENLİ biçimde büyütür.
 
     Numara soyma olmadan banka bilançosu hiç eşleşmiyordu. Ölçüldü: aranan
     satırlar veride VARDI — 'AKTİF TOPLAMI' zaten listede, 'XVI. ÖZKAYNAKLAR'
@@ -137,10 +137,28 @@ def normalize(name: str) -> str:
     net kâr. Eksik olan ad değil, ön ekti. Kırk banka adını tek tek listeye
     eklemek yanlış çözüm olurdu: aynı tablo sigortada ve yatırım ortaklığında
     başka numaralarla geliyor.
+
+    KÜÇÜLTME DEĞİL `fold`. Burada düz `.lower()` vardı ve Türkçe'de sessizce
+    yanlış eşleştiriyordu:
+
+        "DÖNEN VARLIKLAR".lower() → "dönen varliklar"   (noktalı i)
+        "Dönen Varlıklar".lower() → "dönen varlıklar"   (noktasız ı)
+
+    İki metin EŞİT DEĞİL. Yayındaki veriyle ölçüldü: `currentAssets` 561
+    sembolün HİÇBİRİNDE yoktu, oysa kaynak o satırı "Dönen Varlıklar" diye
+    gönderiyor — listemizde yalnızca büyük harfli yazım vardı. Ürüne yansıması
+    somut: "Cari oran" süzgeci hiçbir sonuç veremiyordu.
+
+    `currentLiabilities` bu tuzağa düşmemişti, çünkü listede HEM büyük harfli
+    HEM başlık yazımı vardı; yani kusur, her ada iki yazım eklemeyi unutmakla
+    gizleniyordu. Kökü düzeltmek, listeye ikinci yazım eklemekten iyidir.
+
+    Aynı tuzak bu dosyada `fold` için zaten belgelenmişti; eşleşme yolu
+    güncellenmemişti.
     """
     text = " ".join(str(name).split()).strip()
     text = _MADDE_NO.sub("", text)
-    return text.lower()
+    return fold(text)
 
 
 def fold(text: str) -> str:
@@ -299,6 +317,9 @@ def extract(df, symbol: str) -> dict | None:
         "periods": [str(c) for c in period_cols],
         "fields": fields,
         "missing": missing,
+        # Tazeleme sırası için. Dosya mtime'ı işe yaramıyor: gh-pages klonu
+        # bütün dosyalara aynı damgayı veriyor.
+        "fetched": int(time.time()),
     }
 
 
@@ -589,6 +610,22 @@ def self_test() -> None:
         assert kalan == [], f"{MAX_ATTEMPTS} denemeden sonra listeden düşmeliydi"
         # FORCE_ALL kaynağın düzelmiş olabileceği durumda hepsini geri getirir.
         assert pending_symbols(["YOK"], out, force_all=True, failures=read_failures(out)) == ["YOK"]
+
+        # ...ve EN ESKİ TAZELENEN ÖNCE gelir. Sıra giriş sırası olsaydı
+        # zorlamalı tazeleme yakınsamazdı: bütçe listenin yarısına yetiyor ve
+        # her tur aynı baştan başlıyor, kuyruk hiç tazelenmiyordu.
+        (out / "ESKI.json").write_text(
+            json.dumps({"symbol": "ESKI", "periods": [], "fields": {}, "fetched": 100}), encoding="utf-8"
+        )
+        (out / "YENI.json").write_text(
+            json.dumps({"symbol": "YENI", "periods": [], "fields": {}, "fetched": 900}), encoding="utf-8"
+        )
+        (out / "DAMGASIZ.json").write_text(
+            json.dumps({"symbol": "DAMGASIZ", "periods": [], "fields": {}}), encoding="utf-8"
+        )
+        sira = pending_symbols(["YENI", "ESKI", "DAMGASIZ"], out, force_all=True)
+        # Damgasız eski kayıt 0 sayılır ve en öne geçer.
+        assert sira == ["DAMGASIZ", "ESKI", "YENI"], sira
 
         # Başarılı bir çekim sayacı sıfırlar.
         def basarili(symbol: str):
@@ -891,8 +928,9 @@ def self_test() -> None:
     assert normalize("XVI. ÖZKAYNAKLAR") == normalize("ÖZKAYNAKLAR")
     assert normalize("16.4.2 Dönem Net Kar/Zararı") == normalize("Dönem Net Kar/Zararı")
     assert normalize("I. FAİZ GELİRLERİ") == normalize("FAİZ GELİRLERİ")
-    # Numarasız adlar bozulmamalı.
-    assert normalize("Satış Gelirleri") == "satış gelirleri"
+    # Numarasız adlar bozulmamalı. (Katlama BÜYÜTÜYOR: `.lower()` Türkçe'de
+    # noktalı/noktasız i'yi ayrıştırıyordu, bkz. `normalize` notu.)
+    assert normalize("Satış Gelirleri") == "SATIŞ GELIRLERI"
 
     banka = SahteTablo(
         [
@@ -910,6 +948,38 @@ def self_test() -> None:
     assert kayit["fields"]["equity"] == [300.0], kayit["fields"]["equity"]
     assert kayit["fields"]["assets"] == [900.0], kayit["fields"]["assets"]
 
+
+    # TÜRKÇE KÜÇÜLTME TUZAĞI — EŞLEŞME YOLUNDA.
+    #
+    # `normalize` düz `.lower()` kullanıyordu ve iki yazım sessizce
+    # ayrışıyordu: "DÖNEN VARLIKLAR".lower() noktalı i üretiyor,
+    # "Dönen Varlıklar".lower() noktasız ı bırakıyor. Yayındaki veriyle
+    # ölçüldü: `currentAssets` 561 sembolün hiçbirinde yoktu, oysa kaynak o
+    # satırı "Dönen Varlıklar" diye gönderiyor.
+    assert normalize("DÖNEN VARLIKLAR") == normalize("Dönen Varlıklar")
+    assert normalize("NAKİT VE NAKİT BENZERLERİ") == normalize("Nakit ve Nakit Benzerleri")
+    # Tuzağın kendisi kaybolduysa test anlamsız olur.
+    assert "DÖNEN VARLIKLAR".lower() != "Dönen Varlıklar".lower()
+    # Madde numarası soyma korunuyor.
+    assert normalize("16.4.2 Dönem Net Kar/Zararı") == normalize("DÖNEM NET KAR/ZARARI")
+    # Farklı kalemler BİRLEŞMEMELİ: katlama yalnızca yazım farkını siler.
+    assert normalize("Dönen Varlıklar") != normalize("Duran Varlıklar")
+
+    # ...ve ÇIKARIM da başlık yazımını tanımalı. Asıl kusur buradaydı.
+    class _BaslikTablo(SahteTablo):
+        pass
+
+    tablo_baslik = SahteTablo(
+        [
+            {"FINANCIAL_ITEM_NAME_TR": "Hasılat", "2024/6": 10.0},
+            {"FINANCIAL_ITEM_NAME_TR": "Dönen Varlıklar", "2024/6": 7.0},
+            {"FINANCIAL_ITEM_NAME_TR": "Kısa Vadeli Yükümlülükler", "2024/6": 4.0},
+        ]
+    )
+    kayit = extract(tablo_baslik, "TEST")
+    assert kayit is not None, "başlık yazımlı tablo hiç okunamadı"
+    assert kayit["fields"]["currentAssets"] == [7.0], kayit["fields"]["currentAssets"]
+    assert kayit["fields"]["currentLiabilities"] == [4.0], kayit["fields"]["currentLiabilities"]
 
     # ÜRETİM TANISI. Yayındaki veriyle ölçtüm: üç alan 561 sembolün hiçbirinde
     # yok ve ikisi ürüne doğrudan yansıyor ("Nakde dönüşüm" hep boş, "Cari
@@ -1049,15 +1119,31 @@ def pending_symbols(
     """
     fails = failures or {}
     yok = nostatement or set()
+    if force_all:
+        # EN ESKİ TAZELENEN ÖNCE. Sıra giriş sırası olduğu sürece zorlamalı
+        # tazeleme YAKINSAMIYORDU: bütçe 559 sembolün yarısına yetiyor ve her
+        # tur aynı baştan başlıyor, yani listenin kuyruğu hiçbir zaman
+        # tazelenmiyor. Üreticide yapılan bir düzeltme (ör. kalem adı
+        # eşleşmesi) mevcut verinin yarısına hiç ulaşamazdı.
+        #
+        # Dosya mtime'ı kullanılamıyor: gh-pages klonu bütün dosyalara aynı
+        # damgayı veriyor. Kaydın KENDİ `fetched` damgası kullanılıyor; damgası
+        # olmayan eski kayıtlar 0 sayılıp öne geçiyor, yani ilk tur onları
+        # alıyor ve sonraki turlar kaldığı yerden devam ediyor.
+        def damga(sembol: str) -> float:
+            path = out_dir / f"{sembol}.json"
+            try:
+                return float(json.loads(path.read_text(encoding="utf-8")).get("fetched") or 0)
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                return 0.0
+
+        return sorted(symbols, key=damga)
     return [
         s
         for s in symbols
-        if force_all
-        or (
-            not (out_dir / f"{s}.json").exists()
-            and fails.get(s, 0) < MAX_ATTEMPTS
-            and s not in yok
-        )
+        if not (out_dir / f"{s}.json").exists()
+        and fails.get(s, 0) < MAX_ATTEMPTS
+        and s not in yok
     ]
 
 
