@@ -144,7 +144,56 @@ def main() -> int:
     (pack / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
 
     # Finansallar: oran hesabına giren kalemler, sembole göre tutarlı.
-    periods = ["2023/12", "2024/6", "2024/12", "2025/6"]
+    #
+    # ÖRNEK VERİ GERÇEĞE BENZEMEK ZORUNDA. Burada dört ALTI AYLIK dönem
+    # vardı; yayındaki BIST verisinde ise sembol başına 34'e varan ÇEYREKLİK
+    # dönem var. Fark kozmetik değil, kusur gizliyordu: dört kısa etiket her
+    # düzene sığdığı için "2025/12" gibi uzun etiketlerin ızgara kolonunu
+    # genişletip çubuklardan kaydırdığı ve paneli taşırdığı ölçülemiyordu —
+    # kusur ancak gerçek veriyle çalışınca görüldü.
+    #
+    # İkinci uyum: kaynak AKIŞ kalemlerini yıl başından bugüne KÜMÜLATİF
+    # veriyor. Örnek veri kümülatif olmadığı sürece `quarterlySeries`in
+    # arındırma adımı uçtan uca yolda hiç çalışmıyordu.
+    YIL_SAYISI = 5
+    CEYREK = (3, 6, 9, 12)
+    periods = [f"{2021 + y}/{c}" for y in range(YIL_SAYISI) for c in CEYREK]
+    N = len(periods)
+    # Mevsimsellik: toplamı tam 4,0 — yıllık toplam bozulmadan çubuklar
+    # birbirinden ayrışıyor. Düz seride "mevsimsellik kayboldu" kusuru
+    # görünmez olurdu.
+    MEVSIM = (0.85, 0.95, 1.05, 1.15)
+
+    def yil_carpani(y: int) -> float:
+        """Son yıl 1,1 — eski serinin son değeriyle AYNI, TTM'ler kaymasın."""
+        return 0.7 + 0.1 * y
+
+    def akis(yillik: float) -> list[float]:
+        """Yıl başından bugüne kümülatif akış serisi (kaynakla aynı biçim)."""
+        out: list[float] = []
+        for y in range(YIL_SAYISI):
+            toplam = 0.0
+            for q in range(4):
+                toplam += yillik * yil_carpani(y) / 4 * MEVSIM[q]
+                out.append(round(toplam, 1))
+        return out
+
+    def akis_sabit(yillik: float) -> list[float]:
+        """Yıldan yıla değişmeyen akış — son 12 ayın toplamı `yillik`."""
+        out: list[float] = []
+        for _ in range(YIL_SAYISI):
+            toplam = 0.0
+            for q in range(4):
+                toplam += yillik / 4 * MEVSIM[q]
+                out.append(round(toplam, 1))
+        return out
+
+    def stok(son: float, bas_oran: float = 1.0) -> list[float]:
+        """Bilanço kalemi: o ANIN fotoğrafı, kümülatif değil."""
+        if N == 1:
+            return [round(son, 1)]
+        return [round(son * (bas_oran + (1 - bas_oran) * i / (N - 1)), 1) for i in range(N)]
+
     snapshot = {
         "version": 1,
         "generated": int(time.time()),
@@ -157,21 +206,25 @@ def main() -> int:
         revenue = rnd.uniform(500, 5000)
         margin = rnd.uniform(-0.05, 0.25)
         equity = revenue * rnd.uniform(0.4, 1.5)
+        # Akış kalemleri kümülatif, bilanço kalemleri anlık. Son 12 ayın
+        # toplamları eski serinin son değerleriyle AYNI kalacak biçimde
+        # ölçeklendi: anlık görüntü (snapshot) değişmesin, yalnızca dönem
+        # dizisi gerçeğe benzesin.
         fields = {
-            "revenue": [round(revenue * (0.8 + 0.1 * i), 1) for i in range(4)],
-            "netIncome": [round(revenue * margin * (0.8 + 0.1 * i), 1) for i in range(4)],
-            "equity": [round(equity * (0.9 + 0.05 * i), 1) for i in range(4)],
-            "assets": [round(equity * 2.4, 1)] * 4,
-            "operatingCashFlow": [round(revenue * margin * 1.2, 1)] * 4,
-            "grossProfit": [round(revenue * 0.3, 1)] * 4,
-            "currentAssets": [round(equity * 0.8, 1)] * 4,
-            "currentLiabilities": [round(equity * 0.5, 1)] * 4,
-            "longLiabilities": [round(equity * 0.7, 1)] * 4,
-            "paidCapital": [round(revenue * 0.1, 1)] * 4,
-            "inventory": [round(equity * 0.2, 1)] * 4,
-            "cash": [round(equity * 0.15, 1)] * 4,
-            "operatingProfit": [round(revenue * margin * 1.4, 1)] * 4,
-            "capex": [None] * 4,
+            "revenue": akis(revenue),
+            "netIncome": akis(revenue * margin),
+            "equity": stok(equity * 1.05, 0.9 / 1.05),
+            "assets": [round(equity * 2.4, 1)] * N,
+            "operatingCashFlow": akis_sabit(revenue * margin * 1.2),
+            "grossProfit": akis_sabit(revenue * 0.3),
+            "currentAssets": [round(equity * 0.8, 1)] * N,
+            "currentLiabilities": [round(equity * 0.5, 1)] * N,
+            "longLiabilities": [round(equity * 0.7, 1)] * N,
+            "paidCapital": [round(revenue * 0.1, 1)] * N,
+            "inventory": [round(equity * 0.2, 1)] * N,
+            "cash": [round(equity * 0.15, 1)] * N,
+            "operatingProfit": akis_sabit(revenue * margin * 1.4),
+            "capex": [None] * N,
         }
         kayit = {"symbol": s, "periods": periods, "fields": fields, "missing": ["capex"]}
         (fund / f"{s}.json").write_text(json.dumps(kayit, separators=(",", ":")), encoding="utf-8")
@@ -179,6 +232,8 @@ def main() -> int:
         # hesaplıyor (anlık görüntüde yalnızca son TTM var). Üretilmezse o
         # ölçütler yerelde ve uçtan uca testlerde sessizce boş kalır.
         hepsi["symbols"][s] = kayit
+        # Son dönem 4. çeyrek olduğu için KÜMÜLATİF değer = yılın toplamı =
+        # son 12 ay. Seri Q4'te bitmeseydi bu eşitlik bozulurdu.
         snapshot["symbols"][s] = {
             "period": periods[-1],
             "revenueTtm": fields["revenue"][-1],

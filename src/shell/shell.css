@@ -1837,7 +1837,14 @@
 .barseries__labels {
   grid-column: 2;
   display: grid;
-  grid-template-columns: repeat(var(--n, 1), 1fr);
+  /* `minmax(0, 1fr)` — `1fr` tek başına `minmax(auto, 1fr)` demek ve uzun bir
+     etiket ("2025/12") kendi kolonunu genişletiyordu: ölçüldü, sekiz kolonun
+     ikisi 45,7 px, altısı 38,7 px oluyor, etiketler çubuk merkezlerinden
+     KAYIYOR ve satır 289 px kaba 338 px sığmaya çalışıp taşıyordu.
+     Ölçülen katkı: 338 → 300 px. Kalan 11 px'i aşağıdaki `overflow` kapatıyor;
+     ikisi de gerekli ve ikisi de e2e testiyle korunuyor (geri alındığında
+     test kırılıyor — ayrı ayrı denendi). */
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
   text-align: center;
   gap: 2px;
   margin-top: var(--sp-1);
@@ -1845,6 +1852,13 @@
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
+.barseries__labels > span {
+  /* Kolonundan taşan etiket komşusunun üstüne biniyordu. Ölçülen katkı:
+     300 → 289 px (kabın tam genişliği). */
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* `display: none` DEĞİL: gizlenen etiket kolonunu bırakırsa kalanlar kayar. */
 .barseries__labels .is-hidden {
   visibility: hidden;
 }

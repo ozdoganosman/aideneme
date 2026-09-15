@@ -8,6 +8,7 @@ import {
   karne,
   qualityScore,
   quarterlySeries,
+  donemKisa,
   reportStep,
   type Ratios,
 } from '../../core/fundamentals/metrics';
@@ -225,12 +226,23 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
   const kolonlar = useMemo(() => {
     if (!fin) return null;
     const limit = adet === 'hepsi' ? undefined : Number(adet);
+    // Eksen etiketi kısaltılırken adım TABLONUN TAMAMINDAN okunuyor; kesilmiş
+    // listeden ("2026/6" tek başına) çeyreklik mi altı aylık mı anlaşılmaz.
+    const adim = reportStep(fin.periods);
     const dizi = KOLONLAR.map(({ field, label }) => {
-      if (taban === 'ceyrek') return { field, label, ...quarterlySeries(fin, field, limit) };
-      const { labels, values } = annualSeries(fin, field);
-      return limit && labels.length > limit
-        ? { field, label, labels: labels.slice(-limit), values: values.slice(-limit) }
-        : { field, label, labels, values };
+      const { labels, values } =
+        taban === 'ceyrek'
+          ? quarterlySeries(fin, field, limit)
+          : (() => {
+              const y = annualSeries(fin, field);
+              return limit && y.labels.length > limit
+                ? { labels: y.labels.slice(-limit), values: y.values.slice(-limit) }
+                : y;
+            })();
+      // Yıllık taban zaten çıplak yıl döndürüyor; kısaltma yalnızca dönemsel
+      // tabanda iş yapıyor ve tanımadığı biçimi olduğu gibi bırakıyor.
+      const kisa = taban === 'ceyrek' ? labels.map((l) => donemKisa(l, adim)) : labels;
+      return { field, label, labels, values, kisa };
     });
     return dizi[0].labels.length > 0 ? dizi : null;
   }, [fin, taban, adet]);
@@ -589,7 +601,12 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
             {kolonlar.map((k) => (
               <div key={k.field} className="fin__serie">
                 <span className="fin__serie-label">{k.label}</span>
-                <BarSeries labels={k.labels} values={k.values} label={`${symbol} ${k.label}`} />
+                <BarSeries
+                  labels={k.labels}
+                  kisaLabels={k.kisa}
+                  values={k.values}
+                  label={`${symbol} ${k.label}`}
+                />
               </div>
             ))}
           </div>

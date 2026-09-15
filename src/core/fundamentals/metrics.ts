@@ -82,6 +82,32 @@ export function reportStep(periods: string[]): number {
 }
 
 /**
+ * Dönem etiketinin EKSEN biçimi: "2025/12" → "25Ç4".
+ *
+ * Neden ayrı bir biçim: gerçek veride ölçüldü — dört kolon panelinde sekiz
+ * dönem, panel başına 256 piksel demek; "2025/12" tek başına 39 piksel ve
+ * sekiz etiket 338 piksele çıkıp panelin DIŞINA, yanındaki grafiğin üstüne
+ * taşıyordu. Kısa biçim aynı bilgiyi ~26 pikselde veriyor.
+ *
+ * Adım DIŞARIDAN geliyor, etiketten türetilmiyor: tek dönem gösterildiğinde
+ * ("2026/6") etiketin kendisinden çeyreklik mi altı aylık mı olduğu
+ * ANLAŞILMAZ; tablonun tamamına bakan `reportStep` bunu biliyor.
+ *
+ * Tanınmayan biçim olduğu gibi dönüyor — uydurma bir etiket, yanlış bir
+ * dönem okutmaktan iyidir değil.
+ */
+export function donemKisa(period: string, adim: number): string {
+  const [yil, ay] = period.split('/');
+  const ayNo = Number(ay);
+  if (!/^\d{4}$/.test(yil ?? '') || !Number.isFinite(ayNo) || ayNo <= 0) return period;
+  const yy = yil.slice(2);
+  if (adim === 3 && ayNo % 3 === 0) return `${yy}Ç${ayNo / 3}`;
+  if (adim === 6 && ayNo % 6 === 0) return `${yy}Y${ayNo / 6}`;
+  if (adim === 12) return yil;
+  return period;
+}
+
+/**
  * Dönemsel seri — akış kalemlerinde kümülatif fark alınır.
  *
  * Kaynak "2026/6" satırında yılın İLK ALTI AYINI veriyor, ikinci çeyreği

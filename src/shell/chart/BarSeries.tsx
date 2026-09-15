@@ -4,6 +4,13 @@ import { trCompact, trPct } from '../../ui';
 interface Props {
   labels: string[];
   values: (number | null)[];
+  /**
+   * Eksende yazılacak KISA etiketler (örn. "25Ç4"). Verilmezse `labels`
+   * kullanılır. İpucu ve ekran okuyucu tablosu HER ZAMAN tam etiketi
+   * gösteriyor: kısaltma ekseni okunur kılmak için, bilgiyi eksiltmek için
+   * değil.
+   */
+  kisaLabels?: string[];
   label: string;
   height?: number;
 }
@@ -23,7 +30,7 @@ interface Props {
  * Değeri OLMAYAN dönem çubuk çizmiyor ve boş bırakılıyor: eksik veriyi sıfır
  * saymak, olmayan bir çöküş gösterirdi.
  */
-export function BarSeries({ labels, values, label, height = 150 }: Props) {
+export function BarSeries({ labels, values, kisaLabels, label, height = 150 }: Props) {
   const clipId = useId();
   const kap = useRef<HTMLDivElement>(null);
   const [uzerinde, setUzerinde] = useState<number | null>(null);
@@ -74,6 +81,12 @@ export function BarSeries({ labels, values, label, height = 150 }: Props) {
     const i = Math.floor(((e.clientX - kutu.left) / kutu.width) * n);
     setUzerinde(i >= 0 && i < n ? i : null);
   };
+
+  const eksen = kisaLabels && kisaLabels.length === n ? kisaLabels : labels;
+
+  // Kaç dönemde bir etiket yazılacağı. Ölçüldü: panel başına 250–290 piksel
+  // ve kısa etiket ~26 piksel — sekizden fazla etiket üst üste biniyor.
+  const etiketAdim = Math.max(1, Math.ceil(n / 8));
 
   const secili = uzerinde !== null && Number.isFinite(values[uzerinde] as number) ? uzerinde : null;
   const seciliDegisim = secili === null ? null : degisim(secili);
@@ -159,11 +172,17 @@ export function BarSeries({ labels, values, label, height = 150 }: Props) {
         ) : null}
       </div>
       {/* Izgara: etiket sayısı kadar eşit kolon. `space-between` ile ilk ve son
-          etiket kenarlara yapışıp çubuk MERKEZLERİNDEN kayıyordu. */}
+          etiket kenarlara yapışıp çubuk MERKEZLERİNDEN kayıyordu.
+
+          SEYRELTME son dönemden geriye doğru: kullanıcı önce en son döneme
+          bakıyor, bu yüzden her zaman O yazılı. Baştan saymak (i % 2 === 1)
+          ÇİFT sayıda dönemde son çubuğu etiketsiz bırakıyordu — on dönemde
+          gizlenenler 1,3,5,7,9 ve dokuzuncu indis sonuncusu. Ayrıca eşik tek
+          bir sayıya sabitti; yirmi dönemde de on etiket yazılıyordu. */}
       <figcaption className="barseries__labels" aria-hidden="true" style={{ ['--n' as string]: n }}>
         {labels.map((l, i) => (
-          <span key={l} className={n > 8 && i % 2 === 1 ? 'is-hidden' : undefined}>
-            {l}
+          <span key={l} className={(n - 1 - i) % etiketAdim === 0 ? undefined : 'is-hidden'}>
+            {eksen[i]}
           </span>
         ))}
       </figcaption>

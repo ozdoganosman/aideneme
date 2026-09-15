@@ -80,3 +80,78 @@ test.describe('Sembol Masası — grafik yüksekliği', () => {
     expect(acik, 'açık panel fiyatı ezmemeli').toBeGreaterThan(0.6);
   });
 });
+
+/**
+ * Finansal kolon grafiğinin YATAY düzeni.
+ *
+ * Gerçek BIST verisiyle (THYAO, 8 çeyrek) ölçülen kusur — örnek veride
+ * görünmüyordu çünkü orada dönem etiketleri kısaydı:
+ *
+ * 1. `grid-template-columns: repeat(n, 1fr)` aslında `minmax(auto, 1fr)`
+ *    demek. "2025/12" gibi uzun bir etiket kendi kolonunu genişletiyordu:
+ *    sekiz kolonun ikisi 45,7 px, altısı 38,7 px oluyordu. Yani etiketler
+ *    çubuk MERKEZLERİNDEN kayıyordu — grafik yanlış okunuyordu.
+ * 2. Etiket satırı 256 px'lik kaba 338 px sığmaya çalışıp panelin dışına,
+ *    yanındaki grafiğin üstüne taşıyordu.
+ *
+ * Birim testi bunu yakalayamaz: ızgara kolon genişliği bir DÜZEN sonucudur,
+ * jsdom hesaplamaz.
+ */
+test.describe('Finansallar — kolon grafiği etiketleri', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('etiketler panele sığıyor ve çubuklarla hizalı', async ({ page }) => {
+    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+    await page.getByRole('tab', { name: /finansal/i }).first().click();
+    await page.waitForSelector('.barseries', { timeout: 30_000 });
+
+    const paneller = await page.evaluate(() =>
+      [...document.querySelectorAll('.barseries')].map((fig) => {
+        const satir = fig.querySelector('.barseries__labels') as HTMLElement;
+        const kap = fig.querySelector('.barseries__kap') as HTMLElement;
+        const genislikler = getComputedStyle(satir)
+          .gridTemplateColumns.split(' ')
+          .map((x) => parseFloat(x))
+          .filter((x) => Number.isFinite(x));
+        return {
+          satirGenislik: satir.clientWidth,
+          satirIcerik: satir.scrollWidth,
+          figIcerik: (fig as HTMLElement).scrollWidth,
+          figGenislik: (fig as HTMLElement).clientWidth,
+          kapGenislik: kap.clientWidth,
+          genislikler,
+          // Kırpılan etiket: kolonuna sığmayan metin `overflow: hidden`
+          // yüzünden TAŞMIYOR ama yarısı kesiliyor — "2025/12" yerine
+          // "2025/" okunuyor. Düzen ölçümü bunu yakalamaz, bu yakalar.
+          kirpilan: [...satir.children]
+            .filter((c) => !c.classList.contains('is-hidden'))
+            .filter((c) => c.scrollWidth > c.clientWidth + 1)
+            .map((c) => (c as HTMLElement).innerText),
+        };
+      }),
+    );
+
+    expect(paneller.length, 'kolon grafiği çizilmemiş').toBeGreaterThan(0);
+
+    for (const p of paneller) {
+      // Taşma: satırın içeriği kabından geniş olamaz (1 px yuvarlama payı).
+      expect(p.satirIcerik, 'etiket satırı kabını taşıyor').toBeLessThanOrEqual(
+        p.satirGenislik + 1,
+      );
+      expect(p.figIcerik, 'kolon grafiği panelini taşıyor').toBeLessThanOrEqual(
+        p.figGenislik + 1,
+      );
+      // Hizalama: çubuklar EŞİT aralıklı çiziliyor, kolonlar da eşit olmalı.
+      // Alt piksel yuvarlaması için 1 px tolerans.
+      const enDar = Math.min(...p.genislikler);
+      const enGenis = Math.max(...p.genislikler);
+      expect(enGenis - enDar, 'ızgara kolonları eşit değil — etiketler çubuktan kayar').toBeLessThanOrEqual(1);
+      // Etiket satırı grafik kabıyla aynı genişlikte: ikisi aynı ızgara
+      // sütununda, kayarlarsa hizalama yine bozulur.
+      expect(Math.abs(p.satirGenislik - p.kapGenislik)).toBeLessThanOrEqual(1);
+      // Okunabilirlik: görünür etiketlerin hiçbiri kırpılmıyor.
+      expect(p.kirpilan, `kırpılan etiket: ${p.kirpilan.join(', ')}`).toEqual([]);
+    }
+  });
+});

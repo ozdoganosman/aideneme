@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   annualSeries,
   computeRatios,
+  donemKisa,
   growth,
   latest,
   percentileRank,
@@ -322,5 +323,33 @@ describe('quarterlySeries', () => {
     const out = quarterlySeries(fin, 'revenue', 2);
     expect(out.labels).toEqual(['2024/9', '2024/12']);
     expect(out.values).toEqual([170, 180]);
+  });
+});
+
+describe('donemKisa', () => {
+  it('çeyreklik dönemi yıl+çeyrek olarak kısaltır', () => {
+    expect(donemKisa('2025/3', 3)).toBe('25Ç1');
+    expect(donemKisa('2025/12', 3)).toBe('25Ç4');
+  });
+
+  it('altı aylık ve yıllık tabanların kendi biçimi var', () => {
+    expect(donemKisa('2025/6', 6)).toBe('25Y1');
+    expect(donemKisa('2025/12', 6)).toBe('25Y2');
+    expect(donemKisa('2025/12', 12)).toBe('2025');
+  });
+
+  // Adımın DIŞARIDAN gelmesinin sebebi: aynı etiket, tabana göre farklı
+  // dönem demek. "2026/6" çeyreklik tabanda 2. çeyrek, altı aylıkta 1. yarı.
+  it('aynı etiket tabana göre farklı okunur', () => {
+    expect(donemKisa('2026/6', 3)).toBe('26Ç2');
+    expect(donemKisa('2026/6', 6)).toBe('26Y1');
+  });
+
+  // Uydurmuyor: adıma uymayan ay ya da bozuk biçim olduğu gibi kalıyor.
+  it('tanımadığı biçimi değiştirmeden döndürür', () => {
+    expect(donemKisa('2025/5', 3)).toBe('2025/5');
+    expect(donemKisa('2025', 3)).toBe('2025');
+    expect(donemKisa('bozuk/3', 3)).toBe('bozuk/3');
+    expect(donemKisa('2025/0', 3)).toBe('2025/0');
   });
 });
