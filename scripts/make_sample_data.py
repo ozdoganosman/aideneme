@@ -28,13 +28,20 @@ import json
 import math
 import random
 import sys
+import zlib
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # Bayt düzeni TEK KAYNAKTAN geliyor: burada yeniden yazmak, üretici ile örnek
 # veri arasında sessizce ayrışabilecek ikinci bir format tanımı demek olurdu.
-from pack_data import VERSION as PACK_VERSION, encode_bundle, encode_series, short_hash  # noqa: E402
+from pack_data import (  # noqa: E402
+    VERSION as PACK_VERSION,
+    encode_bundle,
+    encode_series,
+    endeks_kumesi,
+    short_hash,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 SECTORS = [
@@ -42,6 +49,20 @@ SECTORS = [
     "Enerji", "Kimya", "Ulaştırma", "Teknoloji", "İnşaat",
 ]
 
+
+
+def tohum(s: str) -> int:
+    """
+    Sembolden KARARLI tohum.
+
+    `hash()` KULLANILMAZ: CPython'da string hash'i süreç başına rastgele
+    tuzlanır (PYTHONHASHSEED). Ölçüldü — `hash("X001") & 0xFFFF` üç ayrı
+    süreçte 35214 / 26483 / 35268 döndü. Yani örnek veri her üretimde
+    BAŞKAYDI: uçtan uca testler her koşuda farklı fiyat serisiyle çalışıyor,
+    bir tarama kuralı bir koşuda sonuç veriyor ötekinde vermiyordu. "Ara
+    sıra kırılan test" tam olarak buydu; kusur testte değil, veridedir.
+    """
+    return zlib.crc32(s.encode("utf-8")) & 0xFFFF
 
 def synth(seed: int, bars: int, start_day: int) -> list[tuple[int, float, float, float, float, float]]:
     """Geometrik Brownian hareketi + hafif momentum rejimi."""
@@ -109,9 +130,13 @@ def main() -> int:
     pack.mkdir(parents=True, exist_ok=True)
     fund.mkdir(parents=True, exist_ok=True)
 
-    symbols = [f"X{i:03d}" for i in range(args.symbols)]
+    # Örnek evrene GERÇEK bir endeks sembolü de giriyor (XU100). Sebep: yayında
+    # 48 endeks serisi hisselerin arasında duruyordu ve tarayıcıda işlem değeri
+    # 0 olan, alınamayacak satırlar olarak görünüyordu. Eleme artık var; örnek
+    # veride hiç endeks olmazsa o eleme uçtan uca testte HİÇ çalışmaz.
+    symbols = [f"X{i:03d}" for i in range(args.symbols)] + ["XU100"]
     start_day = 19000 - args.bars
-    series = {s: synth(hash(s) & 0xFFFF, args.bars, start_day) for s in symbols}
+    series = {s: synth(tohum(s), args.bars, start_day) for s in symbols}
 
     manifest = {
         "version": PACK_VERSION,
@@ -120,6 +145,7 @@ def main() -> int:
         "symbols": {},
     }
 
+    endeksler = endeks_kumesi(args.market)
     for s in symbols:
         rows = series[s]
         payload = encode_series(rows)
@@ -132,8 +158,13 @@ def main() -> int:
             "b": len(payload),
             "h": short_hash(payload),
         }
+        if s.upper() in endeksler:
+            manifest["symbols"][s]["e"] = 1
 
-    bundle = encode_bundle(series, args.bundle_bars)
+    # Paket = tarama evreni; endeksler dışarıda (pack_data ile aynı sözleşme).
+    bundle = encode_bundle(
+        {k: v for k, v in series.items() if k.upper() not in endeksler}, args.bundle_bars
+    )
     (pack / "latest-250.bin").write_bytes(bundle)
     manifest["bundle"] = {
         "file": "latest-250.bin",
@@ -142,6 +173,8 @@ def main() -> int:
         "hash": short_hash(bundle),
     }
     (pack / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
+
+    hisseler_temel = [s for s in symbols if s.upper() not in endeks_kumesi(args.market)]
 
     # Finansallar: oran hesabına giren kalemler, sembole göre tutarlı.
     #
@@ -201,8 +234,11 @@ def main() -> int:
         "symbols": {},
     }
     hepsi = {"version": 1, "generated": snapshot["generated"], "symbols": {}}
-    for s in symbols:
-        rnd = random.Random(hash(s) & 0xFFFF)
+    # ENDEKSİN BİLANÇOSU YOKTUR. Yayında bu ayrım `tablosuz.json` ile yapılıyor
+    # ("eksik veri" ile "böyle bir tablo yok" farklı şeyler); örnek veride her
+    # sembole tablo üretmek o ayrımı görünmez kılıyordu.
+    for s in hisseler_temel:
+        rnd = random.Random(tohum(s))
         revenue = rnd.uniform(500, 5000)
         margin = rnd.uniform(-0.05, 0.25)
         equity = revenue * rnd.uniform(0.4, 1.5)
@@ -252,6 +288,13 @@ def main() -> int:
         }
     (fund / "snapshot.json").write_text(json.dumps(snapshot, separators=(",", ":")), encoding="utf-8")
     (fund / "hepsi.json").write_text(json.dumps(hepsi, separators=(",", ":")), encoding="utf-8")
+    # "Tablosu olmayan" listesi: arayüz bunu "veri eksik" değil "bu aracın
+    # bilançosu yok" diye okuyor. Yayındaki dosyanın karşılığı.
+    tablosuz = sorted(set(symbols) - set(hisseler_temel))
+    (fund / "tablosuz.json").write_text(
+        json.dumps({"version": 1, "symbols": tablosuz}, separators=(",", ":")),
+        encoding="utf-8",
+    )
 
     # Kur serisi: döviz bazlı getiri ekranının sınanabilmesi için. Gerçek kur
     # DEĞİL — kaynağı "Sentetik (yerel)" yazar ve seri, fiyat serisiyle aynı
@@ -283,8 +326,11 @@ def main() -> int:
 
     # Sektörler: birkaç sembol KASITLI olarak sınıflandırılmamış bırakılır ki
     # "Sınıflandırılmamış" satırı ve kapsama oranı gerçekten sınanabilsin.
+    # Endeksin sektörü YOKTUR: XU100'e "Kimya" demek uydurma bir sınıflandırma
+    # olurdu ve sektör para akışını da kirletirdi.
     rnd = random.Random(7)
-    mapping = {s: rnd.choice(SECTORS) for s in symbols if rnd.random() > 0.1}
+    hisseler = [s for s in symbols if s.upper() not in endeksler]
+    mapping = {s: rnd.choice(SECTORS) for s in hisseler if rnd.random() > 0.1}
     (base / "sectors.json").write_text(
         json.dumps({"source": "Sentetik (yerel)", "generated": int(time.time()), "of": mapping},
                    ensure_ascii=False, separators=(",", ":")),

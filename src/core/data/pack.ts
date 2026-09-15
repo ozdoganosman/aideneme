@@ -226,6 +226,15 @@ export interface ManifestEntry {
   b: number;
   /** İçerik hash'i — önbellek anahtarı + cache-busting. */
   h: string;
+  /**
+   * 1 ise bu sembol bir ENDEKS (XU100, XBANK, …), hisse değil.
+   *
+   * Manifest'te duruyor ki grafikte açılabilsin ve portföy ona göre
+   * kıyaslanabilsin; ama tarama paketinde (`bundle`) yok — hisse tarayan
+   * ekranların evreni paketten geliyor. İsteğe bağlı: eski manifest'lerde
+   * alan yok ve bu bir kusur değil, o sürümde eleme yapılmıyordu.
+   */
+  e?: number;
 }
 
 export interface Manifest {

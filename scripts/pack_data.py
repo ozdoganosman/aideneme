@@ -35,6 +35,35 @@ SERIES_HEADER = 32
 BUNDLE_HEADER = 24
 DAY = 86400
 
+# BIST endeks serileri (XU100, XBANK, BISTTLREF, …) sembol listesinde AYRI
+# tutuluyor. Neden önemli: bunlar hisse DEĞİL. Tarayıcıda, radarda, nabızda
+# ve strateji taramasında hisselerin arasında görünürlerse:
+#   - "hisse ara" sonucuna işlem değeri 0 olan, alınamayacak satırlar girer
+#     (gerçek veride ölçüldü: XFINK satırı işlem değeri 0, F/K "—"),
+#   - sektör para akışı ve strateji sıralaması 48 fazla seriyle hesaplanır.
+# Eski arayüz bunları zaten eliyordu; yeni kabuk bu eleği kaybetmişti.
+#
+# Ön ek TAHMİNİ ("X ile başlayanlar") kullanılmıyor: sembol listesinin kendi
+# `indices` alanı var ve tahmin, ileride X ile başlayan bir hisse çıkarsa
+# sessizce yanlış olurdu.
+SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
+
+
+def endeks_kumesi(market_name: str) -> set[str]:
+    """Piyasanın endeks sembolleri. Liste yoksa BOŞ küme — eleme yapılmaz."""
+    if market_name != "bist" or not SYMBOLS_FILE.exists():
+        return set()
+    try:
+        data = json.loads(SYMBOLS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    return {
+        i["name"].upper()
+        for i in data.get("indices", [])
+        if isinstance(i, dict) and isinstance(i.get("name"), str)
+    }
+
+
 # Sembol dosyası olmayan yardımcı JSON'lar.
 META_FILES = {
     "symbols.json", "quotes.json", "names.json", "spark.json",
@@ -192,6 +221,7 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
         "symbols": {},
     }
     series: dict[str, list[tuple]] = {}
+    endeksler = endeks_kumesi(market_dir.name)
     skipped = 0
 
     for path in files:
@@ -213,12 +243,27 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
             "b": len(payload),
             "h": short_hash(payload),
         }
+        # Endeks İŞARETLENİYOR ama manifest'ten SİLİNMİYOR: XU100'ü grafikte
+        # açmak ve portföyü ona göre kıyaslamak hâlâ mümkün olmalı. Silinen
+        # tek şey paket üyeliği, yani "hisse tara" evreni.
+        if symbol.upper() in endeksler:
+            manifest["symbols"][symbol]["e"] = 1
 
     if not series:
         print(f"[pack] {market_dir.name}: geçerli seri yok")
         return None
 
-    bundle = encode_bundle(series, bundle_bars)
+    # Paket = TARAMA EVRENİ. Endeksler dışarıda: hisse tarayan ekranlar
+    # (tarayıcı, radar, nabız, strateji sıralaması) evrenini buradan alıyor.
+    paket_serileri = {k: v for k, v in series.items() if k.upper() not in endeksler}
+    elenen = len(series) - len(paket_serileri)
+    if not paket_serileri:
+        # Elemeden sonra hiç hisse kalmadıysa liste yanlıştır; boş paket
+        # yayımlamak tüm tarama ekranlarını sessizce boşaltırdı.
+        print(f"[pack] {market_dir.name}: UYARI — eleme sonrası hisse kalmadı, eleme yok sayıldı")
+        paket_serileri = series
+        elenen = 0
+    bundle = encode_bundle(paket_serileri, bundle_bars)
     bundle_name = f"latest-{bundle_bars}.bin"
     (out / bundle_name).write_bytes(bundle)
     manifest["bundle"] = {
@@ -236,7 +281,8 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
     packed = sum(s["b"] for s in manifest["symbols"].values())
     print(
         f"[pack] {market_dir.name}: {len(series)} sembol"
-        f"{f' ({skipped} boş atlandı)' if skipped else ''} · "
+        f"{f' ({skipped} boş atlandı)' if skipped else ''}"
+        f"{f' · paket {len(paket_serileri)} hisse, {elenen} endeks hariç' if elenen else ''} · "
         f"{src_bytes / 1e6:.1f} MB JSON → {packed / 1e6:.1f} MB bin "
         f"({src_bytes / max(packed, 1):.1f}×) + paket {len(bundle) / 1e6:.1f} MB"
     )
@@ -309,7 +355,50 @@ def self_test(bundle_bars: int = 8) -> None:
                 else:
                     assert math.isnan(close), f"{symbol} {day}: boşluk NaN olmalı"
 
+        endeks_self_test(bundle_bars)
         print("[pack] self-test tamam")
+
+
+def endeks_self_test(bundle_bars: int) -> None:
+    """
+    Endeks eleme sözleşmesi: manifest'te KALIR, pakette KALMAZ.
+
+    Ayrı bir dizin, çünkü sembol listesini geçici olarak değiştirmek gerekiyor
+    ve asıl self-test'in verisini kirletmemeli.
+    """
+    global SYMBOLS_FILE
+    with tempfile.TemporaryDirectory() as tmp:
+        kok = Path(tmp)
+        market = kok / "bist"
+        market.mkdir()
+        for symbol in ("AAA", "XU100"):
+            recs = [
+                {"t": (20000 + i) * DAY, "o": 10.0, "h": 11.0, "l": 9.0, "c": 10.5, "v": 100}
+                for i in range(12)
+            ]
+            (market / f"{symbol}.json").write_text(json.dumps({"data": recs}), encoding="utf-8")
+
+        liste = kok / "semboller.json"
+        liste.write_text(
+            json.dumps({"stocks": [{"name": "AAA"}], "indices": [{"name": "XU100"}]}),
+            encoding="utf-8",
+        )
+        onceki, SYMBOLS_FILE = SYMBOLS_FILE, liste
+        try:
+            manifest = pack_market(market, bundle_bars, verify=False)
+        finally:
+            SYMBOLS_FILE = onceki
+
+        assert manifest is not None
+        # Manifest'te DURUYOR — XU100 grafikte açılabilmeli.
+        assert set(manifest["symbols"]) == {"AAA", "XU100"}, manifest["symbols"].keys()
+        assert manifest["symbols"]["XU100"].get("e") == 1
+        assert "e" not in manifest["symbols"]["AAA"]
+        # Pakette YOK — tarama evreni yalnızca hisseler.
+        names, _, _ = decode_bundle((market / "pack" / manifest["bundle"]["file"]).read_bytes())
+        assert names == ["AAA"], names
+        # Seri dosyası yine de yazılıyor.
+        assert (market / "pack" / "XU100.bin").exists()
 
 
 def decode_bundle(buf: bytes):

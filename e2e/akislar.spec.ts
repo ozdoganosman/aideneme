@@ -186,11 +186,18 @@ test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor
   // URL yüzde kodlu gelir; okunabilirlik iddiası çözülmüş haliyle sınanır.
   expect(decodeURIComponent(shared)).toContain('f=1|');
 
+  // Sonuç kümesinin BOŞ olup olmaması bu testin iddiası değil: iddia, aynı
+  // bağlantının aynı DURUMU verdiği. Tabloyu koşulsuz beklemek testi örnek
+  // veriye bağlıyordu — sektörde ölçütlere uyan hisse kalmadığında tablo hiç
+  // çizilmiyor ve test, ilgisiz bir sebeple kırılıyordu.
+  const tabloVar = (await page.locator('.ui-vtable').count()) > 0;
+
   const other = await page.context().newPage();
   await other.goto(shared, { waitUntil: 'networkidle' });
-  await expect(other.locator('.ui-vtable')).toBeVisible();
   await expect(other.getByLabel('Bankacılık')).toBeChecked();
   await expect(other.locator('.screener__status .ui-badge').first()).toHaveText(count);
+  // Aynı sonuç, aynı yüzey: birinde tablo varsa ötekinde de olmalı.
+  await expect(other.locator('.ui-vtable')).toHaveCount(tabloVar ? 1 : 0);
   await other.close();
 });
 
@@ -366,4 +373,31 @@ test('sektör rotasyonu → tarayıcı → karne filtresi → stratejiler', asyn
   expect(plan, 'indirme boyutu Türkçe ondalıkla yazılmalı').toMatch(/\d+,\d+ MB/);
 
   expect(hatalar, 'akış sırasında sayfa hatası').toEqual([]);
+});
+
+/**
+ * Endeksler hisse DEĞİLDİR.
+ *
+ * Gerçek veride ölçüldü: yayındaki 655 serinin 48'i endeks (XU100, XBANK,
+ * BISTTLREF, …) ve tarayıcıda hisselerin arasında duruyordu — XFINK satırı
+ * işlem değeri 0, F/K "—" ile listeleniyordu. "Hisse ara" sonucuna alınamayan
+ * satırlar giriyor, sektör para akışı ve strateji sıralaması 48 fazla seriyle
+ * hesaplanıyordu. Eski arayüz bunları zaten eliyordu; yeni kabuk eleği
+ * kaybetmişti.
+ *
+ * Eleme PAKETTE yapılıyor (tarama evreni), manifest'te değil: XU100 grafikte
+ * hâlâ açılabilmeli.
+ */
+test('endeksler taramada yok ama grafikte açılabiliyor', async ({ page }) => {
+  await open(page, 'v=tarayici');
+  await expect(page.locator('.ui-vtable')).toBeVisible();
+
+  // Tarama evreni: örnek veride 60 hisse + 1 endeks var, tarayıcı 60 görmeli.
+  const durum = await page.locator('.screener__status').first().innerText();
+  expect(durum).toContain('60 sembol');
+  expect(durum).not.toContain('61 sembol');
+
+  // Sembol masası manifest'ten okuyor: endeks orada DURUYOR.
+  await open(page, 'v=sembol&s=XU100');
+  await expect(page.locator('.chart-host canvas').first()).toBeVisible();
 });
