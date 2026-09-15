@@ -310,3 +310,58 @@ describe('Stratejiler — sektör kapsamı', () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * Tek cümlelik cevap.
+ *
+ * Ekranın başlığı "hangi strateji gerçekten çalışıyor?" ama cevabı 27 satırlık
+ * tablodan çıkarmak okuyucuya bırakılmıştı.
+ */
+describe('Stratejiler — sonuç cümlesi', () => {
+  /** Cümle kalın parçalar içeriyor (<b>): sorgu ÖĞEDEN yapılıyor, metinden değil. */
+  async function ozetMetni(): Promise<string> {
+    const el = await waitFor(() => {
+      const x = document.querySelector('.rank__ozet');
+      expect(x).not.toBeNull();
+      return x!;
+    });
+    return el.textContent ?? '';
+  }
+
+  it('anlamlı sonuç varsa kaç tane olduğunu ve en iyisini söylüyor', async () => {
+    render(<Strategies state={STATE} push={push} />);
+    const metin = await ozetMetni();
+    // Bu sahte veride çoğu strateji her sembolde yeniyor.
+    expect(metin).toMatch(/tanesi/);
+    expect(metin).toMatch(/düzeltilmiş p=/);
+  });
+
+  // ASIL TEST: kazanan YOKKEN kazanan ilan edilmemeli. Çoklu test
+  // düzeltmesinin bütün amacı bu.
+  it('anlamlı sonuç yoksa kazanan İLAN ETMİYOR', async () => {
+    const results: Record<string, SymbolResult[]> = {};
+    const skipped: Record<string, number> = {};
+    // Her stratejide sembollerin YARISI yeniyor: işaret testi hiçbir şeyi
+    // anlamlı bulmaz, ama medyan fark pozitif olabilir.
+    STRATEGY_PRESETS.forEach((preset) => {
+      results[preset.id] = [...winners(2).slice(0, 2), ...winners(-2).slice(0, 2)];
+      skipped[preset.id] = 0;
+    });
+    rankFn.mockResolvedValue({ results, skipped, symbols: 4, ms: 10 });
+
+    render(<Strategies state={STATE} push={push} />);
+    const metin = await ozetMetni();
+    expect(metin).toMatch(/hiçbiri/);
+    expect(metin).toMatch(/şansla da çıkar/);
+  });
+
+  // Tek sembolde p-değeri hesaplanmıyor (tek gözlem); "anlamlı" hükmü
+  // kurulamaz, o yüzden cümle de kurulmamalı.
+  it('tek sembol kapsamında özet göstermiyor', async () => {
+    const user = userEvent.setup();
+    render(<Strategies state={STATE} push={push} />);
+    await waitFor(() => expect(document.querySelector('.rank__ozet')).not.toBeNull());
+    await user.selectOptions(screen.getByLabelText('Kapsam'), 'symbol');
+    await waitFor(() => expect(document.querySelector('.rank__ozet')).toBeNull());
+  });
+});

@@ -2170,3 +2170,22 @@
   font-size: var(--fs-sm);
   cursor: pointer;
 }
+
+/* ── Stratejiler: tek cümlelik cevap ──────────────────────────────────── */
+/* Tablo 27 satır ve iki p-değeri gösteriyordu; ekranın başlığı tek bir soru.
+   Cevap tablodan önce ve düz cümleyle. */
+.rank__ozet {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  font-size: var(--fs-sm);
+}
+.rank__ozet.is-var {
+  border-left-color: var(--up);
+}
+.rank__ozet.is-yok {
+  border-left-color: var(--warn);
+}

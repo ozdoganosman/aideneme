@@ -214,3 +214,45 @@ export function rankStrategies(
     };
   });
 }
+
+/**
+ * Sıralamanın TEK CÜMLELİK cevabı.
+ *
+ * Tablo yirmi yedi satır, altı sütun ve iki farklı p-değeri gösteriyor.
+ * "Hangi strateji gerçekten çalışıyor?" sorusunun cevabı bu tablodan
+ * çıkarılabiliyor ama çıkarmak okuyucunun işine bırakılmıştı — oysa ekranın
+ * başlığı tam olarak o soru.
+ *
+ * Özet HİÇBİR ŞEYİ YUMUŞATMIYOR: anlamlı sonuç yoksa bunu düz söylüyor.
+ * Kazanan varmış gibi "en iyi strateji" diye bir satır göstermek, çoklu test
+ * düzeltmesinin bütün amacını boşa çıkarırdı.
+ */
+export interface RankSummary {
+  /** Düzeltilmiş p-değeriyle al-tut'u yenen strateji sayısı. */
+  anlamli: number;
+  /** Ölçülebilen (hüküm 'ölçülemedi'/'sinyal yok' olmayan) strateji sayısı. */
+  olculen: number;
+  /** Toplam strateji sayısı. */
+  toplam: number;
+  /** En yüksek al-tut farkına sahip ÖLÇÜLEBİLEN satır (varsa). */
+  enIyi: RankRow | null;
+  /** Anlamlı çıkanların en iyisi (varsa) — "kazanan" yalnızca budur. */
+  enIyiAnlamli: RankRow | null;
+}
+
+export function summarizeRank(rows: RankRow[]): RankSummary {
+  const olculebilir = rows.filter((r) => r.verdict !== 'ölçülemedi' && r.verdict !== 'sinyal yok');
+  const anlamlilar = rows.filter((r) => r.verdict === 'anlamlı');
+  const enBuyuk = (list: RankRow[]): RankRow | null =>
+    list.length === 0
+      ? null
+      : list.reduce((a, b) => (b.medianExcessPct > a.medianExcessPct ? b : a));
+
+  return {
+    anlamli: anlamlilar.length,
+    olculen: olculebilir.length,
+    toplam: rows.length,
+    enIyi: enBuyuk(olculebilir),
+    enIyiAnlamli: enBuyuk(anlamlilar),
+  };
+}

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { BacktestMetrics } from '../backtest/metrics';
 import { STRATEGY_PRESETS } from './presets';
-import { holmAdjust, median, rankStrategies, signTest, type SymbolResult } from './rank';
+import {
+  holmAdjust,
+  median,
+  rankStrategies,
+  signTest,
+  summarizeRank,
+  type RankRow,
+  type SymbolResult,
+} from './rank';
 
 function metrics(over: Partial<BacktestMetrics>): BacktestMetrics {
   return {
@@ -147,5 +155,71 @@ describe('strateji sıralaması', () => {
       topSymbols: 3,
     });
     expect(rows[0].best.map((b) => b.excessPct)).toEqual([9, 7, 5]);
+  });
+});
+
+/**
+ * Sıralamanın tek cümlelik özeti.
+ *
+ * Tablo 27 satır ve iki farklı p-değeri gösteriyor; ekranın başlığı ise tek
+ * bir soru. Özet o soruyu cevaplamalı ve hiçbir şeyi yumuşatmamalı.
+ */
+describe('summarizeRank', () => {
+  function satir(over: Partial<RankRow>): RankRow {
+    return {
+      id: 'x',
+      name: 'X',
+      detail: '',
+      premise: '',
+      symbols: 10,
+      withTrades: 10,
+      medianCagrPct: 1,
+      medianExcessPct: 1,
+      medianMaxDDPct: -10,
+      medianSharpe: 0.5,
+      medianTrades: 5,
+      medianExposurePct: 50,
+      beatPct: 50,
+      pValue: 0.5,
+      adjustedP: 1,
+      verdict: 'belirsiz',
+      best: [],
+      excessSpread: [],
+      ...over,
+    };
+  }
+
+  it('anlamlı sonuç yoksa kazanan İLAN ETMİYOR', () => {
+    const ozet = summarizeRank([
+      satir({ id: 'a', medianExcessPct: 3, verdict: 'belirsiz' }),
+      satir({ id: 'b', medianExcessPct: -2, verdict: 'zayıf' }),
+    ]);
+    expect(ozet.anlamli).toBe(0);
+    // En yüksek fark yine bildiriliyor (bilgi), ama "anlamlı" boş.
+    expect(ozet.enIyi?.id).toBe('a');
+    expect(ozet.enIyiAnlamli).toBeNull();
+  });
+
+  it('anlamlı varsa en iyisini ayrı veriyor', () => {
+    const ozet = summarizeRank([
+      satir({ id: 'a', medianExcessPct: 5, verdict: 'belirsiz' }),
+      satir({ id: 'b', medianExcessPct: 4, verdict: 'anlamlı' }),
+      satir({ id: 'c', medianExcessPct: 2, verdict: 'anlamlı' }),
+    ]);
+    expect(ozet.anlamli).toBe(2);
+    expect(ozet.enIyiAnlamli?.id).toBe('b');
+    // En yüksek fark anlamlı OLMAYABİLİR; ikisi ayrı sayıdır.
+    expect(ozet.enIyi?.id).toBe('a');
+  });
+
+  // Ölçülemeyen kural "kaybetti" değildir; paydadan düşer.
+  it('ölçülemeyenler paydaya girmiyor', () => {
+    const ozet = summarizeRank([
+      satir({ verdict: 'ölçülemedi', medianExcessPct: Number.NaN }),
+      satir({ verdict: 'sinyal yok', medianExcessPct: Number.NaN }),
+      satir({ verdict: 'zayıf', medianExcessPct: -1 }),
+    ]);
+    expect(ozet.toplam).toBe(3);
+    expect(ozet.olculen).toBe(1);
   });
 });

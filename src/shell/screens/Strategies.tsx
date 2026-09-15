@@ -19,6 +19,7 @@ import { STRATEGY_PRESETS } from '../../core/strategy/presets';
 import {
   INDEPENDENCE_CAVEAT,
   rankStrategies,
+  summarizeRank,
   type RankRow,
   type SymbolResult,
 } from '../../core/strategy/rank';
@@ -304,6 +305,15 @@ export default function Strategies({ state, push }: Props) {
     }
   }
 
+  /**
+   * Tek cümlelik cevap. Tek sembol kapsamında YOK: orada p-değeri
+   * hesaplanmıyor (tek gözlem) ve "anlamlı" diye bir hüküm kurulamaz.
+   */
+  const ozet = useMemo(
+    () => (rows && scope !== 'symbol' ? summarizeRank(rows) : null),
+    [rows, scope],
+  );
+
   const sorted = useMemo(() => {
     if (!rows) return null;
     return [...rows].sort((a, b) => {
@@ -406,6 +416,43 @@ export default function Strategies({ state, push }: Props) {
                 : `Tüm hazır stratejiler ${symbol} sembolünün tam geçmişinde. Tek gözlem olduğu için p-değeri hesaplanmaz.`}
         {scope !== 'symbol' ? ` ${INDEPENDENCE_CAVEAT}` : ''}
       </p>
+
+      {/*
+        SONUÇ CÜMLESİ. Tablo 27 satır, altı sütun ve iki farklı p-değeri
+        gösteriyordu; ekranın başlığı ise tek bir soru ("hangi strateji
+        gerçekten çalışıyor?") ve cevabı çıkarmak okuyucuya bırakılmıştı.
+
+        Hiçbir şey yumuşatılmıyor: anlamlı sonuç yoksa düz söyleniyor.
+        Kazanan varmış gibi "en iyi strateji" diye bir satır göstermek, çoklu
+        test düzeltmesinin bütün amacını boşa çıkarırdı.
+
+        `role="status"` DEĞİL: ekranda zaten bir canlı bölge var (Announce) ve
+        ikinci bir status bölgesi her hesap sonunda aynı bilgiyi ikinci kez
+        okuturdu. Bu cümle bir duyuru değil, içeriğin kendisi.
+      */}
+      {ozet ? (
+        <p className={`rank__ozet ${ozet.anlamli > 0 ? 'is-var' : 'is-yok'}`}>
+          {ozet.olculen === 0 ? (
+            <>Bu kapsamda hiçbir strateji ölçülemedi; aşağıdaki satırlar nedenini yazıyor.</>
+          ) : ozet.anlamli > 0 ? (
+            <>
+              {ozet.olculen} ölçülebilen stratejinin <b>{ozet.anlamli} tanesi</b> al-tut'u
+              istatistiksel olarak yeniyor (çoklu test düzeltmesinden sonra). En iyisi{' '}
+              <b>{ozet.enIyiAnlamli?.name}</b>: medyan{' '}
+              <b>{trPct(ozet.enIyiAnlamli?.medianExcessPct ?? 0, 1, true)}</b> yıllık fark,
+              düzeltilmiş p={trNum(ozet.enIyiAnlamli?.adjustedP ?? 1, 3)}.
+            </>
+          ) : (
+            <>
+              {ozet.olculen} ölçülebilen stratejinin <b>hiçbiri</b> al-tut'u istatistiksel olarak
+              yenmiyor. En yüksek fark <b>{ozet.enIyi?.name}</b> (
+              {trPct(ozet.enIyi?.medianExcessPct ?? 0, 1, true)}) ama düzeltilmiş p=
+              {trNum(ozet.enIyi?.adjustedP ?? 1, 3)} — bu kadar kombinasyon denendiğinde bu fark
+              şansla da çıkar.
+            </>
+          )}
+        </p>
+      ) : null}
 
       {scope === 'deep' || scope === 'liste' || scope === 'sektor' ? (
         <section className="rank__deep" aria-label="Derin tarama">
