@@ -167,9 +167,9 @@ describe('Finansallar paneli', () => {
    * ÜÇÜNCÜ durum: tablosu yok AMA hisse.
    *
    * Ölçüldü — tablosu gelmeyen 96 sembolün 25'i GERÇEK ŞİRKET (Garanti
-   * Faktoring, QNB Finansal Kiralama, Ray Sigorta, DO & CO…). Çoğu leasing/
-   * faktoring/sigorta: tabloları farklı şablonda ve üretici okuyamıyor.
-   * Onlara "bu araç finansal tablo yayımlamıyor" demek YANLIŞTI.
+   * Faktoring, QNB Finansal Kiralama, Ray Sigorta, DO & CO…). Onlara "bu
+   * araç finansal tablo yayımlamıyor" demek YANLIŞTI — yayımlıyorlar,
+   * kaynak bize vermiyor. Sebebini bilmiyoruz ve iddia etmiyoruz.
    */
   it('tablosuz ama hisse olan sembole "yayımlamıyor" demiyor', async () => {
     snapshotFn.mockResolvedValue(null);
@@ -179,7 +179,7 @@ describe('Finansallar paneli', () => {
     manifestFn.mockResolvedValue({ symbols: { GARFA: { f: 'GARFA.bin' } } });
     render(<FinancialsPanel market="bist" symbol="GARFA" price={10} />);
     await waitFor(() =>
-      expect(screen.getByText('Bu şirketin tablosu kaynaktan alınamadı')).toBeInTheDocument(),
+      expect(screen.getByText('Bu şirketin tablosu kaynakta bulunamadı')).toBeInTheDocument(),
     );
     expect(screen.queryByText('Bu araç finansal tablo yayımlamıyor')).not.toBeInTheDocument();
   });

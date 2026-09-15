@@ -154,7 +154,7 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
    * gelmeyen 96 sembolün 52'si endeks, 19'u fon/sertifika — ama kalan 25'i
    * GERÇEK ŞİRKET (Garanti Faktoring, QNB Finansal Kiralama, Ray Sigorta,
    * DO & CO…). Onlara "bu araç finansal tablo yayımlamıyor" demek düpedüz
-   * yanlıştı; yayımlıyorlar, biz alamadık.
+   * yanlıştı; yayımlıyorlar, kaynak bize vermiyor.
    */
   const [hisseDisi, setHisseDisi] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -296,9 +296,14 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
     // Önce ikisi vardı ve ikincisi YANLIŞ cümle kuruyordu. Ölçtüm: tablosu
     // gelmeyen 96 sembolün 52'si endeks ve 19'u fon/sertifika — ama kalan
     // 25'i GERÇEK ŞİRKET (Garanti Faktoring, QNB Finansal Kiralama, İş
-    // Finansal Kiralama, Ray Sigorta, DO & CO…). Çoğu leasing/faktoring/
-    // sigorta, yani tabloları farklı şablonda. Onlara "bu araç finansal tablo
-    // yayımlamıyor" demek düpedüz yanlıştı.
+    // Finansal Kiralama, Ray Sigorta, DO & CO…). Onlara "bu araç finansal
+    // tablo yayımlamıyor" demek düpedüz yanlıştı.
+    //
+    // SEBEBİNİ BİLMİYORUZ ve uydurmuyoruz. `tablosuz.json` yalnızca şu
+    // durumda yazılıyor: kaynak, isteyebildiğimiz ÜÇ şablonun (XI_29, UFRS,
+    // UFRS_K) hiçbirinde veri döndürmedi. "Tablo geldi ama okuyamadık" AYRI
+    // bir durum ve bu dosyaya girmiyor. Yani mekanizma hakkında
+    // söyleyebileceğimiz tek şey kaynağın vermediği.
     //
     // Ayrım manifest'teki `e` işaretinden: endeks/fon olduğunu BİLDİĞİMİZ
     // semboller orada işaretli. Bilmiyorsak iddia da etmiyoruz.
@@ -317,13 +322,13 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
     ) : noStatement ? (
       <EmptyState
         icon={<Icon name="report" size={28} />}
-        title="Bu şirketin tablosu kaynaktan alınamadı"
+        title="Bu şirketin tablosu kaynakta bulunamadı"
         description={
           <>
-            Şirket finansal tablo yayımlıyor ama kaynağımızdan çekilemedi — leasing, faktoring ve
-            sigorta şirketlerinin tabloları farklı şablonda ve üretici bunları okuyamıyor.{' '}
-            <b>"Tablo yok" değil, "bizde yok"</b>. Fiyat, grafik ve teknik ölçüler diğer sekmelerde
-            çalışmaya devam ediyor.
+            Kaynağımız (İş Yatırım) bu sembol için isteyebildiğimiz üç tablo şablonunun hiçbirinde
+            veri döndürmüyor. Bu bir şirket, yani tablo yayımlıyor;{' '}
+            <b>neden bu uç noktadan gelmediğini bilmiyoruz</b> — "tablo yok" değil, "bizde yok".
+            Fiyat, grafik ve teknik ölçüler diğer sekmelerde çalışmaya devam ediyor.
           </>
         }
       />

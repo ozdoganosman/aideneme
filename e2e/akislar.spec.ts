@@ -519,9 +519,12 @@ test('sektör endeksi → birlikte hareket eden hisseler → stratejiler', async
  * Arayüz önce iki cümle kuruyordu ve ikincisi YANLIŞTI. Ölçüldü: tablosu
  * gelmeyen 96 sembolün 52'si endeks, 19'u fon/sertifika — ama kalan 25'i
  * GERÇEK ŞİRKET (Garanti Faktoring, QNB Finansal Kiralama, Ray Sigorta,
- * DO & CO…). Çoğu leasing/faktoring/sigorta: tabloları farklı şablonda ve
- * üretici okuyamıyor. Onlara "bu araç finansal tablo yayımlamıyor" demek
- * düpedüz yanlıştı — yayımlıyorlar, biz alamadık.
+ * DO & CO…). Onlara "bu araç finansal tablo yayımlamıyor" demek düpedüz
+ * yanlıştı — yayımlıyorlar, kaynak bize vermiyor.
+ *
+ * SEBEBİ BİLİNMİYOR ve uydurulmuyor: `tablosuz.json` yalnızca kaynak ÜÇ
+ * şablonun hiçbirinde veri döndürmediğinde yazılıyor. "Tablo geldi ama
+ * okuyamadık" ayrı bir durum ve o dosyaya girmiyor.
  *
  * Ayrım manifest'teki `e` işaretinden: endeks/fon olduğunu BİLDİĞİMİZ
  * semboller orada işaretli, bilmiyorsak iddia etmiyoruz.
@@ -543,6 +546,6 @@ test('finansal tablo yokluğu: araç mı öyle, veri mi eksik', async ({ page })
 
   await open(page, `v=sembol&s=${tablosuz[0]}`);
   await page.getByRole('tab', { name: /finansal/i }).first().click();
-  await expect(page.getByText('Bu şirketin tablosu kaynaktan alınamadı')).toBeVisible();
+  await expect(page.getByText('Bu şirketin tablosu kaynakta bulunamadı')).toBeVisible();
   await expect(page.getByText('Bu araç finansal tablo yayımlamıyor')).toHaveCount(0);
 });

@@ -252,8 +252,8 @@ def main() -> int:
     (pack / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
 
     # TABLOSUZ AMA GERÇEK ŞİRKET. Yayındaki veride tablosu gelmeyen 96
-    # sembolün 52'si endeks, 19'u fon — ama 25'i gerçek şirket (leasing,
-    # faktoring, sigorta: tabloları farklı şablonda). Arayüz bu ikisine AYRI
+    # sembolün 52'si endeks, 19'u fon — ama 25'i gerçek şirket (Garanti
+    # Faktoring, QNB Finansal Kiralama, Ray Sigorta…). Arayüz bu ikisine AYRI
     # cümle kuruyor; örnek veride böyle bir sembol olmazsa o cümle hiç
     # görünmez ve yanlış olduğu fark edilmez (nitekim aylarca edilmedi).
     TABLOSUZ_HISSE = f"X{args.symbols - 1:03d}"

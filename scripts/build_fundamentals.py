@@ -1206,8 +1206,11 @@ def build_all(
         i += 1
         if not record:
             # "Kaynakta veri yok" kalıcı bir yargı: sembol bir daha hiç
-            # denenmiyor ve arayüz kullanıcıya "bu araç tablo yayımlamıyor"
-            # diyor. Bu yüzden KANIT isteniyor — kütüphane ağ hatasını da
+            # denenmiyor. Arayüz bu listeyi okuyor ama TEK BAŞINA "tablo
+            # yayımlamıyor" demiyor — o cümleyi yalnızca endeks/fon olduğu
+            # AYRICA bilinen semboller için kuruyor. Sebebi: bu listede
+            # Garanti Faktoring gibi gerçek şirketler de var ve onlara "tablo
+            # yayımlamıyor" demek yanlıştı. Bu yüzden KANIT isteniyor — kütüphane ağ hatasını da
             # aynı "veri yok" hatasına çeviriyor (ölçüldü). Aynı turda başka
             # semboller indiyse ağ çalışıyor demektir; hiçbiri inmediyse
             # suçlu büyük olasılıkla ağ ve sembol sıradan bir başarısızlık.
