@@ -553,7 +553,12 @@ export default function SymbolDesk({ state, push }: Props) {
 
       {tab === 'sektor' ? (
         <Suspense fallback={<Skeleton count={4} height="40px" />}>
-          <LazySector market={market} symbol={symbol} onSelect={(next) => push({ s: next })} />
+          <LazySector
+            market={market}
+            symbol={symbol}
+            client={analysis.status === 'ready' ? analysis.client : null}
+            onSelect={(next) => push({ s: next })}
+          />
         </Suspense>
       ) : null}
 

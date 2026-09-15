@@ -40,6 +40,7 @@ from pack_data import (  # noqa: E402
     encode_bundle,
     encode_series,
     endeks_kumesi,
+    hisse_disi,
     short_hash,
 )
 
@@ -165,11 +166,15 @@ def main() -> int:
     # XU100 ana endeks (elenmeyi sınar), diğer üçü SEKTÖR endeksi (sektör
     # endeksi panelini sınar). Üçü de gerçek BIST kodları; sektör paneli
     # kodları tanımasaydı liste boş kalır ve panel hiç sınanmazdı.
+    # GLDTR gerçek bir ETF kodu (adı "GOLDIST - Istanbul Gold ETF"): fon
+    # elemesi ADA bakıyor ve örnek veride hiç fon olmazsa o yol uçtan uca
+    # koşmaz — endekslerde aynı hatayı bir kez yapmıştım.
     symbols = [f"X{i:03d}" for i in range(args.symbols)] + [
         "XU100",
         "XBANK",
         "XGIDA",
         "XKMYA",
+        "GLDTR",
     ]
     # Endeksi TAKİP EDEN hisseler. Sektör eşleşmesi (hangi hisse hangi sektör
     # endeksiyle birlikte hareket ediyor) korelasyon eşiğine bakıyor; tamamen
@@ -192,6 +197,7 @@ def main() -> int:
     }
 
     endeksler = endeks_kumesi(args.market)
+    haric = hisse_disi(args.market)
     for s in symbols:
         rows = series[s]
         payload = encode_series(rows)
@@ -204,12 +210,12 @@ def main() -> int:
             "b": len(payload),
             "h": short_hash(payload),
         }
-        if s.upper() in endeksler:
+        if s.upper() in haric:
             manifest["symbols"][s]["e"] = 1
 
     # Paket = tarama evreni; endeksler dışarıda (pack_data ile aynı sözleşme).
     bundle = encode_bundle(
-        {k: v for k, v in series.items() if k.upper() not in endeksler}, args.bundle_bars
+        {k: v for k, v in series.items() if k.upper() not in haric}, args.bundle_bars
     )
     # Endeks paketi (pack_data ile aynı sözleşme): sektör endeksi ekranı bunu
     # okuyor. Örnek veride üretilmezse o ekran uçtan uca testte hiç çalışmaz.
@@ -234,7 +240,7 @@ def main() -> int:
     }
     (pack / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
 
-    hisseler_temel = [s for s in symbols if s.upper() not in endeks_kumesi(args.market)]
+    hisseler_temel = [s for s in symbols if s.upper() not in hisse_disi(args.market)]
 
     # Finansallar: oran hesabına giren kalemler, sembole göre tutarlı.
     #

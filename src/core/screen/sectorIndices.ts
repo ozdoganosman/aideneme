@@ -229,3 +229,20 @@ export function sektorunHisseleri(
 ): SektorEslesmesi[] {
   return eslesmeler.filter((e) => e.kod === kod);
 }
+
+/**
+ * Eşleşmeleri `SectorMap` biçimine çevirir — akran karşılaştırması gibi
+ * sektör haritası bekleyen yüzeyler bunu olduğu gibi kullanabilsin diye.
+ *
+ * `source` alanı ne olduğunu AÇIKÇA söylüyor: bu resmî bir sınıflandırma
+ * değil, ölçülmüş bir davranış. Kullanan yüzey bunu kullanıcıya da yazmalı;
+ * "sektörü şu" ile "şununla birlikte hareket ediyor" aynı iddia değildir.
+ */
+export function eslesmeHaritasi(
+  eslesmeler: readonly SektorEslesmesi[],
+  generated = 0,
+): { source: string; of: Record<string, string>; generated: number } {
+  const of: Record<string, string> = {};
+  for (const e of eslesmeler) of[e.symbol] = e.ad;
+  return { source: 'Sektör endeksi korelasyonu', of, generated };
+}

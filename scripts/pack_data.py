@@ -49,19 +49,65 @@ DAY = 86400
 SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
 
 
-def endeks_kumesi(market_name: str) -> set[str]:
-    """Piyasanın endeks sembolleri. Liste yoksa BOŞ küme — eleme yapılmaz."""
-    if market_name != "bist" or not SYMBOLS_FILE.exists():
-        return set()
+# Borsa yatırım fonu (ETF) işaretleri — aracın KENDİ resmî adında geçiyor.
+#
+# Neden ada bakılıyor: fonlar sembol listesinde "hisse" olarak duruyor ve ayrı
+# bir alanla işaretlenmiyorlar. Ad, ihraççının tescilli adı; "BYF"/"ETF" orada
+# yazıyorsa bu bir çıkarım değil, okunan bir bilgidir.
+#
+# TESPİT EKSİK VE BUNU BİLEREK YAZIYORUM: adı kısaltılmış bir fon (örn. OPK30,
+# adı "…Katilim 30 Endeksi Hisse Se" diye kesilmiş) yakalanmıyor. Eleme tek
+# yönde hatasız — fon olmayan hiçbir şey elenmiyor — ama tam değil.
+FON_ISARETLERI = ("byf", "etf", "borsa yatir", "borsa yatır", "yatirim fonu", "yatırım fonu")
+
+
+def _sembol_listesi() -> dict:
+    if not SYMBOLS_FILE.exists():
+        return {}
     try:
-        data = json.loads(SYMBOLS_FILE.read_text(encoding="utf-8"))
+        return json.loads(SYMBOLS_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def endeks_kumesi(market_name: str) -> set[str]:
+    """
+    YALNIZCA endeksler. Sektör endeksi paketi bundan üretiliyor; fonlar oraya
+    girmemeli. Liste yoksa BOŞ küme — eleme yapılmaz, uydurma yapılmaz.
+    """
+    if market_name != "bist":
         return set()
     return {
         i["name"].upper()
-        for i in data.get("indices", [])
+        for i in _sembol_listesi().get("indices", [])
         if isinstance(i, dict) and isinstance(i.get("name"), str)
     }
+
+
+def fon_kumesi(market_name: str) -> set[str]:
+    """
+    Adı fon olduğunu söyleyen araçlar (ETF/BYF).
+
+    Endekslerden AYRI tutuluyor, çünkü kanıtları farklı: endeksler ayrı bir
+    listede duruyor (kesin), fonlar yalnızca adlarından anlaşılıyor (eksik).
+    """
+    if market_name != "bist":
+        return set()
+    out: set[str] = set()
+    for h in _sembol_listesi().get("stocks", []):
+        if not isinstance(h, dict):
+            continue
+        ad, kod = h.get("displayName"), h.get("name")
+        if not isinstance(ad, str) or not isinstance(kod, str):
+            continue
+        if any(m in ad.lower() for m in FON_ISARETLERI):
+            out.add(kod.upper())
+    return out
+
+
+def hisse_disi(market_name: str) -> set[str]:
+    """Tarama evrenine GİRMEYECEK her şey: endeks + fon."""
+    return endeks_kumesi(market_name) | fon_kumesi(market_name)
 
 
 # Sembol dosyası olmayan yardımcı JSON'lar.
@@ -222,6 +268,7 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
     }
     series: dict[str, list[tuple]] = {}
     endeksler = endeks_kumesi(market_dir.name)
+    haric = hisse_disi(market_dir.name)
     skipped = 0
 
     for path in files:
@@ -246,7 +293,9 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
         # Endeks İŞARETLENİYOR ama manifest'ten SİLİNMİYOR: XU100'ü grafikte
         # açmak ve portföyü ona göre kıyaslamak hâlâ mümkün olmalı. Silinen
         # tek şey paket üyeliği, yani "hisse tara" evreni.
-        if symbol.upper() in endeksler:
+        # `e` = tarama evreni DIŞI (endeks ya da fon). Manifest'te duruyor:
+        # grafikte açılabilsin, kıyas için kullanılabilsin.
+        if symbol.upper() in haric:
             manifest["symbols"][symbol]["e"] = 1
 
     if not series:
@@ -255,7 +304,7 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
 
     # Paket = TARAMA EVRENİ. Endeksler dışarıda: hisse tarayan ekranlar
     # (tarayıcı, radar, nabız, strateji sıralaması) evrenini buradan alıyor.
-    paket_serileri = {k: v for k, v in series.items() if k.upper() not in endeksler}
+    paket_serileri = {k: v for k, v in series.items() if k.upper() not in haric}
     elenen = len(series) - len(paket_serileri)
     if not paket_serileri:
         # Elemeden sonra hiç hisse kalmadıysa liste yanlıştır; boş paket
@@ -305,7 +354,7 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
     print(
         f"[pack] {market_dir.name}: {len(series)} sembol"
         f"{f' ({skipped} boş atlandı)' if skipped else ''}"
-        f"{f' · paket {len(paket_serileri)} hisse, {elenen} endeks hariç' if elenen else ''} · "
+        f"{f' · paket {len(paket_serileri)} hisse, {elenen} endeks/fon hariç' if elenen else ''} · "
         f"{src_bytes / 1e6:.1f} MB JSON → {packed / 1e6:.1f} MB bin "
         f"({src_bytes / max(packed, 1):.1f}×) + paket {len(bundle) / 1e6:.1f} MB"
     )
@@ -426,6 +475,46 @@ def endeks_self_test(bundle_bars: int) -> None:
         assert manifest["indices"]["symbols"] == 1, manifest["indices"]
         e_adlar, _, _ = decode_bundle((market / "pack" / manifest["indices"]["file"]).read_bytes())
         assert e_adlar == ["XU100"], e_adlar
+
+    fon_self_test()
+
+
+def fon_self_test() -> None:
+    """
+    Fon elemesi: ADINDA fon geçen araç tarama evreninden çıkıyor, ama sektör
+    endeksi paketine de GİRMİYOR (kanıtı farklı, kümesi ayrı).
+    """
+    global SYMBOLS_FILE
+    with tempfile.TemporaryDirectory() as tmp:
+        liste = Path(tmp) / "semboller.json"
+        liste.write_text(
+            json.dumps(
+                {
+                    "stocks": [
+                        {"name": "AAA", "displayName": "Anonim Sirketi"},
+                        {"name": "FON1", "displayName": "Bir Portfoy BIST 30 ETF"},
+                        {"name": "FON2", "displayName": "Baska Portfoy Borsa Yatirim Fonu"},
+                    ],
+                    "indices": [{"name": "XU100"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        onceki, SYMBOLS_FILE = SYMBOLS_FILE, liste
+        try:
+            endeks = endeks_kumesi("bist")
+            fon = fon_kumesi("bist")
+            disi = hisse_disi("bist")
+        finally:
+            SYMBOLS_FILE = onceki
+
+    assert endeks == {"XU100"}, endeks
+    assert fon == {"FON1", "FON2"}, fon
+    assert disi == {"XU100", "FON1", "FON2"}, disi
+    # Şirket adı fon işareti taşımıyorsa ELENMİYOR: eleme tek yönde hatasız.
+    assert "AAA" not in disi
+    # Piyasa BIST değilse eleme YOK — liste BIST'e özel.
+    assert hisse_disi("us") == set()
 
 
 def decode_bundle(buf: bytes):

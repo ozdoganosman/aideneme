@@ -7,6 +7,8 @@ import {
   type PeerRow,
   type SectorMap,
 } from '../../core/screen/sectors';
+import { eslesmeHaritasi } from '../../core/screen/sectorIndices';
+import type { AnalysisClient } from '../../workers/analysisClient';
 import { LineChart } from '../chart/LineChart';
 import { dataClient } from '../../data-client/client';
 import { sectorsClient } from '../../data-client/sectors';
@@ -16,6 +18,13 @@ interface Props {
   market: Market;
   symbol: string;
   onSelect: (symbol: string) => void;
+  /**
+   * Hazır worker istemcisi. Resmî sınıflandırma YOKSA akranlar sektör endeksi
+   * korelasyonundan çıkarılıyor ve o hesap worker'da yapılıyor (599 hisse ×
+   * 23 endeks = 246 ms; ana iş parçacığında zayıf makinede ~1,5 sn donma).
+   * Verilmezse eski davranış: "sınıflandırma yok" der ve durur.
+   */
+  client?: AnalysisClient | null;
 }
 
 const fmtValue = (v: number): string => {
@@ -45,8 +54,10 @@ const DONEM_ADI: Record<number, string> = {
  * makinede boşuna megabayt indirmemek için bu ayrım bilinçli (bkz.
  * docs/plan/performans.md).
  */
-export function SectorPanel({ market, symbol, onSelect }: Props) {
+export function SectorPanel({ market, symbol, onSelect, client }: Props) {
   const [map, setMap] = useState<SectorMap | null>(null);
+  /** Harita korelasyondan mı geldi? Arayüz bunu açıkça yazıyor. */
+  const [korelasyondan, setKorelasyondan] = useState(false);
   const [rows, setRows] = useState<PeerRow[] | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   /**
@@ -71,13 +82,44 @@ export function SectorPanel({ market, symbol, onSelect }: Props) {
     setMap(null);
     setRows(null);
     setStatus('idle');
-    sectorsClient.map(market).then((result) => {
-      if (!cancelled) setMap(result);
-    });
+    setKorelasyondan(false);
+    (async () => {
+      const resmi = await sectorsClient.map(market);
+      if (cancelled) return;
+      if (resmi) {
+        setMap(resmi);
+        return;
+      }
+      // RESMÎ SINIFLANDIRMA YOK. Sektör endeksi korelasyonundan bir harita
+      // çıkarılıyor: "şu sektörle birlikte hareket ediyor" iddiası, "şu
+      // sektöre ait" iddiasından daha zayıf ama ÖLÇÜLMÜŞ bir iddia. Arayüz
+      // farkı yazıyor.
+      if (!client) return;
+      try {
+        // Sembol Masası worker'ı paketsiz kuruluyor (tek sembolle çalışıyor,
+        // zayıf makinede boşuna megabayt indirmesin). Eşleşme hesabı paketi
+        // İSTİYOR — ama bu sekme akranlar için zaten aynı paketi indiriyor,
+        // yani önbellekten geliyor ve ek ağ maliyeti yok.
+        if (!client.isLoaded(market)) {
+          const { buffer } = await dataClient.bundleBuffer(market);
+          if (cancelled) return;
+          await client.load(market, buffer);
+          if (cancelled) return;
+        }
+        const buf = await dataClient.indexBundleBuffer(market);
+        if (cancelled || !buf) return;
+        const { matches } = await client.sectorMatch(market, buf);
+        if (cancelled || matches.length === 0) return;
+        setMap(eslesmeHaritasi(matches));
+        setKorelasyondan(true);
+      } catch {
+        // İsteğe bağlı zenginleştirme: başarısız olursa eski boş durum kalır.
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [market]);
+  }, [market, client]);
 
   useEffect(() => {
     if (status !== 'loading') return;
@@ -210,7 +252,16 @@ export function SectorPanel({ market, symbol, onSelect }: Props) {
     <section className="desk__sector" aria-label="Sektör bağlamı">
       <header>
         <Badge>{sector}</Badge>
-        <span className="desk__muted">{map.source} sınıflandırması</span>
+        <span className="desk__muted">
+          {korelasyondan ? (
+            <>
+              Resmî sınıflandırma yok; akranlar <b>sektör endeksi korelasyonundan</b> çıkarıldı —
+              "aynı sektörde" değil, "birlikte hareket eden" hisseler.
+            </>
+          ) : (
+            `${map.source} sınıflandırması`
+          )}
+        </span>
         {status === 'ready' ? (
           <Select
             label="Dönem"

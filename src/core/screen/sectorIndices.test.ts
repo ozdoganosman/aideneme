@@ -4,6 +4,7 @@ import {
   BIST_SEKTOR_ENDEKSLERI,
   sektorAdi,
   sektorEslesmeleri,
+  eslesmeHaritasi,
   sektorGetirileri,
   sektorOzeti,
   sektorunHisseleri,
@@ -175,5 +176,23 @@ describe('sektorEslesmeleri', () => {
         .sort(),
     ).toEqual(['AAA', 'CCC']);
     expect(sektorunHisseleri(hepsi, 'XGIDA').map((e) => e.symbol)).toEqual(['BBB']);
+  });
+});
+
+describe('eslesmeHaritasi', () => {
+  it('eşleşmeleri sembol → sektör adı haritasına çevirir', () => {
+    const harita = eslesmeHaritasi([
+      { symbol: 'AAA', kod: 'XBANK', ad: 'Banka', korelasyon: 0.9, ortak: 200 },
+      { symbol: 'BBB', kod: 'XGIDA', ad: 'Gıda, İçecek', korelasyon: 0.8, ortak: 200 },
+    ]);
+    expect(harita.of).toEqual({ AAA: 'Banka', BBB: 'Gıda, İçecek' });
+  });
+
+  // Kaynak adı, bunun resmî sınıflandırma OLMADIĞINI söylemeli: haritayı
+  // kullanan yüzey kaynağı ekrana yazıyor.
+  it('kaynağı resmî sınıflandırma diye sunmuyor', () => {
+    const harita = eslesmeHaritasi([]);
+    expect(harita.source).toMatch(/korelasyon/i);
+    expect(harita.of).toEqual({});
   });
 });

@@ -378,7 +378,7 @@ test('sektör rotasyonu → tarayıcı → karne filtresi → stratejiler', asyn
 /**
  * Endeksler hisse DEĞİLDİR.
  *
- * Gerçek veride ölçüldü: yayındaki 655 serinin 48'i endeks (XU100, XBANK,
+ * Gerçek veride ölçüldü: yayındaki 655 serinin 52'si endeks (XU100, XBANK,
  * BISTTLREF, …) ve tarayıcıda hisselerin arasında duruyordu — XFINK satırı
  * işlem değeri 0, F/K "—" ile listeleniyordu. "Hisse ara" sonucuna alınamayan
  * satırlar giriyor, sektör para akışı ve strateji sıralaması 48 fazla seriyle
@@ -388,7 +388,7 @@ test('sektör rotasyonu → tarayıcı → karne filtresi → stratejiler', asyn
  * Eleme PAKETTE yapılıyor (tarama evreni), manifest'te değil: XU100 grafikte
  * hâlâ açılabilmeli.
  */
-test('endeksler taramada yok ama grafikte açılabiliyor', async ({ page }) => {
+test('endeks ve fonlar taramada yok ama grafikte açılabiliyor', async ({ page }) => {
   await open(page, 'v=tarayici');
   await expect(page.locator('.ui-vtable')).toBeVisible();
 
@@ -401,8 +401,9 @@ test('endeksler taramada yok ama grafikte açılabiliyor', async ({ page }) => {
     const hepsi = Object.values(m.symbols);
     return { toplam: hepsi.length, endeks: hepsi.filter((v) => v.e === 1).length };
   });
-  // Örnek veride en az bir endeks OLMALI; yoksa bu test hiçbir şey sınamıyor.
-  expect(sayilar.endeks, 'örnek veride endeks yok — eleme sınanamıyor').toBeGreaterThan(0);
+  // Örnek veride en az bir eleme OLMALI; yoksa bu test hiçbir şey sınamıyor.
+  // Örnek evrende dört endeks (XU100, XBANK, XGIDA, XKMYA) ve bir fon (GLDTR).
+  expect(sayilar.endeks, 'örnek veride elenen sembol yok — eleme sınanamıyor').toBeGreaterThan(4);
 
   const durum = await page.locator('.screener__status').first().innerText();
   const hisse = sayilar.toplam - sayilar.endeks;
@@ -422,6 +423,10 @@ test('endeksler taramada yok ama grafikte açılabiliyor', async ({ page }) => {
   expect(await page.locator('.heatmap').innerText()).not.toContain('XU100');
   expect(await page.locator('.pulse__flows').innerText()).not.toContain('XU100');
   expect(await page.locator('.sektor__tablo').innerText()).not.toContain('XU100');
+  // Fon da hisse değil: adı "GOLDIST - Istanbul Gold ETF" olan GLDTR tarama
+  // evreninde yok. Gerçek veride bu sınıftan sekiz araç elendi ve ikisi
+  // (OPT25, OPX30) banka akranları arasında GÖRÜNÜYORDU.
+  expect(await page.locator('.heatmap').innerText()).not.toContain('GLDTR');
 
   // Sembol masası manifest'ten okuyor: endeks orada DURUYOR.
   await open(page, 'v=sembol&s=XU100');
