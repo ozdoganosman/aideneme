@@ -1,8 +1,10 @@
 import {
   computeRatios,
   growth,
+  karne,
   percentileRank,
   qualityScore,
+  type KarneGrubu,
   type Ratios,
 } from '../fundamentals/metrics';
 import type { Financials, FundamentalsSnapshot } from '../fundamentals/types';
@@ -28,6 +30,9 @@ export type FundamentalMetricId =
   | 'revenueGrowth'
   | 'netIncomeGrowth'
   | 'quality'
+  | 'karneKarlilik'
+  | 'karneBuyume'
+  | 'karneBorc'
   | 'marketCap'
   | 'pePercentile'
   | 'roePercentile';
@@ -108,7 +113,36 @@ export const FUNDAMENTAL_METRIC_DEFS: MetricDef[] = [
     label: 'Kalite skoru',
     unit: 'level',
     decimals: 1,
-    formula: () => 'Piotroski benzeri 9 ölçütün karşılananları (veri eksikse payda küçülür)',
+    formula: () =>
+      'Piotroski benzeri 11 ölçütün karşılananları, 9 üzerinden normalize (veri eksikse payda küçülür)',
+  },
+  // KARNE. Tek bir kalite skoru üç ayrı soruyu birbirine karıştırıyordu:
+  // kârlı ama küçülen bir şirket ile zarar eden ama borcunu azaltan bir şirket
+  // aynı skoru alabilir. Üç başlık ayrı filtrelenebiliyor — "kârlılığı yüksek
+  // VE borçluluğu iyi" gibi bir arama ancak böyle kurulabilir.
+  //
+  // Yüzde olarak veriliyor çünkü ham skor paydası olmadan anlamsız: "2", iki
+  // ölçütten ikisi de olabilir beş ölçütten ikisi de.
+  {
+    id: 'karneKarlilik',
+    label: 'Karne: kârlılık',
+    unit: 'pct',
+    decimals: 0,
+    formula: () => 'Kârlılık ölçütlerinin karşılanma oranı (en az 2 ölçüt değerlendirilebilmişse)',
+  },
+  {
+    id: 'karneBuyume',
+    label: 'Karne: büyüme',
+    unit: 'pct',
+    decimals: 0,
+    formula: () => 'Büyüme ölçütlerinin karşılanma oranı (en az 2 ölçüt değerlendirilebilmişse)',
+  },
+  {
+    id: 'karneBorc',
+    label: 'Karne: borçluluk',
+    unit: 'pct',
+    decimals: 0,
+    formula: () => 'Borçluluk ölçütlerinin karşılanma oranı (en az 2 ölçüt değerlendirilebilmişse)',
   },
   {
     id: 'marketCap',
@@ -162,6 +196,7 @@ export function withFundamentals(rows: ScreenRow[], context: FundamentalContext)
     const fin = financialsOf?.(row.symbol);
     const g = fin ? growth(fin) : null;
     const q = fin ? qualityScore(fin) : null;
+    const k = fin ? karne(fin) : null;
 
     return {
       ...row,
@@ -180,6 +215,9 @@ export function withFundamentals(rows: ScreenRow[], context: FundamentalContext)
         netIncomeGrowth: num(g?.netIncomeYoyPct),
         // Kalite: 9 üzerinden normalize edilir ki farklı paydalar kıyaslanabilsin.
         quality: q && q.available > 0 ? (q.score / q.available) * 9 : NaN,
+        karneKarlilik: karneOran(k, 'kârlılık'),
+        karneBuyume: karneOran(k, 'büyüme'),
+        karneBorc: karneOran(k, 'borçluluk'),
         pePercentile: num(percentileRank(peUniverse, r?.pe ?? null, true)),
         roePercentile: num(percentileRank(roeUniverse, r?.roePct ?? null)),
       },
@@ -189,4 +227,18 @@ export function withFundamentals(rows: ScreenRow[], context: FundamentalContext)
 
 function num(value: number | null | undefined): number {
   return value === null || value === undefined ? NaN : value;
+}
+
+/**
+ * Karne başlığının karşılanma oranı (%).
+ *
+ * TEK ölçütle oran üretilmiyor: "%100" ile "%0" arasında ara değer olmayan
+ * bir sütun sıralamada gürültüdür ve filtre kurarken yanıltır. Değer
+ * üretilemediğinde NaN dönüyor — hiçbir kural NaN'ı geçirmiyor, yani sembol
+ * "eşiği geçti" sayılmıyor.
+ */
+function karneOran(basliklar: ReturnType<typeof karne> | null, grup: KarneGrubu): number {
+  const b = basliklar?.find((x) => x.grup === grup);
+  if (!b || b.available < 2) return NaN;
+  return (b.score / b.available) * 100;
 }

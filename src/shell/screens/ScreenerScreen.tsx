@@ -29,6 +29,7 @@ import {
   type ScreenRow,
 } from '../../core/screen/metrics';
 import { FUNDAMENTAL_METRIC_DEFS, withFundamentals } from '../../core/screen/fundamentalMetrics';
+import type { Financials } from '../../core/fundamentals/types';
 import { sectorNames, withSectors, type SectorMap } from '../../core/screen/sectors';
 import {
   decodeScreen,
@@ -80,6 +81,27 @@ const SNAPSHOT_KEY = 'screener.snapshots.v1';
 
 /** Teknik + temel metrikler tek listede: filtre motoru ikisini ayırt etmiyor. */
 const ALL_METRIC_DEFS: MetricDef[] = [...METRIC_DEFS, ...FUNDAMENTAL_METRIC_DEFS];
+
+/**
+ * Dönem DİZİSİ isteyen metrikler.
+ *
+ * Anlık görüntü yalnızca son TTM değerlerini taşıyor; büyüme ve karne ise
+ * geçen yılın aynı dönemini ve önceki yıl sonu bilançosunu ister. Tarama
+ * ekranı bu diziyi hiç yüklemiyordu: aşağıdaki altı metrik HER eşikte sıfır
+ * sonuç veriyordu — filtre ekranda duruyor, verisi hiç gelmiyordu. (Aynı
+ * sınıftan bir kusur "Cari oran"da bir kez daha görülmüştü.)
+ *
+ * Tam tablo dosyası 3,1 MB; bu yüzden ancak bu metriklerden biri kural ya da
+ * sıralama olarak KULLANILDIĞINDA indiriliyor.
+ */
+const TABLO_ISTEYEN = new Set([
+  'quality',
+  'karneKarlilik',
+  'karneBuyume',
+  'karneBorc',
+  'revenueGrowth',
+  'netIncomeGrowth',
+]);
 const METRIC_BY_ID = new Map(ALL_METRIC_DEFS.map((d) => [d.id, d]));
 
 function loadSaved(): SavedScreen[] {
@@ -182,6 +204,46 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
     };
   }, [market]);
 
+  /**
+   * Tam tablolar — YALNIZCA gerektiğinde.
+   *
+   * Kullanılmayan bir metrik için 3,1 MB indirmek, ekranın tamamının ilk
+   * yük bütçesinden büyük olurdu. Kural ya da sıralama bu metriklerden birine
+   * dokunduğu anda iniyor ve tarayıcıda önbelleğe giriyor.
+   */
+  const tabloGerekli = useMemo(
+    () => rules.some((r) => TABLO_ISTEYEN.has(r.metric)) || TABLO_ISTEYEN.has(sort.key),
+    [rules, sort.key],
+  );
+  const [tablolar, setTablolar] = useState<Map<string, Financials> | null>(null);
+  const [tabloDurumu, setTabloDurumu] = useState<'yok' | 'yukleniyor' | 'hazir' | 'hata'>('yok');
+
+  useEffect(() => {
+    setTablolar(null);
+    setTabloDurumu('yok');
+  }, [market]);
+
+  useEffect(() => {
+    if (!tabloGerekli || tablolar) return;
+    let cancelled = false;
+    setTabloDurumu('yukleniyor');
+    fundamentalsClient
+      .allFinancials(market)
+      .then((m) => {
+        if (cancelled) return;
+        setTablolar(m);
+        // `null` da bir cevaptır: dosya yayımlanmamış. Sessizce "sonuç yok"
+        // demek yerine ekran bunu söylüyor.
+        setTabloDurumu(m ? 'hazir' : 'hata');
+      })
+      .catch(() => {
+        if (!cancelled) setTabloDurumu('hata');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tabloGerekli, tablolar, market]);
+
   // Sektör sınıflandırması — yoksa sektör filtresi hiç görünmez.
   const firstSectorLoad = useRef(true);
   useEffect(() => {
@@ -274,9 +336,14 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
 
   /** Teknik satırlara temel metrikleri ekle (fiyat teknik satırdan gelir). */
   const enriched = useMemo(() => {
-    const withFin = snapshot ? withFundamentals(rows, { snapshot }) : rows;
+    const withFin = snapshot
+      ? withFundamentals(rows, {
+          snapshot,
+          financialsOf: tablolar ? (symbol) => tablolar.get(symbol) : undefined,
+        })
+      : rows;
     return withSectors(withFin, sectors);
-  }, [rows, snapshot, sectors]);
+  }, [rows, snapshot, sectors, tablolar]);
 
   const filtered = useMemo(
     () =>
@@ -900,6 +967,30 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
                 <EmptyState
                   title="Sektör sınıflandırması yükleniyor"
                   description="Seçili sektör filtresi, sınıflandırma dosyası indikten sonra uygulanacak."
+                />
+              ) : /*
+                   Tablo dosyası inmediyse sebep BU: "kaynak bu kalemi
+                   yayımlamıyor" demek yanlış olurdu (yayımlıyor, dosya
+                   gelmedi) ve kullanıcıyı kuralı kaldırmaya iterdi. Bu
+                   yüzden veri-yok mesajının ÖNÜNE geçiyor.
+                 */
+              tabloGerekli && tabloDurumu !== 'hazir' ? (
+                <EmptyState
+                  title={
+                    tabloDurumu === 'yukleniyor'
+                      ? 'Finansal tablolar yükleniyor'
+                      : 'Finansal tablolar yüklenemedi'
+                  }
+                  description={
+                    tabloDurumu === 'yukleniyor'
+                      ? 'Büyüme ve karne ölçütleri tüm sembollerin dönem tablolarını ister; dosya iniyor. Sonuçlar birkaç saniye içinde gelecek.'
+                      : "Büyüme ve karne ölçütleri hesaplanamıyor: tablo dosyası (fundamentals/hepsi.json) yayımlanmamış olabilir. Kaynak CI'da scripts/build_fundamentals.py ile üretiliyor. Bu kuralları kaldırırsanız teknik ölçütler çalışmaya devam eder."
+                  }
+                  action={
+                    <Button size="sm" onClick={() => setRules([])}>
+                      Kuralları temizle
+                    </Button>
+                  }
                 />
               ) : dataless.length > 0 ? (
                 <EmptyState

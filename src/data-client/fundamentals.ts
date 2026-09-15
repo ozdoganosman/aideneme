@@ -11,6 +11,7 @@ import { dataBase, type Market } from './markets';
 export class FundamentalsClient {
   private readonly snapshots = new Map<Market, Promise<FundamentalsSnapshot | null>>();
   private readonly files = new Map<string, Promise<Financials | null>>();
+  private readonly all = new Map<Market, Promise<Map<string, Financials> | null>>();
   private readonly noStatement = new Map<Market, Promise<ReadonlySet<string>>>();
 
   constructor(private readonly fetchImpl: typeof fetch = (...args) => fetch(...args)) {}
@@ -83,6 +84,44 @@ export class FundamentalsClient {
     });
 
     this.files.set(key, promise);
+    return promise;
+  }
+
+  /**
+   * TÜM sembollerin tam tablosu, tek istekte.
+   *
+   * Neden var: tarama ekranı büyüme ve karne metriklerini hesaplayabilmek için
+   * dönem DİZİSİNE ihtiyaç duyuyor; anlık görüntüde yalnızca son TTM var.
+   * Sembol başına dosya çekmek 562 istek demekti. Bu dosya ölçüldü: ham
+   * 3,1 MB, ve yalnızca bu metrikler kullanıldığında indiriliyor.
+   *
+   * Dosya yoksa (eski bir veri yayını) `null` döner ve ekran ilgili
+   * metrikleri "veri yok" olarak gösterir — sayı uydurulmaz.
+   */
+  allFinancials(market: Market, signal?: AbortSignal): Promise<Map<string, Financials> | null> {
+    const existing = this.all.get(market);
+    if (existing) return existing;
+
+    const promise = (async () => {
+      const res = await this.fetchImpl(`${dataBase()}${market}/fundamentals/hepsi.json`, {
+        signal,
+      });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { symbols?: Record<string, Financials> };
+      const symbols = json?.symbols;
+      if (!symbols || typeof symbols !== 'object') return null;
+      const out = new Map<string, Financials>();
+      for (const [symbol, fin] of Object.entries(symbols)) {
+        // Bozuk kayıt sessizce ATLANIR ama dosyanın tamamı çöpe atılmaz.
+        if (fin && Array.isArray(fin.periods) && fin.fields) out.set(symbol, fin);
+      }
+      return out.size > 0 ? out : null;
+    })().catch(() => {
+      this.all.delete(market);
+      return null;
+    });
+
+    this.all.set(market, promise);
     return promise;
   }
 }

@@ -151,6 +151,7 @@ def main() -> int:
         "note": "Sentetik (yerel) veri; yayım tarihi bilgisi yok, backtest girdisi yapılmamalıdır.",
         "symbols": {},
     }
+    hepsi = {"version": 1, "generated": snapshot["generated"], "symbols": {}}
     for s in symbols:
         rnd = random.Random(hash(s) & 0xFFFF)
         revenue = rnd.uniform(500, 5000)
@@ -172,11 +173,12 @@ def main() -> int:
             "operatingProfit": [round(revenue * margin * 1.4, 1)] * 4,
             "capex": [None] * 4,
         }
-        (fund / f"{s}.json").write_text(
-            json.dumps({"symbol": s, "periods": periods, "fields": fields, "missing": ["capex"]},
-                       separators=(",", ":")),
-            encoding="utf-8",
-        )
+        kayit = {"symbol": s, "periods": periods, "fields": fields, "missing": ["capex"]}
+        (fund / f"{s}.json").write_text(json.dumps(kayit, separators=(",", ":")), encoding="utf-8")
+        # Birleşik dosya: tarama ekranı büyüme ve karne ölçütlerini bundan
+        # hesaplıyor (anlık görüntüde yalnızca son TTM var). Üretilmezse o
+        # ölçütler yerelde ve uçtan uca testlerde sessizce boş kalır.
+        hepsi["symbols"][s] = kayit
         snapshot["symbols"][s] = {
             "period": periods[-1],
             "revenueTtm": fields["revenue"][-1],
@@ -194,6 +196,7 @@ def main() -> int:
             "cash": fields["cash"][-1],
         }
     (fund / "snapshot.json").write_text(json.dumps(snapshot, separators=(",", ":")), encoding="utf-8")
+    (fund / "hepsi.json").write_text(json.dumps(hepsi, separators=(",", ":")), encoding="utf-8")
 
     # Kur serisi: döviz bazlı getiri ekranının sınanabilmesi için. Gerçek kur
     # DEĞİL — kaynağı "Sentetik (yerel)" yazar ve seri, fiyat serisiyle aynı

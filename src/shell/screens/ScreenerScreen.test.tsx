@@ -20,6 +20,17 @@ vi.mock('../../data-client/sectors', () => ({
   sectorsClient: { map: (...a: unknown[]) => sectorsFn(...a) },
 }));
 
+const snapshotFn = vi.fn();
+const allFinancialsFn = vi.fn();
+const noStatementFn = vi.fn();
+vi.mock('../../data-client/fundamentals', () => ({
+  fundamentalsClient: {
+    snapshot: (...a: unknown[]) => snapshotFn(...a),
+    allFinancials: (...a: unknown[]) => allFinancialsFn(...a),
+    noStatementSymbols: (...a: unknown[]) => noStatementFn(...a),
+  },
+}));
+
 const manifestFn = vi.fn();
 vi.mock('../../data-client/client', () => ({
   dataClient: { manifest: (...a: unknown[]) => manifestFn(...a) },
@@ -58,6 +69,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sectorsFn.mockResolvedValue(null);
+  snapshotFn.mockResolvedValue(null);
+  allFinancialsFn.mockResolvedValue(null);
+  noStatementFn.mockResolvedValue(new Set<string>());
   manifestFn.mockResolvedValue({
     version: 1,
     market: 'bist',
@@ -175,6 +189,9 @@ describe('Tarayıcı — sektör filtresi', () => {
 
   it('sınıflandırma yoksa sektör filtresi hiç görünmez', async () => {
     sectorsFn.mockResolvedValue(null);
+    snapshotFn.mockResolvedValue(null);
+    allFinancialsFn.mockResolvedValue(null);
+    noStatementFn.mockResolvedValue(new Set<string>());
     render(<ScreenerScreen state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
     expect(screen.queryByRole('group', { name: /Sektör/ })).toBeNull();
@@ -232,6 +249,9 @@ describe('Tarayıcı — sektör sütunu', () => {
 
   it('sınıflandırma yoksa sütun hiç eklenmez', async () => {
     sectorsFn.mockResolvedValue(null);
+    snapshotFn.mockResolvedValue(null);
+    allFinancialsFn.mockResolvedValue(null);
+    noStatementFn.mockResolvedValue(new Set<string>());
     render(<ScreenerScreen state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
     expect(within(screen.getByRole('table')).queryByText('Sektör')).toBeNull();
@@ -570,5 +590,106 @@ describe('Tarayıcı — hesap çökerse', () => {
     render(<ScreenerScreen state={STATE} push={push} />);
     expect(await screen.findByText('Tarama hesaplanamadı')).toBeInTheDocument();
     expect(screen.getByText(/worker çöktü/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Tam tabloya dayanan ölçütler (büyüme, kalite, karne).
+ *
+ * ÖLÇÜLDÜ: tarama ekranı `withFundamentals`'ı tam tabloyu VERMEDEN çağırıyordu.
+ * "Kalite skoru", "Ciro büyümesi" ve "Kâr büyümesi" filtreleri bu yüzden her
+ * eşikte sıfır sonuç veriyordu — filtre ekrandaydı, verisi hiç gelmiyordu.
+ */
+describe('Tarayıcı — tam tablo isteyen ölçütler', () => {
+  function kod(metric: string) {
+    return encodeScreen({
+      rules: [{ metric, op: 'gt', a: 0 }],
+      params: DEFAULT_SCREEN_PARAMS,
+      sectors: [],
+      sort: { metric: 'chg21', dir: 'desc' },
+    });
+  }
+
+  const SNAPSHOT = {
+    version: 1,
+    generated: 1,
+    note: 'test',
+    symbols: {
+      AAA: {
+        period: '2024/12',
+        revenueTtm: 1200,
+        grossProfitTtm: 360,
+        operatingProfitTtm: 240,
+        netIncomeTtm: 200,
+        operatingCashFlowTtm: 220,
+        equity: 1000,
+        assets: 2000,
+        paidCapital: 100,
+        currentAssets: 500,
+        currentLiabilities: 250,
+        longLiabilities: 250,
+        inventory: 100,
+        cash: 150,
+      },
+    },
+  };
+
+  const FIN = {
+    symbol: 'AAA',
+    periods: ['2022/12', '2023/12', '2024/12'],
+    fields: {
+      revenue: [800, 1000, 1200],
+      grossProfit: [200, 280, 360],
+      operatingProfit: [150, 200, 240],
+      netIncome: [100, 150, 200],
+      assets: [1500, 1800, 2000],
+      equity: [700, 850, 1000],
+      paidCapital: [100, 100, 100],
+      currentAssets: [400, 450, 500],
+      currentLiabilities: [300, 280, 250],
+      longLiabilities: [400, 350, 250],
+      inventory: [90, 95, 100],
+      cash: [100, 120, 150],
+      operatingCashFlow: [110, 160, 220],
+      capex: [null, null, null],
+    },
+    missing: [],
+  };
+
+  it('ciro büyümesi kuralı artık sonuç veriyor', async () => {
+    snapshotFn.mockResolvedValue(SNAPSHOT);
+    allFinancialsFn.mockResolvedValue(new Map([['AAA', FIN]]));
+    render(<ScreenerScreen state={{ ...STATE, f: kod('revenueGrowth') }} push={push} />);
+
+    // Düzeltmeden önce burası "Kriterlere uyan sembol yok" diyordu.
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(allFinancialsFn).toHaveBeenCalledWith('bist');
+  });
+
+  it('karne başlığı kuralı çalışıyor', async () => {
+    snapshotFn.mockResolvedValue(SNAPSHOT);
+    allFinancialsFn.mockResolvedValue(new Map([['AAA', FIN]]));
+    render(<ScreenerScreen state={{ ...STATE, f: kod('karneBuyume') }} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+  });
+
+  // 3,1 MB'lık dosya kullanılmayan bir metrik için inmemeli.
+  it('tabloya dayanmayan kurallarda dosya İNMİYOR', async () => {
+    snapshotFn.mockResolvedValue(SNAPSHOT);
+    render(<ScreenerScreen state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
+    expect(allFinancialsFn).not.toHaveBeenCalled();
+  });
+
+  // Dosya yayımlanmamışsa sessizce "sonuç yok" demek YANLIŞ: kullanıcı
+  // kuralını gevşetmeye çalışır, oysa sorun eşikte değil.
+  it('tablo dosyası yoksa nedenini söylüyor', async () => {
+    snapshotFn.mockResolvedValue(SNAPSHOT);
+    allFinancialsFn.mockResolvedValue(null);
+    render(<ScreenerScreen state={{ ...STATE, f: kod('quality') }} push={push} />);
+    await waitFor(() =>
+      expect(screen.getByText('Finansal tablolar yüklenemedi')).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/hepsi\.json/)).toBeInTheDocument();
   });
 });

@@ -488,6 +488,18 @@ def self_test() -> None:
         found = [r["symbol"] for r in records_on_disk(out)]
         assert found == ["AAA"], f"anlık görüntü diskten kurulmalı: {found}"
 
+        # Birleşik tablo dosyası. Tarayıcıda "Kalite skoru", "Ciro büyümesi"
+        # ve "Kâr büyümesi" filtreleri HER eşikte sıfır sonuç veriyordu:
+        # bu metrikler dönem DİZİSİ ister, anlık görüntüde ise yalnızca son
+        # TTM var ve tarayıcı sembol başına tabloyu hiç yüklemiyordu.
+        write_all(records_on_disk(out), out)
+        hepsi = json.loads((out / ALL_FILE).read_text(encoding="utf-8"))
+        assert hepsi["symbols"]["AAA"]["periods"] == ["2024/6"], "tam tablo taşınmalı"
+        assert "BOZUK" not in hepsi["symbols"], "bozuk dosya sessizce atlanmalı"
+        # Kendi çıktısını yeniden okumamalı: hepsi.json bir sembol kaydı değil.
+        write_all(records_on_disk(out), out)
+        assert set(json.loads((out / ALL_FILE).read_text(encoding="utf-8"))["symbols"]) == {"AAA"}
+
     # KESİLME tatbikatı. CI adımı zaman sınırında öldürülüyor; döngüden SONRA
     # gelen bir yazma hiç çalışmıyor. İlk düzeltmemde anlık görüntüyü diskten
     # kurdum ama yine döngünün ARDINA koymuştum — kusur aynen sürdü ve
@@ -888,6 +900,7 @@ def self_test() -> None:
 
 
 SNAPSHOT_FILE = "snapshot.json"
+ALL_FILE = "hepsi.json"
 FAILURES_FILE = "failures.json"
 # Kaynağın "bu sembolde finansal tablo yok" dediği semboller. Arayüz bunu
 # "henüz indirilmedi"den ayırmak için okuyor.
@@ -1008,7 +1021,7 @@ def records_on_disk(out_dir: Path) -> list[dict]:
     """Diskteki tüm sembol kayıtları. Bozuk dosya sessizce atlanır."""
     records: list[dict] = []
     for path in sorted(out_dir.glob("*.json")):
-        if path.name in (SNAPSHOT_FILE, FAILURES_FILE, NOSTATEMENT_FILE):
+        if path.name in (SNAPSHOT_FILE, ALL_FILE, FAILURES_FILE, NOSTATEMENT_FILE):
             continue
         try:
             records.append(json.loads(path.read_text(encoding="utf-8")))
@@ -1018,11 +1031,44 @@ def records_on_disk(out_dir: Path) -> list[dict]:
 
 
 def write_snapshot(records: list[dict], out_dir: Path) -> None:
-    """Anlık görüntüyü yaz — taramanın OKUDUĞU tek dosya budur."""
+    """Anlık görüntüyü yaz — taramanın son TTM değerleri için okuduğu dosya."""
     if not records:
         return
     (out_dir / SNAPSHOT_FILE).write_text(
         json.dumps(build_snapshot(records), ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+
+def write_all(records: list[dict], out_dir: Path) -> None:
+    """
+    Tüm sembollerin tam tablosu TEK dosyada.
+
+    Neden gerekli: anlık görüntü yalnızca SON dönemin TTM değerlerini taşıyor.
+    Büyüme ve karne ise dönem dizisi ister (geçen yılın aynı dönemi, önceki
+    yıl sonu bilançosu). Tarayıcı bu diziyi hiç yükleyemediği için "Kalite
+    skoru", "Ciro büyümesi" ve "Kâr büyümesi" filtreleri HER eşikte sıfır
+    sonuç veriyordu — filtre ekrandaydı, verisi yoktu.
+
+    Neden sembol başına istek değil: 562 dosya = 562 istek. Tek dosya ölçüldü,
+    ham 3,1 MB ve yalnızca bu metrikler kullanıldığında indiriliyor.
+
+    Neden türetilmiş sayılar (skor, büyüme) burada HESAPLANMIYOR: o mantık
+    TypeScript'te (`core/fundamentals/metrics.ts`) ve tek kaynak olarak
+    kalmalı. Python'da ikinci bir kopya, iki yerin sessizce ayrışması demek.
+    """
+    if not records:
+        return
+    (out_dir / ALL_FILE).write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "generated": int(time.time()),
+                "symbols": {r["symbol"]: r for r in records if r.get("symbol")},
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
         encoding="utf-8",
     )
 
@@ -1193,11 +1239,13 @@ def build_all(
         fetched += 1
         if i % every == 0:
             write_snapshot(records, out_dir)
+            write_all(records, out_dir)
             print(
                 f"[fund] {i}/{len(pending)} · başarılı {fetched} · tablosuz {tablosuz} "
                 f"· başarısız {failed}"
             )
     write_snapshot(records, out_dir)
+    write_all(records, out_dir)
     return records, fetched, failed
 
 

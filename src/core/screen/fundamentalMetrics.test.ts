@@ -141,6 +141,49 @@ describe('withFundamentals', () => {
     })[0];
     expect(withFin.values.revenueGrowth).toBeCloseTo(20, 6); // 1200 / 1000
     expect(withFin.values.quality).toBeGreaterThan(6);
+    // Karne üç başlığa ayrılıyor: büyüyen ve borcunu azaltan bu şirkette
+    // üçü de yüksek olmalı ve hepsi YÜZDE (ham skor paydasız anlamsız).
+    expect(withFin.values.karneKarlilik).toBeGreaterThan(50);
+    expect(withFin.values.karneBuyume).toBeGreaterThan(50);
+    expect(withFin.values.karneBorc).toBeGreaterThan(50);
+  });
+
+  // Tek bir kalite skoru üç ayrı soruyu karıştırıyor: kârlı ama küçülen bir
+  // şirket ile büyüyen ama borçlanan bir şirket aynı toplamı alabilir. Karne
+  // başlıkları ayrı filtrelenebilmeli.
+  it('karne başlıkları birbirinden bağımsız filtrelenebiliyor', () => {
+    // Kârlı ama KÜÇÜLEN: ciro ve kâr geriliyor, borç artıyor.
+    const kuculen = financials({
+      revenue: [1400, 1200, 1000],
+      netIncome: [260, 220, 200],
+      operatingCashFlow: [300, 250, 210],
+      assets: [2000, 2100, 2200],
+      equity: [1000, 980, 950],
+      grossProfit: [420, 350, 280],
+      currentAssets: [500, 460, 420],
+      currentLiabilities: [250, 280, 320],
+      longLiabilities: [250, 300, 380],
+    });
+    const satir = withFundamentals([row('UCUZ', 10)], {
+      snapshot,
+      financialsOf: () => kuculen,
+    })[0];
+
+    expect(satir.values.karneKarlilik).toBeGreaterThan(satir.values.karneBuyume);
+    // Tek bir toplam skor bu ayrımı GÖSTERMİYORDU; karne gösteriyor.
+    expect(satir.values.karneBuyume).toBeLessThan(50);
+  });
+
+  // Tek ölçütle oran üretmek "%100 ya da %0" veren, ara değeri olmayan bir
+  // sütun demek: sıralamada gürültü, filtrede yanıltıcı.
+  it('bir başlıkta ikiden az ölçüt değerlendirilebiliyorsa oran üretilmiyor', () => {
+    const eksik = financials({ revenue: [null, null, 1000], netIncome: [null, null, 200] });
+    const satir = withFundamentals([row('UCUZ', 10)], { snapshot, financialsOf: () => eksik })[0];
+    expect(Number.isNaN(satir.values.karneBorc)).toBe(true);
+    // NaN hiçbir kuralı geçmiyor: sembol "eşiği geçti" sayılmıyor.
+    expect(applyScreen([satir], { rules: [{ metric: 'karneBorc', op: 'gt', a: 0 }] })).toHaveLength(
+      0,
+    );
   });
 
   it('temel metrikler mevcut filtre motoruyla çalışır', () => {
