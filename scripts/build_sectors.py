@@ -34,6 +34,15 @@ DIŞLANANLAR: XU100/XU030 gibi ANA endeksler ve XUSIN/XUMAL gibi ÜST kümeler
 listede yok. Aynı şirket hem XBANK'ta hem XUMAL'da; ikisini de sektör saymak
 şirketi iki kez saymak olurdu.
 
+TANI: sektörsüz kalan semboller iş akışı özetine yazılıyor — kaç tane
+oldukları, hangi (listemizde olmayan) endekslerde toplandıkları ve birkaçının
+tam üyelik listesi. İlk yazımda yanlış soruyu soruyordum: listemizde olmayan
+endeksleri ÜYE SAYISINA göre sıralayıp ilk 20'yi yazıyordum ve gelen cevap
+baştan sona büyüklük/tema/şehir endeksiydi (BIST 50, TEMETTÜ 5 YIL, ANKARA…).
+Aradığım küçük alt sektör — varsa — tam da kesilen kuyrukta kalırdı. Doğru
+soru "hangi büyük endeksler var" değil, "sektörsüz kalan SEMBOLLER nerede
+duruyor".
+
 Çalıştırma:
     python scripts/build_sectors.py [--self-test] [--csv DOSYA]
 """
@@ -151,39 +160,62 @@ def eslesmeler(
     return harita, cakismalar
 
 
-def aday_endeksler(
+def uyelik_haritasi(
     kayitlar: list[dict[str, str]],
-    sektorler: dict[str, str],
     bilinen: set[str] | None = None,
-) -> list[tuple[str, str, int]]:
+) -> tuple[dict[str, list[str]], dict[str, str]]:
     """
-    Listemizde OLMAYAN ama alt sektör GİBİ duran endeksler, üye sayısıyla.
+    Sembol → İÇİNDE BULUNDUĞU TÜM endeks kodları, ve kod → endeks adı.
 
-    Neden var: ASELS gerçek veride hiçbir sektöre yazılmadı ve tek başına
-    piyasanın son-bar işlem değerinin %6,4'ü (13,1 mlr / 203,2 mlr). Sebebi
-    iki şey olabilir — ya birden çok alt sektörde (çakışma), ya da bizim 23'lük
-    listemizde olmayan bir alt sektörde. İkisi bambaşka arızalar.
-
-    Bunu TAHMİN ETMEK yerine kaynağa sordurmak gerekiyor: bu oturumda üç kez
-    uç nokta adı tahmin edip üç kez 401 yedim. Üye sayısı 2–80 arasındaki,
-    listemizde olmayan endeksler raporlanıyor — ana endeksler (XU100: 100 üye)
-    ve dev üst kümeler (XUTUM) bu aralığın dışında kalıyor, geriye aday alt
-    sektörler kalıyor.
+    Ham malzeme: "bu hisse neden sektörsüz kaldı" sorusunun cevabı buradan
+    okunuyor.
     """
-    sayac: dict[str, tuple[str, set[str]]] = {}
+    uyelik: dict[str, list[str]] = {}
+    adlar: dict[str, str] = {}
     for kayit in kayitlar:
         kod = kayit.get(KOLON_ENDEKS, "").upper()
-        if not ENDEKS_DESENI.match(kod) or kod in sektorler:
+        if not ENDEKS_DESENI.match(kod):
             continue
         sembol = re.sub(r"\.[A-Z]$", "", kayit.get(KOLON_BILESEN, "").upper())
         if not sembol or (bilinen is not None and sembol not in bilinen):
             continue
-        ad = kayit.get(KOLON_ENDEKS_ADI, "") or kod
-        _, uyeler = sayac.setdefault(kod, (ad, set()))
-        uyeler.add(sembol)
-    out = [(kod, ad, len(uyeler)) for kod, (ad, uyeler) in sayac.items() if 2 <= len(uyeler) <= 80]
-    out.sort(key=lambda r: -r[2])
-    return out
+        adlar.setdefault(kod, kayit.get(KOLON_ENDEKS_ADI, "") or kod)
+        kodlar = uyelik.setdefault(sembol, [])
+        if kod not in kodlar:
+            kodlar.append(kod)
+    return uyelik, adlar
+
+
+def sektorsuz_tanisi(
+    uyelik: dict[str, list[str]],
+    adlar: dict[str, str],
+    sektorler: dict[str, str],
+    sektorsuzler: list[str],
+) -> tuple[list[tuple[str, str, int]], list[tuple[str, list[str]]]]:
+    """
+    Sektörsüz kalan sembollerin endeks üyeliklerinden iki rapor.
+
+    1. SIKLIK: sektörsüz sembollerin hangi endekslerde toplandığı. "Listemize
+       hangi endeksi eklersek kaç sembol kurtulur" sorusunun cevabı.
+    2. ÖRNEK: birkaç sembolün TAM üyelik listesi.
+
+    ÖNCEKİ TANIM YANLIŞ SORUYU SORUYORDU. Listemizde olmayan endeksleri ÜYE
+    SAYISINA göre sıralayıp ilk 20'yi yazıyordu; gelen cevap baştan sona
+    büyüklük/tema/şehir endeksiydi (BIST 50, TEMETTÜ 5 YIL, ANKARA…) ve
+    aradığım küçük alt sektör — varsa — tam da kesilen kuyrukta kalırdı.
+    Doğru soru "hangi büyük endeksler var" değil, "sektörsüz kalan SEMBOLLER
+    nerede duruyor".
+    """
+    siklik: dict[str, int] = {}
+    for sembol in sektorsuzler:
+        for kod in uyelik.get(sembol, []):
+            if kod in sektorler:
+                continue
+            siklik[kod] = siklik.get(kod, 0) + 1
+    sirali = sorted(siklik.items(), key=lambda kv: -kv[1])
+    ozet = [(kod, adlar.get(kod, kod), n) for kod, n in sirali]
+    ornek = [(s, uyelik.get(s, [])) for s in sektorsuzler[:10]]
+    return ozet, ornek
 
 
 def indir(url: str = KAYNAK_URL, timeout: int = 30) -> str:
@@ -281,23 +313,22 @@ def self_test() -> int:
     hepsi, _ = eslesmeler(kayitlar, sektorler)
     assert "YOKBU" in hepsi, hepsi
 
-    # TANI — "neden bu hisse sektörsüz kaldı" sorusunun ikinci cevabı:
-    # listemizde OLMAYAN bir alt sektörde olabilir. ASELS gerçek veride tam
-    # olarak bu durumda çıktı, o yüzden sınanıyor.
-    adaylar = dict((kod, (ad, n)) for kod, ad, n in aday_endeksler(kayitlar, sektorler))
-    assert "XSVNM" in adaylar, adaylar
-    assert adaylar["XSVNM"][1] == 3, adaylar
+    # TANI — "neden bu hisse sektörsüz kaldı" sorusu SEMBOLDEN soruluyor.
+    uyelik, adlar = uyelik_haritasi(kayitlar)
+    assert uyelik["GARAN"] == ["XBANK", "XU100", "XUMAL"], uyelik["GARAN"]
+    assert adlar["XSVNM"] == "BIST SAVUNMA", adlar.get("XSVNM")
 
-    # TEK ÜYELİ endeks aday değil: örnek CSV'de XU100 ve XUMAL birer üyeli.
-    assert "XU100" not in adaylar, adaylar
-    assert "XUMAL" not in adaylar, adaylar
+    ozet, ornek = sektorsuz_tanisi(uyelik, adlar, sektorler, ["ASELS", "OTKAR"])
+    # İkisi de XSVNM'de: listemize o endeksi eklersek ikisi birden kurtulur.
+    assert ozet[0] == ("XSVNM", "BIST SAVUNMA", 2), ozet
+    # Listemizde OLAN bir kod sıklık raporuna girmemeli — zaten sektör o.
+    assert all(kod not in sektorler for kod, _, _ in ozet), ozet
+    # Örnek satırı sembolün TAM üyeliğini veriyor, kesilmiş değil.
+    assert dict(ornek)["ASELS"] == ["XSVNM"], ornek
 
-    # Listemizde OLAN bir kod asla aday olarak çıkmamalı.
-    assert all(kod not in sektorler for kod in adaylar), adaylar
-
-    # Bilinen sembol süzgeci aday sayımına da uygulanıyor.
-    kisitli = dict((kod, n) for kod, _, n in aday_endeksler(kayitlar, sektorler, bilinen={"ASELS", "OTKAR"}))
-    assert kisitli.get("XSVNM") == 2, kisitli
+    # Bilinen sembol süzgeci üyelik haritasına da uygulanıyor.
+    dar, _ = uyelik_haritasi(kayitlar, bilinen={"ASELS"})
+    assert set(dar) == {"ASELS"}, dar
 
     print("build_sectors self-test: tamam")
     return 0
@@ -372,20 +403,25 @@ def main() -> int:
 
     bilinen = known_symbols()
     if bilinen:
-        yazilmayan = sorted(bilinen - set(harita) - set(cakismalar))
-        if yazilmayan:
-            print(f"  hiçbir sektörde bulunmayan: {len(yazilmayan)}", file=sys.stderr)
-            ozet_yaz(
-                f"- Hiçbir alt sektör endeksinde bulunmayan {len(yazilmayan)} sembol: "
-                + ", ".join(yazilmayan[:15])
-                + ("…" if len(yazilmayan) > 15 else "")
-            )
+        yazilmayan_sayi = len(bilinen - set(harita) - set(cakismalar))
+        print(f"  hiçbir sektörde bulunmayan: {yazilmayan_sayi}", file=sys.stderr)
+        ozet_yaz(f"- Hiçbir alt sektör endeksinde bulunmayan sembol: {yazilmayan_sayi}")
 
-    adaylar = aday_endeksler(kayitlar, sektorler, bilinen=bilinen or None)
-    if adaylar:
-        satir = ", ".join(f"{kod} {ad} ({n})" for kod, ad, n in adaylar[:20])
-        print(f"  listede olmayan aday alt sektörler: {satir}", file=sys.stderr)
-        ozet_yaz(f"- Listemizde OLMAYAN aday alt sektör endeksleri (üye): {satir}")
+    if bilinen:
+        yazilmayan = sorted(bilinen - set(harita) - set(cakismalar))
+        uyelik, adlar = uyelik_haritasi(kayitlar, bilinen=bilinen)
+        siklik, ornekler = sektorsuz_tanisi(uyelik, adlar, sektorler, yazilmayan)
+        if siklik:
+            satir = ", ".join(f"{kod} {ad} ({n})" for kod, ad, n in siklik[:15])
+            print(f"  sektörsüzler hangi endekslerde: {satir}", file=sys.stderr)
+            ozet_yaz(f"- Sektörsüz sembollerin bulunduğu, listemizde OLMAYAN endeksler: {satir}")
+        for sembol, kodlar in ornekler:
+            print(f"    {sembol}: {', '.join(kodlar) or 'hiçbir endekste'}", file=sys.stderr)
+        if ornekler:
+            ozet_yaz(
+                "- Örnek üyelikler: "
+                + " · ".join(f"{s} → {', '.join(k) or 'hiçbir endekste'}" for s, k in ornekler)
+            )
     return 0
 
 
