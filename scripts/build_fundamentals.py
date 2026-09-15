@@ -573,8 +573,13 @@ def self_test() -> None:
     # yazmada oluştuğu için yarım iş tarayıcıya HİÇ ulaşmazdı.
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp)
+        # `v` alanı şart: artımlı tur güncel sürümle yazılmış kaydı atlıyor,
+        # eski sürümlüyü yeniden çekiyor (aşağıdaki bayatlama sınamasına bak).
         (out / "AAA.json").write_text(
-            json.dumps({"symbol": "AAA", "periods": ["2024/6"], "fields": {}}), encoding="utf-8"
+            json.dumps(
+                {"symbol": "AAA", "periods": ["2024/6"], "fields": {}, "v": EXTRACT_VERSION}
+            ),
+            encoding="utf-8",
         )
         (out / "snapshot.json").write_text("{}", encoding="utf-8")
         (out / "BOZUK.json").write_text("{ bu json değil", encoding="utf-8")
@@ -687,6 +692,37 @@ def self_test() -> None:
         sira = pending_symbols(["YENI", "ESKI", "DAMGASIZ"], out, force_all=True)
         # Damgasız eski kayıt 0 sayılır ve en öne geçer.
         assert sira == ["DAMGASIZ", "ESKI", "YENI"], sira
+
+        # ARTIMLI TUR ESKİ KURALLA YAZILMIŞ KAYDI YENİDEN ÇEKER. Eskiden tek
+        # ölçüt "dosya var mı" idi; ayıklama kuralı değişince eski kayıtlar
+        # ancak FORCE_ALL ile ziyaret ediliyordu ve zorlamalı turun bütçesi
+        # listenin yarısına yettiği için kuyruk aylarca eski kuralda kalıyordu.
+        # Ölçüldü: yayındaki 87 eksik nakit akışının 72'si tam olarak buydu.
+        for ad, kayit in (
+            ("GUNCEL", {"fetched": 100, "v": EXTRACT_VERSION}),
+            ("ESKISURUM", {"fetched": 100, "v": EXTRACT_VERSION - 1}),
+            ("SURUMSUZ", {"fetched": 100}),
+            ("BOZUK", None),
+        ):
+            path = out / f"{ad}.json"
+            if kayit is None:
+                path.write_text("{bozuk", encoding="utf-8")
+            else:
+                path.write_text(
+                    json.dumps({"symbol": ad, "periods": [], "fields": {}, **kayit}),
+                    encoding="utf-8",
+                )
+        bekleyen = pending_symbols(["GUNCEL", "ESKISURUM", "SURUMSUZ", "BOZUK"], out)
+        assert bekleyen == ["ESKISURUM", "SURUMSUZ", "BOZUK"], bekleyen
+
+        # Güncel sürümle yazılan kayıt artımlı turda YENİDEN ÇEKİLMEZ; yoksa
+        # her tur bütün evreni tarar ve bütçe hiçbir şeye yetmez.
+        def damgali(symbol: str):
+            return {"symbol": symbol, "periods": ["2024/6"], "fields": {f: [1.0] for f in FIELDS}}
+
+        build_all(["TAZE"], out, _uyarla(damgali))
+        assert json.loads((out / "TAZE.json").read_text(encoding="utf-8"))["v"] == EXTRACT_VERSION
+        assert pending_symbols(["TAZE"], out) == [], "taze kayıt yeniden çekilmemeli"
 
         # Başarılı bir çekim sayacı sıfırlar.
         def basarili(symbol: str):
@@ -1171,6 +1207,18 @@ MAX_ATTEMPTS = 3
 # ama sürümü artırmayı atladım, oysa bu notun kendisi bunu söylüyordu.
 # Atlama listesindeki 25 gerçek şirket (finansal kiralama, faktoring, sigorta,
 # varlık yönetimi) yeni kuralla bir kez bile denenmeyecekti.
+#
+# SÜRÜM ARTIK SEMBOL KAYDINA DA YAZILIYOR (`"v"`, diske yazan tek noktada).
+# Bu not uzun süre YALNIZCA sayaç/atlama dosyalarını koruyordu; sembol
+# kayıtlarının kendisi korumasızdı. Artımlı turun tek ölçütü "dosya var mı"
+# olduğu için eski kuralla yazılmış kayıt bir daha ziyaret edilmiyor, kural
+# düzeltmesi yalnızca FORCE_ALL ile ve onun bütçesi kadar yayılıyordu.
+#
+# Ölçüldü (v5 geçişi, yayındaki veri): 09:33-10:20 arasında yazılan 72
+# sembolün %0'ında nakit akışı vardı; 11:20 sonrasında yazılanların
+# %93-100'ünde vardı. Eksik 87 kaydın 72'si "kaynakta yok" değil, "eski
+# kuralla yazılmış ve bir daha hiç denenmemiş"ti. Sürüm eşleşmeyen kayıt
+# artık artımlı turda da bayat sayılıp yeniden çekiliyor.
 EXTRACT_VERSION = 5
 
 
@@ -1241,7 +1289,11 @@ def pending_symbols(
     nostatement: set[str] | None = None,
 ) -> list[str]:
     """
-    Henüz indirilmemiş semboller (FORCE_ALL ile hepsi).
+    Yeniden çekilmesi gereken semboller (FORCE_ALL ile hepsi).
+
+    "Gereken" = dosyası yok, YA DA dosyası eski bir `EXTRACT_VERSION` ile
+    yazılmış. İkincisi olmadan ayıklama kuralı düzeltmeleri mevcut kayıtlara
+    hiç ulaşmıyordu (bkz. EXTRACT_VERSION notu).
 
     Üst üste `MAX_ATTEMPTS` kez başarısız olan sembol listeden düşüyor.
     Ölçüldü: 135 sembollük ilerlemede 11'i hiç alınamıyor ve her çalıştırma
@@ -1272,12 +1324,22 @@ def pending_symbols(
                 return 0.0
 
         return sorted(symbols, key=damga)
+    def bayat(sembol: str) -> bool:
+        """Dosya yok ya da ESKİ ayıklama kuralıyla yazılmış."""
+        path = out_dir / f"{sembol}.json"
+        if not path.exists():
+            return True
+        try:
+            return json.loads(path.read_text(encoding="utf-8")).get("v") != EXTRACT_VERSION
+        except (OSError, json.JSONDecodeError):
+            # Okunamayan kaydı yeniden çekmek, bozuk kaydı sonsuza dek
+            # taşımaktan iyi.
+            return True
+
     return [
         s
         for s in symbols
-        if not (out_dir / f"{s}.json").exists()
-        and fails.get(s, 0) < MAX_ATTEMPTS
-        and s not in yok
+        if bayat(s) and fails.get(s, 0) < MAX_ATTEMPTS and s not in yok
     ]
 
 
@@ -1538,8 +1600,21 @@ def build_all(
         # sonra bile eski sayaç sembolü gereksiz yere listeden düşürürdü.
         if failures.pop(symbol, None) is not None:
             write_failures(failures, out_dir)
+        # AYIKLAMA SÜRÜMÜ, diske yazan TEK noktada veriliyor. Ayıklayıcının
+        # içinde damgalamak yetmiyordu: kaydı üreten her yol oradan geçmiyor
+        # ve damgasız dosya artımlı turda "güncel" sayılırdı.
+        #
+        # Bunsuz artımlı tur, kaydı HANGİ kuralın yazdığını bilemiyordu: tek
+        # ölçüt "dosya var mı" olduğu için eski kuralla yazılmış kayıt bir
+        # daha hiç ziyaret edilmiyordu. Ölçüldü — v5'e geçerken 09:33-10:20
+        # arasında yazılan 72 sembolün %0'ında nakit akışı vardı, 11:20
+        # sonrasının %93-100'ünde vardı; fark kaynakta değil, kaydın eski
+        # kuralla yazılmış olmasındaydı.
         (out_dir / f"{symbol}.json").write_text(
-            json.dumps(record, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+            json.dumps(
+                {**record, "v": EXTRACT_VERSION}, ensure_ascii=False, separators=(",", ":")
+            ),
+            encoding="utf-8",
         )
         records.append(record)
         fetched += 1
