@@ -275,3 +275,48 @@ export function rotationBySector(rows: WindowRow[], map: SectorMap | null): Sect
     return b.value - a.value;
   });
 }
+
+/**
+ * Sektör bileşik getiri serisi (EŞİT AĞIRLIKLI).
+ *
+ * "Bu hisse %2 düştü" eksik bir cümle; sektörü %3 düştüyse hisse aslında iyi
+ * performans göstermiştir. Karşılaştırma ancak ortak bir tabana oturtulmuş
+ * iki seriyle yapılabilir: her iki seri de pencerenin başında %0.
+ *
+ * Neden eşit ağırlık: piyasa değeri tüm semboller için elimizde yok ve işlem
+ * değeriyle ağırlıklandırmak endeksi tek bir devin hareketine indirger. Eşit
+ * ağırlık "ortalama hisse ne yaptı" sorusunu cevaplıyor ve arayüz bunu böyle
+ * söylüyor — gizli bir ağırlıklandırma varsaymıyor.
+ *
+ * Başlangıç kapanışı geçersiz (0 ya da NaN) olan sembol DIŞARIDA kalıyor:
+ * sıfıra bölmek sonsuz, tahmin etmek uydurma olurdu.
+ */
+export function compositeSeries(peers: ArrayLike<number>[], bars: number): number[] {
+  if (bars < 2) return [];
+  const gecerli: { seri: ArrayLike<number>; taban: number; from: number }[] = [];
+  for (const seri of peers) {
+    const n = seri.length;
+    if (n < bars) continue;
+    const from = n - bars;
+    const taban = seri[from];
+    if (!(taban > 0) || !Number.isFinite(taban)) continue;
+    gecerli.push({ seri, taban, from });
+  }
+  if (gecerli.length === 0) return [];
+
+  const out: number[] = [];
+  for (let i = 0; i < bars; i++) {
+    let toplam = 0;
+    let sayi = 0;
+    for (const { seri, taban, from } of gecerli) {
+      const v = seri[from + i];
+      if (!Number.isFinite(v)) continue;
+      toplam += (v / taban - 1) * 100;
+      sayi++;
+    }
+    // Hiçbir sembolün o barda değeri yoksa seri KESİLİYOR: eksik barı bir
+    // öncekiyle doldurmak, olmayan bir yatay seyir çizerdi.
+    out.push(sayi > 0 ? toplam / sayi : NaN);
+  }
+  return out;
+}

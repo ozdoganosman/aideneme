@@ -7,6 +7,7 @@ import {
   sectorCoverage,
   sectorNames,
   sectorPeers,
+  compositeSeries,
   rotationBySector,
   withSectors,
   type SectorMap,
@@ -211,5 +212,49 @@ describe('rotationBySector', () => {
 
   it('sınıflandırma yoksa boş döner (uydurma grup yok)', () => {
     expect(rotationBySector([w('AAA', 1, 1)], null)).toEqual([]);
+  });
+});
+
+describe('compositeSeries', () => {
+  it('her seriyi kendi tabanına göre normalize edip ortalıyor', () => {
+    // A: 100 → 110 (+%10), B: 50 → 55 (+%10) → ortalama +%10.
+    const out = compositeSeries(
+      [
+        [100, 105, 110],
+        [50, 52.5, 55],
+      ],
+      3,
+    );
+    expect(out[0]).toBeCloseTo(0, 6);
+    expect(out[2]).toBeCloseTo(10, 6);
+  });
+
+  // Farklı fiyat seviyeleri ortalamayı ELE GEÇİRMEMELİ: normalize edilmeseydi
+  // 1.000 TL'lik hisse endeksi tek başına belirlerdi.
+  it('yüksek fiyatlı sembol ortalamayı ele geçirmiyor', () => {
+    const out = compositeSeries(
+      [
+        [1000, 1000],
+        [10, 12],
+      ],
+      2,
+    );
+    expect(out[1]).toBeCloseTo(10, 6); // (0 + 20) / 2
+  });
+
+  it('tabanı geçersiz sembol dışarıda kalıyor', () => {
+    const out = compositeSeries(
+      [
+        [0, 5],
+        [10, 11],
+      ],
+      2,
+    );
+    expect(out[1]).toBeCloseTo(10, 6); // yalnızca ikinci sembol
+  });
+
+  it('hiç geçerli sembol yoksa boş seri', () => {
+    expect(compositeSeries([[0, 1]], 2)).toEqual([]);
+    expect(compositeSeries([], 5)).toEqual([]);
   });
 });

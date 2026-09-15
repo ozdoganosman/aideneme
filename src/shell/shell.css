@@ -2064,3 +2064,16 @@
   background: var(--surface-1);
   font-size: var(--fs-sm);
 }
+
+/* ── Sektör sekmesi: karşılaştırma grafiği ────────────────────────────── */
+/* "Bu hisse %2 düştü" eksik bir cümle; sektörü %3 düştüyse hisse iyi
+   gitmiştir. İki seri ortak tabanda (%0) yan yana. */
+.desk__sector-chart {
+  margin: var(--sp-4) 0;
+  min-width: 0;
+}
+.desk__sector-chart .desk__muted {
+  display: block;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+}
