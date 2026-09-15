@@ -587,3 +587,34 @@ test('tarayıcı: ölçülemeyen sembolleri "uymadı" diye saymıyor', async ({ 
   expect(olculemeyen).toBeGreaterThan(0);
   expect(uyan + olculemeyen).toBeLessThanOrEqual(evren);
 });
+
+/**
+ * Aynı ayrım RADARDA da olmalı: filtre motoru tarayıcıyla AYNI, dolayısıyla
+ * kusur da aynıydı. Radar dar bir panel olduğu için cümle kısa; ölçüt
+ * kırılımı `title` ile fareye, görünmez metinle ekran okuyucuya gidiyor —
+ * panele sığmaması, erişilemez kalmasının gerekçesi değil.
+ */
+test('radar: ölçülemeyen sembolleri "uymadı" diye saymıyor', async ({ page }) => {
+  await open(page, 'v=sembol&s=X001');
+  await expect(page.locator('.chart-host canvas').first()).toBeVisible();
+  await page.getByText('Radar', { exact: true }).first().click();
+  await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+  await page.getByLabel('Kapsam').selectOption('piyasa');
+  await page.waitForFunction(
+    () => document.querySelectorAll('.radar__tablo tbody tr').length > 5,
+    { timeout: 90_000 },
+  );
+
+  // Filtresiz: ölçülemeyen yok, uyarı da yok.
+  await expect(page.locator('.radar__olculemedi')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Hazır', exact: true }).click();
+  await page.getByRole('button', { name: /Ucuz ve kârlı/ }).click();
+
+  const not = page.locator('.radar__olculemedi');
+  await expect(not).toBeVisible();
+  await expect(not).toContainText(/o ölçü onlarda olmadığı için/);
+  // Kırılım hem fareye (title) hem ekran okuyucuya (görünmez metin) gidiyor.
+  expect(await not.getAttribute('title')).toMatch(/F\/K|Özkaynak/);
+  await expect(not).toContainText(/Ölçüt kırılımı:/);
+});

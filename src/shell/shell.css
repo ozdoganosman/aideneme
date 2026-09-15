@@ -2294,3 +2294,10 @@
     display: none;
   }
 }
+
+/* Radar dar bir panel: not sayacın altında, tam genişlikte ve küçük. */
+.radar__olculemedi {
+  margin: 0 var(--sp-3) var(--sp-2);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}

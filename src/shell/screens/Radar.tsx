@@ -20,6 +20,7 @@ import {
   DEFAULT_SCREEN_PARAMS,
   METRIC_DEFS,
   applyScreen,
+  olculemeyen,
   type MetricDef,
   type Rule,
   type ScreenRow,
@@ -321,6 +322,16 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
 
   const kurallar = useMemo(() => araliklarKurallara(araliklar), [araliklar]);
 
+  /**
+   * Kurallara UYMADIĞI için değil, ÖLÇÜLEMEDİĞİ için elenenler.
+   *
+   * Tarayıcıdaki ile aynı kusur, aynı motor: "35 / 582" sayacı 547 sembolün
+   * sınandığını ima ediyor, oysa NaN hiçbir kuralı geçmiyor. Gerçek veride
+   * ölçüldü — 582 hissenin 293'ünün F/K'sı var. Radar dar bir panel, bu
+   * yüzden cümle kısa; kırılım başlık (title) olarak veriliyor.
+   */
+  const olculemedi = useMemo(() => olculemeyen(satirlar, kurallar), [satirlar, kurallar]);
+
   const suzulmus = useMemo(() => {
     const q = ara.trim().toLocaleUpperCase('tr');
     const metinli = q
@@ -439,6 +450,27 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           <Icon name="close" size={16} />
         </IconButton>
       </header>
+
+      {olculemedi.count > 0
+        ? (() => {
+            const kirilim = olculemedi.byMetric
+              .map((m) => `${OLCUT_BY_ID.get(m.metric)?.label ?? m.metric}: ${m.count}`)
+              .join(', ');
+            return (
+              <p className="radar__olculemedi desk__muted" title={kirilim}>
+                {olculemedi.count} sembol ölçülemedi — kuralı geçemedikleri için değil, o ölçü
+                onlarda olmadığı için.
+                {/*
+                Kırılım `title` ile FARE kullanıcısına gidiyor; klavye ve ekran
+                okuyucu `title`'a erişemiyor. Aynı bilgi görünmez metin olarak
+                da veriliyor — panel dar olduğu için ekrana sığmıyor, ama
+                erişilemez kalması sığmamasının bedeli olmamalı.
+              */}
+                <span className="visually-hidden"> Ölçüt kırılımı: {kirilim}.</span>
+              </p>
+            );
+          })()
+        : null}
 
       <div className="radar__kontrol">
         <Select

@@ -46,6 +46,11 @@ const SCREENS: Ekran[] = [
       await page.getByText('Radar', { exact: true }).first().click();
       await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
       await page.getByLabel('Kapsam').selectOption('piyasa');
+      // Temel veri filtresi UYGULANIYOR: "ölçülemedi" notu yalnızca böyle
+      // görünüyor ve denetim görmediği yüzeyi koruyamaz.
+      await page.getByRole('button', { name: 'Hazır', exact: true }).click();
+      await page.getByRole('button', { name: /Ucuz ve kârlı/ }).click();
+      await page.waitForSelector('.radar__olculemedi', { timeout: 30_000 });
     },
   },
   {
