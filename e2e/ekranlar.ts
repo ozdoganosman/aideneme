@@ -153,6 +153,31 @@ export const EKRANLAR: Ekran[] = [
       await page.getByLabel('Kapsam').selectOption('deep');
     },
   },
+  {
+    /*
+      SEKTÖR PLANI. `stratejiler:derin-plan` derin kapsamı kapsıyor ama sektör
+      kapsamı AYRI bir yüzey: kendi "Sektör" seçicisi, kendi cümlesi ("11
+      sembol · 0,9 MB indirilecek ve 297 backtest koşacak") ve kendi düğmesi
+      ("… sektöründe test et") var.
+
+      Gerçek veride elle denerken buldum ve denetim listesinde yoktu. Bu
+      oturumda beş kez aynı kusuru yaptım — yüzey ekleyip listeyi unutmak.
+      Bu sefer kusur ısırmadan yazıldı.
+    */
+    id: 'stratejiler:sektor-plan',
+    ad: 'Stratejiler — sektör planı',
+    url: 'v=stratejiler',
+    hazir: '.rank__deep',
+    ac: async (page) => {
+      await page.getByLabel('Kapsam').selectOption('sektor');
+      // Sektör listesi sınıflandırma dosyasından geliyor; ilk GERÇEK seçenek
+      // alınıyor (sıfırıncı "Seçin…"). Ad sabit yazmak, örnek verinin sektör
+      // adları değişince testi 120 saniye bekletip düşürürdü — bu oturumda
+      // tam olarak öyle oldu.
+      await page.getByLabel('Sektör').selectOption({ index: 1 });
+      await page.waitForSelector('.rank__deep', { timeout: 30_000 });
+    },
+  },
   { id: 'model', ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
   {
     // Havuz eğitiminin indirme PLANI: "x sembol · y MB indirilecek" satırı.

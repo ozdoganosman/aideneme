@@ -124,12 +124,47 @@ kümelerine düşüyor ve nedenini söylüyor; üretici script kaynağa erişeme
 dosyayı YAZMIYOR (yarım bir sınıflandırma, olmayan bilgiyi varmış gibi
 gösterirdi). CI adımı bu yüzden `continue-on-error`.
 
+### Kaynak: Borsa İstanbul'un kendi bileşen dosyası
+
+Bu bölüm bir süre "kaynak uç noktası doğrulanamadı" diyordu ve ayrıştırıcı
+`SECTOR`/`Sektor` gibi alan adlarını tahminle deniyordu. Üç aday uç noktanın
+üçü de `HTTP 401` döndürdü — çünkü üçü de TAHMİNDİ.
+
+Doğru hamle, fiyat verimizi zaten çeken kütüphanenin (borsapy) kaynağını
+okumaktı: `borsapy/_providers/bist_index.py` borsanın kendi yayımladığı
+bileşen dosyasını indiriyor —
+`https://www.borsaistanbul.com/datum/hisse_endeks_ds.csv`. Her satır bir
+(endeks, bileşen hisse) çifti. Bir hissenin BIST'in alt sektör endekslerinden
+hangisinde olduğu onun sektörüdür.
+
+**İKİ TABAKA.** Önce 23 alt sektör endeksi; hiçbiri sahiplenmezse
+XUSIN/XUMAL/XUHIZ/XUTEK üst gruplarına düşülüyor ve o hisseler
+"… (alt sektörsüz)" adıyla yazılıyor. Sıra kritik: ikisi aynı anda
+uygulansaydı Bilişim'deki 35 hisse hem XBLSM hem XUTEK üyesi olduğu için
+çakışır ve hepsi sektörsüz kalırdı.
+
+**ÖLÇÜLEN SONUÇ** (yayındaki veri, 584 hisse):
+
+| | korelasyon vekili | yalnız alt sektör | + üst grup |
+|---|---|---|---|
+| sınıflandırılan sembol | 35 | 496 | **541** |
+| sınıflandırılmamış işlem değeri payı | — | %9,7 | **%0,1** |
+
+Vekilin kapsamı %6'ydı. Alt sektör tabakası tek başına 496 sembolü bağladı
+ama dışarıda kalan %9,7'nin neredeyse tamamı TEK hisseydi: ASELS, piyasanın
+son-bar işlem değerinin %6,4'ü (13,1 mlr / 203,2 mlr). Tanı turu sebebini
+söyledi — ASELS'in tek sektör endeksi XUTEK ve bir savunma alt endeksi yok.
+Üst grup tabakasından sonra ASELS "Teknoloji (alt sektörsüz)" oldu; kalan 43
+sektörsüz hissenin en büyüğü 38 mn TL.
+
+**TANI YAYIMLANIYOR.** `sectors-tani.json`: kaç sembol yazıldı, çakışanlar,
+sektörsüz kalanlar, bunların hangi (listemizde olmayan) endekslerde
+toplandığı ve on örnek üyelik. Sebep pratik — iş akışı kaydının kuyruğu
+sektör adımına ulaşmıyor ve tüm kaydı indirmek her seferinde yirmi bin token.
+
 `build_sectors.py`'nin ayrıştırıcısı ağdan bağımsız: `--self-test` sabit örnek
-kayıtlar üzerinde çalışıyor ve doğrulama iş akışına eklendi. **Not:** kaynak uç
-noktası bu geliştirme ortamından erişilemediği için canlı yanıt formatı
-doğrulanamadı; ayrıştırıcı birden çok alan adını (SECTOR/Sektor/…) deniyor ve
-okunamayan kaydı atlıyor. Ekran görüntüleri yerel sentetik sınıflandırmayla
-alındı.
+CSV üzerinde çalışıyor ve doğrulama iş akışına eklendi. Sektör adları TEK
+kaynaktan — betik `src/core/screen/sectorIndices.ts` listesini okuyor.
 
 ## Tarayıcıda sektör filtresi
 
