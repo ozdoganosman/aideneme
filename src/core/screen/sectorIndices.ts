@@ -21,6 +21,19 @@ import type { Candles } from '../data/types';
  * Liste BİRBİRİNİ DIŞLAYAN ekonomik sektörler: XU100/XU030 gibi ana endeksler
  * ve XUSIN/XUMAL gibi ÜST kümeler bilerek dışarıda — üst kümeyi alt sektörle
  * aynı listede sıralamak aynı şirketi iki kez saymak olurdu.
+ *
+ * SINIFLANDIRMADA ÜST GRUPLAR VAR, BU LİSTEDE YOK. `build_sectors.py` alt
+ * sektör endeksi hiçbir hisseyi sahiplenmediğinde XUSIN/XUMAL/XUHIZ/XUTEK'e
+ * düşüyor ve o hisseleri "… (alt sektörsüz)" adıyla yazıyor. Sebep ölçüldü:
+ * ASELS'in yayımlanan tüm endeks üyelikleri arasında tek sektör endeksi
+ * XUTEK ve tek başına piyasanın son-bar işlem değerinin %6,4'ü.
+ *
+ * O dört kod BURAYA EKLENMİYOR, çünkü bu liste GETİRİ tablosunu besliyor ve
+ * orada birbirini dışlaması şart: XUTEK, XBLSM'i de kapsıyor. Sınıflandırma
+ * ile getiri tablosu farklı iki soruya cevap veriyor ve farklı listelerle
+ * çalışmaları doğru. Üst grup adlarının bu tabloda karşılığı yok — o adlar
+ * "Sektörün hisseleri" sütununda hiçbir satıra düşmüyor, ki doğrusu bu:
+ * onların bir alt sektör endeksi yok.
  */
 export interface SektorEndeksi {
   /** Endeks sembolü (XBANK, XGIDA …). */

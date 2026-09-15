@@ -83,6 +83,31 @@ BASLIKLAR = {
     "Accept-Language": "tr-TR,tr;q=0.9",
 }
 
+# ÜST GRUPLAR — alt sektör endeksi hiçbir hisseyi sahiplenmediğinde.
+#
+# NEDEN VAR: tanı turu kesin cevap verdi. ASELS'in yayımlanan tüm endeks
+# üyelikleri arasında TEK sektör endeksi XUTEK (BIST Teknoloji); bir savunma
+# alt endeksi yok. ASELS tek başına piyasanın son-bar işlem değerinin %6,4'ü
+# (13,1 mlr / 203,2 mlr), yani "Sınıflandırılmamış" satırı pratikte ASELS
+# demekti. Aynı durumda 45 sembol daha var (XUHIZ 23, XUMAL 12, XUSIN 6,
+# XUTEK 4).
+#
+# ADLARDA "(alt sektörsüz)" VAR, bilerek: XUTEK, XBLSM'i (Bilişim) DE
+# kapsıyor. Adı düz "Teknoloji" koysaydık kullanıcı "Bilişim" ile "Teknoloji"
+# yi eş düzey iki sektör sanır, oysa biri ötekinin üst kümesi. Ad, ne
+# olduğunu söylüyor: üst grubu belli ama alt sektör endeksi olmayan hisseler.
+#
+# SIRA ÖNEMLİ: önce alt sektör aranıyor, bulunamazsa üst gruba düşülüyor.
+# İkisi aynı anda yazılsaydı Bilişim'deki 35 hisse iki sektöre birden girer
+# ve çakışma kuralı hepsini sektörsüz bırakırdı — dördünü kurtarmak için
+# otuz beşini kaybetmek olurdu.
+UST_GRUPLAR: dict[str, str] = {
+    "XUSIN": "Sınai (alt sektörsüz)",
+    "XUMAL": "Mali (alt sektörsüz)",
+    "XUHIZ": "Hizmetler (alt sektörsüz)",
+    "XUTEK": "Teknoloji (alt sektörsüz)",
+}
+
 # CSV kolon adları (borsapy'nin okuduğu sözleşme).
 KOLON_ENDEKS = "ENDEKS KODU"
 KOLON_BILESEN = "BILESEN KODU"
@@ -159,6 +184,29 @@ def eslesmeler(
     for sembol, kodlar in uyeler.items():
         if len(kodlar) == 1:
             harita[sembol] = sektorler[kodlar[0]]
+        else:
+            cakismalar[sembol] = sorted(kodlar)
+
+    # ÜST GRUP TABAKASI — yalnızca alt sektörü OLMAYANLAR için.
+    ust: dict[str, list[str]] = {}
+    for kayit in kayitlar:
+        kod = kayit.get(KOLON_ENDEKS, "").upper()
+        if kod not in UST_GRUPLAR:
+            continue
+        sembol = re.sub(r"\.[A-Z]$", "", kayit.get(KOLON_BILESEN, "").upper())
+        if not sembol or sembol in harita or sembol in cakismalar:
+            continue
+        if bilinen is not None and sembol not in bilinen:
+            continue
+        kodlar = ust.setdefault(sembol, [])
+        if kod not in kodlar:
+            kodlar.append(kod)
+    for sembol, kodlar in ust.items():
+        # İki üst grupta birden olan sembol yine yazılmıyor: üst gruplar
+        # birbirini dışlamalı ve dışlamıyorsa o bir veri sorusudur, tercih
+        # meselesi değil.
+        if len(kodlar) == 1:
+            harita[sembol] = UST_GRUPLAR[kodlar[0]]
         else:
             cakismalar[sembol] = sorted(kodlar)
     return harita, cakismalar
@@ -274,6 +322,12 @@ XBLSM;BIST BILISIM;YOKBU.E;LISTEMIZDE OLMAYAN
 XSVNM;BIST SAVUNMA;ASELS.E;ASELSAN
 XSVNM;BIST SAVUNMA;OTKAR.E;OTOKAR
 XSVNM;BIST SAVUNMA;YOKBU.E;LISTEMIZDE OLMAYAN
+XUTEK;BIST TEKNOLOJI;ASELS.E;ASELSAN
+XUTEK;BIST TEKNOLOJI;LOGO.E;LOGO YAZILIM
+XBLSM;BIST BILISIM;LOGO.E;LOGO YAZILIM
+XUSIN;BIST SINAI;ULKER.E;ULKER BISKUVI
+XUSIN;BIST SINAI;ADEL.E;ADEL KALEMCILIK
+XUMAL;BIST MALI;ADEL.E;ADEL KALEMCILIK
 ;;;
 """
 
@@ -298,8 +352,22 @@ def self_test() -> int:
     assert harita["AKBNK"] == "Banka", harita
     assert harita["ULKER"] == "Gıda, İçecek", harita
 
-    # XU100/XUMAL üyeliği GARAN'ı çakışma yapmamalı: ikisi de sektör değil.
+    # XU100/XUMAL üyeliği GARAN'ı çakışma yapmamalı: ikisi de alt sektör değil.
     assert "GARAN" not in cakismalar, cakismalar
+
+    # ÜST GRUP TABAKASI — alt sektörü OLMAYANA, yalnızca ona.
+    ust, ust_cakisma = eslesmeler(
+        kayitlar, sektorler, bilinen={"ASELS", "LOGO", "ULKER", "ADEL"}
+    )
+    # ASELS'in alt sektörü yok, üst grubu XUTEK: ad üst grup adı olmalı.
+    assert ust["ASELS"] == "Teknoloji (alt sektörsüz)", ust
+    # LOGO hem XBLSM'de hem XUTEK'te: ALT SEKTÖR kazanır, üst grup ezmez.
+    assert ust["LOGO"] == "Bilişim", ust
+    # ULKER'in alt sektörü var (XGIDA); XUSIN üyeliği onu değiştirmemeli.
+    assert ust["ULKER"] == "Gıda, İçecek", ust
+    # ADEL iki ÜST GRUPTA birden: yazılmıyor, çakışma olarak raporlanıyor.
+    assert "ADEL" not in ust, ust
+    assert ust_cakisma["ADEL"] == ["XUMAL", "XUSIN"], ust_cakisma
 
     # İki ALT sektörde birden görünen sembol sektörsüz kalıyor ve raporlanıyor.
     assert "THYAO" not in harita, harita
@@ -328,7 +396,7 @@ def self_test() -> int:
     # Listemizde OLAN bir kod sıklık raporuna girmemeli — zaten sektör o.
     assert all(kod not in sektorler for kod, _, _ in ozet), ozet
     # Örnek satırı sembolün TAM üyeliğini veriyor, kesilmiş değil.
-    assert dict(ornek)["ASELS"] == ["XSVNM"], ornek
+    assert dict(ornek)["ASELS"] == ["XSVNM", "XUTEK"], ornek
 
     # Bilinen sembol süzgeci üyelik haritasına da uygulanıyor.
     dar, _ = uyelik_haritasi(kayitlar, bilinen={"ASELS"})
