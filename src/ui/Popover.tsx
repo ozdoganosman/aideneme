@@ -73,16 +73,27 @@ export function Popover({ trigger, title, align = 'start', children }: PopoverPr
     const t = tetik.getBoundingClientRect();
     const g = panel.offsetWidth;
     /*
-      DOĞAL yükseklik ölçülüyor: sınır geçici olarak kaldırılıp okunuyor.
+      DOĞAL yükseklik, PANELE DOKUNMADAN okunuyor.
 
-      Sınırlı hâli ölçseydik salınım olurdu — sınır uygulanınca panel kısalır,
-      kısalan panel "alta sığıyor" görünür, sınır kalkar, panel uzar, yine
-      sığmaz… Karşılaştırma her zaman sınırsız yükseklikle yapılmalı.
+      Sınırlı hâli ölçmek olmaz — sınır uygulanınca panel kısalır, kısalan
+      panel "alta sığıyor" görünür, sınır kalkar, panel uzar, yine sığmaz…
+      Karşılaştırma her zaman sınırsız yükseklikle yapılmalı.
+
+      Ama sınırı BİR AN KALDIRIP ölçmek de olmaz ve bu gerçek bir kusur
+      oldu: sınır kalkınca taşma da kalkıyor, tarayıcı `scrollTop`'u 0'a
+      KENETLİYOR ve sınır geri konduğunda eski değer dönmüyor. Değeri elle
+      geri yazmak da yetmiyor — düzen o anda yeniden hesaplanmadığı için
+      yazılan değer de kenetleniyor. Kullanıcı panelin içinde her
+      kaydırdığında liste başa sarıyordu: filtre paneli ve sütun listesi
+      aşağı kaydırılamıyordu.
+
+      `scrollHeight` aynı bilgiyi ölçmeden veriyor: içerik + dolgu. Kutu
+      `border-box` olduğu için kenarlık payı ekleniyor (`offsetHeight -
+      clientHeight`). Taşma yokken `scrollHeight === clientHeight`, yani
+      sonuç `offsetHeight`'e eşit çıkıyor — iki durum da tutarlı.
     */
-    const oncekiSinir = panel.style.maxHeight;
-    panel.style.maxHeight = '';
-    const y = panel.offsetHeight;
-    panel.style.maxHeight = oncekiSinir;
+    const kenarlik = panel.offsetHeight - panel.clientHeight;
+    const y = panel.scrollHeight + kenarlik;
 
     // Tercih edilen yön sığmıyorsa öteki yön; o da sığmıyorsa kenara yaslanır.
     let left = align === 'end' ? t.right - g : t.left;
@@ -162,7 +173,13 @@ export function Popover({ trigger, title, align = 'start', children }: PopoverPr
 
   useEffect(() => {
     if (!open) return;
-    const guncelle = () => yerlestir();
+    const guncelle = (e: Event) => {
+      // PANELİN KENDİ KAYDIRMASI yerleştirmeyi gerektirmiyor: panel yerinde
+      // duruyor, içeriği kayıyor. Yeniden ölçmek hem gereksiz hem de ölçüm
+      // sırasında sınır kalktığı için kaydırmayı bozma riski taşıyor.
+      if (e.target instanceof Node && panelRef.current?.contains(e.target)) return;
+      yerlestir();
+    };
     // `capture`: panel kaydırılabilir bir atanın içindeki bir düğmeye bağlı
     // olabilir ve o ata kaydırıldığında da yer değiştirmeli.
     addEventListener('scroll', guncelle, true);

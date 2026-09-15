@@ -97,3 +97,45 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
     }
   });
 }
+
+/*
+  SINIRA DAYANAN KATMAN KAYDIRILABİLMELİ.
+
+  Yukarıdaki denetim panelin ekrana SIĞDIĞINI ölçüyor ve sığdırmanın yolu
+  yüksekliği sınırlayıp içeriği kaydırılabilir yapmak. Ama "kaydırılabilir
+  görünmek" ile "gerçekten kaydırılmak" aynı şey değil ve tam oradan bir
+  kusur çıktı: yerleştirme, DOĞAL yüksekliği ölçmek için sınırı bir an
+  kaldırıyordu; sınır kalkınca taşma da kalkıyor ve tarayıcı `scrollTop`'u
+  0'a kenetliyor. Panelin kendi kaydırması `capture` dinleyicisiyle
+  yerleştirmeyi tetiklediği için kullanıcı her kaydırışında liste başa
+  sarıyordu — filtre paneli ve sütun listesi aşağı kaydırılamıyordu.
+
+  Ölçüm en dar ekranda: taşmanın kesin olduğu yer orası.
+*/
+for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
+  test(`${name}: sınıra dayanan katman gerçekten kaydırılıyor`, async ({ page }) => {
+    await page.setViewportSize(OLCULER[2]);
+    await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
+    if (ac) await ac(page);
+    await page.waitForSelector(ready, { timeout: 90_000 });
+    await page.waitForTimeout(250);
+
+    const olcum = await page.evaluate(async () => {
+      const panel = [
+        ...document.querySelectorAll<HTMLElement>('.ui-popover__panel'),
+      ].find((el) => el.offsetWidth > 0 && el.scrollHeight > el.clientHeight + 1);
+      if (!panel) return null;
+      const hedef = Math.min(120, panel.scrollHeight - panel.clientHeight);
+      panel.scrollTop = hedef;
+      // `scroll` olayının ve tetiklediği yeniden yerleştirmenin bitmesi için.
+      await new Promise((r) => setTimeout(r, 300));
+      return { hedef, sonra: panel.scrollTop };
+    });
+
+    // Taşmayan panel bu denetimin konusu değil.
+    test.skip(olcum === null, 'bu ekranda sınıra dayanan katman yok');
+    expect(olcum!.sonra, 'katman kaydırıldıktan sonra başa sarıyor').toBeGreaterThan(
+      olcum!.hedef - 2,
+    );
+  });
+}
