@@ -175,7 +175,24 @@ test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor
   await open(page, 'v=tarayici');
   await expect(page.locator('.ui-vtable')).toBeVisible();
 
-  await page.getByLabel('Bankacılık').click();
+  /*
+    VİRGÜLLÜ SEKTÖR ADI SEÇİLİYOR ve bu bilerek.
+
+    Virgül, bağlantıdaki sektör ayırıcısı. Kaçırılmazsa ad bölünür ve
+    paylaşılan bağlantı SESSİZCE başka bir tarama açar — tam da bu testin
+    iddia ettiği şeyi bozar. Kaçış `share.ts` içinde birim testleriyle
+    korunuyor; burada URL turunun TAMAMI sınanıyor (kodlama → adres çubuğu →
+    yeniden çözme).
+
+    Ad sabit yazılmıyor: örnek verinin sektör adları değiştiğinde test
+    "Bankacılık bulunamadı" diye 120 saniye bekleyip zaman aşımına düşmüştü.
+    Rozetler okunuyor, virgüllü olan seçiliyor.
+  */
+  const adlar = await page.locator('.screener__chip').allInnerTexts();
+  const virgullu = adlar.map((a) => a.trim()).find((a) => a.includes(','));
+  expect(virgullu, 'örnek veride virgüllü sektör adı yok — tur sınanamaz').toBeTruthy();
+
+  await page.getByLabel(virgullu!, { exact: true }).click();
   await expect(page.locator('.screener__chip.is-on')).toHaveCount(1);
   // Değişmez olan SONUÇ SAYISI; worker süresi ölçümden ölçüme değişir ve
   // onu karşılaştırmak testi nedensiz kırılgan yapar.
@@ -194,7 +211,7 @@ test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor
 
   const other = await page.context().newPage();
   await other.goto(shared, { waitUntil: 'networkidle' });
-  await expect(other.getByLabel('Bankacılık')).toBeChecked();
+  await expect(other.getByLabel(virgullu!, { exact: true })).toBeChecked();
   await expect(other.locator('.screener__status .ui-badge').first()).toHaveText(count);
   // Aynı sonuç, aynı yüzey: birinde tablo varsa ötekinde de olmalı.
   await expect(other.locator('.ui-vtable')).toHaveCount(tabloVar ? 1 : 0);
