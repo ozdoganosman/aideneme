@@ -27,6 +27,19 @@ export interface Position {
   shares: number;
   /** Ağırlıklı ortalama maliyet (komisyon dahil). */
   avgCost: number;
+  /**
+   * MALİYET AĞIRLIKLI ortalama alış tarihi (unix saniye).
+   *
+   * `firstDate` değil: iki alışın ilki küçük, ikincisi büyükse pozisyonun
+   * parası aslında ikinci tarihte bağlanmıştır. Reel (TÜFE düzeltmeli)
+   * getiri bu tarihi kullanıyor — paranın ne zaman bağlandığı, enflasyona
+   * ne kadar maruz kaldığını belirleyen şeydir.
+   *
+   * `avgCost` ile AYNI yinelemeyle tutuluyor: ağırlıklı ortalama maliyet
+   * yönteminde satış ortalamayı değiştirmez, alış ise eski ağırlıkla yeniyi
+   * harmanlar.
+   */
+  avgDate: number;
   /** Bu sembolde kapanan işlemlerden gerçekleşen kâr/zarar. */
   realizedPnl: number;
   /** Ödenen toplam komisyon. */
@@ -68,6 +81,7 @@ export function buildLedger(txns: Txn[]): Ledger {
         symbol: txn.symbol,
         shares: 0,
         avgCost: 0,
+        avgDate: txn.date,
         realizedPnl: 0,
         fees: 0,
         firstDate: txn.date,
@@ -79,7 +93,13 @@ export function buildLedger(txns: Txn[]): Ledger {
     position.lastDate = txn.date;
 
     if (txn.side === 'buy') {
-      const cost = position.shares * position.avgCost + txn.shares * txn.price + fee;
+      const eskiTutar = position.shares * position.avgCost;
+      const yeniTutar = txn.shares * txn.price + fee;
+      const cost = eskiTutar + yeniTutar;
+      // Tarih de TUTARLA ağırlıklanıyor, adetle değil: enflasyona maruz kalan
+      // şey adet değil paradır.
+      position.avgDate =
+        cost > 0 ? (position.avgDate * eskiTutar + txn.date * yeniTutar) / cost : txn.date;
       position.shares += txn.shares;
       position.avgCost = position.shares > 0 ? cost / position.shares : 0;
       cashFlows.push({ date: txn.date, amount: -(txn.shares * txn.price + fee) });

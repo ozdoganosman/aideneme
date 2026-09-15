@@ -127,3 +127,66 @@ describe('moneyWeightedReturn (IRR)', () => {
     );
   });
 });
+
+/**
+ * MALİYET AĞIRLIKLI ALIŞ TARİHİ.
+ *
+ * Reel (TÜFE düzeltmeli) getiri bu tarihi kullanıyor: paranın ne zaman
+ * bağlandığı, enflasyona ne kadar maruz kaldığını belirler. `firstDate`
+ * yetmez — iki alışın ilki küçük, ikincisi büyükse pozisyonun parası
+ * aslında ikinci tarihte bağlanmıştır.
+ */
+describe('avgDate — maliyet ağırlıklı alış tarihi', () => {
+  it('tek alışta o işlemin tarihi', () => {
+    const { positions } = buildLedger([
+      txn({ symbol: 'AAA', side: 'buy', shares: 10, price: 100, date: day(0) }),
+    ]);
+    expect(positions[0].avgDate).toBe(day(0));
+  });
+
+  it('büyük ikinci alış ortalamayı kendine çekiyor', () => {
+    const { positions } = buildLedger([
+      txn({ symbol: 'AAA', side: 'buy', shares: 1, price: 100, date: day(0) }),
+      txn({ symbol: 'AAA', side: 'buy', shares: 99, price: 100, date: day(100) }),
+    ]);
+    // Tutar ağırlığı 100 / 9.900 → ortalama ikinci tarihe çok yakın.
+    expect(positions[0].avgDate).toBeGreaterThan(day(98));
+    // firstDate DEĞİŞMİYOR: iki alan iki farklı soruya cevap veriyor.
+    expect(positions[0].firstDate).toBe(day(0));
+  });
+
+  it('eşit tutarlı iki alışta tam ortada', () => {
+    const { positions } = buildLedger([
+      txn({ symbol: 'AAA', side: 'buy', shares: 10, price: 100, date: day(0) }),
+      txn({ symbol: 'AAA', side: 'buy', shares: 10, price: 100, date: day(10) }),
+    ]);
+    expect(positions[0].avgDate).toBe(day(5));
+  });
+
+  // Ağırlıklı ortalama maliyet yönteminde satış ortalamayı değiştirmez;
+  // ortalama TARİH de değişmemeli, yoksa iki alan tutarsızlaşır.
+  it('satış ortalama tarihi değiştirmiyor', () => {
+    const alislar: Txn[] = [
+      txn({ symbol: 'AAA', side: 'buy', shares: 10, price: 100, date: day(0) }),
+      txn({ symbol: 'AAA', side: 'buy', shares: 10, price: 100, date: day(10) }),
+    ];
+    const once = buildLedger(alislar).positions[0].avgDate;
+    const sonra = buildLedger([
+      ...alislar,
+      txn({ symbol: 'AAA', side: 'sell', shares: 5, price: 150, date: day(20) }),
+    ]).positions[0];
+    expect(sonra.avgDate).toBe(once);
+    expect(sonra.avgCost).toBeCloseTo(100, 8);
+  });
+
+  // Komisyon maliyete giriyor, dolayısıyla tarih ağırlığına da girmeli:
+  // bağlanan para komisyonu da içerir.
+  it('komisyon tarih ağırlığına da giriyor', () => {
+    const { positions } = buildLedger([
+      txn({ symbol: 'AAA', side: 'buy', shares: 10, price: 100, fee: 0, date: day(0) }),
+      txn({ symbol: 'AAA', side: 'buy', shares: 10, price: 100, fee: 1000, date: day(10) }),
+    ]);
+    // İkinci lot 2.000 TL (1.000 + 1.000 komisyon), ilki 1.000 TL.
+    expect(positions[0].avgDate).toBeCloseTo(day(0) + (day(10) - day(0)) * (2000 / 3000), 0);
+  });
+});

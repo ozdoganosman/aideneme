@@ -24,7 +24,7 @@ import {
   valuePortfolio,
   type Txn,
 } from '../../core/portfolio/ledger';
-import { realReturnPct } from '../../core/portfolio/real';
+import { realReturnOfLots } from '../../core/portfolio/real';
 import { returnInCurrency, type FxSeries } from '../../core/portfolio/fx';
 import { fxClient } from '../../data-client/fx';
 import {
@@ -230,10 +230,23 @@ export default function Portfolio({ state, push }: Props) {
 
   const nominalPct =
     valuation.totalCost > 0 ? (valuation.unrealizedPnl / valuation.totalCost) * 100 : NaN;
-  const realPct =
-    Number.isFinite(nominalPct) && firstDate
-      ? realReturnPct(nominalPct, firstDate, valuationDate)
-      : NaN;
+  /**
+   * Reel getiri LOT BAZINDA. Önce portföyün tamamı İLK işlem tarihinden
+   * düşürülüyordu; sonradan eklenen para da baştan beri enflasyona maruz
+   * sayıldığı için kayıp sistematik olarak abartılıyordu. Gerçek veriyle
+   * ölçüldü: iki tarihli bir portföyde -%18,6 yerine -%17,1.
+   *
+   * Her pozisyon KENDİ maliyet ağırlıklı alış tarihinden düzeltiliyor.
+   */
+  const realPct = useMemo(
+    () =>
+      realReturnOfLots(
+        valuation.totalValue,
+        ledger.positions.map((p) => ({ cost: p.shares * p.avgCost, date: p.avgDate })),
+        valuationDate,
+      ),
+    [valuation.totalValue, ledger.positions, valuationDate],
+  );
 
   /**
    * Döviz bazlı getiri: maliyet ilk işlem GÜNÜNÜN kuruyla, güncel değer
@@ -488,9 +501,10 @@ export default function Portfolio({ state, push }: Props) {
                     </button>
                   )}
                 >
-                  Nominal getiri, ilk işlem tarihinden DEĞERLEME GÜNÜNE (elimizdeki son fiyat günü,
-                  bugüne değil) birikimli TÜFE çarpanına bölünür. TL'de %60 nominal kazanç, %65
-                  enflasyonda satın alma gücü kaybıdır.
+                  Her pozisyonun maliyeti KENDİ ağırlıklı alış tarihinden DEĞERLEME GÜNÜNE
+                  (elimizdeki son fiyat günü, bugüne değil) birikimli TÜFE çarpanıyla bugünkü paraya
+                  çevrilir; portföy değeri bu satın alma gücü maliyetine bölünür. TL'de %60 nominal
+                  kazanç, %65 enflasyonda satın alma gücü kaybıdır.
                 </Popover>
               }
             />
