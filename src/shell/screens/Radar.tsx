@@ -26,7 +26,7 @@ import {
   type ScreenRow,
 } from '../../core/screen/metrics';
 import { FUNDAMENTAL_METRIC_DEFS, withFundamentals } from '../../core/screen/fundamentalMetrics';
-import { UNCLASSIFIED, withSectors, type SectorMap } from '../../core/screen/sectors';
+import { sectorNames, UNCLASSIFIED, withSectors, type SectorMap } from '../../core/screen/sectors';
 import type { Financials, FundamentalsSnapshot } from '../../core/fundamentals/types';
 import type { Market } from '../../data-client/markets';
 import type { AnalysisClient } from '../../workers/analysisClient';
@@ -54,6 +54,7 @@ const KAPSAM_ANAHTARI = 'radar.kapsam.v1';
 const SIRA_ANAHTARI = 'radar.sira.v1';
 const FILTRE_ANAHTARI = 'radar.filtre.v2';
 const SUTUN_ANAHTARI = 'radar.sutun.v1';
+const SEKTOR_ANAHTARI = 'radar.sektor.v1';
 
 /**
  * Varsayılan sütunlar.
@@ -212,6 +213,14 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
   const [sutunlar, setSutunlar] = useState<string[]>(() =>
     tercihOku<string[]>(SUTUN_ANAHTARI, VARSAYILAN_SUTUNLAR),
   );
+  /**
+   * Seçili sektörler. Aralık filtrelerinden AYRI tutuluyor çünkü sektör
+   * sayısal değil: "en az / en çok" ile ifade edilemez, `applyScreen`
+   * kurallarına da girmez.
+   */
+  const [sektorSecim, setSektorSecim] = useState<string[]>(() =>
+    tercihOku<string[]>(SEKTOR_ANAHTARI, []),
+  );
 
   const liste = useMemo(() => listeler[market] ?? [], [listeler, market]);
 
@@ -337,10 +346,17 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
     const metinli = q
       ? satirlar.filter((r) => r.symbol.toLocaleUpperCase('tr').includes(q))
       : satirlar;
+    // Sektör süzgeci sayısal kuralların DIŞINDA uygulanıyor. Seçim varken
+    // sektörü BİLİNMEYEN sembol de eleniyor: "sektörü bilinmiyor" ile
+    // "seçtiğin sektörde" aynı şey değil ve ikincisi iddia edilemez.
+    const sektorlu =
+      sektorSecim.length > 0
+        ? metinli.filter((r) => (r.sector ? sektorSecim.includes(r.sector) : false))
+        : metinli;
     // Süzme motoru tarama ekranıyla aynı: NaN hiçbir kuralı geçmez, yani
     // değeri olmayan sembol "eşiği geçti" sayılmaz.
-    return applyScreen(metinli, { rules: kurallar });
-  }, [satirlar, ara, kurallar]);
+    return applyScreen(sektorlu, { rules: kurallar });
+  }, [satirlar, ara, kurallar, sektorSecim]);
 
   const columns: Column<ScreenRow>[] = useMemo(() => {
     const sayisal = (id: string, genislik: string): Column<ScreenRow> => ({
@@ -431,12 +447,22 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
     tercihYaz(FILTRE_ANAHTARI, temiz);
   };
 
+  const sektorYaz = (yeni: string[]) => {
+    setSektorSecim(yeni);
+    tercihYaz(SEKTOR_ANAHTARI, yeni);
+  };
+
+  /** Panelde seçilebilecek sektörler; sınıflandırma yoksa boş. */
+  const sektorAdlari = useMemo(() => sectorNames(sektorler), [sektorler]);
+
   const secenekler = useMemo(
     () => isimler.filter((n) => !liste.includes(n)).map((n) => ({ value: n, label: n })),
     [isimler, liste],
   );
 
   const etkin = Object.entries(araliklar);
+  /** Düğmedeki sayı: sektör seçimi de bir filtredir, sayılmalı. */
+  const etkinSayi = etkin.length + (sektorSecim.length > 0 ? 1 : 0);
   const olcutQ = olcutArama.trim().toLocaleLowerCase('tr');
 
   return (
@@ -514,13 +540,13 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           trigger={(p) => (
             <Button
               size="sm"
-              variant={etkin.length ? 'primary' : 'secondary'}
+              variant={etkinSayi ? 'primary' : 'secondary'}
               // Açık ad: "Filtreyi kaldır: …" çipleriyle karışmasın ve ekran
               // okuyucu kaç filtre olduğunu söylesin.
-              aria-label={`Filtre paneli${etkin.length ? `, ${etkin.length} etkin` : ''}`}
+              aria-label={`Filtre paneli${etkinSayi ? `, ${etkinSayi} etkin` : ''}`}
               {...p}
             >
-              Filtre{etkin.length ? ` (${etkin.length})` : ''}
+              Filtre{etkinSayi ? ` (${etkinSayi})` : ''}
             </Button>
           )}
         >
@@ -532,6 +558,46 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
               placeholder="Ölçüt ara (F/K, RSI…)"
               aria-label="Ölçüt ara"
             />
+            {/*
+              SEKTÖR SÜZGECİ. En üstte, çünkü "hangi sektör" sorusu
+              "hangi F/K" sorusundan önce geliyor: nabızda bir sektörün
+              öne çıktığını gören kullanıcı buraya o sektörü daraltmaya
+              geliyor.
+
+              Sınıflandırma YOKSA bölüm hiç çizilmiyor — boş bir "Sektör"
+              başlığı, filtrenin var olduğunu ama çalışmadığını düşündürür.
+            */}
+            {sektorAdlari.length > 0 ? (
+              <fieldset className="radar__grup radar__sektor">
+                <legend>
+                  Sektör{' '}
+                  <span className="desk__muted">
+                    {sektorSecim.length === 0
+                      ? 'hepsi'
+                      : `${sektorSecim.length} seçili · sektörü bilinmeyenler elenir`}
+                  </span>
+                </legend>
+                <div className="radar__sektor-cipler">
+                  {sektorAdlari.map((ad) => {
+                    const acik = sektorSecim.includes(ad);
+                    return (
+                      <label key={ad} className={`radar__sektor-cip${acik ? ' is-on' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={acik}
+                          onChange={() =>
+                            sektorYaz(
+                              acik ? sektorSecim.filter((x) => x !== ad) : [...sektorSecim, ad],
+                            )
+                          }
+                        />
+                        {ad}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            ) : null}
             {GRUPLAR.map((grup) => {
               const gorunen = grup.idler
                 .map((id) => OLCUT_BY_ID.get(id))
@@ -687,8 +753,18 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
         />
       </div>
 
-      {etkin.length > 0 ? (
+      {etkinSayi > 0 ? (
         <ul className="radar__cipler" aria-label="Etkin filtreler">
+          {sektorSecim.length > 0 ? (
+            <li>
+              <span>
+                {sektorSecim.length === 1 ? sektorSecim[0] : `${sektorSecim.length} sektör`}
+              </span>
+              <IconButton label="Filtreyi kaldır: Sektör" size="sm" onClick={() => sektorYaz([])}>
+                <Icon name="close" size={12} />
+              </IconButton>
+            </li>
+          ) : null}
           {etkin.map(([id, sinir]) => (
             <li key={id}>
               <span>{cipMetni(id, sinir)}</span>
@@ -705,7 +781,13 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
             </li>
           ))}
           <li className="radar__cip-temizle">
-            <button type="button" onClick={() => araliklarYaz({})}>
+            <button
+              type="button"
+              onClick={() => {
+                araliklarYaz({});
+                sektorYaz([]);
+              }}
+            >
               Tümünü temizle
             </button>
           </li>

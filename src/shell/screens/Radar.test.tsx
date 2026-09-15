@@ -240,6 +240,44 @@ describe('Radar — filtreler', () => {
     await tumPiyasa(user);
     expect((await satirlar()).join(' ')).toContain('Ulaştırma');
   });
+
+  /*
+    SEKTÖR SÜZGECİ. Zincirin son halkası: nabızda bir sektörün öne çıktığını
+    gören kullanıcı radarı o sektöre daraltıp ölçütlerini üstüne koyabilmeli.
+    Sektör sayısal olmadığı için `applyScreen` kurallarına giremiyor, ayrı
+    süzülüyor — bu yüzden ayrı sınanıyor.
+  */
+  it('sektör süzgeci satırları eliyor ve çip olarak görünüyor', async () => {
+    sectorsFn.mockResolvedValue({
+      of: { THYAO: 'Ulaştırma', GARAN: 'Bankacılık' },
+      source: 'test',
+      generated: 1,
+    });
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    expect(await screen.findByText('2 / 2')).toBeInTheDocument();
+
+    await filtrePaneliniAc(user);
+    await user.click(screen.getByRole('checkbox', { name: 'Ulaştırma' }));
+
+    expect(await screen.findByText('1 / 2')).toBeInTheDocument();
+    expect((await satirlar())[0]).toContain('THYAO');
+    // Düğme sayacı sektörü de sayıyor; aksi hâlde "filtre yok" der gibi durur.
+    expect(screen.getByRole('button', { name: /^Filtre paneli, 1 etkin/ })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list', { name: 'Etkin filtreler' })).getByText('Ulaştırma'),
+    ).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('radar.sektor.v1')!)).toEqual(['Ulaştırma']);
+  });
+
+  // Sınıflandırma YOKSA bölüm hiç çizilmemeli: boş bir "Sektör" başlığı,
+  // filtrenin var olduğunu ama çalışmadığını düşündürür.
+  it('sınıflandırma yoksa sektör bölümü çizilmiyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await filtrePaneliniAc(user);
+    expect(screen.queryByRole('group', { name: /^Sektör/ })).toBeNull();
+  });
 });
 
 describe('Radar — sütunlar', () => {

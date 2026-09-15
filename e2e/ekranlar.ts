@@ -90,6 +90,25 @@ export const EKRANLAR: Ekran[] = [
     },
   },
   {
+    /*
+      FİLTRE PANELİ AYRI BİR DURUM. `sembol:radar` girdisi hazır filtreyi
+      uyguluyor ve panel seçimde KAPANIYOR — yani orada panelin kendisi
+      denetlenmiyor. Sektör süzgeci de bu panelin içinde; ayrı giriş
+      olmasaydı yepyeni bir yüzey denetimsiz kalırdı. Bu oturumda tam olarak
+      bu kusuru beş kez yaptım.
+    */
+    id: 'sembol:radar-filtre',
+    ad: 'Sembol Masası — radar filtre paneli',
+    url: 'v=sembol&s=X001',
+    hazir: '.radar__sektor',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
+    },
+  },
+  {
     id: 'sembol:finansallar',
     ad: 'Sembol Masası — finansallar',
     url: 'v=sembol&s=X001',
