@@ -34,6 +34,11 @@ vi.mock('../../data-client/client', () => ({
   },
 }));
 
+const sectorsFn = vi.fn();
+vi.mock('../../data-client/sectors', () => ({
+  sectorsClient: { map: (...a: unknown[]) => sectorsFn(...a) },
+}));
+
 import Strategies from './Strategies';
 
 function metrics(over: Partial<BacktestMetrics>): BacktestMetrics {
@@ -90,6 +95,7 @@ const STATE = { v: 'stratejiler', m: 'bist', s: 'AAA' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sectorsFn.mockResolvedValue(null); // varsayılan: sınıflandırma yok
   const results: Record<string, SymbolResult[]> = {};
   const skipped: Record<string, number> = {};
   STRATEGY_PRESETS.forEach((preset, i) => {
@@ -263,5 +269,44 @@ describe('Strategies — veri gelmezse', () => {
     } finally {
       Object.assign(FAKE_ANALYSIS, prev);
     }
+  });
+});
+
+/**
+ * SEKTÖR kapsamı.
+ *
+ * Piyasa geneli ortalama sektör farklarını yutuyor: bankada işe yarayan bir
+ * kural çimentoda çalışmayabilir ve tek bir piyasa sıralaması ikisini aynı
+ * sayıya karıştırıyor.
+ */
+describe('Stratejiler — sektör kapsamı', () => {
+  const HARITA = {
+    source: 'test',
+    generated: 1,
+    of: { AAA: 'Bankacılık', BBB: 'Çimento' },
+  };
+
+  it('sınıflandırma yoksa seçenek HİÇ görünmüyor', async () => {
+    render(<Strategies state={STATE} push={push} />);
+    await waitFor(() => expect(screen.getByLabelText('Kapsam')).toBeInTheDocument());
+    expect(within(screen.getByLabelText('Kapsam')).queryByText('Sektör (tam geçmiş)')).toBeNull();
+  });
+
+  it('sektör seçilince YALNIZCA o sektörün sembolleri planlanıyor', async () => {
+    const user = userEvent.setup();
+    sectorsFn.mockResolvedValue(HARITA);
+    render(<Strategies state={STATE} push={push} />);
+
+    await user.selectOptions(await screen.findByLabelText('Kapsam'), 'sektor');
+    // Sektör seçilmeden indirme planı hesaplanmıyor: boş liste için paket
+    // indirip "0 sembol" demek olurdu.
+    expect(await screen.findByText('Önce bir sektör seçin.')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Sektör'), 'Bankacılık');
+    // AAA bankacılıkta, BBB değil → tek sembol.
+    expect(await screen.findByText(/1 sembol ·/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Bankacılık sektöründe test et' }),
+    ).toBeInTheDocument();
   });
 });

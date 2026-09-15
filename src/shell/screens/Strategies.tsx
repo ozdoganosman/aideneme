@@ -24,6 +24,8 @@ import {
 } from '../../core/strategy/rank';
 import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
+import { sectorsClient } from '../../data-client/sectors';
+import type { SectorMap } from '../../core/screen/sectors';
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
@@ -37,7 +39,7 @@ interface Props {
   push: (patch: UrlState) => void;
 }
 
-type Scope = 'market' | 'symbol' | 'deep' | 'liste';
+type Scope = 'market' | 'symbol' | 'deep' | 'liste' | 'sektor';
 
 /** Aynı anda kaç sembol indirilip hesaplansın (zayıf makinede de akıcı kalsın). */
 const DEEP_CONCURRENCY = 3;
@@ -88,6 +90,15 @@ export default function Strategies({ state, push }: Props) {
   const listed = useMemo(() => (state.sy ? state.sy.split(',').filter(Boolean) : []), [state.sy]);
   const [scope, setScope] = useState<Scope>(listed.length > 0 ? 'liste' : 'market');
   const [deepCount, setDeepCount] = useState(30);
+  /**
+   * Sektör kapsamı: "bu sektörde hangi kural çalışıyor?"
+   *
+   * Piyasa geneli ortalama, sektör farklarını yutuyor: bankada işe yarayan bir
+   * momentum kuralı çimentoda çalışmayabilir ve tek bir piyasa sıralaması
+   * ikisini aynı sayıya karıştırıyor.
+   */
+  const [sektorler, setSektorler] = useState<SectorMap | null>(null);
+  const [sektor, setSektor] = useState<string>('');
   const [deep, setDeep] = useState<{ done: number; total: number } | null>(null);
   const [plan, setPlan] = useState<{ symbols: string[]; bytes: number } | null>(null);
   const [withCosts, setWithCosts] = useState(true);
@@ -109,7 +120,13 @@ export default function Strategies({ state, push }: Props) {
     setRows(null);
     setError(null);
 
-    if (scope === 'deep' || scope === 'liste') {
+    if (scope === 'deep' || scope === 'liste' || scope === 'sektor') {
+      // Sektör seçilmeden plan hesaplamak, boş bir liste için paket indirip
+      // "0 sembol" demek olurdu.
+      if (scope === 'sektor' && !sektor) {
+        setPlan(null);
+        return;
+      }
       // Derin tarama KENDİLİĞİNDEN başlamaz: megabaytlarca indirme demek.
       // Önce ne indirileceği hesaplanıp kullanıcıya söylenir.
       (async () => {
@@ -125,7 +142,9 @@ export default function Strategies({ state, push }: Props) {
               ? // Listedekilerin sırası da işlem değerine göre; ilerleme çubuğu
                 // en likitten başlasın.
                 ranked.filter((r) => listed.includes(r.symbol)).map((r) => r.symbol)
-              : ranked.slice(0, deepCount).map((r) => r.symbol);
+              : scope === 'sektor'
+                ? ranked.filter((r) => sektorler?.of[r.symbol] === sektor).map((r) => r.symbol)
+                : ranked.slice(0, deepCount).map((r) => r.symbol);
           const bytes = symbols.reduce((sum, s) => sum + (manifest.symbols[s]?.b ?? 0), 0);
           setPlan({ symbols, bytes });
         } catch (err) {
@@ -183,7 +202,43 @@ export default function Strategies({ state, push }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [market, scope, symbol, deepCount, listed, analysis.status, analysis.bars, options]);
+  }, [
+    market,
+    scope,
+    symbol,
+    deepCount,
+    listed,
+    sektor,
+    sektorler,
+    analysis.status,
+    analysis.bars,
+    options,
+  ]);
+
+  // Sektör sınıflandırması: yoksa sektör kapsamı hiç görünmez.
+  useEffect(() => {
+    let cancelled = false;
+    setSektorler(null);
+    setSektor('');
+    sectorsClient
+      .map(market)
+      .then((m) => {
+        if (!cancelled) setSektorler(m);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [market]);
+
+  /** Sınıflandırmadaki sektör adları (alfabetik). */
+  const sektorAdlari = useMemo(
+    () =>
+      sektorler
+        ? [...new Set(Object.values(sektorler.of))].sort((a, b) => a.localeCompare(b, 'tr'))
+        : [],
+    [sektorler],
+  );
 
   /**
    * Derin tarama: en likit N sembolün TAM geçmişi indirilir ve tüm stratejiler
@@ -290,10 +345,28 @@ export default function Strategies({ state, push }: Props) {
               ? [{ value: 'liste', label: `Tarama sonucu (${listed.length} sembol)` }]
               : []),
             { value: 'market', label: 'Piyasa (ortak pencere)' },
+            // Sınıflandırma yoksa seçenek HİÇ görünmüyor: seçilip sonra
+            // "sektör verisi yok" demek, olmayan bir yolu varmış gibi sunardı.
+            ...(sektorAdlari.length > 0 ? [{ value: 'sektor', label: 'Sektör (tam geçmiş)' }] : []),
             { value: 'symbol', label: 'Tek sembol (tüm geçmiş)' },
             { value: 'deep', label: 'Derin (en likitler, tam geçmiş)' },
           ]}
         />
+        {scope === 'sektor' ? (
+          <Select
+            label="Sektör"
+            value={sektor}
+            onChange={(v) => {
+              setSektor(v);
+              setRows(null);
+              setPlan(null);
+            }}
+            options={[
+              { value: '', label: 'Seçin…' },
+              ...sektorAdlari.map((x) => ({ value: x, label: x })),
+            ]}
+          />
+        ) : null}
         {scope === 'deep' ? (
           <NumberField
             label="Sembol sayısı"
@@ -321,17 +394,19 @@ export default function Strategies({ state, push }: Props) {
       </section>
 
       <p className="rank__lead">
-        {scope === 'market'
-          ? 'Aynı kurallar tüm sembollerde, ortak 250 barlık pencerede — paket zaten inmiş olduğu için ek indirme yok. Karşılaştırma tabanı al-tut ve al-tut aynı maliyeti öder.'
-          : scope === 'liste'
-            ? 'Tarayıcıda bulduğunuz sembollerin TAM geçmişinde tüm hazır stratejiler. Seçim tarama kriterlerinden geldiği için sonuçlar o kriterlere koşulludur — piyasanın tamamı için genelleme değildir.'
-            : scope === 'deep'
-              ? 'En likit sembollerin TAM geçmişi indirilip stratejiler gerçek tarih üzerinde koşar. Ortak pencere kısıtı kalkar; EMA(200) tabanlı kurallar da ölçülebilir.'
-              : `Tüm hazır stratejiler ${symbol} sembolünün tam geçmişinde. Tek gözlem olduğu için p-değeri hesaplanmaz.`}
+        {scope === 'sektor'
+          ? 'Aynı kurallar YALNIZCA bu sektörün sembollerinde, tam geçmişle. Piyasa geneli ortalama sektör farklarını yutuyor: bankada işe yarayan bir kural çimentoda çalışmayabilir.'
+          : scope === 'market'
+            ? 'Aynı kurallar tüm sembollerde, ortak 250 barlık pencerede — paket zaten inmiş olduğu için ek indirme yok. Karşılaştırma tabanı al-tut ve al-tut aynı maliyeti öder.'
+            : scope === 'liste'
+              ? 'Tarayıcıda bulduğunuz sembollerin TAM geçmişinde tüm hazır stratejiler. Seçim tarama kriterlerinden geldiği için sonuçlar o kriterlere koşulludur — piyasanın tamamı için genelleme değildir.'
+              : scope === 'deep'
+                ? 'En likit sembollerin TAM geçmişi indirilip stratejiler gerçek tarih üzerinde koşar. Ortak pencere kısıtı kalkar; EMA(200) tabanlı kurallar da ölçülebilir.'
+                : `Tüm hazır stratejiler ${symbol} sembolünün tam geçmişinde. Tek gözlem olduğu için p-değeri hesaplanmaz.`}
         {scope !== 'symbol' ? ` ${INDEPENDENCE_CAVEAT}` : ''}
       </p>
 
-      {scope === 'deep' || scope === 'liste' ? (
+      {scope === 'deep' || scope === 'liste' || scope === 'sektor' ? (
         <section className="rank__deep" aria-label="Derin tarama">
           {deep ? (
             <>
@@ -348,12 +423,18 @@ export default function Strategies({ state, push }: Props) {
                 okundu, tahmin değil.
               </p>
               <Button variant="primary" onClick={runDeep}>
-                {scope === 'liste' ? 'Bu sembollerde test et' : 'Derin taramayı başlat'}
+                {scope === 'liste'
+                  ? 'Bu sembollerde test et'
+                  : scope === 'sektor'
+                    ? `${sektor} sektöründe test et`
+                    : 'Derin taramayı başlat'}
               </Button>
               <span className="desk__muted">
                 İnen seriler tarayıcı önbelleğinde kalır; ikinci çalıştırma ağa çıkmaz.
               </span>
             </>
+          ) : scope === 'sektor' && !sektor ? (
+            <p className="desk__muted">Önce bir sektör seçin.</p>
           ) : (
             <p className="desk__muted">İndirme boyutu hesaplanıyor…</p>
           )}
@@ -389,11 +470,13 @@ export default function Strategies({ state, push }: Props) {
               }
               provenance={
                 <Prov label={scope === 'symbol' ? 'Bar' : 'Sembol'}>
-                  {scope === 'market'
-                    ? 'Paketteki tüm semboller, HEPSİNDE ortak olan son N barlık pencerede. Ortak pencere şart: farklı uzunluklarda ölçülen sonuçlar yan yana sıralanamaz.'
-                    : scope === 'deep'
-                      ? 'En likit semboller, her birinin TAM geçmişiyle. Pencereler farklı olduğu için semboller arası karşılaştırma değil, strateji başına dağılım okunur.'
-                      : 'Tek sembol, tam geçmişi. Çoklu test düzeltmesi gerekmez çünkü tek bir seri üzerinde ölçülüyor.'}
+                  {scope === 'sektor'
+                    ? 'Aynı kurallar YALNIZCA bu sektörün sembollerinde, tam geçmişle. Piyasa geneli ortalama sektör farklarını yutuyor: bankada işe yarayan bir kural çimentoda çalışmayabilir.'
+                    : scope === 'market'
+                      ? 'Paketteki tüm semboller, HEPSİNDE ortak olan son N barlık pencerede. Ortak pencere şart: farklı uzunluklarda ölçülen sonuçlar yan yana sıralanamaz.'
+                      : scope === 'deep'
+                        ? 'En likit semboller, her birinin TAM geçmişiyle. Pencereler farklı olduğu için semboller arası karşılaştırma değil, strateji başına dağılım okunur.'
+                        : 'Tek sembol, tam geçmişi. Çoklu test düzeltmesi gerekmez çünkü tek bir seri üzerinde ölçülüyor.'}
                 </Prov>
               }
             />
