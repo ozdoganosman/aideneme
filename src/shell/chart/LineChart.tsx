@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { trDay } from '../../core/format/date';
+import { eksenAraligi } from '../../core/chart/scale';
 import { trPct, axisLabel } from '../../ui';
 import { useChartColors } from './useThemeColors';
 
@@ -100,19 +101,9 @@ export function LineChart({
         }
       }
       if (!Number.isFinite(min) || !Number.isFinite(max)) return;
-      // Sıfır ölçeğin içinde kalmalı: aksi hâlde tamamı negatif bir seri
-      // grafikte yükseliyormuş gibi görünür ve sıfır çizgisi hiç çizilmez.
-      if (zeroLine) {
-        if (min > 0) min = 0;
-        if (max < 0) max = 0;
-      }
-      if (max - min < 1e-9) {
-        min -= 1;
-        max += 1;
-      }
-      const pad = (max - min) * 0.08;
-      min -= pad;
-      max += pad;
+      // Ölçek kuralı ÇEKİRDEKTE ve orada sınanıyor: canvas'a `fillText` ile
+      // yazılan eksen etiketi DOM'da olmadığı için uçtan uca test göremiyor.
+      ({ min, max } = eksenAraligi(min, max, { sifirCizgisi: zeroLine }));
 
       const toX = (x: number) => padL + x * plotW;
       const toY = (y: number) => padT + (1 - (y - min) / (max - min)) * plotH;
