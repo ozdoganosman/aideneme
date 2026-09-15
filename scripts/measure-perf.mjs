@@ -30,13 +30,29 @@ const BASE = 'http://localhost:4182/next.html';
  * akışkan" iddiası doğrulanamaz hâldeydi. Listeyi iki yerde tutmak aynı
  * çürümeyi tekrar üretirdi.
  */
-const HAZIR = Object.fromEntries(
-  JSON.parse(readFileSync(new URL('./perf-ekranlar.json', import.meta.url), 'utf8')).ekranlar.map(
-    (e) => [e.ad, e.hazir],
-  ),
-);
+const EKRANLAR = JSON.parse(
+  readFileSync(new URL('./perf-ekranlar.json', import.meta.url), 'utf8'),
+).ekranlar;
+const HAZIR = Object.fromEntries(EKRANLAR.map((e) => [e.ad, e.hazir]));
 const THROTTLE = Number(process.argv[2] ?? 6); // 1 = yok, 6 ≈ düşük güçlü dizüstü
 const RUNS = Number(process.argv[3] ?? 3);
+
+/**
+ * ÖLÇÜLECEK SEMBOLLER — argümanla değiştirilebilir.
+ *
+ * Sabit `X001` yazılıydı ve araç yayındaki GERÇEK veride hiç çalışmıyordu:
+ * o sembol orada yok, grafik hiç çizilmiyor, araç 120 saniye bekleyip
+ * düşüyordu. "Zayıf makinede akışkan" iddiasının asıl sınanması gereken yer
+ * ise tam olarak gerçek veri — 584 sembol ve tam geçmiş.
+ *
+ *   node scripts/measure-perf.mjs 6 3 THYAO,GARAN,AKBNK
+ */
+const SEMBOLLER = (process.argv[4] ?? 'X001,X002,X003').split(',');
+const coz = (url) =>
+  url
+    .replaceAll('{SEMBOL2}', SEMBOLLER[1] ?? SEMBOLLER[0])
+    .replaceAll('{SEMBOL3}', SEMBOLLER[2] ?? SEMBOLLER[0])
+    .replaceAll('{SEMBOL}', SEMBOLLER[0]);
 
 const median = (values) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -137,10 +153,12 @@ async function repeat(name, url, ready, actions) {
 
 const results = [];
 
-results.push(await repeat('nabız (200 sembol, ısı haritası)', `${BASE}?v=nabiz`, HAZIR['nabız']));
+results.push(
+  await repeat('nabız (200 sembol, ısı haritası)', coz(`${BASE}?v=nabiz`), HAZIR['nabız']),
+);
 
 results.push(
-  await repeat('tarayıcı', `${BASE}?v=tarayici`, HAZIR['tarayıcı'], async (page) => {
+  await repeat('tarayıcı', coz(`${BASE}?v=tarayici`), HAZIR['tarayıcı'], async (page) => {
     const input = page.getByLabel('RSI uzunluk');
     await input.click();
     await input.press('Control+a');
@@ -178,7 +196,7 @@ results.push(
 results.push(
   await repeat(
     'sembol masası (grafik)',
-    `${BASE}?v=sembol&s=X001`,
+    coz(`${BASE}?v=sembol&s={SEMBOL}`),
     HAZIR['sembol masası'],
     async (page) => {
       const t = Date.now();
@@ -228,7 +246,7 @@ results.push(
 results.push(
   await repeat(
     'laboratuvar (backtest)',
-    `${BASE}?v=laboratuvar&s=X001`,
+    coz(`${BASE}?v=laboratuvar&s={SEMBOL}`),
     HAZIR['laboratuvar'],
     async (page) => {
       const t = Date.now();
@@ -240,7 +258,11 @@ results.push(
 );
 
 results.push(
-  await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=X001,X002,X003`, HAZIR['karşılaştır']),
+  await repeat(
+    'karşılaştır',
+    coz(`${BASE}?v=karsilastir&cmp={SEMBOL},{SEMBOL2},{SEMBOL3}`),
+    HAZIR['karşılaştır'],
+  ),
 );
 
 // Fazlardan sonra eklenen ekranlar: en ağır iki iş (1600 backtest ve model
@@ -248,7 +270,7 @@ results.push(
 results.push(
   await repeat(
     'stratejiler (1600 backtest)',
-    `${BASE}?v=stratejiler`,
+    coz(`${BASE}?v=stratejiler`),
     HAZIR['stratejiler'],
     async (page) => {
       const t = Date.now();
@@ -262,15 +284,15 @@ results.push(
   ),
 );
 
-results.push(await repeat('model (purged CV)', `${BASE}?v=model&s=X001`, HAZIR['model']));
+results.push(await repeat('model (purged CV)', coz(`${BASE}?v=model&s={SEMBOL}`), HAZIR['model']));
 
-results.push(await repeat('rapor', `${BASE}?v=rapor&s=X001`, HAZIR['rapor']));
+results.push(await repeat('rapor', coz(`${BASE}?v=rapor&s={SEMBOL}`), HAZIR['rapor']));
 
 // Sektör paneli paketi indiriyor (izinli); portföy kur serisini okuyor.
 results.push(
   await repeat(
     'sektör akranları',
-    `${BASE}?v=sembol&s=X001`,
+    coz(`${BASE}?v=sembol&s={SEMBOL}`),
     HAZIR['sembol masası'],
     async (page) => {
       const t = Date.now();
@@ -291,7 +313,7 @@ results.push(
 results.push(
   await repeat(
     'radar (tüm piyasa)',
-    `${BASE}?v=sembol&s=X001`,
+    coz(`${BASE}?v=sembol&s={SEMBOL}`),
     HAZIR['sembol masası'],
     async (page) => {
       const t = Date.now();
@@ -307,7 +329,7 @@ results.push(
   ),
 );
 
-results.push(await repeat('portföy', `${BASE}?v=portfoy`, HAZIR['portföy']));
+results.push(await repeat('portföy', coz(`${BASE}?v=portfoy`), HAZIR['portföy']));
 
 console.log(
   `\nCPU yavaşlatma: ${THROTTLE}× · ${RUNS} tekrarın medyanı (köşeli parantez: min–maks)\n`,
