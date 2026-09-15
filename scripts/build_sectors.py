@@ -73,6 +73,7 @@ BASLIKLAR = {
 # CSV kolon adları (borsapy'nin okuduğu sözleşme).
 KOLON_ENDEKS = "ENDEKS KODU"
 KOLON_BILESEN = "BILESEN KODU"
+KOLON_ENDEKS_ADI = "ENDEKS ADI"
 
 # Endeks kodu deseni. İkinci başlık satırını (İngilizce kolon adları) ve boş
 # satırları AYIKLAR: "INDEX CODE" bu desene uymuyor. Ayrı bir "kaçıncı satırı
@@ -150,6 +151,41 @@ def eslesmeler(
     return harita, cakismalar
 
 
+def aday_endeksler(
+    kayitlar: list[dict[str, str]],
+    sektorler: dict[str, str],
+    bilinen: set[str] | None = None,
+) -> list[tuple[str, str, int]]:
+    """
+    Listemizde OLMAYAN ama alt sektör GİBİ duran endeksler, üye sayısıyla.
+
+    Neden var: ASELS gerçek veride hiçbir sektöre yazılmadı ve tek başına
+    piyasanın son-bar işlem değerinin %6,4'ü (13,1 mlr / 203,2 mlr). Sebebi
+    iki şey olabilir — ya birden çok alt sektörde (çakışma), ya da bizim 23'lük
+    listemizde olmayan bir alt sektörde. İkisi bambaşka arızalar.
+
+    Bunu TAHMİN ETMEK yerine kaynağa sordurmak gerekiyor: bu oturumda üç kez
+    uç nokta adı tahmin edip üç kez 401 yedim. Üye sayısı 2–80 arasındaki,
+    listemizde olmayan endeksler raporlanıyor — ana endeksler (XU100: 100 üye)
+    ve dev üst kümeler (XUTUM) bu aralığın dışında kalıyor, geriye aday alt
+    sektörler kalıyor.
+    """
+    sayac: dict[str, tuple[str, set[str]]] = {}
+    for kayit in kayitlar:
+        kod = kayit.get(KOLON_ENDEKS, "").upper()
+        if not ENDEKS_DESENI.match(kod) or kod in sektorler:
+            continue
+        sembol = re.sub(r"\.[A-Z]$", "", kayit.get(KOLON_BILESEN, "").upper())
+        if not sembol or (bilinen is not None and sembol not in bilinen):
+            continue
+        ad = kayit.get(KOLON_ENDEKS_ADI, "") or kod
+        _, uyeler = sayac.setdefault(kod, (ad, set()))
+        uyeler.add(sembol)
+    out = [(kod, ad, len(uyeler)) for kod, (ad, uyeler) in sayac.items() if 2 <= len(uyeler) <= 80]
+    out.sort(key=lambda r: -r[2])
+    return out
+
+
 def indir(url: str = KAYNAK_URL, timeout: int = 30) -> str:
     request = urllib.request.Request(url, headers=BASLIKLAR)
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -199,6 +235,9 @@ XGIDA;BIST GIDA, ICECEK;ULKER.E;ULKER BISKUVI
 XULAS;BIST ULASTIRMA;THYAO.E;TURK HAVA YOLLARI
 XTCRT;BIST TICARET;THYAO.E;TURK HAVA YOLLARI
 XBLSM;BIST BILISIM;YOKBU.E;LISTEMIZDE OLMAYAN
+XSVNM;BIST SAVUNMA;ASELS.E;ASELSAN
+XSVNM;BIST SAVUNMA;OTKAR.E;OTOKAR
+XSVNM;BIST SAVUNMA;YOKBU.E;LISTEMIZDE OLMAYAN
 ;;;
 """
 
@@ -241,6 +280,24 @@ def self_test() -> int:
     # Bilinen sembol listesi verilmezse filtre yok.
     hepsi, _ = eslesmeler(kayitlar, sektorler)
     assert "YOKBU" in hepsi, hepsi
+
+    # TANI — "neden bu hisse sektörsüz kaldı" sorusunun ikinci cevabı:
+    # listemizde OLMAYAN bir alt sektörde olabilir. ASELS gerçek veride tam
+    # olarak bu durumda çıktı, o yüzden sınanıyor.
+    adaylar = dict((kod, (ad, n)) for kod, ad, n in aday_endeksler(kayitlar, sektorler))
+    assert "XSVNM" in adaylar, adaylar
+    assert adaylar["XSVNM"][1] == 3, adaylar
+
+    # TEK ÜYELİ endeks aday değil: örnek CSV'de XU100 ve XUMAL birer üyeli.
+    assert "XU100" not in adaylar, adaylar
+    assert "XUMAL" not in adaylar, adaylar
+
+    # Listemizde OLAN bir kod asla aday olarak çıkmamalı.
+    assert all(kod not in sektorler for kod in adaylar), adaylar
+
+    # Bilinen sembol süzgeci aday sayımına da uygulanıyor.
+    kisitli = dict((kod, n) for kod, _, n in aday_endeksler(kayitlar, sektorler, bilinen={"ASELS", "OTKAR"}))
+    assert kisitli.get("XSVNM") == 2, kisitli
 
     print("build_sectors self-test: tamam")
     return 0
@@ -303,12 +360,32 @@ def main() -> int:
         else ""
     )
     print(f"{len(harita)} sembol · {sektor_sayisi} sektör{not_cakisma} → {OUT.relative_to(ROOT)}")
-    if cakismalar:
-        ornek = ", ".join(f"{s} ({'+'.join(k)})" for s, k in sorted(cakismalar.items())[:8])
-        print(f"  çakışanlar: {ornek}", file=sys.stderr)
     ozet_yaz(
         f"Sektör sınıflandırması: {len(harita)} sembol · {sektor_sayisi} sektör{not_cakisma}."
     )
+
+    # TANI — "neden bu hisse sektörsüz kaldı" sorusunun cevabı burada.
+    if cakismalar:
+        ornek = ", ".join(f"{s} ({'+'.join(k)})" for s, k in sorted(cakismalar.items())[:10])
+        print(f"  çakışanlar: {ornek}", file=sys.stderr)
+        ozet_yaz(f"- Birden çok sektörde olduğu için yazılmayanlar: {ornek}")
+
+    bilinen = known_symbols()
+    if bilinen:
+        yazilmayan = sorted(bilinen - set(harita) - set(cakismalar))
+        if yazilmayan:
+            print(f"  hiçbir sektörde bulunmayan: {len(yazilmayan)}", file=sys.stderr)
+            ozet_yaz(
+                f"- Hiçbir alt sektör endeksinde bulunmayan {len(yazilmayan)} sembol: "
+                + ", ".join(yazilmayan[:15])
+                + ("…" if len(yazilmayan) > 15 else "")
+            )
+
+    adaylar = aday_endeksler(kayitlar, sektorler, bilinen=bilinen or None)
+    if adaylar:
+        satir = ", ".join(f"{kod} {ad} ({n})" for kod, ad, n in adaylar[:20])
+        print(f"  listede olmayan aday alt sektörler: {satir}", file=sys.stderr)
+        ozet_yaz(f"- Listemizde OLMAYAN aday alt sektör endeksleri (üye): {satir}")
     return 0
 
 
