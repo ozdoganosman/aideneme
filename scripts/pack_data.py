@@ -49,16 +49,34 @@ DAY = 86400
 SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
 
 
-# Borsa yatırım fonu (ETF) işaretleri — aracın KENDİ resmî adında geçiyor.
+# Hisse OLMAYAN araçların işaretleri — aracın KENDİ resmî adında geçiyor.
 #
 # Neden ada bakılıyor: fonlar sembol listesinde "hisse" olarak duruyor ve ayrı
-# bir alanla işaretlenmiyorlar. Ad, ihraççının tescilli adı; "BYF"/"ETF" orada
-# yazıyorsa bu bir çıkarım değil, okunan bir bilgidir.
+# bir alanla işaretlenmiyorlar. Ad, ihraççının tescilli adı; "BYF"/"ETF"/"GSYF"
+# orada yazıyorsa bu bir çıkarım değil, OKUNAN bir bilgidir.
 #
-# TESPİT EKSİK VE BUNU BİLEREK YAZIYORUM: adı kısaltılmış bir fon (örn. OPK30,
-# adı "…Katilim 30 Endeksi Hisse Se" diye kesilmiş) yakalanmıyor. Eleme tek
-# yönde hatasız — fon olmayan hiçbir şey elenmiyor — ama tam değil.
-FON_ISARETLERI = ("byf", "etf", "borsa yatir", "borsa yatır", "yatirim fonu", "yatırım fonu")
+# İşaretler ARAÇ TÜRÜNÜ söylüyor, ihraççıyı değil. "Portföy" bilerek listede
+# YOK: fonların çoğunun adında geçiyor ama borsaya kote bir portföy yönetim
+# ŞİRKETİ de aynı kelimeyi taşır ve o gerçek bir hissedir. Yanlış eleme,
+# elememekten kötüdür.
+#
+# TESPİT EKSİK VE BUNU BİLEREK YAZIYORUM. Yayındaki veride adı kısaltıldığı
+# için yakalanamayan dört araç var: OPK30 ("…Katilim 30 Endeksi Hisse Se"),
+# ZTLRK, HTPSB ("Hedef Portfoy Yone Npv"), NPCLN ("Neo Portfoy Yoneti
+# Perles"). Eleme TEK YÖNDE hatasız — fon olmayan hiçbir şey elenmiyor — ama
+# tam değil.
+FON_ISARETLERI = (
+    "byf",
+    "etf",
+    "gsyf",  # girişim sermayesi yatırım fonu
+    "borsa yatir",
+    "borsa yatır",
+    "yatirim fonu",
+    "yatırım fonu",
+    # QTEMZ "DJIST - Dow Jones Istanbul 20": endeks, ama kaynak listesi onu
+    # `indices` yerine `stocks` altında tutuyor.
+    "dow jones",
+)
 
 
 def _sembol_listesi() -> dict:
@@ -492,8 +510,12 @@ def fon_self_test() -> None:
                 {
                     "stocks": [
                         {"name": "AAA", "displayName": "Anonim Sirketi"},
+                        # Portföy YÖNETİM ŞİRKETİ gerçek bir hissedir ve
+                        # ELENMEMELİ — "portföy" bu yüzden işaret değil.
+                        {"name": "PYS", "displayName": "Bir Portfoy Yonetimi A.S."},
                         {"name": "FON1", "displayName": "Bir Portfoy BIST 30 ETF"},
                         {"name": "FON2", "displayName": "Baska Portfoy Borsa Yatirim Fonu"},
+                        {"name": "FON3", "displayName": "TERA PY TECH INVEST TEK. GSYF"},
                     ],
                     "indices": [{"name": "XU100"}],
                 }
@@ -509,10 +531,13 @@ def fon_self_test() -> None:
             SYMBOLS_FILE = onceki
 
     assert endeks == {"XU100"}, endeks
-    assert fon == {"FON1", "FON2"}, fon
-    assert disi == {"XU100", "FON1", "FON2"}, disi
-    # Şirket adı fon işareti taşımıyorsa ELENMİYOR: eleme tek yönde hatasız.
+    assert fon == {"FON1", "FON2", "FON3"}, fon
+    assert disi == {"XU100", "FON1", "FON2", "FON3"}, disi
+    # Şirket adı ARAÇ TÜRÜ işareti taşımıyorsa ELENMİYOR: eleme tek yönde
+    # hatasız. Portföy yönetim şirketi buna örnek — adında "portföy" geçiyor
+    # ama kendisi bir hisse.
     assert "AAA" not in disi
+    assert "PYS" not in disi, "portföy yönetim şirketi yanlışlıkla elendi"
     # Piyasa BIST değilse eleme YOK — liste BIST'e özel.
     assert hisse_disi("us") == set()
 
