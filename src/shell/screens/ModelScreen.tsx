@@ -29,7 +29,9 @@ interface Props {
 
 const pct = (v: number, digits = 1): string => trPct(v * 100, digits);
 const num = (v: number, digits = 3): string => trNum(v, digits);
-const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+// Türkçe ondalık: `toFixed` "474.5 MB" üretiyordu ve biçim denetimi bunu
+// ancak indirme planı ekrandayken yakalayabiliyordu.
+const mb = (bytes: number): string => `${trNum(bytes / 1024 / 1024, 1)} MB`;
 
 const day = (d: number) => trDayIndex(d);
 
@@ -531,7 +533,15 @@ export default function ModelScreen({ state, push }: Props) {
               <h3>Model kartı</h3>
               <span className="desk__muted">
                 {day(card.firstDay)} – {day(card.lastDay)} · sızıntı temizliğinde {card.purged}{' '}
-                örnek atıldı · {result?.ms ?? 0} ms
+                {/*
+                  Süre YUVARLANIYOR. Ham `performance.now()` farkı bir ondalık
+                  sayı ("443.5218") ve çoğu zaman biçim denetiminin desenine
+                  takılmıyordu; tam bir ondalığa denk geldiğinde ("443.5")
+                  ekranda İngİLİZCE ondalık beliriyordu. Kusur iki turda
+                  "kararsız test" sanıldı — oysa aralıklı görünen gerçek bir
+                  kusurdu. Milisaniyenin ondalığı zaten hiçbir şey anlatmıyor.
+                */}
+                örnek atıldı · {Math.round(result?.ms ?? 0)} ms
               </span>
             </header>
             <ul className="model__list">

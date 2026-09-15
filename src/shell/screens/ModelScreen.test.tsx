@@ -197,7 +197,7 @@ describe('Model ekranı — havuz kapsamı', () => {
 
     await user.selectOptions(screen.getByLabelText('Kapsam'), 'pool');
     // 1 MB + 0,5 MB = 1,5 MB, manifestten okunuyor.
-    await waitFor(() => expect(screen.getByText('1.5 MB')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('1,5 MB')).toBeInTheDocument());
     expect(pooledFn).not.toHaveBeenCalled();
   });
 

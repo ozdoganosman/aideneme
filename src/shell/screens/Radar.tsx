@@ -52,6 +52,17 @@ const LISTE_ANAHTARI = 'radar.liste.v1';
 const KAPSAM_ANAHTARI = 'radar.kapsam.v1';
 const SIRA_ANAHTARI = 'radar.sira.v1';
 const FILTRE_ANAHTARI = 'radar.filtre.v2';
+const SUTUN_ANAHTARI = 'radar.sutun.v1';
+
+/**
+ * Varsayılan sütunlar.
+ *
+ * DÖRT tane, sekiz değil: 300 px'lik bir panelde sekiz sütun yatay kaydırma
+ * demek ve ilk bakışta okunan şey en soldaki üç sütun oluyor. Kullanıcı
+ * istediğini sütun seçiciden ekliyor; ayrıca FİLTRELENEN ölçüt kendiliğinden
+ * sütun olarak geliyor.
+ */
+const VARSAYILAN_SUTUNLAR = ['last', 'chg1', 'volRatio'];
 
 type Listeler = Partial<Record<Market, string[]>>;
 type Kapsam = 'liste' | 'piyasa';
@@ -197,6 +208,9 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
   );
   const [ara, setAra] = useState('');
   const [olcutArama, setOlcutArama] = useState('');
+  const [sutunlar, setSutunlar] = useState<string[]>(() =>
+    tercihOku<string[]>(SUTUN_ANAHTARI, VARSAYILAN_SUTUNLAR),
+  );
 
   const liste = useMemo(() => listeler[market] ?? [], [listeler, market]);
 
@@ -347,13 +361,7 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           </span>
         ),
       },
-      sayisal('last', '82px'),
-      sayisal('chg1', '78px'),
-      sayisal('volRatio', '80px'),
-      sayisal('turnover', '92px'),
-      sayisal('rsi', '68px'),
-      sayisal('pe', '72px'),
-      sayisal('roe', '80px'),
+      ...sutunlar.filter((id) => OLCUT_BY_ID.has(id)).map((id) => sayisal(id, '88px')),
     ];
 
     // FİLTRELENEN ölçüt sütun olarak da geliyor: "neden bu satır kaldı"
@@ -392,9 +400,10 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
         ),
     });
     return cols;
-    // `liste`, `symbol`, sınıflandırma ve etkin filtreler dışındaki her şey sabit.
+    // `liste`, `symbol`, sınıflandırma, sütunlar ve etkin filtreler dışındaki
+    // her şey sabit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liste, symbol, sektorler, araliklar]);
+  }, [liste, symbol, sektorler, araliklar, sutunlar]);
 
   const sirali = useMemo(() => sortRows(suzulmus, columns, sira), [suzulmus, columns, sira]);
 
@@ -558,6 +567,44 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
               </li>
             ))}
           </ul>
+        </Popover>
+
+        <Popover
+          title="Sütunlar"
+          trigger={(p) => (
+            <Button size="sm" variant="secondary" aria-label="Sütun seçici" {...p}>
+              Sütun
+            </Button>
+          )}
+        >
+          <div className="radar__panel">
+            {GRUPLAR.map((grup) => {
+              const gorunen = grup.idler
+                .map((id) => OLCUT_BY_ID.get(id))
+                .filter((d): d is MetricDef => !!d);
+              return (
+                <section key={grup.ad} className="radar__grup">
+                  <h4>{grup.ad}</h4>
+                  {gorunen.map((def) => (
+                    <label key={def.id} className="radar__sutun-secim">
+                      <input
+                        type="checkbox"
+                        checked={sutunlar.includes(def.id)}
+                        onChange={(e) => {
+                          const yeni = e.target.checked
+                            ? [...sutunlar, def.id]
+                            : sutunlar.filter((x) => x !== def.id);
+                          setSutunlar(yeni);
+                          tercihYaz(SUTUN_ANAHTARI, yeni);
+                        }}
+                      />
+                      <span>{def.label}</span>
+                    </label>
+                  ))}
+                </section>
+              );
+            })}
+          </div>
         </Popover>
 
         <Combobox

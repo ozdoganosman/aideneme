@@ -99,7 +99,7 @@ function fmt(v: number, digits = 2, suffix = ''): string {
 function provText(key: string, metrics: { bars: number; years: number } | undefined): string {
   const formula = BACKTEST_METRIC_FORMULA[key] ?? '';
   if (!metrics) return formula;
-  return `${formula} Pencere: ${metrics.bars} bar · ${metrics.years.toFixed(1)} yıl (ısınma hariç).`;
+  return `${formula} Pencere: ${metrics.bars} bar · ${trNum(metrics.years, 1)} yıl (ısınma hariç).`;
 }
 
 /** İşaretsiz yüzde: pay ve isabet oranında "+" yanıltıcı olurdu. */

@@ -151,7 +151,7 @@ function fmt(metric: Metric): string {
     case 'volume':
       return v.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
     default:
-      return v.toFixed(2);
+      return trNum(v, 2);
   }
 }
 

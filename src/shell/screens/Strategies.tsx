@@ -44,7 +44,8 @@ type Scope = 'market' | 'symbol' | 'deep' | 'liste' | 'sektor';
 /** Aynı anda kaç sembol indirilip hesaplansın (zayıf makinede de akıcı kalsın). */
 const DEEP_CONCURRENCY = 3;
 
-const mb = (bytes: number): string => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+// Türkçe ondalık: `toFixed` "1.2 MB" üretiyordu.
+const mb = (bytes: number): string => `${trNum(bytes / 1024 / 1024, 1)} MB`;
 
 const pct = (v: number, digits = 1): string => trPct(v, digits, true);
 const plain = (v: number, digits = 1): string => trNum(v, digits);

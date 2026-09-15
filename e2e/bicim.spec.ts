@@ -13,20 +13,84 @@ import { expect, test } from '@playwright/test';
  *   2. Yüzde işareti sayının ÖNÜNDE olmalı (`40%` → `%40`).
  */
 
-const SCREENS: [string, string, string][] = [
-  ['Nabız', 'v=nabiz', '.pulse__flows'],
-  ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
-  ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix'],
-  ['Laboratuvar', 'v=laboratuvar&s=X001', '.lab__stats'],
-  ['Stratejiler', 'v=stratejiler', '.rank__table'],
-  ['Model', 'v=model&s=X001', '.model__verdict'],
-  ['Rapor', 'v=rapor&s=X001', '.report__sheet'],
+/**
+ * Ekranlar ve GEREKİRSE açılacak yüzey.
+ *
+ * Denetimin kör noktası: yalnızca varsayılan durumlar taranıyordu. Model
+ * ekranının indirme PLANI (havuzlanmış model) "474.5 MB" yazıyordu ve bu
+ * satır ancak plan ekrandayken görünüyor — denetim bazen yakalıyor, bazen
+ * kaçırıyordu; iki turda "kararsız test" sanıldı. Aynı sınıftan beş kaçak
+ * daha çıktı (indirme notu, laboratuvarın yıl ipucu, galeri fiyat sütunu,
+ * sembol masasının varsayılan biçimi, finansallarda küçük tutar).
+ */
+type Ekran = {
+  ad: string;
+  url: string;
+  hazir: string;
+  ac?: (page: import('@playwright/test').Page) => Promise<void>;
+};
+
+const SCREENS: Ekran[] = [
+  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
+  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
+  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
+  {
+    ad: 'Sembol Masası (radar)',
+    url: 'v=sembol&s=X001',
+    hazir: '.radar__tablo',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+    },
+  },
+  {
+    ad: 'Sembol Masası (finansallar)',
+    url: 'v=sembol&s=X001',
+    hazir: '.fin__karne',
+    ac: async (page) => {
+      await page.getByRole('tab', { name: 'Finansallar' }).click();
+    },
+  },
+  { ad: 'Karşılaştır', url: 'v=karsilastir&cmp=X001,X002,X003', hazir: '.compare__matrix' },
+  { ad: 'Laboratuvar', url: 'v=laboratuvar&s=X001', hazir: '.lab__stats' },
+  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
+  {
+    // İNDİRME PLANI: "x MB indirilecek" satırı yalnızca bu kapsamda çiziliyor.
+    ad: 'Stratejiler (derin tarama planı)',
+    url: 'v=stratejiler',
+    hazir: '.rank__deep',
+    ac: async (page) => {
+      await page.getByLabel('Kapsam').selectOption('deep');
+    },
+  },
+  { ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
+  {
+    // Havuz eğitiminin indirme PLANI: "x sembol · y MB indirilecek" satırı.
+    ad: 'Model (havuz planı)',
+    url: 'v=model&s=X001',
+    hazir: '.rank__deep',
+    ac: async (page) => {
+      await page.getByLabel('Kapsam').selectOption('pool');
+    },
+  },
+  {
+    // UI kitaplığının tablo sekmesi: fiyat sütunu burada çiziliyor ve bu
+    // ekran hiç denetlenmemişti.
+    ad: 'Kitaplık (tablo)',
+    url: 'v=kitaplik',
+    hazir: '.ui-vtable',
+    ac: async (page) => {
+      await page.getByRole('tab', { name: /Tablo/ }).click();
+    },
+  },
+  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
 ];
 
-for (const [name, query, ready] of SCREENS) {
+for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
   test(`${name}: sayılar Türkçe biçimde`, async ({ page }) => {
     await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
+    if (ac) await ac(page);
     await page.waitForSelector(ready, { timeout: 90_000 });
     await page.waitForTimeout(400);
 

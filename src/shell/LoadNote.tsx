@@ -1,7 +1,11 @@
+import { trNum } from '../ui';
 import type { AnalysisState } from './useAnalysis';
 
+// `toFixed` İNGİLİZCE ondalık üretir ("1.2 MB"). Ürünün geri kalanı Türkçe
+// biçimde ve bu satır yalnızca indirme SIRASINDA görünüyor — biçim denetimi
+// onu bu yüzden hiç yakalayamamıştı.
 const kb = (bytes: number): string =>
-  bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+  bytes >= 1_048_576 ? `${trNum(bytes / 1_048_576, 1)} MB` : `${Math.round(bytes / 1024)} KB`;
 
 /**
  * Paket indirme ilerlemesi.

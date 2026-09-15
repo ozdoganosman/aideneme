@@ -86,7 +86,7 @@ const fmtMoney = (v: number | null): string => {
   if (abs >= 1e9) return `${trNum(v / 1e9, 1)} mlr`;
   if (abs >= 1e6) return `${trNum(v / 1e6, 1)} mn`;
   if (abs >= 1e3) return `${trNum(v / 1e3, 1)} b`;
-  return v.toFixed(0);
+  return trNum(v, 0);
 };
 
 /**

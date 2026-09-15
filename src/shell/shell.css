@@ -2160,3 +2160,13 @@
   margin-top: var(--sp-2);
   font-size: var(--fs-xs);
 }
+
+/* Sütun seçici: onay kutusu + ad, tek satır. */
+.radar__sutun-secim {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 0;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}

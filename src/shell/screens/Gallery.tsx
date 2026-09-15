@@ -20,6 +20,7 @@ import {
   sortRows,
   useToast,
   type Column,
+  trNum,
   trPct,
 } from '../../ui';
 import { Icon } from '../../ui/icons';
@@ -76,7 +77,7 @@ export default function Gallery() {
         key: 'fiyat',
         header: 'Fiyat',
         numeric: true,
-        render: (r) => r.fiyat.toFixed(2),
+        render: (r) => trNum(r.fiyat, 2),
         sortValue: (r) => r.fiyat,
       },
       {

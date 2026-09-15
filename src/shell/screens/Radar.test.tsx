@@ -232,3 +232,25 @@ describe('Radar — filtreler', () => {
     expect((await satirlar()).join(' ')).toContain('Ulaştırma');
   });
 });
+
+describe('Radar — sütunlar', () => {
+  // 300 px'lik panelde sekiz sütun yatay kaydırma demek; varsayılan üç ölçüt
+  // ve kullanıcı istediğini ekliyor.
+  it('varsayılan sütunlar dar tutuluyor, seçiciyle ekleniyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    const basliklar = () =>
+      within(screen.getByRole('table', { name: 'Radar tablosu' }))
+        .getAllByRole('columnheader')
+        // Sıralanan sütun başlığına ok ekliyor ("1 gün ↓"); karşılaştırma
+        // okunu atıyor, sınanan şey sütun KÜMESİ.
+        .map((h) => h.textContent!.trim().replace(/\s*[↑↓]$/, ''));
+
+    expect(basliklar()).toEqual(['Sembol', 'Fiyat', '1 gün', 'Hacim oranı', '']);
+
+    await user.click(screen.getByRole('button', { name: 'Sütun seçici' }));
+    await user.click(screen.getByRole('checkbox', { name: 'RSI' }));
+    expect(basliklar()).toContain('RSI');
+    expect(JSON.parse(localStorage.getItem('radar.sutun.v1')!)).toContain('rsi');
+  });
+});

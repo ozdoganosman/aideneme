@@ -23,6 +23,8 @@ describe('İndirme ilerlemesi', () => {
 
   it('bir megabaytın üstünü MB olarak yazar', () => {
     render(<LoadNote progress={{ loaded: 1_572_864, total: 2_097_152 }} />);
-    expect(screen.getByRole('status')).toHaveTextContent('1.5 MB / 2.0 MB');
+    // Türkçe ondalık: ürünün geri kalanı virgül kullanıyor ve bu satır
+    // `toFixed` yüzünden nokta yazıyordu.
+    expect(screen.getByRole('status')).toHaveTextContent('1,5 MB / 2,0 MB');
   });
 });

@@ -202,7 +202,7 @@ describe('Stratejiler', () => {
 
     await user.selectOptions(screen.getByLabelText('Kapsam'), 'deep');
     // 1 MB + 0,5 MB = 1,5 MB; manifestten okunuyor, tahmin değil.
-    await waitFor(() => expect(screen.getByText('1.5 MB')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('1,5 MB')).toBeInTheDocument());
     expect(rankSeriesFn).not.toHaveBeenCalled();
     expect(seriesFn).not.toHaveBeenCalled();
 
