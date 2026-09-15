@@ -21,6 +21,7 @@ import {
   DEFAULT_SCREEN_PARAMS,
   METRIC_DEFS,
   applyScreen,
+  olculemeyen,
   metricsWithoutData,
   type MetricDef,
   type Operator,
@@ -355,6 +356,17 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
       }),
     [enriched, rules, sort, pickedSectors],
   );
+
+  /**
+   * Kurallara UYMADIĞI için değil, ÖLÇÜLEMEDİĞİ için elenenler.
+   *
+   * "582 sembolden 10 tanesi ölçütlere uyuyor" cümlesi 572 sembolün sınandığını
+   * ima ediyor. Oysa NaN hiçbir kuralı geçmiyor: ölçüsü olmayan sembol de
+   * "uymadı" kovasına düşüyor. Gerçek veride ölçüldü — 582 hissenin yalnızca
+   * 293'ünün F/K'sı var (zarar edende F/K tanımsız, 23 sembolde tablo hiç
+   * yok). Yani bir F/K kuralı evrenin yarısını sessizce eliyordu.
+   */
+  const olculemedi = useMemo(() => olculemeyen(enriched, rules), [enriched, rules]);
 
   // Veri boşluğu mu, kullanıcının eşiği mi? İkisi aynı ekranla anlatılıyordu.
   // Ölçüldü: yayındaki 559 sembolün TAMAMINDA `currentAssets` ve
@@ -888,6 +900,17 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
             <Badge tone={busy ? 'warn' : 'up'}>
               {busy ? 'Hesaplanıyor…' : `${filtered.length} / ${rows.length} sembol`}
             </Badge>
+            {!busy && olculemedi.count > 0 ? (
+              <span className="screener__olculemedi desk__muted">
+                {olculemedi.count} sembol ölçülemedi (
+                {olculemedi.byMetric
+                  .map(
+                    (m) => `${METRIC_BY_ID.get(m.metric)?.label ?? m.metric}: ${trNum(m.count, 0)}`,
+                  )
+                  .join(', ')}
+                ) — kuralı geçemedikleri için değil, o ölçü onlarda olmadığı için elendiler.
+              </span>
+            ) : null}
             {timing ? (
               <span className="desk__muted">
                 {timing.count} sembol × {analysis.bars} bar · worker {timing.ms.toFixed(0)} ms ·{' '}

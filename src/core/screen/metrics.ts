@@ -353,3 +353,44 @@ export function metricsWithoutData(rows: ScreenRow[], rules: Rule[]): string[] {
   }
   return out;
 }
+
+export interface OlculemeyenOzet {
+  /** Kuralların istediği ölçüt en az birinde OLMAYAN sembol sayısı. */
+  count: number;
+  /** Hangi ölçütte kaç sembol ölçülemedi — çoktan aza. */
+  byMetric: { metric: string; count: number }[];
+}
+
+/**
+ * Kurallar yüzünden değil, ÖLÇÜLEMEDİĞİ için elenen semboller.
+ *
+ * Neden gerekiyor: "582 sembolden 10 tanesi ölçütlere uyuyor" cümlesi 572
+ * sembolün SINANDIĞINI ve kaldığını söylüyor. Oysa NaN hiçbir kuralı geçmiyor,
+ * yani ölçüsü olmayan sembol de "uymadı" kovasına düşüyor. Gerçek veride
+ * ölçüldü: 582 hissenin yalnızca 293'ünün F/K'sı var (zarar edende F/K
+ * tanımsız, 23 sembolde tablo hiç yok). Yani bir F/K kuralı, kullanıcı fark
+ * etmeden evrenin yarısını sessizce eliyor.
+ *
+ * Bu, Karne'de zaten uygulanan ilkenin aynısı: payda küçülünce bunu söyle.
+ *
+ * Sektör ve minimum bar elemesi BURAYA girmiyor — onlar kullanıcının açıkça
+ * kurduğu kapsam, eksik ölçü değil.
+ */
+export function olculemeyen(rows: ScreenRow[], rules: Rule[]): OlculemeyenOzet {
+  if (rules.length === 0) return { count: 0, byMetric: [] };
+  const sayac = new Map<string, number>();
+  let count = 0;
+  for (const row of rows) {
+    let eksikVar = false;
+    for (const rule of rules) {
+      if (Number.isFinite(row.values[rule.metric])) continue;
+      eksikVar = true;
+      sayac.set(rule.metric, (sayac.get(rule.metric) ?? 0) + 1);
+    }
+    if (eksikVar) count++;
+  }
+  const byMetric = [...sayac.entries()]
+    .map(([metric, n]) => ({ metric, count: n }))
+    .sort((a, b) => b.count - a.count || a.metric.localeCompare(b.metric));
+  return { count, byMetric };
+}

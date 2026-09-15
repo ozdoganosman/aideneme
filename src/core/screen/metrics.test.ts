@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  olculemeyen,
   DEFAULT_SCREEN_PARAMS,
   METRIC_DEFS,
   applyScreen,
@@ -319,5 +320,50 @@ describe('metricsWithoutData', () => {
       { metric: 'ocf', op: 'lt', a: 9 },
     ];
     expect(metricsWithoutData(rows, rules)).toEqual(['ocf']);
+  });
+});
+
+describe('olculemeyen', () => {
+  const satir = (symbol: string, values: Record<string, number>): ScreenRow => ({
+    symbol,
+    bars: 300,
+    values,
+  });
+
+  it('kuralın istediği ölçüsü olmayan sembolleri sayar', () => {
+    const rows = [
+      satir('AAA', { pe: 10 }),
+      satir('BBB', { pe: NaN }), // zarar eden: F/K tanımsız
+      satir('CCC', { pe: NaN }), // tablosu yok
+    ];
+    const r = olculemeyen(rows, [{ metric: 'pe', op: 'lt', a: 20 }]);
+    expect(r.count).toBe(2);
+    expect(r.byMetric).toEqual([{ metric: 'pe', count: 2 }]);
+  });
+
+  // Bir sembol İKİ ölçütte birden eksikse BİR kez sayılıyor (kaç sembol
+  // ölçülemedi sorusunun cevabı), ama ölçüt kırılımında ikisinde de görünüyor.
+  it('sembolü bir kez, ölçütleri ayrı ayrı sayar', () => {
+    const rows = [satir('AAA', { pe: NaN, roe: NaN }), satir('BBB', { pe: 5, roe: NaN })];
+    const r = olculemeyen(rows, [
+      { metric: 'pe', op: 'gt', a: 0 },
+      { metric: 'roe', op: 'gt', a: 0 },
+    ]);
+    expect(r.count).toBe(2);
+    expect(r.byMetric).toEqual([
+      { metric: 'roe', count: 2 },
+      { metric: 'pe', count: 1 },
+    ]);
+  });
+
+  it('kural yoksa hiçbir şey ölçülemedi sayılmaz', () => {
+    expect(olculemeyen([satir('AAA', { pe: NaN })], [])).toEqual({ count: 0, byMetric: [] });
+  });
+
+  // Ölçüsü OLAN ama kuralı geçemeyen sembol "ölçülemedi" DEĞİLDİR: ikisini
+  // karıştırmak, bu sayıyı anlamsız kılardı.
+  it('kuralı geçemeyen ölçülebilir sembolü saymaz', () => {
+    const r = olculemeyen([satir('AAA', { pe: 99 })], [{ metric: 'pe', op: 'lt', a: 10 }]);
+    expect(r.count).toBe(0);
   });
 });

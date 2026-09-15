@@ -549,3 +549,41 @@ test('finansal tablo yokluğu: araç mı öyle, veri mi eksik', async ({ page })
   await expect(page.getByText('Bu şirketin tablosu kaynakta bulunamadı')).toBeVisible();
   await expect(page.getByText('Bu araç finansal tablo yayımlamıyor')).toHaveCount(0);
 });
+
+/**
+ * "Uymadı" ile "ölçemedik" AYNI ŞEY DEĞİL.
+ *
+ * Tarayıcı "582 sembolden 35 tanesi ölçütlere uyuyor" diyordu ve bu, 547
+ * sembolün SINANIP elendiğini ima ediyordu. Oysa NaN hiçbir kuralı geçmiyor:
+ * ölçüsü olmayan sembol de "uymadı" kovasına düşüyor.
+ *
+ * Gerçek veride ölçüldü: 582 hissenin yalnızca 293'ünün F/K'sı var — zarar
+ * edende F/K tanımsız (negatif F/K "ucuz" gibi sıralanırdı), 23 sembolde ise
+ * tablo hiç yok. Yani bir F/K kuralı evrenin yarısını sessizce eliyordu.
+ * Karne'de zaten uygulanan "payda küçülünce söyle" ilkesinin aynısı.
+ */
+test('tarayıcı: ölçülemeyen sembolleri "uymadı" diye saymıyor', async ({ page }) => {
+  await open(page, 'v=tarayici');
+  await expect(page.locator('.ui-vtable')).toBeVisible();
+
+  // Varsayılan kurallar (RSI, 1 ay) her sembolde ölçülebilir → uyarı YOK.
+  await expect(page.locator('.screener__olculemedi')).toHaveCount(0);
+
+  // F/K: zarar eden şirkette tanımsız, tablosuz sembolde hiç yok.
+  await page.getByLabel('Metrik').first().selectOption({ label: 'F/K' });
+  await page.getByLabel('Koşul').first().selectOption('<');
+  await page.getByLabel('Değer').first().fill('10');
+
+  const not = page.locator('.screener__olculemedi');
+  await expect(not).toBeVisible();
+  await expect(not).toContainText('F/K');
+  await expect(not).toContainText(/o ölçü onlarda olmadığı için/);
+
+  // Sayı UYDURULMUYOR: sonuç + ölçülemeyen ≤ evren olmalı.
+  const metin = await page.locator('.screener__status').first().innerText();
+  const uyan = Number(metin.match(/(\d+)\s*\/\s*(\d+) sembol/)?.[1] ?? '0');
+  const evren = Number(metin.match(/(\d+)\s*\/\s*(\d+) sembol/)?.[2] ?? '0');
+  const olculemeyen = Number((await not.innerText()).match(/(\d+) sembol ölçülemedi/)?.[1] ?? '0');
+  expect(olculemeyen).toBeGreaterThan(0);
+  expect(uyan + olculemeyen).toBeLessThanOrEqual(evren);
+});
