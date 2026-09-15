@@ -15,9 +15,26 @@
  * Tek ölçüm gürültülüdür (aynı kodda %30 sapma görülebilir); varsayılan 3
  * tekrarın MEDYANI raporlanır.
  */
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const BASE = 'http://localhost:4182/next.html';
+
+/**
+ * HAZIR ölçütleri ayrı bir dosyada ve e2e testi (e2e/olcum.spec.ts) onları
+ * doğruluyor.
+ *
+ * Neden: veri sağlığı paneli kaldırıldığında bu araç onu beklemeye devam etti
+ * ve `npm run perf` o günden beri hiç çalışmadı — 120 saniye bekleyip zaman
+ * aşımına düşüyordu. CI'da koşmadığı için kırılma görünmedi; "zayıf makinede
+ * akışkan" iddiası doğrulanamaz hâldeydi. Listeyi iki yerde tutmak aynı
+ * çürümeyi tekrar üretirdi.
+ */
+const HAZIR = Object.fromEntries(
+  JSON.parse(readFileSync(new URL('./perf-ekranlar.json', import.meta.url), 'utf8')).ekranlar.map(
+    (e) => [e.ad, e.hazir],
+  ),
+);
 const THROTTLE = Number(process.argv[2] ?? 6); // 1 = yok, 6 ≈ düşük güçlü dizüstü
 const RUNS = Number(process.argv[3] ?? 3);
 
@@ -120,10 +137,10 @@ async function repeat(name, url, ready, actions) {
 
 const results = [];
 
-results.push(await repeat('nabız (200 sembol, ısı haritası)', `${BASE}?v=nabiz`, '.pulse__flows'));
+results.push(await repeat('nabız (200 sembol, ısı haritası)', `${BASE}?v=nabiz`, HAZIR['nabız']));
 
 results.push(
-  await repeat('tarayıcı', `${BASE}?v=tarayici`, '.ui-vtable', async (page) => {
+  await repeat('tarayıcı', `${BASE}?v=tarayici`, HAZIR['tarayıcı'], async (page) => {
     const input = page.getByLabel('RSI uzunluk');
     await input.click();
     await input.press('Control+a');
@@ -162,7 +179,7 @@ results.push(
   await repeat(
     'sembol masası (grafik)',
     `${BASE}?v=sembol&s=X001`,
-    '.desk__health',
+    HAZIR['sembol masası'],
     async (page) => {
       const t = Date.now();
       await page.getByRole('tab', { name: 'Haftalık' }).click();
@@ -212,7 +229,7 @@ results.push(
   await repeat(
     'laboratuvar (backtest)',
     `${BASE}?v=laboratuvar&s=X001`,
-    '.lab__stats',
+    HAZIR['laboratuvar'],
     async (page) => {
       const t = Date.now();
       await page.getByRole('button', { name: 'Doğrulamayı çalıştır' }).click();
@@ -223,7 +240,7 @@ results.push(
 );
 
 results.push(
-  await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=X001,X002,X003`, '.compare__matrix'),
+  await repeat('karşılaştır', `${BASE}?v=karsilastir&cmp=X001,X002,X003`, HAZIR['karşılaştır']),
 );
 
 // Fazlardan sonra eklenen ekranlar: en ağır iki iş (1600 backtest ve model
@@ -232,7 +249,7 @@ results.push(
   await repeat(
     'stratejiler (1600 backtest)',
     `${BASE}?v=stratejiler`,
-    '.rank__table tbody tr',
+    HAZIR['stratejiler'],
     async (page) => {
       const t = Date.now();
       await page.getByLabel('Kapsam').selectOption('symbol');
@@ -245,22 +262,52 @@ results.push(
   ),
 );
 
-results.push(await repeat('model (purged CV)', `${BASE}?v=model&s=X001`, '.model__verdict'));
+results.push(await repeat('model (purged CV)', `${BASE}?v=model&s=X001`, HAZIR['model']));
 
-results.push(await repeat('rapor', `${BASE}?v=rapor&s=X001`, '.report__sheet'));
+results.push(await repeat('rapor', `${BASE}?v=rapor&s=X001`, HAZIR['rapor']));
 
 // Sektör paneli paketi indiriyor (izinli); portföy kur serisini okuyor.
 results.push(
-  await repeat('sektör akranları', `${BASE}?v=sembol&s=X001`, '.desk__health', async (page) => {
-    const t = Date.now();
-    await page.getByRole('tab', { name: 'Sektör' }).click();
-    await page.getByRole('button', { name: 'Akranları yükle' }).click();
-    await page.waitForSelector('.desk__sector-table tbody tr', { timeout: 60000 });
-    return { akran_yükleme_ms: Date.now() - t };
-  }),
+  await repeat(
+    'sektör akranları',
+    `${BASE}?v=sembol&s=X001`,
+    HAZIR['sembol masası'],
+    async (page) => {
+      const t = Date.now();
+      await page.getByRole('tab', { name: 'Sektör' }).click();
+      await page.getByRole('button', { name: 'Akranları yükle' }).click();
+      await page.waitForSelector('.desk__sector-table tbody tr', { timeout: 60000 });
+      return { akran_yükleme_ms: Date.now() - t };
+    },
+  ),
 );
 
-results.push(await repeat('portföy', `${BASE}?v=portfoy`, '.pf-form, .screener__panel, .ui-field'));
+/**
+ * RADAR: yeni ve en ağır yan yüzey — piyasa paketini indiriyor ve 200 satırlık
+ * pencerelenmiş tabloyu çiziyor. Varsayılan olarak KAPALI olduğu için sembol
+ * masasının kendi ölçümüne girmiyor; açık hâli ayrıca ölçülüyor ki "zayıf
+ * makinede akışkan" iddiası bu yüzeyi de kapsasın.
+ */
+results.push(
+  await repeat(
+    'radar (tüm piyasa)',
+    `${BASE}?v=sembol&s=X001`,
+    HAZIR['sembol masası'],
+    async (page) => {
+      const t = Date.now();
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 60000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.waitForFunction(
+        () => document.querySelectorAll('.radar__tablo tbody tr').length > 5,
+        { timeout: 60000 },
+      );
+      return { radar_açılış_ms: Date.now() - t };
+    },
+  ),
+);
+
+results.push(await repeat('portföy', `${BASE}?v=portfoy`, HAZIR['portföy']));
 
 console.log(
   `\nCPU yavaşlatma: ${THROTTLE}× · ${RUNS} tekrarın medyanı (köşeli parantez: min–maks)\n`,

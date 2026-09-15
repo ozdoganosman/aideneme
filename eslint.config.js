@@ -151,6 +151,9 @@ export default tseslint.config(
         performance: 'readonly',
         PerformanceObserver: 'readonly',
         setTimeout: 'readonly',
+        // Node genel nesnesi: ölçüm aracı kendi yanındaki JSON'u okurken
+        // `new URL(..., import.meta.url)` kullanıyor.
+        URL: 'readonly',
       },
     },
     rules: { 'no-console': 'off' },
