@@ -731,6 +731,46 @@ def self_test() -> None:
         sirali = pending_symbols(["AYENI", "ZESKI"], out)
         assert sirali == ["ZESKI", "AYENI"], sirali
 
+        # ATLAMA LİSTESİ ESKİ KAYDI VETO EDEMEZ. Yayındaki veride 11 sembol
+        # hem "kaynak tablo yayımlamıyor" listesindeydi hem de kendi kaydında
+        # 12 alanın 10'u doluydu; liste onları tazelemeden dışladığı için
+        # eski kuralla yazılmış kayıtları hiçbir turda düzelemiyordu.
+        (out / "ATLANAN_VERILI.json").write_text(
+            json.dumps(
+                {
+                    "symbol": "ATLANAN_VERILI",
+                    "periods": ["2024/6"],
+                    "fields": {f: [1.0] for f in FIELDS},
+                }
+            ),
+            encoding="utf-8",
+        )
+        atlama = {"ATLANAN_VERILI", "ATLANAN_KAYITSIZ"}
+        bekleyen2 = pending_symbols(
+            ["ATLANAN_VERILI", "ATLANAN_KAYITSIZ"], out, nostatement=atlama
+        )
+        # Verili eski kayıt yeniden deneniyor; KAYDI OLMAYAN sembolde liste
+        # hâlâ veto ediyor — yoksa endeks/fon her turda boşuna denenirdi.
+        assert bekleyen2 == ["ATLANAN_VERILI"], bekleyen2
+
+        # Güncel sürümle yazılmış kayıt atlama listesini DELMİYOR: bir kez
+        # tazelendikten sonra bu kapıdan bir daha geçmemeli.
+        (out / "ATLANAN_TAZE.json").write_text(
+            json.dumps(
+                {
+                    "symbol": "ATLANAN_TAZE",
+                    "periods": [],
+                    "fields": {f: [1.0] for f in FIELDS},
+                    "v": EXTRACT_VERSION,
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert pending_symbols(["ATLANAN_TAZE"], out, nostatement={"ATLANAN_TAZE"}) == []
+        # Bu blokta sonra anlık görüntü kuruluyor; sınama kuklaları kalmasın.
+        (out / "ATLANAN_VERILI.json").unlink()
+        (out / "ATLANAN_TAZE.json").unlink()
+
         # Güncel sürümle yazılan kayıt artımlı turda YENİDEN ÇEKİLMEZ; yoksa
         # her tur bütün evreni tarar ve bütçe hiçbir şeye yetmez.
         def damgali(symbol: str):
@@ -1361,8 +1401,33 @@ def pending_symbols(
         # iyi.
         return o is None or o.get("v") != EXTRACT_VERSION
 
+    def eskiKayitVar(sembol: str) -> bool:
+        """ESKİ kuralla yazılmış, veri TAŞIYAN bir kayıt duruyor mu."""
+        o = kayit(sembol)
+        return bool(o) and o.get("v") != EXTRACT_VERSION and bool(o.get("fields"))
+
+    # ATLAMA LİSTESİ ESKİ KAYDI VETO EDEMİYOR.
+    #
+    # `tablosuz` "kaynak bu sembol için tablo yayımlamıyor" demek ve KALICI
+    # bir yargı. Ama yayındaki veride 11 sembol hem bu listedeydi hem de
+    # kendi kaydında 12 alanın 10'u doluydu — yargı onlar için olgusal
+    # olarak yanlıştı. Liste onları tazelemeden dışladığı için v5 öncesi
+    # kayıtları hiçbir turda düzelemiyordu (hepsi 09:31-09:34'te, yani eski
+    # kuralla yazılmıştı).
+    #
+    # Bu, EXTRACT_VERSION notundaki tuzağın yeni bir yüzü: kalıcı bir yargı,
+    # kural değişiminin denenmesini engelleyemez. Sürüm artışı sayaçları
+    # sıfırlıyor ama bu semboller listeye ZATEN v5 altında girdiği için o
+    # yol da kapalıydı.
+    #
+    # Kendini sınırlıyor: bir kez tazelenen kayıt `v` damgasını alıyor ve
+    # bir daha bu kapıdan geçmiyor. Kaydı OLMAYAN sembolde liste hâlâ veto
+    # ediyor — yoksa 106 endeks/fon her turda boşuna denenirdi.
+    def atlanir(sembol: str) -> bool:
+        return sembol in yok and not eskiKayitVar(sembol)
+
     return sorted(
-        (s for s in symbols if bayat(s) and fails.get(s, 0) < MAX_ATTEMPTS and s not in yok),
+        (s for s in symbols if bayat(s) and fails.get(s, 0) < MAX_ATTEMPTS and not atlanir(s)),
         key=damga,
     )
 
