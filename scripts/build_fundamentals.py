@@ -210,6 +210,12 @@ _eksik_basildi: set[str] = set()
 _aday_adlar: dict[str, list[str]] = {}
 # Aday toplanan sembol sayısı — her sembolde tablo taramak boşuna iş.
 _ADAY_SEMBOL_SINIRI = 20
+# Cevapta hangi kolonlar geliyor ve KOD sütunu var mı? borsapy aynı uç
+# noktadan nakit akışını `itemCode` öneki "4" ile süzüyor, yani cevapta bir
+# kod sütunu olması bekleniyor. Bizim eşleşmemiz yalnızca Türkçe ADA bakıyor.
+_kolon_ornegi: list[str] = []
+# Kod öneki "4" olan satırlar (kod, ad) — nakit akış kalemleri.
+_nakit_satirlari: list[tuple[str, str]] = []
 
 
 def missing_candidates(df, name_col: str, missing: list[str], limit: int = 30) -> list[str]:
@@ -310,6 +316,28 @@ def extract(df, symbol: str) -> dict | None:
                 liste = _aday_adlar.setdefault(alan, [])
                 if ad not in liste and len(liste) < 12:
                     liste.append(ad)
+
+        # KOD SÜTUNU VAR MI ve nakit akış satırları geliyor mu?
+        #
+        # Önceki tur "nakit akış tablosu gerçekten yok" dedirtti, ama o sonuç
+        # KENDİ teşhisimin kapağından çıkmış olabilir: adaylar satır sırasıyla
+        # taranıyor ve alan başına on ikide kesiliyor; bilanço satırları önce
+        # geldiği için kapak nakit akış satırlarına ulaşmadan dolabilir.
+        #
+        # Kod öneki daha güvenilir bir soru: aynı uç noktayı kullanan borsapy
+        # nakit akışını `itemCode` öneki "4" ile süzüyor. Kod sütununun adını
+        # da TAHMİN ETMİYORUZ — gelen kolon adları olduğu gibi raporlanıyor.
+        if not _kolon_ornegi:
+            _kolon_ornegi.extend(str(c) for c in df.columns)
+        kod_sutun = next(
+            (c for c in df.columns if "CODE" in str(c).upper() or "KOD" in str(c).upper()),
+            None,
+        )
+        if kod_sutun is not None and not _nakit_satirlari:
+            for _, satir in df.iterrows():
+                kod = str(satir.get(kod_sutun, "")).strip()
+                if kod.startswith("4") and len(_nakit_satirlari) < 25:
+                    _nakit_satirlari.append((kod, str(satir.get(name_col, "")).strip()))
         if ilk:
             # Tur başına tek satır: kayıt zaten uzun, dosya asıl kaynak.
             print(
@@ -986,6 +1014,29 @@ def self_test() -> None:
     assert kayit["fields"]["currentAssets"] == [7.0], kayit["fields"]["currentAssets"]
     assert kayit["fields"]["currentLiabilities"] == [4.0], kayit["fields"]["currentLiabilities"]
 
+    # KOD ÖNEKİ TEŞHİSİ. "Nakit akış tablosu yok" sonucunu ilk turda kendi
+    # teşhisimin KAPAĞINDAN çıkarmış olabilirim: adaylar satır sırasıyla
+    # taranıp alan başına on ikide kesiliyor ve bilanço satırları önce
+    # geliyor. Kod öneki daha güvenilir bir soru — aynı uç noktayı kullanan
+    # borsapy nakit akışını `itemCode` öneki "4" ile süzüyor.
+    _kolon_ornegi.clear()
+    _nakit_satirlari.clear()
+    _eksik_basildi.clear()
+    kodlu = SahteTablo(
+        [
+            {"FINANCIAL_ITEM_CODE": "3AA", "FINANCIAL_ITEM_NAME_TR": "Hasılat", "2024/6": 9.0},
+            {"FINANCIAL_ITEM_CODE": "1AA", "FINANCIAL_ITEM_NAME_TR": "Dönen Varlıklar", "2024/6": 5.0},
+            {"FINANCIAL_ITEM_CODE": "4AA", "FINANCIAL_ITEM_NAME_TR": "İşletme Faaliyetleri", "2024/6": 2.0},
+            {"FINANCIAL_ITEM_CODE": "4BB", "FINANCIAL_ITEM_NAME_TR": "Yatırım Faaliyetleri", "2024/6": 1.0},
+        ]
+    )
+    extract(kodlu, "KODLU")
+    assert _kolon_ornegi[:1] == ["FINANCIAL_ITEM_CODE"], _kolon_ornegi
+    assert [k for k, _ in _nakit_satirlari] == ["4AA", "4BB"], _nakit_satirlari
+    _kolon_ornegi.clear()
+    _nakit_satirlari.clear()
+    _eksik_basildi.clear()
+
     # ÜRETİM TANISI. Yayındaki veriyle ölçtüm: üç alan 561 sembolün hiçbirinde
     # yok ve ikisi ürüne doğrudan yansıyor ("Nakde dönüşüm" hep boş, "Cari
     # oran" süzgeci hiç sonuç veremez). Doğru kalem adını tahmin etmemek için
@@ -1004,6 +1055,10 @@ def self_test() -> None:
         )
         write_tani(records_on_disk(out), out)
         tani = json.loads((out / TANI_FILE).read_text(encoding="utf-8"))
+        # Kolon ve nakit akış alanları HER ZAMAN yazılmalı (boş olsa bile):
+        # "alan yok" ile "değer yok" farklı şeyler ve okuyan taraf ayırt
+        # edebilmeli.
+        assert "kolonlar" in tani and "nakit_satirlari" in tani, sorted(tani)
         assert tani["sembol"] == 1, tani
         assert tani["kapsam"]["revenue"] == 1, tani["kapsam"]
         # Boş seri DOLU sayılmamalı: "alan var" ile "değer var" farklı şeyler.
@@ -1204,6 +1259,8 @@ def write_tani(records: list[dict], out_dir: Path) -> None:
                 "sembol": len(records),
                 "kapsam": kapsam,
                 "aday_adlar": _aday_adlar,
+                "kolonlar": _kolon_ornegi,
+                "nakit_satirlari": [{"kod": k, "ad": a} for k, a in _nakit_satirlari],
             },
             ensure_ascii=False,
             separators=(",", ":"),
