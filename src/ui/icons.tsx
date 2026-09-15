@@ -22,7 +22,8 @@ export type IconName =
   | 'close'
   | 'model'
   | 'rank'
-  | 'alert';
+  | 'alert'
+  | 'plus';
 
 const PATHS: Record<IconName, string> = {
   pulse: 'M3 12h3.5l2.5-7 4 14 2.5-7H21',
@@ -43,6 +44,7 @@ const PATHS: Record<IconName, string> = {
   model:
     'M6 5.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6 14.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 8.5l8 2.5M8 15.5l8-2.5',
   rank: 'M4 20h16M7 20V9M12 20V4M17 20v-7',
+  plus: 'M12 5v14M5 12h14',
   alert: 'M12 4 2.5 20h19L12 4zM12 10v4m0 3h.01',
 };
 

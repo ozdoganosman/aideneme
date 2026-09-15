@@ -16,6 +16,7 @@ export { ToastProvider, useToast } from './Toast';
 export { VirtualTable, sortRows } from './VirtualTable';
 export type { Column } from './VirtualTable';
 export { Badge, Stat, Skeleton, EmptyState } from './Feedback';
+export { Sparkline } from './Sparkline';
 export {
   useFocusTrap,
   useEscape,

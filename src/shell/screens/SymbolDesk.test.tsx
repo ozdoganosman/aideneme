@@ -14,12 +14,17 @@ vi.mock('../chart/PriceChart', () => ({
   PriceChart: ({
     candles,
     overlays = [],
+    fitKey,
   }: {
     candles: Candles;
     overlays?: { key: string; visible: boolean; pane?: number; values: Float64Array }[];
+    fitKey?: string;
   }) => (
     <div
       data-testid="chart"
+      // Sığdırma anahtarı: sembol değişince AYNI kalmalı, yoksa kullanıcının
+      // zoom'u her hisse geçişinde sıfırlanır.
+      data-fitkey={fitKey}
       // Görünür VE verisi olan panel serileri: "açık ama boş" durumu
       // (EMA 200 kusurunun aynısı) teste yakalansın.
       data-panes={overlays
@@ -106,6 +111,8 @@ const STATE = { v: 'sembol', s: 'THYAO', tf: 'D', m: 'bist' };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Tercihler tarayıcıda saklanıyor: bir testin seçimi sonrakine sızmasın.
+  localStorage.clear();
   manifest.mockResolvedValue({
     version: 1,
     market: 'bist',
@@ -260,5 +267,59 @@ describe('Sembol Masası — analiz çalışmazsa', () => {
     } finally {
       FAKE_ANALYSIS.client.symbol = gercek;
     }
+  });
+});
+
+describe('Sembol Masası — kalıcı tercihler', () => {
+  // Kullanıcı isteği: "son pozisyonumuz grafikte ve indikatör tercihlerimiz
+  // kayıtlı kalsın".
+  it('indikatör paneli ve parametresi sonraki açılışta geri geliyor', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+    await user.click(screen.getByText('MACD (NizamiCedid)'));
+    const alan = await screen.findByLabelText('hızlı');
+    await user.clear(alan);
+    await user.type(alan, '90');
+    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(90));
+    unmount();
+
+    render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+    // Panel açık VE parametre korunmuş olarak dönüyor.
+    expect(await screen.findByLabelText('hızlı')).toHaveValue(90);
+    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(90));
+  });
+
+  // Adres paylaşıldığında o adres kazanmalı: başkasının bağlantısı kullanıcının
+  // kendi geçmişine açılmamalı.
+  it('URL sembol taşıyorsa kayıt onu EZMİYOR', async () => {
+    localStorage.setItem('masa.v1', JSON.stringify({ m: 'bist', s: 'GARAN', tf: 'W' }));
+    render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+    expect(push).not.toHaveBeenCalledWith(expect.objectContaining({ s: 'GARAN' }));
+  });
+
+  it('adres çıplaksa son bakılan sembole dönüyor', async () => {
+    localStorage.setItem('masa.v1', JSON.stringify({ m: 'bist', s: 'GARAN', tf: 'W' }));
+    render(<SymbolDesk state={{ ...STATE, s: '' }} push={push} />);
+    await waitFor(() => expect(push).toHaveBeenCalledWith({ m: 'bist', s: 'GARAN', tf: 'W' }));
+  });
+
+  // Kullanıcı isteği: "hisseler arası geçince de grafikteki zaman aralığı
+  // korunsun". Sığdırma anahtarı sembolü İÇERMEMELİ.
+  it('sığdırma anahtarı sembol değişince aynı kalıyor', async () => {
+    const ilkEkran = render(<SymbolDesk state={STATE} push={push} />);
+    const ilk = (await screen.findByTestId('chart')).getAttribute('data-fitkey');
+    ilkEkran.unmount();
+
+    const ikinci = render(<SymbolDesk state={{ ...STATE, s: 'GARAN' }} push={push} />);
+    expect((await screen.findByTestId('chart')).getAttribute('data-fitkey')).toBe(ilk);
+    ikinci.unmount();
+
+    // Periyot değişince SIĞDIRILMALI: bar uzunluğu değişince eski aralık
+    // başka bir zamana denk gelir.
+    render(<SymbolDesk state={{ ...STATE, tf: 'W' }} push={push} />);
+    expect((await screen.findByTestId('chart')).getAttribute('data-fitkey')).not.toBe(ilk);
   });
 });

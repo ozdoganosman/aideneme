@@ -1910,3 +1910,104 @@
 .prov__bant .is-unknown dt {
   color: var(--text-muted);
 }
+
+/* ── Grafik alanı: grafik + radar ─────────────────────────────────────── */
+/* `.desk` bir flex KOLON; grafik alanı onun içinde esneyen tek satır.
+   `min-height: 0` şart — yoksa iç grafik kabı taşar (aynı kusur `.desk__chart`
+   yorumunda anlatılıyor). */
+/* Yükseklik EKRANA bağlı, içeriğe değil.
+   ÖLÇÜLDÜ: `flex: 1` + kapsayıcının `min-height: 100%` birleşimi grafiği
+   1.344 px'e çıkarıyordu, görünür alan ise 905 px — yani grafiğin alt üçte
+   biri ve altındaki metrik kartları her açılışta ekranın dışında kalıyordu.
+   (Bu kusur radar eklenmeden ÖNCE de vardı; ölçüm bir önceki sürümde de
+   aynı sayıyı verdi.) Artık grafik görünür alanı dolduruyor, taşmıyor. */
+.desk__alan {
+  display: flex;
+  flex: 0 0 auto;
+  height: calc(100dvh - 290px);
+  min-height: 340px;
+  gap: 0;
+}
+.desk__alan .desk__chart {
+  flex: 1;
+  min-width: 0;
+  /* Satır içinde yükseklik kabından geliyor; taban ölçü burada engel olurdu. */
+  min-height: 0;
+}
+/* Ayırıcı: dokunma hedefi 8 px görünür + kenar boşluğu; klavye odağı görünür. */
+.desk__ayirici {
+  flex: 0 0 8px;
+  cursor: col-resize;
+  background: var(--border-subtle);
+  border: none;
+  touch-action: none;
+}
+.desk__ayirici:hover,
+.desk__ayirici:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+.desk__radar {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* Dar ekranda yan yana durmuyor: 390 px'te iki sütun ikisini de okunmaz
+   kılardı. Radar grafiğin ALTINA iniyor ve tam genişlik alıyor. */
+@media (max-width: 860px) {
+  .desk__alan {
+    flex-direction: column;
+  }
+  .desk__ayirici {
+    display: none;
+  }
+  .desk__radar {
+    width: auto !important;
+    max-height: 320px;
+  }
+}
+
+/* ── Radar ────────────────────────────────────────────────────────────── */
+.radar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  height: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.radar__bas {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.radar__bas h3 {
+  font-size: var(--fs-md);
+}
+.radar__bos {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.radar__kontrol {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-2);
+}
+/* Tablo dar panelde YATAY kayıyor: sütunları kırpmak sayıyı okunmaz yapardı
+   (aynı kusur tarayıcı tablosunda ölçülmüştü: "+%18,67" → "+%18,…"). */
+.radar__tablo {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.radar__tablo .ui-vtable__scroll {
+  overflow-x: auto;
+}
+.radar__ad.is-aktif {
+  color: var(--accent);
+  font-weight: 700;
+}

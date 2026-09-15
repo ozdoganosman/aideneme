@@ -27,6 +27,7 @@ import type { Metric } from '../../core/stats/summary';
 import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import type { UrlState } from '../urlState';
+import { tercihOku, tercihYaz } from '../tercih';
 
 /** Grafik ayrı chunk'ta: lightweight-charts ilk yük bütçesine girmesin. */
 const LazyPriceChart = lazy(() =>
@@ -40,6 +41,35 @@ const LazyFinancials = lazy(() =>
 
 /** Sektör paneli de ayrı chunk; paketi yalnızca o sekme isterse indirir. */
 const LazySector = lazy(() => import('./SectorPanel').then((m) => ({ default: m.SectorPanel })));
+
+/** Radar da ayrı chunk: açılmadıkça ne kodu ne de piyasa paketi iniyor. */
+const LazyRadar = lazy(() => import('./Radar').then((m) => ({ default: m.Radar })));
+
+/**
+ * Grafik ekranının kalıcı tercihleri.
+ *
+ * Kullanıcı isteği: "son pozisyonumuz grafikte ve indikatör tercihlerimiz
+ * kayıtlı kalsın". Piyasa/sembol/periyot URL'de de duruyor (paylaşılabilirlik
+ * için) — burada saklanan, ADRES ÇIPLAKKEN nereden devam edileceği. URL bir
+ * sembol taşıyorsa o kazanır; paylaşılan bir bağlantı başka birinin son
+ * baktığı hisseye açılmamalı.
+ */
+const MASA_ANAHTARI = 'masa.v1';
+const RADAR_ANAHTARI = 'radar.genislik.v1';
+
+interface MasaTercihi {
+  m?: string;
+  s?: string;
+  tf?: string;
+  enabled?: Record<string, boolean>;
+  panels?: Record<string, boolean>;
+  indParams?: IndicatorParams;
+  showVolume?: boolean;
+  radar?: boolean;
+}
+
+const RADAR_MIN = 220;
+const RADAR_MAX = 560;
 
 const VIEW_TABS = [
   { id: 'grafik', label: 'Grafik' },
@@ -136,12 +166,34 @@ export default function SymbolDesk({ state, push }: Props) {
   const [load, setLoad] = useState<LoadState>({ status: 'idle' });
   const [tab, setTab] = useState('grafik');
   const [chartReady, setChartReady] = useState(false);
-  const [showVolume, setShowVolume] = useState(true);
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({ ema50: true, ema200: false });
+  const kayit = useRef<MasaTercihi>(tercihOku<MasaTercihi>(MASA_ANAHTARI, {}));
+  const [showVolume, setShowVolume] = useState(() => kayit.current.showVolume ?? true);
+  const [enabled, setEnabled] = useState<Record<string, boolean>>(
+    () => kayit.current.enabled ?? { ema50: true, ema200: false },
+  );
   // Panel kapalıyken indikatör HİÇ hesaplanmıyor (worker isteğinde yok).
-  const [panels, setPanels] = useState<Record<string, boolean>>({ wr: false, macd: false });
-  const [indParams, setIndParams] = useState<IndicatorParams>(DEFAULT_PARAMS);
+  const [panels, setPanels] = useState<Record<string, boolean>>(
+    () => kayit.current.panels ?? { wr: false, macd: false },
+  );
+  const [indParams, setIndParams] = useState<IndicatorParams>(() => ({
+    ...DEFAULT_PARAMS,
+    // Eski bir sürümden kalan kayıt eksik alan taşıyabilir: varsayılanın
+    // üstüne yazılıyor, böylece yeni bir parametre eklendiğinde kayıt
+    // yüzünden `undefined` gelmiyor.
+    ...(kayit.current.indParams ?? {}),
+  }));
+  const [radarAcik, setRadarAcik] = useState(() => kayit.current.radar ?? false);
+  const [radarGenislik, setRadarGenislik] = useState(() =>
+    Math.min(RADAR_MAX, Math.max(RADAR_MIN, tercihOku<number>(RADAR_ANAHTARI, 300))),
+  );
   const requestId = useRef(0);
+  const surukleme = useRef<{ x: number; w: number } | null>(null);
+
+  const radarAyarla = (px: number) => {
+    const kirpik = Math.min(RADAR_MAX, Math.max(RADAR_MIN, Math.round(px)));
+    setRadarGenislik(kirpik);
+    tercihYaz(RADAR_ANAHTARI, kirpik);
+  };
 
   // Grafik kütüphanesi zayıf makinede ~230 ms CPU istiyor (profille ölçüldü).
   // Mount'u boş zamana bırakınca metrikler ve sağlık paneli önce boyanıyor;
@@ -182,6 +234,42 @@ export default function SymbolDesk({ state, push }: Props) {
   }, [market]);
 
   const symbol = state.s || symbols[0] || '';
+
+  /**
+   * ÇIPLAK adreste son bakılan yere dön.
+   *
+   * Yalnızca URL hiçbir sembol taşımıyorken ve YALNIZCA bir kez: adres
+   * paylaşıldığında o adres kazanmalı, kullanıcının kendi geçmişi başkasının
+   * bağlantısını ezmemeli. `replace` kullanılıyor — geri tuşu boş bir
+   * adrese dönmek zorunda kalmasın.
+   */
+  const geriYuklendi = useRef(false);
+  useEffect(() => {
+    if (geriYuklendi.current) return;
+    geriYuklendi.current = true;
+    const son = kayit.current;
+    if (state.s || !son.s) return;
+    push({ m: son.m ?? market, s: son.s, tf: son.tf ?? tf });
+    // Tek seferlik: bağımlılıklar bilerek dar tutuldu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Tercihler değiştikçe kaydediliyor. Sembol/piyasa/periyot da burada:
+  // adres çıplakken buradan devam edilecek.
+  useEffect(() => {
+    if (!symbol) return;
+    kayit.current = {
+      m: market,
+      s: symbol,
+      tf,
+      enabled,
+      panels,
+      indParams,
+      showVolume,
+      radar: radarAcik,
+    };
+    tercihYaz(MASA_ANAHTARI, kayit.current);
+  }, [market, symbol, tf, enabled, panels, indParams, showVolume, radarAcik]);
 
   // Seri yükleme.
   useEffect(() => {
@@ -369,6 +457,8 @@ export default function SymbolDesk({ state, push }: Props) {
             />
           ))}
           <Toggle label="Hacim" checked={showVolume} onChange={setShowVolume} />
+          {/* Radar piyasa paketini indiriyor; kapalıyken o bedel ödenmiyor. */}
+          <Toggle label="Radar" checked={radarAcik} onChange={setRadarAcik} />
         </div>
       </div>
 
@@ -469,18 +559,83 @@ export default function SymbolDesk({ state, push }: Props) {
 
       {load.status === 'ready' && candles && tab === 'grafik' ? (
         <>
-          <section className="desk__chart" aria-label={`${symbol} fiyat grafiği`}>
-            {chartReady ? (
-              <ChartPanel
-                candles={candles}
-                overlays={overlays}
-                showVolume={showVolume}
-                fitKey={`${market}:${symbol}:${tf}`}
-              />
-            ) : (
-              <Skeleton height="320px" />
-            )}
-          </section>
+          <div className="desk__alan">
+            <section className="desk__chart" aria-label={`${symbol} fiyat grafiği`}>
+              {chartReady ? (
+                <ChartPanel
+                  candles={candles}
+                  overlays={overlays}
+                  showVolume={showVolume}
+                  /*
+                    Sembol ARTIK anahtarda değil.
+
+                    Kullanıcı isteği: "hisseler arası geçince de grafikteki
+                    zaman aralığı korunsun". LOD katmanı bunu zaten
+                    destekliyordu (aynı görünür bar sayısı ve sağ kenardan
+                    aynı boşluk) ama anahtar sembolü içerdiği için her geçişte
+                    yeniden sığdırılıyordu. Periyot ya da piyasa değişince
+                    sığdırmak DOĞRU: bar uzunluğu değişince eski aralık başka
+                    bir zamana denk gelir.
+                  */
+                  fitKey={`${market}:${tf}`}
+                />
+              ) : (
+                <Skeleton height="320px" />
+              )}
+            </section>
+
+            {radarAcik ? (
+              <>
+                {/* Ayırıcı: sürüklemeyle genişlik. Klavyeyle de çalışıyor —
+                    yalnızca fareyle ayarlanabilen bir bölme erişilemez olurdu. */}
+                {/* Ayarlanan şey bir DEĞER (piksel genişliği), o yüzden
+                    `slider`: ekran okuyucu "Radar genişliği, 300" diye
+                    okuyup ok tuşlarıyla değiştirilebileceğini söylüyor.
+                    Odaklanabilir `separator` da ARIA'nın bölücü kalıbı ama
+                    düz bir `div`e tabIndex vermek odak davranışını elle
+                    yazmayı gerektiriyordu. */}
+                <button
+                  type="button"
+                  className="desk__ayirici"
+                  role="slider"
+                  aria-label="Radar genişliği"
+                  aria-valuenow={radarGenislik}
+                  aria-valuemin={RADAR_MIN}
+                  aria-valuemax={RADAR_MAX}
+                  aria-valuetext={`${radarGenislik} piksel`}
+                  onPointerDown={(e) => {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    surukleme.current = { x: e.clientX, w: radarGenislik };
+                  }}
+                  onPointerMove={(e) => {
+                    const d = surukleme.current;
+                    if (!d) return;
+                    // Sola sürükleme radarı BÜYÜTÜR: radar sağda.
+                    radarAyarla(d.w + (d.x - e.clientX));
+                  }}
+                  onPointerUp={() => {
+                    surukleme.current = null;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowLeft') radarAyarla(radarGenislik + 24);
+                    else if (e.key === 'ArrowRight') radarAyarla(radarGenislik - 24);
+                    else return;
+                    e.preventDefault();
+                  }}
+                />
+                <div className="desk__radar" style={{ width: radarGenislik }}>
+                  <Suspense fallback={<Skeleton count={3} height="40px" />}>
+                    <LazyRadar
+                      market={market}
+                      symbol={symbol}
+                      onSelect={(next) => push({ s: next })}
+                      onClose={() => setRadarAcik(false)}
+                    />
+                  </Suspense>
+                </div>
+              </>
+            ) : null}
+          </div>
 
           <section className="desk__metrics" aria-label="Özet metrikler">
             {metrics.map((metric) => (

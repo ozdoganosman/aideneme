@@ -87,6 +87,10 @@ export function PriceChart({
         vertLine: { color: colors.muted, width: 1, style: LineStyle.LargeDashed },
         horzLine: { color: colors.muted, width: 1, style: LineStyle.LargeDashed },
       },
+      // Eksen dili TARAYICIYA bırakılmıştı: kütüphane yerel ayardan okuyor ve
+      // tarayıcısı İngilizce olan makinede eksen "May, Jun, Jul" yazıyordu —
+      // ürünün geri kalanı Türkçe biçimdeyken. Tek kaynak: tr-TR.
+      localization: { locale: 'tr-TR' },
       rightPriceScale: { borderColor: colors.grid, ticksVisible: false, entireTextOnly: true },
       timeScale: {
         borderColor: colors.grid,
@@ -257,6 +261,31 @@ export function PriceChart({
     // overlays her render'da yeni dizi; değer kimliği yeterli.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, fitKey, overlayKeys, overlays.map((o) => o.values.length).join(',')]);
+
+  /**
+   * KAPALI panel yer kaplamamalı.
+   *
+   * Paneller kurulumda oluşuyor (seriler önceden yaratılıyor) ve esneme
+   * katsayıları sabitti: her ikisi de kapalıyken grafiğin yaklaşık %40'ı boş
+   * duruyordu — ölçüldü, ekran görüntüsünde fiyatın altındaki alanın tamamı
+   * boştu. Kullanıcının isteği tam tersiydi: "grafiği olabildiğince genişlet".
+   *
+   * Kapalı panel sıfıra yakın bir katsayı alıyor; kütüphane paneli tamamen
+   * kaldırmıyor ama payı ölçülemez hâle geliyor.
+   */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const panes = chart.panes();
+    if (panes.length < 2) return;
+    const acik = new Set(
+      overlays.filter((o) => (o.pane ?? 0) > 0 && o.visible).map((o) => o.pane as number),
+    );
+    panes[0]?.setStretchFactor(3);
+    for (let i = 1; i < panes.length; i++) panes[i]?.setStretchFactor(acik.has(i) ? 1 : 0.0001);
+    // Görünürlük imzası yeterli: seri kimlikleri kurulumda sabitlendi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlays.map((o) => `${o.pane ?? 0}:${o.visible ? 1 : 0}`).join(',')]);
 
   // Tema değişimi: yeniden kurmadan renkleri uygula.
   useEffect(() => {
