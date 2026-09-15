@@ -1531,6 +1531,62 @@ Bu dört kusur birbirini gizliyordu ve üçü aynı kalıptan çıktı: **bir ar
 veride hiç çalışmıyordu, teşhis kapağı "nakit akış satırı yok" gibi okundu.
 Her seferinde doğru hamle cevabı değil ARACI sorgulamak oldu.
 
+DÖRDÜNCÜ KEZ, aynı oturumda: `npm run preview` önceden derlenmiş `dist/`'i
+sunuyor ve `reuseExistingServer` ile ayakta olanı yeniden kullanıyor. Kaynağı
+değiştirip uçtan uca test koşmak paketi tazelemiyor. "Düzelttim ama test hâlâ
+kırmızı" diye birkaç tur bayat derlemeyi ölçtüm; kaynağa iz düşüp izlerin
+HEPSİNİN sıfır çıkması uyandırdı. Kaynak değiştiyse `npm run build` şart.
+
+## Nakit akışı: 0 → 540 (kapandı)
+
+İki kusur daha çıktı ve ikisi de aynı kalıptandı — bir yargı, kural
+değişiminin denenmesini engelliyordu.
+
+**Artımlı tur eski kuralla yazılmış kaydı hiç ziyaret etmiyordu.** Tek ölçüt
+"dosya var mı" idi ve sembol kaydında sürüm yazmıyordu; düzeltme yalnızca
+`FORCE_ALL` ile ve onun bütçesi kadar yayılıyordu. Ölçüm, çekilme damgasına
+göre ayırdı: 09:33'te yazılan 70 sembolün %0'ında, 11:20 sonrasının
+%93-100'ünde nakit akışı vardı. Eksikler alfabenin kuyruğunda kümelenmişti —
+gerçek bir veri sınırı alfabetik kümelenmez. `EXTRACT_VERSION` artık kayda da
+yazılıyor (diske yazan TEK noktada) ve sürümü tutmayan kayıt bayat sayılıyor.
+Sıralama da düzeltildi: artımlı yol da en eski tazelenen kaydı önce alıyor,
+yoksa bütçe zaten güncel olan baştaki kayıtlara gidiyordu.
+
+**Atlama listesi eski kaydı veto ediyordu.** Kalan 11 sembol hem "kaynak tablo
+yayımlamıyor" listesindeydi hem de kendi kaydında 12 alanın 10'u doluydu; yargı
+onlar için olgusal olarak yanlıştı. Sürümü artırmak da kurtarmazdı — listeye
+zaten v5 altında girmişlerdi. Artık liste yalnızca KAYDI OLMAYAN sembolü veto
+ediyor; veri taşıyan eski kayıt listeyi bir kez deliyor ve damgayı alınca bir
+daha geçmiyor.
+
+ÖLÇÜLEN SONUÇ (yayındaki veri, 559 sembol):
+
+|                          | önce | sonra   |
+| ------------------------ | ---- | ------- |
+| `operatingCashFlow` dolu | 0    | **540** |
+| `capex` dolu             | 0    | **540** |
+| v5 ile yazılmış kayıt    | —    | 559/559 |
+| sanayi şablonunda boşluk | —    | **0**   |
+
+Kalan 19 YAPISAL: 12 banka + 5 sigorta + 2 sınıfsız, hepsi şablon grubu 2 ve
+3. O şablonlar nakit akış tablosu vermiyor — kaynak sınırı, kod sınırı değil.
+`operatingCashFlow` artık `currentAssets` ile aynı seviyede (540), yani
+bilançosu olan her şirkette nakit akışı da var.
+
+## Katman panelleri kaydırılamıyordu
+
+Filtre paneli ve sütun listesi aşağı kaydırılamıyor, her kaydırışta başa
+sarıyordu. Yerleştirme, doğal yüksekliği ölçmek için sınırı bir an
+kaldırıyordu; sınır kalkınca taşma da kalkıyor ve tarayıcı `scrollTop`'u 0'a
+KENETLİYOR. Değeri elle geri yazmak yetmedi (denendi) — düzen o anda yeniden
+hesaplanmadığı için yazılan değer de kenetleniyor. Çözüm panele hiç
+dokunmamak: `scrollHeight` aynı bilgiyi zaten veriyor.
+
+Denetimdeki kör nokta buydu: testler panelin ekrana SIĞDIĞINI ölçüyordu ve
+sığdırmanın yolu "yüksekliği sınırla, içeriği kaydırılabilir yap" — ama
+kaydırmanın GERÇEKTEN çalıştığını hiçbir test ölçmüyordu. **"Sığıyor" ile
+"kullanılabiliyor" aynı şey değil.**
+
 ## Sırada
 
-- Nakit akış tablosu için başka bir kaynak/şablon var mı — bu şablonda yok.
+- Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.
