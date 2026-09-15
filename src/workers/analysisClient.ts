@@ -75,14 +75,22 @@ export class AnalysisClient {
 
   /** Paketi tüm worker'lara yükler (her birine kendi kopyası gider). */
   async load(market: Market, buffer: ArrayBuffer): Promise<{ symbols: string[]; bars: number }> {
-    const responses = await this.pool.broadcast((id) => ({
-      id,
-      type: 'init',
-      market,
-      // Her worker kendi kopyasını almalı: aktarılan (transfer) tampon
-      // gönderende boşalır, ikinci worker'a gönderilecek bir şey kalmazdı.
-      buffer: buffer.slice(0),
-    }));
+    const responses = await this.pool.broadcast(
+      (id) => ({
+        id,
+        type: 'init',
+        market,
+        // Her worker kendi kopyasını almalı: aktarılan (transfer) tampon
+        // gönderende boşalır, ikinci worker'a gönderilecek bir şey kalmazdı.
+        buffer: buffer.slice(0),
+      }),
+      // Kopya AKTARILIYOR, klonlanmıyor. Aktarım olmadan `postMessage` her
+      // worker için tamponu BİR KEZ DAHA kopyalar: üç worker'da 3 dilim + 3
+      // klon = paketin altı kopyası ana iş parçacığında. BIST paketi 3 MB;
+      // zayıf makinede bu, radar açılışındaki en pahalı iş. Dilim zaten bu
+      // worker'a özel, aktarmak kimseyi boşaltmıyor.
+      (req) => (req.type === 'init' ? [req.buffer] : []),
+    );
     const first = unwrap(responses[0]);
     if (first.type !== 'init') throw new Error('beklenmeyen yanıt');
     const info = { symbols: first.symbols, bars: first.bars };

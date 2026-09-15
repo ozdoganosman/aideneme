@@ -189,6 +189,47 @@ describe('AnalysisClient', () => {
     client.terminate();
   });
 
+  /**
+   * Paket worker'lara KLONLANARAK değil AKTARILARAK gidiyor.
+   *
+   * Aktarım listesi olmadan `postMessage` tamponu her worker için bir kez
+   * daha kopyalar; üç worker'da dilim + klon = paketin ALTI kopyası ana iş
+   * parçacığında. Ölçüldü (3 MB, üç worker, 6× yavaşlatma): klonlayarak
+   * 116 ms, aktararak 57,7 ms — ana iş parçacığında 58 ms fark.
+   *
+   * Uçtan uca ölçüm bunu GÖSTERMEZ: örnek paket 978 KB, yani farkın üçte
+   * biri ve 1.300 ms'lik radar açılışının gürültüsüne gömülüyor. Bu yüzden
+   * sözleşme burada, doğrudan sınanıyor.
+   */
+  it('paketi klonlamadan aktarıyor', async () => {
+    const aktarimlar: (Transferable[] | undefined)[] = [];
+    const gozetleyen = (): WorkerLike => {
+      const w = fakeWorker();
+      const asil = w.postMessage.bind(w);
+      w.postMessage = (message, transfer) => {
+        if ((message as WorkerRequest).type === 'init') aktarimlar.push(transfer);
+        asil(message, transfer);
+      };
+      return w;
+    };
+
+    const client = new AnalysisClient({ size: 3, spawn: gozetleyen });
+    const buffer = buildBundle(10, 50);
+    await client.load('bist', buffer);
+
+    expect(aktarimlar).toHaveLength(3);
+    // Her worker KENDİ dilimini aktarıyor: aynı tamponu iki kez aktarmak
+    // ikincisini boş gönderirdi.
+    for (const t of aktarimlar) {
+      expect(t, 'aktarım listesi verilmemiş — tampon klonlanıyor').toBeDefined();
+      expect(t).toHaveLength(1);
+    }
+    expect(new Set(aktarimlar.map((t) => t?.[0])).size).toBe(3);
+    // Gönderenin elindeki tampon BOŞALMAMALI: aktarılan dilim, kaynak değil.
+    expect(buffer.byteLength).toBeGreaterThan(0);
+    client.terminate();
+  });
+
   it('yüklenmemiş piyasa için açık hata verir', async () => {
     const client = new AnalysisClient({ size: 1, spawn: fakeWorker });
     await expect(client.screen('us', DEFAULT_SCREEN_PARAMS)).rejects.toThrow(/yüklenmedi/);
