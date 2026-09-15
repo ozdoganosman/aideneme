@@ -109,6 +109,19 @@ def self_test() -> int:
     ]
     assert len(parse_items(dup)[0]) == 1
 
+    # BEKLENEN YOKLUK 0, GERÇEK HATA 1. İkisi aynı kodu verdiği sürece
+    # kayıtta "kaynak çöktü" ile "anahtar konmamış" ayırt edilemiyordu.
+    eski_anahtar = os.environ.get("EVDS_API_KEY")
+    eski_argv = sys.argv
+    try:
+        os.environ.pop("EVDS_API_KEY", None)
+        sys.argv = ["build_fx.py"]
+        assert main() == 0, "anahtar yokluğu beklenen durum: çıkış kodu 0 olmalı"
+    finally:
+        sys.argv = eski_argv
+        if eski_anahtar is not None:
+            os.environ["EVDS_API_KEY"] = eski_anahtar
+
     print("build_fx self-test: tamam")
     return 0
 
@@ -124,9 +137,20 @@ def main() -> int:
 
     api_key = os.environ.get("EVDS_API_KEY", "").strip()
     if not api_key:
+        # BEKLENEN YOKLUK, HATA DEĞİL — çıkış kodu 0.
+        #
+        # Buraya `1` dönülüyordu ve iş akışı adımı `continue-on-error` ile
+        # ayakta kalıyordu, ama sinyal kayboluyordu: kaynağın ÇÖKMESİ ile
+        # anahtarın YAPILANDIRILMAMASI aynı kodu veriyordu, yani gerçek bir
+        # kesinti kayıtta beklenen durumdan ayırt edilemiyordu. Projenin
+        # finansal tablolarda yaptığı ayrımın (veriyok / hata) aynısı.
+        #
+        # Anahtar koymamak bir tercih: arayüz "kur serisi yok" diyor ve
+        # portföy TL bazında çalışmaya devam ediyor. Kırmızı bir adım bunu
+        # anlatmıyor, yalnızca gürültü üretiyor.
         print("EVDS_API_KEY yok; fx.json YAZILMADI (arayüz 'kur serisi yok' diyecek).",
               file=sys.stderr)
-        return 1
+        return 0
 
     end = date.today()
     start = end - timedelta(days=365 * args.years)

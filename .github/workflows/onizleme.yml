@@ -62,6 +62,9 @@ jobs:
         timeout-minutes: 3
         run: python scripts/build_sectors.py
 
+      # `continue-on-error` gerçek kesinti için duruyor: anahtarın konmamış
+      # olması artık 0 dönüyor, yani BU ADIM KIRMIZIYSA gerçekten bir şey
+      # bozulmuştur. Eskiden ikisi de 1 dönüyordu ve ayrım kaybolmuştu.
       - name: Kur serisi (TCMB)
         continue-on-error: true
         timeout-minutes: 3
