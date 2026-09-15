@@ -14,7 +14,7 @@ import {
   UNCLASSIFIED,
   type SectorMap,
 } from '../../core/screen/sectors';
-import { encodeScreen, isShareableSector } from '../../core/screen/share';
+import { encodeScreen } from '../../core/screen/share';
 import { DEFAULT_SCREEN_PARAMS } from '../../core/screen/metrics';
 import { sectorsClient } from '../../data-client/sectors';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
@@ -502,7 +502,7 @@ export default function Pulse({ state, push }: Props) {
                             >
                               {f.sector}
                             </Button>
-                            {f.sector !== UNCLASSIFIED && isShareableSector(f.sector) ? (
+                            {f.sector !== UNCLASSIFIED ? (
                               <button
                                 type="button"
                                 className="pulse__scan"
@@ -552,7 +552,18 @@ export default function Pulse({ state, push }: Props) {
                   }))}
                 />
                 <table className="pulse__flows">
-                  <caption className="visually-hidden">Kümelere göre işlem değeri ve yön</caption>
+                  {/*
+                    Başlık hücresi zaten "Sektör"/"Grup" diye değişiyordu ama
+                    `caption` değişmiyordu: sektör görünümünde ekran okuyucu
+                    tabloyu "Kümelere göre" diye duyuruyordu. İki farklı soru
+                    ve gören kullanıcı farkı sütun başlığından anlıyor;
+                    duyanın tek ipucu bu satır.
+                  */}
+                  <caption className="visually-hidden">
+                    {bySector
+                      ? 'Sektörlere göre işlem değeri ve yön'
+                      : 'Davranış gruplarına göre işlem değeri ve yön'}
+                  </caption>
                   <thead>
                     <tr>
                       <th scope="col">{bySector ? 'Sektör' : 'Grup'}</th>
@@ -599,7 +610,7 @@ export default function Pulse({ state, push }: Props) {
                           >
                             {bySector ? flow.key : `${flow.label} grubu`}
                           </Button>
-                          {bySector && flow.key !== UNCLASSIFIED && isShareableSector(flow.key) ? (
+                          {bySector && flow.key !== UNCLASSIFIED ? (
                             <button
                               type="button"
                               className="pulse__scan"

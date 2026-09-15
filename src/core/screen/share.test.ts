@@ -72,10 +72,50 @@ describe('tarama bağlantısı', () => {
     expect(dropped).toEqual([]);
   });
 
-  it('ayırıcı içeren sektör adı kodlamaya girmez (ad bölünmesin)', () => {
-    const encoded = encodeScreen(state({ sectors: ['Gıda, İçecek', 'Enerji'] }));
-    const { state: back } = decodeScreen(encoded, KNOWN);
+  /*
+    AYIRICI İÇEREN SEKTÖR ADI. Önceki sözleşme bu adı kodlamaya HİÇ
+    ALMIYORDU; ad bölünmesin diye düşürülüyordu. Borsa İstanbul'un resmî
+    sınıflandırması gelince ölçtüm: 23 sektörün 7'sinin adında virgül var ve
+    işlem değerinde en büyük sektör onlardan biri. Yani "bu sektörü tara"
+    bağlantısı tam da en çok kullanılacak yerlerde yoktu. Yasak kalktı,
+    yerine kaçış geldi.
+  */
+  it('ayırıcı içeren sektör adı kaçırılıyor ve aynen geri geliyor', () => {
+    const adlar = ['Gıda, İçecek', 'Kimya, Petrol, Plastik', 'Enerji'];
+    const encoded = encodeScreen(state({ sectors: adlar }));
+    // Ayırıcılar kodlanmış metinde ad İÇİNDE kalmamalı: sektör alanı üç
+    // parçaya bölünmeli, ne az ne çok.
+    expect(encoded.split('|')[3].split(',')).toHaveLength(3);
+    expect(decodeScreen(encoded, KNOWN).state!.sectors).toEqual(adlar);
+  });
+
+  // Dikey çizgi ALAN ayırıcısı: adda geçerse bağlantının tamamı kayardı.
+  it('dikey çizgi içeren ad alanları kaydırmıyor', () => {
+    const encoded = encodeScreen(state({ sectors: ['Bir|İki'] }));
+    expect(encoded.split('|')).toHaveLength(5);
+    expect(decodeScreen(encoded, KNOWN).state!.sectors).toEqual(['Bir|İki']);
+  });
+
+  // Yüzde işareti kaçışın KENDİSİ: önce kaçırılmazsa çözüm onu bir kaçış
+  // dizisinin başlangıcı sanar.
+  it('yüzde işareti içeren ad bozulmuyor', () => {
+    const encoded = encodeScreen(state({ sectors: ['%2C sahte', 'Enerji'] }));
+    expect(decodeScreen(encoded, KNOWN).state!.sectors).toEqual(['%2C sahte', 'Enerji']);
+  });
+
+  // Elle bozulmuş bağlantı: adı tahmin etmek yerine o parça düşüyor ve
+  // düşme GEREKÇESİYLE bildiriliyor.
+  it('bozuk kaçış dizisi taramayı çökertmiyor, parça düşüyor', () => {
+    const { state: back, dropped } = decodeScreen('1|||%E0%A4%A,Enerji|chg21~d', KNOWN);
     expect(back!.sectors).toEqual(['Enerji']);
+    expect(dropped).toEqual(['okunamayan sektör adı: %E0%A4%A']);
+  });
+
+  // Eski bağlantı: kaçış gerektirmeyen ad aynı metne kodlanıyor.
+  it('kaçış gerektirmeyen ad eski biçimle aynı kalıyor', () => {
+    expect(encodeScreen(state({ sectors: ['Banka', 'Enerji'] })).split('|')[3]).toBe(
+      'Banka,Enerji',
+    );
   });
 
   it('boş kurallar ve boş sektörler geçerli bir durumdur', () => {

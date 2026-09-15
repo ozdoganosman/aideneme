@@ -4,20 +4,22 @@ import type { Page } from '@playwright/test';
  * DENETİM EKRANLARI — TEK liste.
  *
  * Neden tek: bu oturumda BEŞ KEZ aynı kusuru yaptım. Yeni bir yüzey ekledim,
- * beş denetim listesinin (kontrast, erişilebilirlik, mobil, biçim, klavye)
+ * denetim listelerinin (kontrast, erişilebilirlik, mobil, biçim, klavye,
+ * katman)
  * bir kısmını güncellemeyi unuttum, yüzey denetimsiz kaldı. Sırasıyla sektör
  * paneli, finansal sekmesi, sektör rotasyonu, radar filtre paneli ve radarın
  * "ölçülemedi" notu. Her seferinde kusuru eklerken değil SONRADAN buldum.
  *
- * Beş ayrı liste varken "hangisinde eksik" sorusu gözle cevaplanıyordu ve göz
+ * Ayrı listeler varken "hangisinde eksik" sorusu gözle cevaplanıyordu ve göz
  * beş kez yetmedi. Tek liste bu soruyu ORTADAN KALDIRIYOR: yeni bir ekran
- * eklendiğinde beş denetime birden girer. Bir denetimden çıkarmak için
+ * eklendiğinde denetimlerin HEPSİNE birden girer — sonradan eklenen `katman`
+ * denetimi de on yedi ekranı kendiliğinden kapsadı. Bir denetimden çıkarmak için
  * `haric` alanına GEREKÇE yazmak gerekiyor — yani "unuttum" ile "gerek yok"
  * artık birbirinden ayrı.
  *
  * `kapsam.spec.ts` gerekçelerin boş olmadığını ve çürümediğini sınıyor.
  */
-export type DenetimAdi = 'kontrast' | 'erisilebilirlik' | 'mobil' | 'bicim' | 'klavye';
+export type DenetimAdi = 'kontrast' | 'erisilebilirlik' | 'mobil' | 'bicim' | 'klavye' | 'katman';
 
 export const DENETIM_ADLARI: DenetimAdi[] = [
   'kontrast',
@@ -25,6 +27,7 @@ export const DENETIM_ADLARI: DenetimAdi[] = [
   'mobil',
   'bicim',
   'klavye',
+  'katman',
 ];
 
 export type Ekran = {

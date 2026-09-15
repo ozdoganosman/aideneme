@@ -40,12 +40,38 @@ const PARAM_KEYS: (keyof ScreenParams)[] = [
 const num = (v: number): string => (Number.isInteger(v) ? String(v) : String(+v.toFixed(4)));
 
 /**
- * Sektör adı bağlantıda taşınabilir mi? Ayırıcılarla çakışan ad kodlamaya
- * giremez; bunu ÇAĞIRAN tarafın bilmesi gerekir, yoksa "bu sektörü tara"
- * bağlantısı sessizce sektörsüz (tüm piyasa) bir tarama açardı.
+ * Sektör adı ayırıcılardan KAÇIRILIYOR.
+ *
+ * Önce basit bir yasak vardı: virgül ya da dikey çizgi içeren ad kodlamaya
+ * girmiyordu ve çağıran taraf "bu sektörü tara" düğmesini gizliyordu. O gün
+ * sınıflandırma kapsamı %6 olduğu için kimsenin gözüne çarpmadı.
+ *
+ * Borsa İstanbul'un kendi bileşen dosyası geldiğinde ölçtüm: 23 sektörün
+ * 7'sinin adında virgül var ve işlem değerinde EN BÜYÜK sektör onlardan biri
+ * ("Kimya, Petrol, Plastik", toplam işlem değerinin %17,9'u). Yani nabızdan
+ * tarayıcıya geçiş, en çok ihtiyaç duyulan sektörlerde yoktu.
+ *
+ * Kaçış YALNIZCA üç karakteri hedefliyor: `%` (kaçışın kendisi, önce),
+ * `|` ve `,`. `encodeURIComponent` de işi görürdü ama Türkçe harfleri de
+ * kaçırıyor — "Bankacılık" bağlantıda "Bankac%C4%B1l%C4%B1k" olurdu; ölçtüm,
+ * bağlantı üç katına çıkıyor ve okunabilirliği bu biçimin açık bir hedefi
+ * (bir test uzunluğu sınırlıyor). Çözme tarafı `decodeURIComponent`: ürettiğimiz
+ * üç dizinin üçünü de doğru çözüyor.
+ *
+ * Eski bağlantılar bozulmuyor: kaçış gerektirmeyen bir ad ("Banka") aynı
+ * metne kodlanıyor ve aynı şekilde çözülüyor.
  */
-export const isShareableSector = (name: string): boolean =>
-  !name.includes(',') && !name.includes('|');
+const sektorKodla = (ad: string): string =>
+  ad.replace(/%/g, '%25').replace(/\|/g, '%7C').replace(/,/g, '%2C');
+
+const sektorCoz = (parca: string): string | null => {
+  try {
+    return decodeURIComponent(parca);
+  } catch {
+    // Bozuk yüzde dizisi: adı tahmin etmektense bu parçayı düşürüyoruz.
+    return null;
+  }
+};
 
 export function encodeScreen(state: ShareState): string {
   const rules = state.rules
@@ -61,9 +87,7 @@ export function encodeScreen(state: ShareState): string {
   const params = PARAM_KEYS.map((key) =>
     num(Number.isFinite(state.params[key]) ? state.params[key] : DEFAULT_SCREEN_PARAMS[key]),
   ).join('.');
-  // Sektör adlarında virgül olmadığı varsayılmıyor: ayırıcı çakışırsa ad
-  // bölünür ve tanınmaz; bu yüzden virgül içeren ad kodlamaya girmez.
-  const sectors = state.sectors.filter(isShareableSector).join(',');
+  const sectors = state.sectors.map(sektorKodla).join(',');
   const sort = `${state.sort.metric}~${state.sort.dir === 'asc' ? 'a' : 'd'}`;
 
   return [VERSION, rules, params, sectors, sort].join('|');
@@ -126,7 +150,12 @@ export function decodeScreen(text: string, knownMetrics: Set<string>): DecodeRes
     else dropped.push(`okunamayan parametre: ${key}`);
   });
 
-  const sectors = sectorPart ? sectorPart.split(',').filter(Boolean) : [];
+  const sectors: string[] = [];
+  for (const parca of sectorPart ? sectorPart.split(',').filter(Boolean) : []) {
+    const ad = sektorCoz(parca);
+    if (ad) sectors.push(ad);
+    else dropped.push(`okunamayan sektör adı: ${parca}`);
+  }
 
   const [sortMetric, sortDir] = sortPart.split('~');
   const sort: ShareState['sort'] =

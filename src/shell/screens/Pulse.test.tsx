@@ -233,6 +233,22 @@ describe('Nabız — sektör bazlı para akışı', () => {
     expect(decoded.state!.rules).toEqual([]);
   });
 
+  /*
+    TABLONUN ERİŞİLEBİLİR ADI. Sütun başlığı "Sektör"/"Grup" diye değişiyordu
+    ama `caption` sabitti: sektör görünümünde ekran okuyucu tabloyu hâlâ
+    "Kümelere göre" diye duyuruyordu. Gören kullanıcı farkı sütun başlığından
+    anlıyor; duyanın tek ipucu bu satır.
+  */
+  it('tablonun erişilebilir adı gruplamayla değişiyor', async () => {
+    sectorsFn.mockResolvedValue(SECTORS);
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(within(akisTablosu()).getByText('Bankacılık')).toBeInTheDocument());
+    expect(akisTablosu()).toHaveAccessibleName(/Sektörlere göre/);
+
+    await userEvent.selectOptions(screen.getByLabelText('Gruplama'), 'cluster');
+    await waitFor(() => expect(akisTablosu()).toHaveAccessibleName(/Davranış gruplarına göre/));
+  });
+
   it('sınıflandırılmamış satır tarayıcıya geçiş sunmaz', async () => {
     sectorsFn.mockResolvedValue(SECTORS);
     render(<Pulse state={STATE} push={push} />);
@@ -245,9 +261,18 @@ describe('Nabız — sektör bazlı para akışı', () => {
     ).toBeNull();
   });
 
-  it('adı bağlantıda taşınamayan sektör geçiş sunmaz', async () => {
-    // Virgül, bağlantıdaki sektör ayırıcısı: ad bölünürse tarayıcı SESSİZCE
-    // tüm piyasayı gösterirdi. Böyle bir sektörde düğme hiç çıkmıyor.
+  /*
+    VİRGÜLLÜ SEKTÖR ADI. Eskiden bu satırda "Tara" düğmesi HİÇ çıkmıyordu:
+    virgül bağlantıdaki sektör ayırıcısıydı, ad bölünürse tarayıcı sessizce
+    tüm piyasayı gösterirdi ve düğmeyi gizlemek doğru karardı.
+
+    Borsa İstanbul'un resmî sınıflandırması gelince o karar yetmez oldu:
+    23 sektörün 7'sinin adında virgül var ve işlem değerinde en büyük sektör
+    ("Kimya, Petrol, Plastik") onlardan biri. Geçiş, en çok kullanılacak
+    yerlerde yoktu. Ayırıcı artık kaçırılıyor (bkz. `share.ts`), düğme de
+    çıkıyor — ve bağlantı ADI AYNEN taşıyor.
+  */
+  it('virgüllü sektör adı da tarayıcıya geçiş sunuyor', async () => {
     sectorsFn.mockResolvedValue({
       ...SECTORS,
       of: { AAA: 'Gıda, İçecek', BBB: 'Gıda, İçecek', CCC: 'Demir Çelik' },
@@ -256,10 +281,14 @@ describe('Nabız — sektör bazlı para akışı', () => {
     await waitFor(() =>
       expect(within(akisTablosu()).getByText('Gıda, İçecek')).toBeInTheDocument(),
     );
-    expect(
-      screen.queryByRole('button', { name: /Gıda, İçecek sektörünü tarayıcıda aç/ }),
-    ).toBeNull();
-    // Taşınabilir ad etkilenmiyor.
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Gıda, İçecek sektörünü tarayıcıda aç' }),
+    );
+    const hedef = push.mock.calls.at(-1)![0] as { v: string; f: string };
+    expect(hedef.v).toBe('tarayici');
+    // Bağlantı tek bir sektör taşımalı ve adı bölünmemiş olmalı.
+    expect(decodeScreen(hedef.f, new Set(['chg21'])).state!.sectors).toEqual(['Gıda, İçecek']);
+
     expect(
       screen.getByRole('button', { name: 'Demir Çelik sektörünü tarayıcıda aç' }),
     ).toBeInTheDocument();
