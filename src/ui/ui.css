@@ -434,6 +434,10 @@
   /* Panel EKRANDAN geniş olamaz: dar bir yan panelde açılan popover pencere
      dışına taşıyordu. 360 px üst sınır, ama ekran daha darsa ekran kazanır. */
   max-width: min(360px, calc(100vw - 2 * var(--sp-4)));
+  /* Yükseklik sınırını JS veriyor (ekranda ne kadar yer varsa). Sınıra
+     dayanan panel KAYAR; kırpılmış bir panelden kaydırılabilir olanı
+     iyidir. */
+  overflow-y: auto;
   padding: var(--sp-3);
   background: var(--surface-0);
   border: 1px solid var(--border-subtle);

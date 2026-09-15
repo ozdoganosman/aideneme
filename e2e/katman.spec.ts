@@ -25,6 +25,9 @@ import { denetimEkranlari, type Ekran } from './ekranlar';
 const OLCULER = [
   { ad: 'masaüstü', width: 1500, height: 950 },
   { ad: 'telefon', width: 390, height: 780 },
+  // KISA TELEFON ayrı bir ölçü ve bu bilerek: dikey taşma kusuru en sert
+  // burada çıktı. 390×780'de panel 208 px, 360×640'ta 1.397 px sarkıyordu.
+  { ad: 'kısa telefon', width: 360, height: 640 },
 ];
 
 const SCREENS: Ekran[] = denetimEkranlari('katman');
@@ -56,7 +59,10 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
               kayma: el.scrollWidth - el.clientWidth,
               sol: Math.round(r.left),
               sag: Math.round(r.right),
+              ust: Math.round(r.top),
+              alt: Math.round(r.bottom),
               pencere: window.innerWidth,
+              pencereY: window.innerHeight,
             };
           }),
       );
@@ -72,6 +78,20 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
         ).toBeGreaterThanOrEqual(-1);
         expect(k.sag, `${olcu.ad}: katman ekranın sağından taşıyor — ${k.ad}`).toBeLessThanOrEqual(
           k.pencere + 1,
+        );
+        /*
+          DİKEY EKSEN. Denetim bir süre YALNIZCA yatay bakıyordu ve tam o
+          kör noktada bir kusur yaşadı: yerleştirme yalnızca "altta yer yoksa
+          ve üstte TAM sığıyorsa yukarı dön" diyordu; ikisine de sığmayan
+          panel aşağıda kalıp ekranın dışına sarkıyordu. Yatayda kenetleme
+          vardı, dikeyde yoktu.
+        */
+        expect(
+          k.ust,
+          `${olcu.ad}: katman ekranın üstünden taşıyor — ${k.ad}`,
+        ).toBeGreaterThanOrEqual(-1);
+        expect(k.alt, `${olcu.ad}: katman ekranın altından taşıyor — ${k.ad}`).toBeLessThanOrEqual(
+          k.pencereY + 1,
         );
       }
     }

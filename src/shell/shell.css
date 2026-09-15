@@ -2053,8 +2053,10 @@
      popover'ın kendi viewport payandası geçerli oluyor (78vw'den daha
      doğru). */
   min-width: 0;
-  max-height: min(60vh, 460px);
-  overflow-y: auto;
+  /* YÜKSEKLİK DE POPOVER'IN İŞİ. Burada `max-height: min(60vh, 460px)` ve
+     kendi kaydırıcısı vardı; popover ekranda kalan yere göre sınır koyunca
+     ikinci bir kaydırıcı olurdu (iç içe kaydırma) ve 460 px'lik sabit sınır
+     dar ekranda zaten yanlış sayıydı. Tek kaydırıcı, katmanın kendisi. */
 }
 .radar__grup h4 {
   margin: 0 0 var(--sp-1);
