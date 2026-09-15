@@ -713,7 +713,23 @@ def self_test() -> None:
                     encoding="utf-8",
                 )
         bekleyen = pending_symbols(["GUNCEL", "ESKISURUM", "SURUMSUZ", "BOZUK"], out)
-        assert bekleyen == ["ESKISURUM", "SURUMSUZ", "BOZUK"], bekleyen
+        # Güncel sürümlü kayıt listede YOK; kalanlar en eski tazelenen önce
+        # (okunamayan kayıt damgasız sayılıp 0 ile en öne geçiyor).
+        assert bekleyen == ["BOZUK", "ESKISURUM", "SURUMSUZ"], bekleyen
+
+        # ARTIMLI YOLDA DA EN ESKİ ÖNCE. Sıra alfabetik kaldığı sürece bütçe
+        # hep listenin başına gidiyordu; ölçüldü ki bayat kayıtlar alfabenin
+        # kuyruğunda toplanmıştı, yani düzeltme onlara hiç ulaşmıyordu.
+        (out / "AYENI.json").write_text(
+            json.dumps({"symbol": "AYENI", "periods": [], "fields": {}, "fetched": 900}),
+            encoding="utf-8",
+        )
+        (out / "ZESKI.json").write_text(
+            json.dumps({"symbol": "ZESKI", "periods": [], "fields": {}, "fetched": 100}),
+            encoding="utf-8",
+        )
+        sirali = pending_symbols(["AYENI", "ZESKI"], out)
+        assert sirali == ["ZESKI", "AYENI"], sirali
 
         # Güncel sürümle yazılan kayıt artımlı turda YENİDEN ÇEKİLMEZ; yoksa
         # her tur bütün evreni tarar ve bütçe hiçbir şeye yetmez.
@@ -1305,42 +1321,50 @@ def pending_symbols(
     """
     fails = failures or {}
     yok = nostatement or set()
-    if force_all:
-        # EN ESKİ TAZELENEN ÖNCE. Sıra giriş sırası olduğu sürece zorlamalı
-        # tazeleme YAKINSAMIYORDU: bütçe 559 sembolün yarısına yetiyor ve her
-        # tur aynı baştan başlıyor, yani listenin kuyruğu hiçbir zaman
-        # tazelenmiyor. Üreticide yapılan bir düzeltme (ör. kalem adı
-        # eşleşmesi) mevcut verinin yarısına hiç ulaşamazdı.
-        #
-        # Dosya mtime'ı kullanılamıyor: gh-pages klonu bütün dosyalara aynı
-        # damgayı veriyor. Kaydın KENDİ `fetched` damgası kullanılıyor; damgası
-        # olmayan eski kayıtlar 0 sayılıp öne geçiyor, yani ilk tur onları
-        # alıyor ve sonraki turlar kaldığı yerden devam ediyor.
-        def damga(sembol: str) -> float:
-            path = out_dir / f"{sembol}.json"
-            try:
-                return float(json.loads(path.read_text(encoding="utf-8")).get("fetched") or 0)
-            except (OSError, json.JSONDecodeError, TypeError, ValueError):
-                return 0.0
 
-        return sorted(symbols, key=damga)
-    def bayat(sembol: str) -> bool:
-        """Dosya yok ya da ESKİ ayıklama kuralıyla yazılmış."""
-        path = out_dir / f"{sembol}.json"
-        if not path.exists():
-            return True
+    def kayit(sembol: str) -> dict | None:
         try:
-            return json.loads(path.read_text(encoding="utf-8")).get("v") != EXTRACT_VERSION
+            return json.loads((out_dir / f"{sembol}.json").read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
-            # Okunamayan kaydı yeniden çekmek, bozuk kaydı sonsuza dek
-            # taşımaktan iyi.
-            return True
+            return None
 
-    return [
-        s
-        for s in symbols
-        if bayat(s) and fails.get(s, 0) < MAX_ATTEMPTS and s not in yok
-    ]
+    # EN ESKİ TAZELENEN ÖNCE. Sıra giriş sırası olduğu sürece tazeleme
+    # YAKINSAMIYORDU: bütçe 559 sembolün yarısına yetiyor ve her tur aynı
+    # baştan başlıyor, yani listenin kuyruğu hiçbir zaman tazelenmiyor.
+    # Üreticide yapılan bir düzeltme (ör. kalem adı eşleşmesi) mevcut verinin
+    # yarısına hiç ulaşamazdı.
+    #
+    # ARTIMLI YOLDA DA GEÇERLİ: orada da sıra alfabetikti ve bayat kayıtlar
+    # alfabenin kuyruğunda toplanmıştı (ölçüldü: eksik 87 nakit akışının
+    # tamamı P-Z aralığındaydı), yani bütçe hep zaten iyi olan kayıtlara
+    # gidiyordu.
+    #
+    # Dosya mtime'ı kullanılamıyor: gh-pages klonu bütün dosyalara aynı
+    # damgayı veriyor. Kaydın KENDİ `fetched` damgası kullanılıyor; damgası
+    # olmayan eski kayıtlar 0 sayılıp öne geçiyor.
+    def damga(sembol: str) -> float:
+        o = kayit(sembol)
+        try:
+            return float((o or {}).get("fetched") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if force_all:
+        return sorted(symbols, key=damga)
+
+    def bayat(sembol: str) -> bool:
+        """Dosya yok, okunamıyor ya da ESKİ ayıklama kuralıyla yazılmış."""
+        if not (out_dir / f"{sembol}.json").exists():
+            return True
+        o = kayit(sembol)
+        # Okunamayan kaydı yeniden çekmek, bozuk kaydı sonsuza dek taşımaktan
+        # iyi.
+        return o is None or o.get("v") != EXTRACT_VERSION
+
+    return sorted(
+        (s for s in symbols if bayat(s) and fails.get(s, 0) < MAX_ATTEMPTS and s not in yok),
+        key=damga,
+    )
 
 
 def records_on_disk(out_dir: Path) -> list[dict]:
