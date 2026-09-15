@@ -273,6 +273,29 @@ def pack_market(market_dir: Path, bundle_bars: int, verify: bool) -> dict | None
         "hash": short_hash(bundle),
     }
 
+    # ENDEKS PAKETİ — ayrı ve küçük.
+    #
+    # Endeksler tarama evreninden çıktı ama "hangi sektör kazandırıyor"
+    # sorusunun cevabı onlarda: BIST'in alt sektör endeksleri (XBANK, XGIDA …)
+    # sınıflandırma dosyası olmadan da sektör getirisini veriyor.
+    #
+    # Neden ayrı dosya: tek tek seri dosyaları TAM geçmiş taşıyor (sembol
+    # başına ~80 KB, 23 sektör ≈ 1,8 MB). Son N barlık paket aynı iş için
+    # ~140 KB ve TEK istek. Ana pakete geri koymak ise endeksleri tarama
+    # evrenine geri sokardı.
+    endeks_serileri = {k: v for k, v in series.items() if k.upper() in endeksler}
+    if endeks_serileri:
+        endeks_paket = encode_bundle(endeks_serileri, bundle_bars)
+        endeks_adi = f"endeks-{bundle_bars}.bin"
+        (out / endeks_adi).write_bytes(endeks_paket)
+        manifest["indices"] = {
+            "file": endeks_adi,
+            "bars": bundle_bars,
+            "bytes": len(endeks_paket),
+            "hash": short_hash(endeks_paket),
+            "symbols": len(endeks_serileri),
+        }
+
     (out / "manifest.json").write_text(
         json.dumps(manifest, separators=(",", ":")), encoding="utf-8"
     )
@@ -399,6 +422,10 @@ def endeks_self_test(bundle_bars: int) -> None:
         assert names == ["AAA"], names
         # Seri dosyası yine de yazılıyor.
         assert (market / "pack" / "XU100.bin").exists()
+        # ENDEKS PAKETİ ayrı yazılıyor ve YALNIZCA endeksleri taşıyor.
+        assert manifest["indices"]["symbols"] == 1, manifest["indices"]
+        e_adlar, _, _ = decode_bundle((market / "pack" / manifest["indices"]["file"]).read_bytes())
+        assert e_adlar == ["XU100"], e_adlar
 
 
 def decode_bundle(buf: bytes):

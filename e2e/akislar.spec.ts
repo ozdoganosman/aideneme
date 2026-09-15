@@ -416,10 +416,58 @@ test('endeksler taramada yok ama grafikte açılabiliyor', async ({ page }) => {
   // -%33,2 ve harita gerçek hisseleri gösteriyor.
   await open(page, 'v=nabiz');
   await expect(page.locator('.pulse__flows')).toBeVisible();
-  const nabiz = await page.locator('#icerik').innerText();
-  expect(nabiz).not.toContain('XU100');
+  // VERİ yüzeylerine bakılıyor, sayfanın tamamına değil: sektör endeksi
+  // panelinin AÇIKLAMASI "XU100 gibi ana endeksler listede yok" diyor ve bu
+  // doğru bir cümle. Aranan şey endeksin bir SATIR/kutu olarak görünmesi.
+  expect(await page.locator('.heatmap').innerText()).not.toContain('XU100');
+  expect(await page.locator('.pulse__flows').innerText()).not.toContain('XU100');
+  expect(await page.locator('.sektor__tablo').innerText()).not.toContain('XU100');
 
   // Sembol masası manifest'ten okuyor: endeks orada DURUYOR.
   await open(page, 'v=sembol&s=XU100');
   await expect(page.locator('.chart-host canvas').first()).toBeVisible();
+});
+
+/**
+ * SEKTÖR ENDEKSLERİ — sınıflandırma dosyası OLMADAN da sektör sorusu
+ * cevaplanıyor.
+ *
+ * Kullanıcı isteği "endüstriden para akışı"ydı. Sembol→sektör sınıflandırması
+ * üretilemiyor (kaynak 401 döndürüyor), ama BIST'in kendi alt sektör
+ * endeksleri veri setinde ve tam geçmişleriyle duruyor. Bu panel onları
+ * okuyor; sınıflandırma dosyasına bağlı DEĞİL.
+ *
+ * Gerçek BIST verisiyle doğrulandı (14 Eylül 2026, 1 ay): 23 sektörün 11'i
+ * artıda, başta Finansal Kiralama +%31,68, sonda Bilişim -%45,24 — bağımsız
+ * bir Python hesabıyla birebir aynı.
+ */
+test('sektör endeksleri: sınıflandırma olmadan sektör getirisi', async ({ page }) => {
+  await open(page, 'v=nabiz');
+  await expect(page.locator('.sektor__tablo')).toBeVisible();
+
+  const satir = page.locator('.sektor__tablo tbody tr');
+  const n = await satir.count();
+  expect(n, 'sektör endeksi satırı yok').toBeGreaterThan(0);
+
+  // Getiriler BÜYÜKTEN küçüğe sıralı: kullanıcı ilk satırı "en çok kazandıran"
+  // diye okuyor, sıra bozulursa cümle yanlış olur.
+  const yuzdeler = await page.locator('.sektor__tablo tbody td.is-num').allInnerTexts();
+  const sayi = yuzdeler.map((t) => Number(t.replace('%', '').replace(',', '.').replace('+', '')));
+  expect(sayi.every((v) => Number.isFinite(v))).toBe(true);
+  for (let i = 1; i < sayi.length; i++) {
+    expect(sayi[i - 1], `${i}. satır sıralama dışı`).toBeGreaterThanOrEqual(sayi[i]);
+  }
+
+  // Ana endeks ve üst küme LİSTEDE OLMAMALI: XU100 örnek veride var ama
+  // sektör değil; üst kümeyi alt sektörle sıralamak aynı parayı iki kez sayar.
+  const tablo = await page.locator('.sektor__tablo').innerText();
+  expect(tablo).not.toContain('XU100');
+
+  // Dönem değişince tablo yeniden hesaplanıyor.
+  await page.getByLabel('Getiri penceresi').selectOption('5');
+  await expect(page.locator('.sektor__tablo thead')).toContainText(/1 hafta/i);
+
+  // Sektör adına tıklayınca o endeks grafikte açılıyor.
+  await satir.first().getByRole('button').click();
+  await expect(page).toHaveURL(/v=sembol/);
 });

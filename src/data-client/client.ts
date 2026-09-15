@@ -34,6 +34,7 @@ export class DataClient {
   private readonly cache: BinaryCache;
   private readonly manifests = new Map<Market, Promise<Manifest>>();
   private readonly bundles = new Map<Market, Promise<Bundle>>();
+  private readonly indexBundles = new Map<Market, Promise<Bundle>>();
 
   constructor(options: DataClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? ((...args) => fetch(...args));
@@ -106,6 +107,39 @@ export class DataClient {
     );
     await this.cache.put(key, buf, prefix);
     return { buffer: buf, fromCache: false, bytes: info.bytes };
+  }
+
+  /**
+   * SEKTÖR ENDEKSİ paketi — 23 alt sektör endeksinin son N barı, tek istek.
+   *
+   * Ayrı bir paket, çünkü endeksler tarama evreninden çıkarıldı. Tek tek seri
+   * dosyalarını çekmek aynı iş için ~1,8 MB olurdu (tam geçmiş); bu paket
+   * ~140 KB. Paket üretilmemişse (endeksi olmayan piyasa) `null` döner —
+   * çağıran "sektör endeksi yok" diyebilsin diye hata DEĞİL.
+   */
+  async indexBundle(market: Market, signal?: AbortSignal): Promise<Bundle | null> {
+    const existing = this.indexBundles.get(market);
+    if (existing) return existing;
+
+    const manifest = await this.manifest(market, signal);
+    const info = manifest.indices;
+    if (!info) return null;
+
+    const prefix = `${market}/${info.file}@`;
+    const key = `${prefix}${info.hash}`;
+    const promise = (async () => {
+      const cached = await this.cache.get(key);
+      if (cached) return decodeBundle(cached);
+      const buf = await this.fetchBinary(packPath(market, `${info.file}?h=${info.hash}`), signal);
+      await this.cache.put(key, buf, prefix);
+      return decodeBundle(buf);
+    })().catch((err) => {
+      this.indexBundles.delete(market);
+      throw err;
+    });
+
+    this.indexBundles.set(market, promise);
+    return promise;
   }
 
   /** Tüm sembollerin son N barı — tarama/ısı haritası için tek istek. */

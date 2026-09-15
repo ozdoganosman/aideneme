@@ -1,3 +1,4 @@
+import { SektorEndeksleri } from './SektorEndeksleri';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct, trCompact } from '../../ui';
 import {
@@ -653,6 +654,17 @@ export default function Pulse({ state, push }: Props) {
           </>
         )}
       </section>
+
+      {/*
+        SEKTÖR ENDEKSLERİ — yukarıdaki "para akışı" panelinden AYRI.
+
+        Üstteki panel sınıflandırma dosyası varsa sektör akışını, yoksa davranış
+        kümelerini gösteriyor. Bu panel üçüncü bir kaynak: BIST'in kendi alt
+        sektör endeksleri. Sınıflandırma dosyasına İHTİYAÇ DUYMUYOR, yani
+        kaynak erişilemezken de "hangi sektör kazandırdı" sorusu cevaplanıyor.
+        Ayrı panel, çünkü ölçtüğü şey farklı: getiri, akış değil.
+      */}
+      <SektorEndeksleri market={market} onSelect={(symbol) => push({ v: 'sembol', s: symbol })} />
     </div>
   );
 }

@@ -22,6 +22,10 @@ type Ekran = {
 
 const SCREENS: Ekran[] = [
   { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
+  // Sektör endeksi paneli ASENKRON yükleniyor: `.pulse__flows` hazır olduğunda
+  // tablosu daha çizilmemiş olabiliyor. Ayrı giriş, çünkü denetimin kör
+  // noktası tam olarak buydu — varsayılan durumda GÖRÜNMEYEN yüzeyler.
+  { ad: 'Nabız (sektör endeksleri)', url: 'v=nabiz', hazir: '.sektor__tablo' },
   { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
   { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
   {

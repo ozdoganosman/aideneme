@@ -243,6 +243,14 @@ export interface Manifest {
   /** Üretim zamanı (unix saniye). */
   generated: number;
   bundle?: { file: string; bars: number; bytes: number; hash: string };
+  /**
+   * SEKTÖR ENDEKSİ paketi — yalnızca endeks serileri, son N bar.
+   *
+   * Ana paketten ayrı, çünkü ana paket "tarama evreni" ve endeksler oraya
+   * girmemeli. İsteğe bağlı: endeksi olmayan bir piyasada (ABD, kripto) alan
+   * hiç yazılmaz ve bu bir kusur değildir.
+   */
+  indices?: { file: string; bars: number; bytes: number; hash: string; symbols: number };
   symbols: Record<string, ManifestEntry>;
 }
 

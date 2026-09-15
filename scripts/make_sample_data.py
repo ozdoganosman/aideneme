@@ -134,7 +134,15 @@ def main() -> int:
     # 48 endeks serisi hisselerin arasında duruyordu ve tarayıcıda işlem değeri
     # 0 olan, alınamayacak satırlar olarak görünüyordu. Eleme artık var; örnek
     # veride hiç endeks olmazsa o eleme uçtan uca testte HİÇ çalışmaz.
-    symbols = [f"X{i:03d}" for i in range(args.symbols)] + ["XU100"]
+    # XU100 ana endeks (elenmeyi sınar), diğer üçü SEKTÖR endeksi (sektör
+    # endeksi panelini sınar). Üçü de gerçek BIST kodları; sektör paneli
+    # kodları tanımasaydı liste boş kalır ve panel hiç sınanmazdı.
+    symbols = [f"X{i:03d}" for i in range(args.symbols)] + [
+        "XU100",
+        "XBANK",
+        "XGIDA",
+        "XKMYA",
+    ]
     start_day = 19000 - args.bars
     series = {s: synth(tohum(s), args.bars, start_day) for s in symbols}
 
@@ -165,7 +173,21 @@ def main() -> int:
     bundle = encode_bundle(
         {k: v for k, v in series.items() if k.upper() not in endeksler}, args.bundle_bars
     )
+    # Endeks paketi (pack_data ile aynı sözleşme): sektör endeksi ekranı bunu
+    # okuyor. Örnek veride üretilmezse o ekran uçtan uca testte hiç çalışmaz.
+    endeks_serileri = {k: v for k, v in series.items() if k.upper() in endeksler}
     (pack / "latest-250.bin").write_bytes(bundle)
+    if endeks_serileri:
+        e_paket = encode_bundle(endeks_serileri, args.bundle_bars)
+        (pack / f"endeks-{args.bundle_bars}.bin").write_bytes(e_paket)
+        manifest["indices"] = {
+            "file": f"endeks-{args.bundle_bars}.bin",
+            "bars": min(args.bundle_bars, args.bars),
+            "bytes": len(e_paket),
+            "hash": short_hash(e_paket),
+            "symbols": len(endeks_serileri),
+        }
+
     manifest["bundle"] = {
         "file": "latest-250.bin",
         "bars": min(args.bundle_bars, args.bars),

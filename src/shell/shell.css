@@ -2203,3 +2203,94 @@
 .rank__ozet.is-yok {
   border-left-color: var(--warn);
 }
+
+/* ── Sektör endeksleri ────────────────────────────────────────────────────
+   "Hangi sektör kazandırdı" tablosu. Sayılar sağa yaslı ve tabular: sütun
+   boyunca göz tek bir hizada iniyor, virgüller alt alta geliyor. */
+.sektor__ozet {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.sektor__tablo {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.sektor__tablo th,
+.sektor__tablo td {
+  padding: var(--sp-2) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  font-weight: 400;
+}
+.sektor__tablo thead th {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sektor__tablo .is-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sektor__tablo .is-up {
+  color: var(--up);
+}
+.sektor__tablo .is-down {
+  color: var(--down);
+}
+.sektor__ad {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.sektor__ad:hover {
+  text-decoration: underline;
+}
+/* Çubuk SIFIRDAN iki yöne uzuyor: orta çizgi sıfır. Tek yöne uzayan bir
+   çubukta "az kazandı" ile "az kaybetti" aynı görünürdü. */
+.sektor__bar-hucre {
+  width: 40%;
+  min-width: 120px;
+}
+.sektor__bar {
+  position: relative;
+  display: block;
+  height: 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.sektor__bar::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+}
+.sektor__bar > span {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 2px;
+}
+.sektor__bar > span.is-up {
+  left: 50%;
+  background: var(--up);
+}
+.sektor__bar > span.is-down {
+  right: 50%;
+  background: var(--down);
+}
+/* Telefon: çubuk sütunu düşüyor, sayı kalıyor — ölçülen değer sayıda. */
+@media (max-width: 560px) {
+  .sektor__bar-hucre {
+    display: none;
+  }
+}
