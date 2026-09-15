@@ -8,25 +8,54 @@ import { expect, test } from '@playwright/test';
  * tarayıcıda ortaya çıkar.
  */
 
-const SCREENS: [string, string, string][] = [
-  ['Nabız', 'v=nabiz', '.pulse__flows'],
-  ['Tarayıcı', 'v=tarayici', '.ui-vtable'],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart'],
-  ['Strateji Laboratuvarı', 'v=laboratuvar&s=X001', '.lab__stats'],
-  ['Stratejiler', 'v=stratejiler', '.rank__table'],
-  ['Rapor', 'v=rapor&s=X001', '.report__sheet'],
+type Ekran = {
+  ad: string;
+  url: string;
+  hazir: string;
+  /** Varsayılan KAPALI yüzeyler (radar) için açma adımı. */
+  ac?: (page: import('@playwright/test').Page) => Promise<void>;
+};
+
+const SCREENS: Ekran[] = [
+  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
+  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
+  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
+  {
+    // Radar üç yeni etkileşim getirdi: sürüklenebilir ayırıcı (ok tuşlarıyla
+    // da çalışmalı), filtre ve sütun panelleri. Kapalıyken denetlenmiş
+    // sayılmaz — biçim ve erişilebilirlik denetimlerinde aynı kör nokta
+    // gerçek kusur çıkarmıştı.
+    ad: 'Sembol Masası (radar)',
+    url: 'v=sembol&s=X001',
+    hazir: '.radar__tablo',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+    },
+  },
+  { ad: 'Strateji Laboratuvarı', url: 'v=laboratuvar&s=X001', hazir: '.lab__stats' },
+  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
+  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
 ];
 
-for (const [name, query, ready] of SCREENS) {
+for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
   test(`${name}: klavyeyle gezilebiliyor`, async ({ page }) => {
     await page.goto(`/next.html?m=bist&${query}`, { waitUntil: 'networkidle' });
+    if (ac) await ac(page);
     await page.waitForSelector(ready, { timeout: 90_000 });
     await page.waitForTimeout(300);
 
-    // İlk sekme durağı "içeriğe atla" olmalı: klavye kullanıcısı her sayfada
-    // önce menüyü baştan geçmek zorunda kalmasın.
-    await page.keyboard.press('Tab');
-    await expect(page.locator(':focus')).toHaveText(/İçeriğe atla/);
+    // Atlama bağlantısı YALNIZCA tıklamayla açılmayan ekranlarda sınanıyor.
+    //
+    // Yüzeyi açmak için tıklamak, tarayıcının "sıradaki sekme nereden devam
+    // etsin" işaretini o öğeye taşıyor; `blur()` bile onu geri almıyor
+    // (ölçüldü: odak BODY'ye döndü ama Tab yine radar anahtarına gitti).
+    // Atlama bağlantısı zaten bir SAYFA sözleşmesi ve aynı ekranın açılmamış
+    // hâlinde sınanıyor; burada asıl sınanan şey odak TUZAĞI.
+    if (!ac) {
+      await page.keyboard.press('Tab');
+      await expect(page.locator(':focus')).toHaveText(/İçeriğe atla/);
+    }
 
     // 40 sekme boyunca odak ilerlemeli ve sayfada kalmalı (tuzak yok).
     //
@@ -54,3 +83,33 @@ for (const [name, query, ready] of SCREENS) {
     expect(new Set(stops).size).toBeGreaterThan(stops.length / 2);
   });
 }
+
+/**
+ * Radarın KENDİ klavye sözleşmesi.
+ *
+ * Genişlik ayarı fareyle sürüklenerek yapılıyor; yalnızca fareyle ayarlanabilen
+ * bir bölme klavye kullanıcısı için erişilemez olurdu. Filtre paneli de
+ * klavyeyle açılıp kapanmalı ve Esc ile kapanmalı.
+ */
+test('Radar: genişlik ok tuşlarıyla, panel Esc ile', async ({ page }) => {
+  await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+  await page.getByText('Radar', { exact: true }).first().click();
+  await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+
+  const ayirici = page.locator('.desk__ayirici');
+  await ayirici.focus();
+  const once = await page.locator('.desk__radar').evaluate((el) => el.clientWidth);
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  const sonra = await page.locator('.desk__radar').evaluate((el) => el.clientWidth);
+  expect(sonra, 'sola ok radarı genişletmeli').toBeGreaterThan(once);
+  // Erişilebilir değer de güncellenmeli; ekran okuyucu ne olduğunu duysun.
+  await expect(ayirici).toHaveAttribute('aria-valuenow', String(sonra));
+
+  const filtre = page.getByRole('button', { name: /^Filtre paneli/ });
+  await filtre.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.radar__panel')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.radar__panel')).toHaveCount(0);
+});
