@@ -19,7 +19,8 @@ import type { Page } from '@playwright/test';
  *
  * `kapsam.spec.ts` gerekçelerin boş olmadığını ve çürümediğini sınıyor.
  */
-export type DenetimAdi = 'kontrast' | 'erisilebilirlik' | 'mobil' | 'bicim' | 'klavye' | 'katman';
+export type DenetimAdi =
+  'kontrast' | 'erisilebilirlik' | 'mobil' | 'bicim' | 'klavye' | 'katman' | 'kaydirma';
 
 export const DENETIM_ADLARI: DenetimAdi[] = [
   'kontrast',
@@ -28,6 +29,7 @@ export const DENETIM_ADLARI: DenetimAdi[] = [
   'bicim',
   'klavye',
   'katman',
+  'kaydirma',
 ];
 
 export type Ekran = {
