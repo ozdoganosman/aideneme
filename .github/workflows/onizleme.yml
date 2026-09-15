@@ -106,7 +106,7 @@ jobs:
             mkdir -p _site/data/bist
             rm -rf _site/data/bist/pack
             cp -r public/data/bist/pack _site/data/bist/pack
-            for f in sectors.json fx.json; do
+            for f in sectors.json sectors-tani.json fx.json; do
               if [ -f "public/data/bist/$f" ]; then cp "public/data/bist/$f" "_site/data/bist/$f"; fi
             done
             # Finansal tablolara dokunulmuyor: onları `finansallar` işi yazıyor

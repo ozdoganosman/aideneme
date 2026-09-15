@@ -61,6 +61,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "public" / "data" / "bist" / "sectors.json"
+# Tanı AYRI dosyada: `sectors.json` uygulamanın okuduğu veri, tanı ise
+# üretim sürecine ait. İkisini karıştırmak, veriyi okuyan her yere
+# üretim ayrıntısı taşımak olurdu.
+TANI = ROOT / "public" / "data" / "bist" / "sectors-tani.json"
 SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
 SEKTOR_TS = ROOT / "src" / "core" / "screen" / "sectorIndices.ts"
 
@@ -391,6 +395,12 @@ def main() -> int:
         else ""
     )
     print(f"{len(harita)} sembol · {sektor_sayisi} sektör{not_cakisma} → {OUT.relative_to(ROOT)}")
+    tani: dict[str, object] = {
+        "generated": int(time.time()),
+        "yazilan": len(harita),
+        "sektor": sektor_sayisi,
+        "cakisanlar": {s: k for s, k in sorted(cakismalar.items())},
+    }
     ozet_yaz(
         f"Sektör sınıflandırması: {len(harita)} sembol · {sektor_sayisi} sektör{not_cakisma}."
     )
@@ -411,6 +421,11 @@ def main() -> int:
         yazilmayan = sorted(bilinen - set(harita) - set(cakismalar))
         uyelik, adlar = uyelik_haritasi(kayitlar, bilinen=bilinen)
         siklik, ornekler = sektorsuz_tanisi(uyelik, adlar, sektorler, yazilmayan)
+        tani["sektorsuz"] = yazilmayan
+        tani["sektorsuz_endeksleri"] = [
+            {"kod": kod, "ad": ad, "sembol": n} for kod, ad, n in siklik
+        ]
+        tani["ornek_uyelikler"] = {s: k for s, k in ornekler}
         if siklik:
             satir = ", ".join(f"{kod} {ad} ({n})" for kod, ad, n in siklik[:15])
             print(f"  sektörsüzler hangi endekslerde: {satir}", file=sys.stderr)
@@ -422,6 +437,14 @@ def main() -> int:
                 "- Örnek üyelikler: "
                 + " · ".join(f"{s} → {', '.join(k) or 'hiçbir endekste'}" for s, k in ornekler)
             )
+
+    # Tanı dosyası YAYIMLANIYOR. Sebebi pratik: iş akışı kaydının kuyruğu
+    # sektör adımına ulaşmıyor ve tüm kaydı indirmek pahalı. Yayımlanan küçük
+    # bir dosya hem ucuz hem kalıcı — "o gün kaynak ne dedi" sorusu sonradan
+    # da cevaplanabiliyor.
+    TANI.write_text(
+        json.dumps(tani, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
     return 0
 
 
