@@ -3,12 +3,15 @@ import { EmptyState, Select, Skeleton, trNum, trPct } from '../../ui';
 import { Icon } from '../../ui/icons';
 import {
   ESLESME_ESIGI,
+  resmiSektorunHisseleri,
   sektorGetirileri,
   sektorOzeti,
   sektorunHisseleri,
   type SektorEslesmesi,
   type SektorGetirisi,
 } from '../../core/screen/sectorIndices';
+import type { SectorMap } from '../../core/screen/sectors';
+import { sectorsClient } from '../../data-client/sectors';
 import { dataClient } from '../../data-client/client';
 import type { Market } from '../../data-client/markets';
 import type { Candles } from '../../core/data/types';
@@ -39,10 +42,17 @@ const DONEMLER: { bars: number; ad: string }[] = [
 /**
  * SEKTÖR ENDEKSLERİ — "endüstriden para akışı" sorusunun cevaplanabilen hâli.
  *
- * Neden burada: sembol→sektör sınıflandırması üretilemiyor (kaynak 401
- * döndürüyor). Ama BIST'in KENDİ alt sektör endeksleri veri setimizde ve tam
- * geçmişleriyle duruyor. Sektörün nasıl gittiğini uydurmadan borsanın resmî
- * endeksinden okuyoruz.
+ * Neden burada: sektörün nasıl gittiğini uydurmadan borsanın resmî
+ * endeksinden okuyoruz — BIST'in alt sektör endeksleri veri setimizde ve tam
+ * geçmişleriyle duruyor.
+ *
+ * SEKTÖRÜN HİSSELERİ sütunu RESMÎ sınıflandırmadan (`sectors.json`) geliyor.
+ * Önce korelasyon vekilinden geliyordu; resmî dosya üretilebilir hâle gelince
+ * ölçtüm: vekil 584 hissenin 35'ini (%6), resmî dosya 496'sını (%85) bir
+ * sektöre bağlıyor. Aynı ekranın hemen üstündeki akış tablosu zaten resmî
+ * dosyayı kullanıyordu; iki farklı üyeliği yan yana göstermek zayıf olanı
+ * yetkili gibi okuturdu. Vekil yalnızca resmî dosya YOKKEN devreye giriyor
+ * ve arayüz hangisinin konuştuğunu yazıyor.
  *
  * GETİRİ, AKIŞ DEĞİL: endeks serilerinde hacim güvenilir değil (ölçüldü —
  * yayındaki veride endekslerin işlem değeri 0). Bu yüzden "şu sektöre şu kadar
@@ -58,6 +68,24 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
   const [bars, setBars] = useState(21);
   const [eslesmeler, setEslesmeler] = useState<SektorEslesmesi[] | null>(null);
   const [degerlendirilen, setDegerlendirilen] = useState(0);
+  /** Resmî sınıflandırma; `undefined` = henüz bakılmadı, `null` = yok. */
+  const [resmi, setResmi] = useState<SectorMap | null | undefined>(undefined);
+
+  useEffect(() => {
+    let iptal = false;
+    setResmi(undefined);
+    sectorsClient
+      .map(market)
+      .then((m) => {
+        if (!iptal) setResmi(m);
+      })
+      .catch(() => {
+        if (!iptal) setResmi(null);
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [market]);
 
   useEffect(() => {
     let iptal = false;
@@ -99,7 +127,11 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
    * GETİRİ tablosu bu hesabı BEKLEMİYOR; eşleşme geldiğinde sütun ekleniyor.
    */
   useEffect(() => {
-    if (!client) return;
+    // Resmî dosya varken korelasyon hesabı HİÇ YAPILMIYOR. Yalnızca doğruluk
+    // değil, maliyet meselesi de: gerçek veride 599 hisse × 23 endeks 246 ms
+    // worker işi ve ayrıca endeks paketinin indirilmesi demek. Zayıf makinede
+    // kullanılmayacak bir sonuç için ödenecek bedel değil.
+    if (!client || resmi === undefined || resmi) return;
     let iptal = false;
     setEslesmeler(null);
 
@@ -121,7 +153,7 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
     return () => {
       iptal = true;
     };
-  }, [market, client]);
+  }, [market, client, resmi]);
 
   const liste: SektorGetirisi[] = useMemo(
     () => (seriler ? sektorGetirileri(seriler, bars) : []),
@@ -148,11 +180,26 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
           serilerinde işlem hacmi güvenilir olmadığı için "şu sektöre şu kadar para girdi"
           denemiyor. Birbirini dışlayan sektörler; XU100 gibi ana endeksler ve üst kümeler listede
           yok.
-          {eslesmeler && eslesmeler.length > 0 ? (
+          {resmi ? (
+            <>
+              {' '}
+              {/*
+                İDDİA KAYNAĞIN, BİZİM DEĞİL. Burada "borsanın kendi bileşen
+                listesi, tahmin değil" yazıyordu — oysa cümle dosyanın
+                KİMLİĞİNE bakmadan kuruluyordu. Örnek veriyle çalıştırınca
+                ortaya çıktı: "Sentetik (yerel) dosyasından: borsanın kendi
+                endeks bileşen listesi" diyordu, yani sentetik bir dosyayı
+                borsanın resmî listesi diye sunuyordu. Artık yalnızca kaynağın
+                adı yazılıyor; ne olduğunu ad söylüyor.
+              */}
+              <b>Sektörün hisseleri</b> {resmi.source} sınıflandırmasından.
+            </>
+          ) : eslesmeler && eslesmeler.length > 0 ? (
             <>
               {' '}
               <b>Birlikte hareket edenler</b> resmî sektör üyeliği DEĞİL: günlük getirisi o endeksle
-              en çok örtüşen hisseler (korelasyon ≥ {trNum(ESLESME_ESIGI, 2)}). Eşiği geçmeyen hisse
+              en çok örtüşen hisseler (korelasyon ≥ {trNum(ESLESME_ESIGI, 2)}). Resmî sınıflandırma
+              dosyası bu piyasada yok, bu yüzden vekil ölçü kullanılıyor. Eşiği geçmeyen hisse
               hiçbir sektöre yazılmıyor — zayıf bir benzerliğe sektör etiketi yapıştırmak yanlış
               bilgi olurdu.
             </>
@@ -201,7 +248,12 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
             küçük bir kısmı eşleşiyor; bunu söylemezsek "Bilişim — hiç hisse
             yok" satırı "BIST'te bilişim hissesi yok" diye okunabilir.
           */}
-          {eslesmeler && degerlendirilen > 0 ? (
+          {resmi ? (
+            <p className="sektor__ozet desk__muted">
+              {Object.keys(resmi.of).length} hisse resmî olarak bir sektöre bağlı. Sınıflandırması
+              olmayan hisse bir sektöre YAZILMIYOR.
+            </p>
+          ) : eslesmeler && degerlendirilen > 0 ? (
             <p className="sektor__ozet desk__muted">
               {degerlendirilen} hissenin {eslesmeler.length} tanesi bir sektör endeksiyle eşiği
               geçecek kadar örtüşüyor. Kalanı bir sektöre YAZILMADI — eşleşmedikleri için, o
@@ -222,7 +274,11 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
                 <th scope="col">
                   <span className="visually-hidden">Getiri çubuğu</span>
                 </th>
-                {eslesmeler ? <th scope="col">Birlikte hareket edenler</th> : null}
+                {resmi ? (
+                  <th scope="col">Sektörün hisseleri</th>
+                ) : eslesmeler ? (
+                  <th scope="col">Birlikte hareket edenler</th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -256,7 +312,30 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
                       />
                     </span>
                   </td>
-                  {eslesmeler ? (
+                  {resmi ? (
+                    <td>
+                      {(() => {
+                        const liste = resmiSektorunHisseleri(resmi.of, s.ad);
+                        if (liste.length === 0) return <span className="desk__muted">—</span>;
+                        const baslik = liste.slice(0, 12).join(', ');
+                        return onTest ? (
+                          <button
+                            type="button"
+                            className="sektor__ad"
+                            title={`Stratejilerde test et: ${baslik}`}
+                            // Erişilebilir ad SEKTÖRÜ de söylüyor: "9 hisse →"
+                            // tek başına birden çok satırda aynı ad olurdu.
+                            aria-label={`${s.ad}: ${liste.length} hisseyi stratejilerde test et`}
+                            onClick={() => onTest(liste.slice(0, 60))}
+                          >
+                            {liste.length} hisse →
+                          </button>
+                        ) : (
+                          <span title={baslik}>{liste.length} hisse</span>
+                        );
+                      })()}
+                    </td>
+                  ) : eslesmeler ? (
                     <td>
                       {(() => {
                         const h = sektorunHisseleri(eslesmeler, s.kod);

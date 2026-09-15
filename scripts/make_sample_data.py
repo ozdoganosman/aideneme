@@ -46,11 +46,30 @@ from pack_data import (  # noqa: E402
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-SECTORS = [
-    "Bankacılık", "Holding", "Demir Çelik", "Perakende", "Gıda",
-    "Enerji", "Kimya", "Ulaştırma", "Teknoloji", "İnşaat",
-]
 
+
+def _sektor_adlari() -> list[str]:
+    """
+    Örnek sektör adları GERÇEK listeden.
+
+    Uydurma adlar ("Demir Çelik", "Perakende") kullanılıyordu ve o gün zararı
+    yoktu. Sektör endeksi paneli sınıflandırmayı SEKTÖR ADI üzerinden
+    birleştirmeye başlayınca zararlı oldu: uydurma adlar hiçbir endeks
+    satırıyla eşleşmiyor, yani örnek veri o birleştirmeyi ne sınayabiliyor ne
+    de bozulduğunda bağırabiliyor. Fixture kusuru ÜRETEBİLMELİ.
+
+    Liste `src/core/screen/sectorIndices.ts` içinde ve `build_sectors.py` onu
+    zaten okuyor; ikinci bir kopya tutmuyoruz.
+
+    İlk on ad alınıyor, hepsi değil: bazı endeks satırlarının hissesiz
+    kalması ("—" durumu) da sınanacak bir durum.
+    """
+    from build_sectors import sektor_listesi
+
+    return list(sektor_listesi().values())[:10]
+
+
+SECTORS = _sektor_adlari()
 
 
 def tohum(s: str) -> int:

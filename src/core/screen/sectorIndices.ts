@@ -4,11 +4,14 @@ import type { Candles } from '../data/types';
  * BIST SEKTÖR ENDEKSLERİ — "endüstriden para akışı" sorusunun veriye dayanan
  * cevabı.
  *
- * Neden bu yol: sektör AKIŞI için sembol→sektör sınıflandırması gerekiyor ve
- * o dosya üretilemiyor (kaynak uç noktaları 401 döndürüyor; `build_sectors.py`
- * başındaki nota bakın). Ama BIST'in KENDİ alt sektör endeksleri zaten veri
- * setimizde — her biri tam geçmişiyle. Sektörün nasıl gittiğini uydurmadan,
- * borsanın resmî endeksinden okuyoruz.
+ * Bu dosya SEKTÖRÜN NASIL GİTTİĞİNİ ölçüyor: BIST'in kendi alt sektör
+ * endeksleri veri setimizde, her biri tam geçmişiyle. Sektörün getirisini
+ * uydurmadan borsanın resmî endeksinden okuyoruz.
+ *
+ * Sembol→sektör SINIFLANDIRMASI ayrı bir şey ve artık var: `sectors.json`,
+ * Borsa İstanbul'un kendi bileşen dosyasından üretiliyor (bkz.
+ * `build_sectors.py`). Aşağıdaki korelasyon eşleştirmesi o dosyanın
+ * OLMADIĞI piyasalar için duruyor — vekil, asıl değil.
  *
  * DÜRÜSTLÜK SINIRI — bu GETİRİ, akış DEĞİL: endeks serilerinin "hacim" alanı
  * güvenilir değil (ölçüldü: yayındaki veride endekslerin işlem değeri 0).
@@ -141,9 +144,15 @@ export const ESLESME_ESIGI = 0.7;
  * Her hissenin EN ÇOK BİRLİKTE HAREKET ETTİĞİ sektör endeksi.
  *
  * DİKKAT — bu RESMÎ SEKTÖR DEĞİL. Ölçülen şey davranış: hissenin günlük
- * getirisi hangi sektör endeksinin getirisine en çok benziyor. Resmî
- * sınıflandırma başka bir şeydir ve onu üretemiyoruz (kaynak 401 döndürüyor).
- * Arayüz de "sektörü şu" değil "şu sektörle birlikte hareket ediyor" diyor.
+ * getirisi hangi sektör endeksinin getirisine en çok benziyor.
+ *
+ * VEKİL, ASIL DEĞİL. Resmî sınıflandırma (`sectors.json`) varken bu hesap
+ * KULLANILMAMALI: gerçek veride ölçtüm, korelasyon 584 hissenin 35'ini
+ * (%6) bir sektöre bağlayabiliyor, resmî dosya 496'sını (%85). İki
+ * üyeliği aynı ekranda yan yana göstermek, zayıf olanı yetkili gibi
+ * okutur. Yüzeyler önce resmî dosyaya bakıyor; burası yalnızca o dosyanın
+ * olmadığı piyasalar için. Arayüz de "sektörü şu" değil "şu sektörle
+ * birlikte hareket ediyor" diyor.
  *
  * Korelasyon FİYAT değil GETİRİ üzerinden: iki trendli seri seviye
  * korelasyonunda her zaman ~1 çıkar ve hiçbir şey ayırt edilmez.
@@ -228,6 +237,26 @@ export function sektorunHisseleri(
   kod: string,
 ): SektorEslesmesi[] {
   return eslesmeler.filter((e) => e.kod === kod);
+}
+
+/**
+ * RESMÎ sınıflandırmada bir sektörün hisseleri.
+ *
+ * Eşleştirme SEKTÖR ADI üzerinden yapılıyor, kod üzerinden değil — ve bu bir
+ * tesadüf değil: `scripts/build_sectors.py` sektör adlarını doğrudan
+ * `BIST_SEKTOR_ENDEKSLERI` listesinden okuyor, yani `sectors.json` içindeki
+ * adlar bu dosyadaki adların ta kendisi. Bağ tek yönlü ve tek kaynaklı.
+ *
+ * Sıra alfabetik: korelasyon eşleşmesinin aksine burada hisseleri
+ * sıralayacak bir ÖLÇÜ yok ve uydurma bir sıra "önce gelen daha önemli"
+ * diye okunur.
+ */
+export function resmiSektorunHisseleri(harita: Record<string, string>, ad: string): string[] {
+  const out: string[] = [];
+  for (const [sembol, sektor] of Object.entries(harita)) {
+    if (sektor === ad) out.push(sembol);
+  }
+  return out.sort((a, b) => a.localeCompare(b, 'tr'));
 }
 
 /**

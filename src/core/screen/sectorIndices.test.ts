@@ -8,6 +8,7 @@ import {
   sektorGetirileri,
   sektorOzeti,
   sektorunHisseleri,
+  resmiSektorunHisseleri,
 } from './sectorIndices';
 
 /** Verilen kapanışlardan seri kurar; diğer kolonlar testi ilgilendirmiyor. */
@@ -194,5 +195,46 @@ describe('eslesmeHaritasi', () => {
     const harita = eslesmeHaritasi([]);
     expect(harita.source).toMatch(/korelasyon/i);
     expect(harita.of).toEqual({});
+  });
+});
+
+/**
+ * RESMÎ sınıflandırmadan sektörün hisseleri.
+ *
+ * Eşleştirme SEKTÖR ADI üzerinden — ve bu bağ tesadüf değil:
+ * `scripts/build_sectors.py` adları doğrudan `BIST_SEKTOR_ENDEKSLERI`
+ * listesinden okuyor. İki tarafın adları ayrışırsa sütun sessizce boşalır,
+ * bu yüzden bağ da sınanıyor.
+ */
+describe('resmiSektorunHisseleri', () => {
+  const harita = {
+    GARAN: 'Banka',
+    AKBNK: 'Banka',
+    ISCTR: 'Banka',
+    ULKER: 'Gıda, İçecek',
+    THYAO: 'Ulaştırma',
+  };
+
+  it('sektörün hisselerini alfabetik veriyor', () => {
+    expect(resmiSektorunHisseleri(harita, 'Banka')).toEqual(['AKBNK', 'GARAN', 'ISCTR']);
+  });
+
+  it('hissesi olmayan sektör boş dönüyor', () => {
+    expect(resmiSektorunHisseleri(harita, 'Spor')).toEqual([]);
+  });
+
+  // Virgüllü ad tam eşleşmeli: parça eşleşmesi "Gıda" ile "Gıda, İçecek"i
+  // karıştırırdı.
+  it('ad TAM eşleşiyor, parça eşleşmiyor', () => {
+    expect(resmiSektorunHisseleri(harita, 'Gıda, İçecek')).toEqual(['ULKER']);
+    expect(resmiSektorunHisseleri(harita, 'Gıda')).toEqual([]);
+  });
+
+  // Endeks listesindeki her ad sınıflandırmada da kullanılabilir olmalı:
+  // üretici adları bu listeden okuyor.
+  it('endeks listesindeki adlar sınıflandırmada aranabiliyor', () => {
+    for (const { ad } of BIST_SEKTOR_ENDEKSLERI) {
+      expect(resmiSektorunHisseleri({ AAA: ad }, ad)).toEqual(['AAA']);
+    }
   });
 });

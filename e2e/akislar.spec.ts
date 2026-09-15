@@ -446,7 +446,7 @@ test('endeks ve fonlar taramada yok ama grafikte açılabiliyor', async ({ page 
  * artıda, başta Finansal Kiralama +%31,68, sonda Bilişim -%45,24 — bağımsız
  * bir Python hesabıyla birebir aynı.
  */
-test('sektör endeksleri: sınıflandırma olmadan sektör getirisi', async ({ page }) => {
+test('sektör endeksleri: getiri sınıflandırma gerektirmiyor', async ({ page }) => {
   await open(page, 'v=nabiz');
   await expect(page.locator('.sektor__tablo')).toBeVisible();
 
@@ -482,30 +482,36 @@ test('sektör endeksleri: sınıflandırma olmadan sektör getirisi', async ({ p
  * SEKTÖR → HİSSE → STRATEJİ zinciri.
  *
  * Hedef cümlenin son halkası: "endüstriden para akışına ... hisse arayıp en
- * doğru stratejilere". Sektör endeksinden o sektörle birlikte hareket eden
- * hisselere, oradan strateji testine geçilebiliyor mu?
+ * doğru stratejilere". Sektör endeksinden o sektörün hisselerine, oradan
+ * strateji testine geçilebiliyor mu?
  *
- * Eşleşme RESMÎ SEKTÖR DEĞİL, ölçülen bir davranış: hissenin günlük getirisi
- * hangi sektör endeksine en çok benziyor. Gerçek BIST verisinde bilinen 15
- * ismin 15'i doğru eşleşti; eşiği geçemeyen (PETKM) hiç bildirilmedi.
+ * ÜYELİK RESMÎ DOSYADAN. Bu sütun önce korelasyon vekilinden geliyordu;
+ * `sectors.json` Borsa İstanbul'un kendi bileşen dosyasından üretilebilir
+ * hâle gelince ölçtüm: vekil 584 hissenin 35'ini (%6), resmî dosya 496'sını
+ * (%85) bir sektöre bağlıyor. Aynı ekranın üstündeki akış tablosu zaten resmî
+ * dosyayı kullanıyordu; iki farklı üyeliği yan yana göstermek zayıf olanı
+ * yetkili gibi okuturdu.
  *
- * Örnek veride üç hisse endeksi İZLEYECEK şekilde üretiliyor; bağımsız
- * serilerde hiçbiri eşiği geçmiyordu ve bu yol hiç koşmuyordu.
+ * Korelasyon vekili resmî dosya OLMAYAN piyasalar için duruyor ve birim
+ * testleriyle korunuyor (`sectorIndices.test.ts`); örnek veride her piyasanın
+ * sınıflandırması olduğu için o yol buradan geçmiyor.
  */
-test('sektör endeksi → birlikte hareket eden hisseler → stratejiler', async ({ page }) => {
+test('sektör endeksi → sektörün hisseleri → stratejiler', async ({ page }) => {
   await open(page, 'v=nabiz');
   await expect(page.locator('.sektor__tablo')).toBeVisible();
 
-  // Eşleşme worker'da hesaplanıyor; sütun hazır olunca geliyor.
   const baslik = page.locator('.sektor__tablo thead');
-  await expect(baslik).toContainText(/birlikte hareket/i);
+  await expect(baslik).toContainText(/sektörün hisseleri/i);
+  // Vekil ölçünün cümlesi ARTIK GÖRÜNMEMELİ: resmî dosya varken "eşiği
+  // geçecek kadar örtüşüyor" demek, olmayan bir belirsizliği ima ederdi.
+  await expect(baslik).not.toContainText(/birlikte hareket/i);
 
-  // Kapsama AÇIKÇA yazılı olmalı: eşik yüksek, hisselerin küçük bir kısmı
-  // eşleşiyor. Bunu söylemezsek boş satır "o sektörde hisse yok" diye okunur.
-  await expect(page.locator('.sektor__ozet').last()).toContainText(/bir sektöre YAZILMADI/);
+  // Kapsama açıkça yazılı: sınıflandırması olmayan hisse bir sektöre
+  // yazılmıyor ve bu "o sektörde hisse yok" demek değil.
+  await expect(page.locator('.sektor__ozet').last()).toContainText(/bir sektöre YAZILMIYOR/);
 
   const bagli = page.locator('.sektor__tablo tbody button', { hasText: /hisse/ });
-  expect(await bagli.count(), 'hiçbir sektörde eşleşen hisse yok').toBeGreaterThan(0);
+  expect(await bagli.count(), 'hiçbir sektörde hisse yok').toBeGreaterThan(0);
 
   await bagli.first().click();
   await expect(page).toHaveURL(/v=stratejiler/);
