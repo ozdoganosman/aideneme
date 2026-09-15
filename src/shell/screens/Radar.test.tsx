@@ -8,6 +8,10 @@ const bundleFn = vi.fn();
 vi.mock('../../data-client/client', () => ({
   dataClient: { bundle: (...a: unknown[]) => bundleFn(...a) },
 }));
+const sectorsFn = vi.fn();
+vi.mock('../../data-client/sectors', () => ({
+  sectorsClient: { map: (...a: unknown[]) => sectorsFn(...a) },
+}));
 const snapshotFn = vi.fn();
 vi.mock('../../data-client/fundamentals', () => ({
   fundamentalsClient: { snapshot: (...a: unknown[]) => snapshotFn(...a) },
@@ -38,6 +42,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   snapshotFn.mockResolvedValue(null);
+  sectorsFn.mockResolvedValue(null);
   bundleFn.mockResolvedValue({
     names: ['GARAN', 'THYAO', 'TUPRS'],
     days: new Int32Array(),
@@ -134,5 +139,98 @@ describe('Radar', () => {
     render(<Radar market="bist" symbol="" onSelect={noop} onClose={noop} />);
     expect((await screen.findAllByRole('row'))[1].textContent).toContain('110,00');
     expect((await satirMetinleri())[0]).toContain('—');
+  });
+});
+
+/**
+ * Filtreler.
+ *
+ * Radar bir izleme listesi değil tarama yüzeyi: "bağıl hacmi 2 katını
+ * geçenler" ya da "F/K'sı 10'un altında olanlar" ancak filtreyle sorulabilir.
+ */
+describe('Radar — filtreler', () => {
+  async function tumPiyasa(user: ReturnType<typeof userEvent.setup>) {
+    render(<Radar market="bist" symbol="" onSelect={noop} onClose={noop} />);
+    await user.selectOptions(await screen.findByLabelText('Kapsam'), 'piyasa');
+  }
+
+  it('sayısal filtre satırları eliyor ve kaç kaldığını yazıyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    expect((await satirMetinleri()).length).toBe(2);
+
+    // Bağıl hacim: THYAO 3×, GARAN 1×.
+    await user.selectOptions(screen.getByLabelText('Ölçüt'), 'bagilHacim');
+    const deger = screen.getByLabelText('Değer');
+    await user.clear(deger);
+    await user.type(deger, '2');
+    await user.click(screen.getByRole('button', { name: 'Filtreyi ekle' }));
+
+    const kalan = await satirMetinleri();
+    expect(kalan).toHaveLength(1);
+    expect(kalan[0]).toContain('THYAO');
+    expect(screen.getByText('1 / 2 sembol')).toBeInTheDocument();
+  });
+
+  // Değeri OLMAYAN satır sayısal filtreyi geçmemeli: "F/K < 10" araması
+  // F/K'sı hiç olmayan şirketi getirseydi sonuç soruya cevap vermezdi.
+  it('değeri olmayan satır sayısal filtreyi geçmiyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    // Çarpan verisi yok (snapshot null) → F/K her satırda boş.
+    await user.selectOptions(screen.getByLabelText('Ölçüt'), 'pe');
+    await user.selectOptions(screen.getByLabelText('Koşul'), 'lt');
+    const deger = screen.getByLabelText('Değer');
+    await user.clear(deger);
+    await user.type(deger, '1000');
+    await user.click(screen.getByRole('button', { name: 'Filtreyi ekle' }));
+
+    expect(screen.getByText('0 / 2 sembol')).toBeInTheDocument();
+  });
+
+  it('sembol araması harf büyüklüğünden bağımsız', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await user.type(screen.getByLabelText('Sembol ara'), 'thy');
+    const kalan = await satirMetinleri();
+    expect(kalan).toHaveLength(1);
+    expect(kalan[0]).toContain('THYAO');
+  });
+
+  it('filtre çipi kaldırılabiliyor ve tercih saklanıyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await user.selectOptions(screen.getByLabelText('Ölçüt'), 'bagilHacim');
+    const deger = screen.getByLabelText('Değer');
+    await user.clear(deger);
+    await user.type(deger, '2');
+    await user.click(screen.getByRole('button', { name: 'Filtreyi ekle' }));
+    expect(JSON.parse(localStorage.getItem('radar.filtre.v1')!)).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: /Filtreyi kaldır/ }));
+    expect((await satirMetinleri()).length).toBe(2);
+    expect(JSON.parse(localStorage.getItem('radar.filtre.v1')!)).toHaveLength(0);
+  });
+
+  // Sınıflandırma yoksa boş bir açılır kutu "sektör verisi var ama hiçbiri
+  // eşleşmedi" gibi okunurdu.
+  it('sektör dosyası yoksa sektör seçici hiç çizilmiyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    expect(screen.queryByLabelText('Sektör')).toBeNull();
+  });
+
+  it('sektör dosyası varsa sektöre göre süzüyor', async () => {
+    sectorsFn.mockResolvedValue({
+      of: { THYAO: 'Ulaştırma', GARAN: 'Bankacılık' },
+      source: 'test',
+      generated: 1,
+    });
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await user.selectOptions(await screen.findByLabelText('Sektör'), 'Bankacılık');
+    const kalan = await satirMetinleri();
+    expect(kalan).toHaveLength(1);
+    expect(kalan[0]).toContain('GARAN');
   });
 });

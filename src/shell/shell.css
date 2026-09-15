@@ -2011,3 +2011,44 @@
   color: var(--accent);
   font-weight: 700;
 }
+
+/* ── Radar filtreleri ─────────────────────────────────────────────────── */
+/* Dar panele sığması için kur-ekle biçimi: seçilen filtreler altta çip. */
+.radar__filtre {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+.radar__filtre-kur {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr) auto;
+  align-items: end;
+  gap: var(--sp-2);
+}
+.radar__cipler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.radar__cipler li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-0);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.radar__sayac {
+  margin: 0;
+  font-size: var(--fs-xs);
+}
