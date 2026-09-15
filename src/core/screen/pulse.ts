@@ -44,6 +44,51 @@ export interface PulseSummary {
   newLows: number;
 }
 
+/**
+ * Bir sembolün PENCERE toplamları.
+ *
+ * Tek barlık akış "bugün ne oldu" sorusunu cevaplıyor; "para hangi sektöre
+ * KAYIYOR" sorusu ise pencere ister: bir sektörün işlem değeri payı bir
+ * önceki eşit pencereye göre artıyor mu? Seviyeyi değil DEĞİŞİMİ ölçmek
+ * gerekiyor — büyük sektörün payı zaten büyüktür, bu bir rotasyon değildir.
+ */
+export interface WindowRow {
+  symbol: string;
+  /** Son N barın toplam işlem değeri (kapanış × hacim). */
+  value: number;
+  /** Ondan ÖNCEKİ N barın toplam işlem değeri. */
+  prevValue: number;
+  /** Pencere getirisi (%): son kapanış ÷ N bar önceki kapanış − 1. */
+  returnPct: number;
+  /** Pencerede gerçekten kaç bar vardı (kısa geçmişli sembol). */
+  bars: number;
+}
+
+/**
+ * Pencere toplamları. Önceki pencere EKSİKSE `prevValue` 0 kalır ve rotasyon
+ * hesabı o sembolü paya katmaz — yarım pencereyi tam saymak, yeni işlem görmeye
+ * başlayan bir sembolü "para akıyor" gibi gösterirdi.
+ */
+export function windowRow(symbol: string, c: Candles, bars: number): WindowRow | null {
+  const n = c.length;
+  if (n < bars + 1 || bars < 1) return null;
+
+  let value = 0;
+  for (let i = n - bars; i < n; i++) value += c.close[i] * c.volume[i];
+
+  let prevValue = 0;
+  const prevFrom = n - 2 * bars;
+  if (prevFrom >= 0) {
+    for (let i = prevFrom; i < n - bars; i++) prevValue += c.close[i] * c.volume[i];
+  }
+
+  const last = c.close[n - 1];
+  const base = c.close[n - 1 - bars];
+  if (!(last > 0) || !(base > 0)) return null;
+
+  return { symbol, value, prevValue, returnPct: (last / base - 1) * 100, bars };
+}
+
 export interface PulseOptions {
   /** Yeni zirve/dip penceresi (bar). */
   window?: number;

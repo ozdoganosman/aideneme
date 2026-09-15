@@ -1,4 +1,4 @@
-import type { GroupFlow, PulseRow } from './pulse';
+import type { GroupFlow, PulseRow, WindowRow } from './pulse';
 
 /**
  * Resmî sektör sınıflandırmasına göre para akışı.
@@ -187,4 +187,91 @@ export function isSectorMap(value: unknown): value is SectorMap {
     !!m.of &&
     typeof m.of === 'object'
   );
+}
+
+/**
+ * Sektör ROTASYONU: para hangi sektöre kayıyor?
+ *
+ * Tek barlık akış "bugün ne oldu" diyor. Rotasyon, bir sektörün işlem değeri
+ * PAYININ bir önceki eşit pencereye göre kaç puan değiştiğini söylüyor —
+ * seviyeyi değil değişimi. Bankacılığın payının büyük olması bir rotasyon
+ * değildir; payının iki haftada 3 puan artması rotasyondur.
+ *
+ * Pay puan (pp) olarak veriliyor, yüzde değişim olarak DEĞİL: %2'den %4'e
+ * çıkan bir pay "%100 arttı" diye okunursa küçük sektörler her zaman listenin
+ * başında görünür. Puan farkı paranın gerçekten ne kadarının yer değiştirdiğini
+ * söylüyor.
+ *
+ * Önceki penceresi OLMAYAN sembol (yeni işlem görmeye başlamış) toplamlara
+ * girer ama önceki toplamı 0'dır; bu sektörün payını yapay olarak yükseltmesin
+ * diye önceki pay HESAPLANIRKEN kendi 0'ı kullanılır — uydurma bir taban
+ * atanmaz.
+ */
+export interface SectorRotation {
+  sector: string;
+  symbols: number;
+  /** Penceredeki toplam işlem değeri. */
+  value: number;
+  /** Payı (%) — pencere toplamı üzerinden. */
+  sharePct: number;
+  /** Önceki penceredeki payı (%). */
+  prevSharePct: number;
+  /** Pay değişimi (puan). Pozitif = para bu sektöre kaydı. */
+  shareShiftPp: number;
+  /** İşlem değeriyle ağırlıklı pencere getirisi (%). */
+  returnPct: number;
+  /** Sektörün en çok işlem gören sembolü. */
+  leader: string;
+}
+
+export function rotationBySector(rows: WindowRow[], map: SectorMap | null): SectorRotation[] {
+  if (!map) return [];
+
+  const groups = new Map<string, WindowRow[]>();
+  for (const row of rows) {
+    // Sınıflandırması olmayan sembol GİZLENMEZ: payların toplamı 100 kalsın.
+    const sector = map.of[row.symbol] ?? UNCLASSIFIED;
+    const list = groups.get(sector);
+    if (list) list.push(row);
+    else groups.set(sector, [row]);
+  }
+
+  let total = 0;
+  let prevTotal = 0;
+  for (const row of rows) {
+    total += row.value;
+    prevTotal += row.prevValue;
+  }
+
+  const out: SectorRotation[] = [];
+  for (const [sector, list] of groups) {
+    let value = 0;
+    let prevValue = 0;
+    let weighted = 0;
+    for (const row of list) {
+      value += row.value;
+      prevValue += row.prevValue;
+      weighted += row.value * row.returnPct;
+    }
+    const sharePct = total ? (value / total) * 100 : NaN;
+    const prevSharePct = prevTotal ? (prevValue / prevTotal) * 100 : NaN;
+    out.push({
+      sector,
+      symbols: list.length,
+      value,
+      sharePct,
+      prevSharePct,
+      shareShiftPp:
+        Number.isFinite(sharePct) && Number.isFinite(prevSharePct) ? sharePct - prevSharePct : NaN,
+      returnPct: value ? weighted / value : NaN,
+      leader: list.reduce((a, b) => (b.value > a.value ? b : a)).symbol,
+    });
+  }
+
+  // Sınıflandırılmamış grup en sonda: bir sektör değil, bir eksik.
+  return out.sort((a, b) => {
+    if (a.sector === UNCLASSIFIED) return 1;
+    if (b.sector === UNCLASSIFIED) return -1;
+    return b.value - a.value;
+  });
 }

@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct, trCompact } from '../../ui';
-import { flowByCluster, type PulseRow, type PulseSummary } from '../../core/screen/pulse';
+import {
+  flowByCluster,
+  type PulseRow,
+  type PulseSummary,
+  type WindowRow,
+} from '../../core/screen/pulse';
 import {
   flowBySector,
+  rotationBySector,
   sectorCoverage,
   UNCLASSIFIED,
   type SectorMap,
@@ -19,6 +25,13 @@ import { LoadNote } from '../LoadNote';
 import { Announce } from '../Announce';
 import { Prov } from '../Prov';
 import type { UrlState } from '../urlState';
+
+/** Bar sayısı → insan diliyle dönem adı (metinlerde kullanılıyor). */
+const DONEM_ADI: Record<number, string> = {
+  5: '1 hafta',
+  21: '1 ay',
+  63: '3 ay',
+};
 
 interface Props {
   state: UrlState;
@@ -50,6 +63,8 @@ export default function Pulse({ state, push }: Props) {
   const [pulse, setPulse] = useState<{
     rows: PulseRow[];
     summary: PulseSummary;
+    /** Dönem > 1 barken: sembol başına pencere toplamları. */
+    windows?: WindowRow[];
     ms: number;
   } | null>(null);
   const [clusters, setClusters] = useState<{
@@ -66,6 +81,14 @@ export default function Pulse({ state, push }: Props) {
   const [clusterOrder, setClusterOrder] = useState(false);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
   const [grouping, setGrouping] = useState<'cluster' | 'sector'>('cluster');
+  /**
+   * Akış PENCERESİ (bar).
+   *
+   * 1 = son bar, yani "bugün ne oldu". Daha uzun pencerelerde soru değişiyor:
+   * "para hangi sektöre KAYIYOR". Bunu pay SEVİYESİ değil pay DEĞİŞİMİ
+   * söylüyor — büyük sektörün payı zaten büyüktür, bu bir rotasyon değildir.
+   */
+  const [donem, setDonem] = useState<number>(1);
 
   const clientRef = useRef(analysis.client);
   clientRef.current = analysis.client;
@@ -80,7 +103,9 @@ export default function Pulse({ state, push }: Props) {
     // Nabız hızlı (tek geçiş), kümeleme yavaş (~0,5 sn) — ikisini ayrı isteyip
     // ısı haritasını nabız gelir gelmez çiziyoruz, sıralama sonra oturuyor.
     client
-      .pulse(market)
+      // Pencere toplamları YALNIZCA 1 barın üstünde isteniyor: tek barlık
+      // nabza bakan kullanıcı 200 sembollük ikinci döngüyü ödemesin.
+      .pulse(market, donem > 1 ? { rotationBars: donem } : {})
       .then((result) => {
         if (!cancelled) setPulse(result);
       })
@@ -95,6 +120,18 @@ export default function Pulse({ state, push }: Props) {
         if (!cancelled) setBusy(false);
       });
 
+    return () => {
+      cancelled = true;
+    };
+  }, [analysis.status, market, donem]);
+
+  // Kümeleme AYRI efekt: dönem değişince yeniden hesaplanmamalı. Korelasyon
+  // ~0,5 sn sürüyor ve dönemle hiç ilgisi yok — aynı efekte bırakmak her
+  // dönem değişiminde bu maliyeti boşuna ödetirdi.
+  useEffect(() => {
+    const client = clientRef.current;
+    if (analysis.status !== 'ready' || !client) return;
+    let cancelled = false;
     client
       .correlate(market, { lookback: 120 })
       .then((result) => {
@@ -108,7 +145,6 @@ export default function Pulse({ state, push }: Props) {
       .catch(() => {
         if (!cancelled) setClusters(null);
       });
-
     return () => {
       cancelled = true;
     };
@@ -138,12 +174,27 @@ export default function Pulse({ state, push }: Props) {
     return flowBySector(pulse.rows, sectors);
   }, [pulse, sectors]);
 
+  /** Dönem > 1 barken: pay değişimiyle sektör rotasyonu. */
+  const rotasyon = useMemo(() => {
+    if (!pulse?.windows || !sectors) return [];
+    return rotationBySector(pulse.windows, sectors);
+  }, [pulse, sectors]);
+
   const coverage = useMemo(
     () => sectorCoverage(pulse ? pulse.rows.map((r) => r.symbol) : [], sectors),
     [pulse, sectors],
   );
 
   const bySector = grouping === 'sector' && sectorFlows.length > 0;
+  /** Pencere görünümü: pay DEĞİŞİMİ (rotasyon) gösterilir. */
+  const rotasyonGorunumu = bySector && donem > 1 && rotasyon.length > 0;
+  /** Payı en çok artan sektör — ekranın tek cümlelik cevabı. */
+  const enCokGiren = useMemo(() => {
+    const aday = rotasyon
+      .filter((r) => r.sector !== UNCLASSIFIED && Number.isFinite(r.shareShiftPp))
+      .sort((a, b) => b.shareShiftPp - a.shareShiftPp)[0];
+    return aday && aday.shareShiftPp > 0 ? aday : null;
+  }, [rotasyon]);
 
   const s = pulse?.summary;
 
@@ -305,13 +356,23 @@ export default function Pulse({ state, push }: Props) {
 
       <section className="pulse__panel" aria-label="Gruplara göre para akışı">
         <header>
-          <h2>Para akışı — {bySector ? 'sektörler' : 'davranış grupları'}</h2>
+          <h2>
+            {rotasyonGorunumu ? 'Sektör rotasyonu' : 'Para akışı'} —{' '}
+            {bySector ? 'sektörler' : 'davranış grupları'}
+          </h2>
           <span className="desk__muted">
             {bySector ? (
               <>
                 {sectors?.source} sınıflandırması · {coverage.known}/{coverage.total} sembol
                 eşleşti. Eşleşmeyenler "Sınıflandırılmamış" satırında; paylar toplam işlem değerinin
                 tamamı üzerinden.
+                {rotasyonGorunumu ? (
+                  <>
+                    {' '}
+                    Pay değişimi, son {DONEM_ADI[donem] ?? `${donem} bar`} ile ondan ÖNCEKİ eşit
+                    pencerenin karşılaştırmasıdır — seviye değil, yer değiştiren para.
+                  </>
+                ) : null}
               </>
             ) : (
               <>
@@ -321,6 +382,24 @@ export default function Pulse({ state, push }: Props) {
               </>
             )}
           </span>
+          {/*
+            DÖNEM. "Bugün ne oldu" ile "para nereye kayıyor" iki ayrı soru;
+            ikincisi pencere ister. Dönem 1 barın üstündeyken tablo pay
+            DEĞİŞİMİNİ gösteriyor.
+          */}
+          {bySector ? (
+            <Select
+              label="Dönem"
+              value={String(donem)}
+              onChange={(v) => setDonem(Number(v))}
+              options={[
+                { value: '1', label: 'Son bar' },
+                { value: '5', label: '1 hafta' },
+                { value: '21', label: '1 ay' },
+                { value: '63', label: '3 ay' },
+              ]}
+            />
+          ) : null}
           {sectors ? (
             <Select
               label="Gruplama"
@@ -343,114 +422,234 @@ export default function Pulse({ state, push }: Props) {
               liste onu tek boyuta indiriyordu. Tablo kaldırılmadı: kesin
               sayılar, "Tara" eylemi ve sıralama orada duruyor.
             */}
-            <FlowMap
-              label={`${bySector ? 'Sektör' : 'Grup'} para akışı haritası — kutu alanı işlem değeri, rengi ağırlıklı değişim`}
-              items={(bySector
-                ? sectorFlows.map((f) => ({ key: f.sector, target: f.leader, ...f }))
-                : flows.map((f) => ({ key: `${f.label} grubu`, target: f.label, ...f }))
-              ).map((f) => ({
-                key: f.key,
-                value: f.value,
-                changePct: f.weightedChangePct,
-                onSelect: () => push({ v: 'sembol', s: f.target }),
-              }))}
-            />
-            <table className="pulse__flows">
-              <caption className="visually-hidden">Kümelere göre işlem değeri ve yön</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{bySector ? 'Sektör' : 'Grup'}</th>
-                  <th scope="col" className="num">
-                    Hisse
-                  </th>
-                  <th scope="col" className="num">
-                    İşlem değeri
-                  </th>
-                  {bySector ? (
-                    <th scope="col" className="num">
-                      Pay
-                    </th>
-                  ) : null}
-                  <th scope="col" className="num">
-                    Ağırlıklı değişim
-                  </th>
-                  <th scope="col" className="num">
-                    Akış
-                  </th>
-                  <th scope="col" className="num">
-                    Yük./Düş.
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(bySector
-                  ? sectorFlows.map((f) => ({ ...f, key: f.sector, target: f.leader }))
-                  : flows.map((f) => ({ ...f, key: String(f.cluster), target: f.label }))
-                ).map((flow) => (
-                  <tr key={flow.key}>
-                    <th scope="row">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        aria-label={
-                          !bySector
-                            ? undefined
-                            : flow.key === UNCLASSIFIED
-                              ? `Sektörü bilinmeyen sembollerin en çok işlem göreni ${flow.target}`
-                              : `${flow.key} sektörünün en çok işlem göreni ${flow.target}`
-                        }
-                        onClick={() => push({ v: 'sembol', s: flow.target })}
-                      >
-                        {bySector ? flow.key : `${flow.label} grubu`}
-                      </Button>
-                      {bySector && flow.key !== UNCLASSIFIED && isShareableSector(flow.key) ? (
-                        <button
-                          type="button"
-                          className="pulse__scan"
-                          aria-label={`${flow.key} sektörünü tarayıcıda aç`}
-                          onClick={() => push({ v: 'tarayici', f: screenLink(flow.key) })}
-                        >
-                          Tara
-                        </button>
+            {rotasyonGorunumu ? (
+              <>
+                {/*
+                  Tek cümlelik cevap. On satırlık bir tabloda "para nereye
+                  kaydı" sorusunun cevabı kaybolabiliyor; en çok pay kazanan
+                  sektör üstte yazıyor.
+                */}
+                <p className="pulse__rotasyon">
+                  {enCokGiren ? (
+                    <>
+                      Son {DONEM_ADI[donem] ?? `${donem} bar`} içinde para en çok{' '}
+                      <b>{enCokGiren.sector}</b> sektörüne kaydı: işlem değeri payı{' '}
+                      <b>{trPct(enCokGiren.shareShiftPp, 1, true)} puan</b> arttı (
+                      {trPct(enCokGiren.prevSharePct, 1)} → {trPct(enCokGiren.sharePct, 1)}).
+                    </>
+                  ) : (
+                    <>
+                      Son {DONEM_ADI[donem] ?? `${donem} bar`} içinde payı artan bir sektör yok;
+                      dağılım bir önceki dönemle aynı kalmış.
+                    </>
+                  )}
+                </p>
+                <FlowMap
+                  label={`Sektör rotasyon haritası — kutu alanı ${DONEM_ADI[donem] ?? ''} işlem değeri, rengi dönem getirisi`}
+                  items={rotasyon.map((f) => ({
+                    key: f.sector,
+                    value: f.value,
+                    changePct: f.returnPct,
+                    onSelect: () => push({ v: 'sembol', s: f.leader }),
+                  }))}
+                />
+                <table className="pulse__flows">
+                  <caption className="visually-hidden">
+                    Sektörlere göre dönem işlem değeri, pay değişimi ve getiri
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Sektör</th>
+                      <th scope="col" className="num">
+                        Hisse
+                      </th>
+                      <th scope="col" className="num">
+                        İşlem değeri
+                      </th>
+                      <th scope="col" className="num">
+                        Pay
+                      </th>
+                      <th scope="col" className="num">
+                        Pay değişimi
+                      </th>
+                      <th scope="col" className="num">
+                        Dönem getirisi
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...rotasyon]
+                      .sort((a, b) => {
+                        // Sınıflandırılmamış en sonda; gerisi PAY DEĞİŞİMİNE
+                        // göre — ekranın sorusu "nereye kaydı".
+                        if (a.sector === UNCLASSIFIED) return 1;
+                        if (b.sector === UNCLASSIFIED) return -1;
+                        return b.shareShiftPp - a.shareShiftPp;
+                      })
+                      .map((f) => (
+                        <tr key={f.sector}>
+                          <th scope="row">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              aria-label={
+                                f.sector === UNCLASSIFIED
+                                  ? `Sektörü bilinmeyen sembollerin en çok işlem göreni ${f.leader}`
+                                  : `${f.sector} sektörünün en çok işlem göreni ${f.leader}`
+                              }
+                              onClick={() => push({ v: 'sembol', s: f.leader })}
+                            >
+                              {f.sector}
+                            </Button>
+                            {f.sector !== UNCLASSIFIED && isShareableSector(f.sector) ? (
+                              <button
+                                type="button"
+                                className="pulse__scan"
+                                aria-label={`${f.sector} sektörünü tarayıcıda aç`}
+                                onClick={() => push({ v: 'tarayici', f: screenLink(f.sector) })}
+                              >
+                                Tara
+                              </button>
+                            ) : null}
+                          </th>
+                          <td className="num">{f.symbols}</td>
+                          <td className="num">{fmtValue(f.value)}</td>
+                          <td className="num">{trPct(f.sharePct, 1)}</td>
+                          <td
+                            className="num"
+                            style={{
+                              color: f.shareShiftPp >= 0 ? 'var(--up)' : 'var(--down)',
+                            }}
+                          >
+                            {Number.isFinite(f.shareShiftPp)
+                              ? `${trPct(f.shareShiftPp, 1, true)} puan`
+                              : '—'}
+                          </td>
+                          <td
+                            className="num"
+                            style={{ color: f.returnPct >= 0 ? 'var(--up)' : 'var(--down)' }}
+                          >
+                            {fmtPct(f.returnPct, 2)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </>
+            ) : (
+              <>
+                <FlowMap
+                  label={`${bySector ? 'Sektör' : 'Grup'} para akışı haritası — kutu alanı işlem değeri, rengi ağırlıklı değişim`}
+                  items={(bySector
+                    ? sectorFlows.map((f) => ({ key: f.sector, target: f.leader, ...f }))
+                    : flows.map((f) => ({ key: `${f.label} grubu`, target: f.label, ...f }))
+                  ).map((f) => ({
+                    key: f.key,
+                    value: f.value,
+                    changePct: f.weightedChangePct,
+                    onSelect: () => push({ v: 'sembol', s: f.target }),
+                  }))}
+                />
+                <table className="pulse__flows">
+                  <caption className="visually-hidden">Kümelere göre işlem değeri ve yön</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{bySector ? 'Sektör' : 'Grup'}</th>
+                      <th scope="col" className="num">
+                        Hisse
+                      </th>
+                      <th scope="col" className="num">
+                        İşlem değeri
+                      </th>
+                      {bySector ? (
+                        <th scope="col" className="num">
+                          Pay
+                        </th>
                       ) : null}
-                    </th>
-                    <td className="num">{flow.symbols}</td>
-                    <td className="num">{fmtValue(flow.value)}</td>
-                    {bySector ? (
-                      <td className="num">
-                        {'sharePct' in flow ? trPct(flow.sharePct as number, 1) : '—'}
-                      </td>
-                    ) : null}
-                    <td
-                      className="num"
-                      style={{ color: flow.weightedChangePct >= 0 ? 'var(--up)' : 'var(--down)' }}
-                    >
-                      {fmtPct(flow.weightedChangePct, 2)}
-                    </td>
-                    <td className="num">
-                      {/* Çubuk SABİT genişlikte bir rayın içinde: eskiden genişliği
+                      <th scope="col" className="num">
+                        Ağırlıklı değişim
+                      </th>
+                      <th scope="col" className="num">
+                        Akış
+                      </th>
+                      <th scope="col" className="num">
+                        Yük./Düş.
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(bySector
+                      ? sectorFlows.map((f) => ({ ...f, key: f.sector, target: f.leader }))
+                      : flows.map((f) => ({ ...f, key: String(f.cluster), target: f.label }))
+                    ).map((flow) => (
+                      <tr key={flow.key}>
+                        <th scope="row">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label={
+                              !bySector
+                                ? undefined
+                                : flow.key === UNCLASSIFIED
+                                  ? `Sektörü bilinmeyen sembollerin en çok işlem göreni ${flow.target}`
+                                  : `${flow.key} sektörünün en çok işlem göreni ${flow.target}`
+                            }
+                            onClick={() => push({ v: 'sembol', s: flow.target })}
+                          >
+                            {bySector ? flow.key : `${flow.label} grubu`}
+                          </Button>
+                          {bySector && flow.key !== UNCLASSIFIED && isShareableSector(flow.key) ? (
+                            <button
+                              type="button"
+                              className="pulse__scan"
+                              aria-label={`${flow.key} sektörünü tarayıcıda aç`}
+                              onClick={() => push({ v: 'tarayici', f: screenLink(flow.key) })}
+                            >
+                              Tara
+                            </button>
+                          ) : null}
+                        </th>
+                        <td className="num">{flow.symbols}</td>
+                        <td className="num">{fmtValue(flow.value)}</td>
+                        {bySector ? (
+                          <td className="num">
+                            {'sharePct' in flow ? trPct(flow.sharePct as number, 1) : '—'}
+                          </td>
+                        ) : null}
+                        <td
+                          className="num"
+                          style={{
+                            color: flow.weightedChangePct >= 0 ? 'var(--up)' : 'var(--down)',
+                          }}
+                        >
+                          {fmtPct(flow.weightedChangePct, 2)}
+                        </td>
+                        <td className="num">
+                          {/* Çubuk SABİT genişlikte bir rayın içinde: eskiden genişliği
                         hücreye göreydi ve %70'i geçince sayı alt satıra kayıyordu,
                         satır yüksekliği değişiyordu. */}
-                      <span className="pulse__flowcell">
-                        <span className="pulse__flowtrack" aria-hidden="true">
-                          <span
-                            className="pulse__flowbar"
-                            style={{
-                              width: `${Math.min(100, Math.abs(flow.flowPct))}%`,
-                              background: flow.flowPct >= 0 ? 'var(--up)' : 'var(--down)',
-                            }}
-                          />
-                        </span>
-                        <span className="pulse__flowval">{fmtPct(flow.flowPct, 0)}</span>
-                      </span>
-                    </td>
-                    <td className="num">
-                      {flow.advancing}/{flow.declining}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <span className="pulse__flowcell">
+                            <span className="pulse__flowtrack" aria-hidden="true">
+                              <span
+                                className="pulse__flowbar"
+                                style={{
+                                  width: `${Math.min(100, Math.abs(flow.flowPct))}%`,
+                                  background: flow.flowPct >= 0 ? 'var(--up)' : 'var(--down)',
+                                }}
+                              />
+                            </span>
+                            <span className="pulse__flowval">{fmtPct(flow.flowPct, 0)}</span>
+                          </span>
+                        </td>
+                        <td className="num">
+                          {flow.advancing}/{flow.declining}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </>
         )}
       </section>

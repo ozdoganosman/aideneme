@@ -319,3 +319,95 @@ describe('Nabız — hesap çökerse', () => {
     expect(screen.getByText(/worker çöktü/)).toBeInTheDocument();
   });
 });
+
+/**
+ * Sektör ROTASYONU.
+ *
+ * Eksik olan buydu: akış yalnızca SON BARI ölçüyordu. "Piyasada bugün ne
+ * oluyor" için doğru, ama "endüstriden para akışı" bir pencere sorusu —
+ * cevabı pay SEVİYESİ değil pay DEĞİŞİMİ.
+ */
+describe('Nabız — sektör rotasyonu', () => {
+  const SEKTORLER = {
+    of: { AAA: 'Banka', BBB: 'Banka', CCC: 'Çimento', DDD: 'Çimento' },
+    source: 'test',
+    generated: 1,
+  };
+
+  function pencere(symbol: string, value: number, prevValue: number, returnPct: number) {
+    return { symbol, value, prevValue, returnPct, bars: 21 };
+  }
+
+  beforeEach(() => {
+    sectorsFn.mockResolvedValue(SEKTORLER);
+  });
+
+  it('dönem seçilince pencere toplamları isteniyor', async () => {
+    const user = userEvent.setup();
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(pulseFn).toHaveBeenCalled());
+    // Son bar görünümünde pencere İSTENMİYOR: 200 sembollük ikinci döngü
+    // boşuna çalışmasın.
+    expect(pulseFn.mock.calls[0][1]).toEqual({});
+
+    await user.selectOptions(await screen.findByLabelText('Dönem'), '21');
+    await waitFor(() =>
+      expect(pulseFn.mock.calls[pulseFn.mock.calls.length - 1][1]).toEqual({ rotationBars: 21 }),
+    );
+  });
+
+  it('pay değişimini puan olarak gösteriyor ve tek cümleyle özetliyor', async () => {
+    const user = userEvent.setup();
+    // Banka payı %40 → %60 (+20 puan), Çimento tersi.
+    pulseFn.mockImplementation(async (_m: string, o: { rotationBars?: number } = {}) => ({
+      rows: [row('AAA', 4, 5000), row('BBB', 1, 1000), row('CCC', -2, 9000), row('DDD', -1, 100)],
+      summary: {
+        symbols: 4,
+        advancing: 2,
+        declining: 2,
+        unchanged: 0,
+        breadthPct: 50,
+        medianChangePct: 0,
+        totalValue: 15100,
+        upValue: 6000,
+        downValue: 9100,
+        flowPct: -20.5,
+        newHighs: 1,
+        newLows: 0,
+      },
+      windows: o.rotationBars
+        ? [
+            pencere('AAA', 400, 250, 8),
+            pencere('BBB', 200, 150, 4),
+            pencere('CCC', 300, 500, -3),
+            pencere('DDD', 100, 100, -1),
+          ]
+        : undefined,
+      ms: 12,
+    }));
+
+    render(<Pulse state={STATE} push={push} />);
+    await user.selectOptions(await screen.findByLabelText('Dönem'), '21');
+
+    expect(await screen.findByText(/para en çok/i)).toHaveTextContent('Banka');
+    expect(screen.getByText(/para en çok/i)).toHaveTextContent('+%20,0 puan');
+
+    // Tablo pay DEĞİŞİMİNE göre sıralı: sorulan şey "nereye kaydı".
+    const satirlar = within(akisTablosu())
+      .getAllByRole('row')
+      .slice(1)
+      .map((r) => r.textContent!);
+    expect(satirlar[0]).toContain('Banka');
+    expect(satirlar[0]).toContain('+%20,0 puan');
+  });
+
+  // Pencere verisi gelmezse eski (son bar) görünüm korunmalı; boş tablo değil.
+  it('pencere verisi yoksa son bar görünümü kalıyor', async () => {
+    const user = userEvent.setup();
+    render(<Pulse state={STATE} push={push} />);
+    await user.selectOptions(await screen.findByLabelText('Dönem'), '21');
+    // Sahte istemci `windows` döndürmüyor (varsayılan mock).
+    await waitFor(() => expect(screen.getByText(/Ağırlıklı değişim/)).toBeInTheDocument());
+    expect(screen.queryByText(/para en çok/i)).toBeNull();
+  });
+});

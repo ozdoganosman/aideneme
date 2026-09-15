@@ -1,6 +1,6 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
-import type { PulseRow, PulseSummary } from '../core/screen/pulse';
+import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
 import type { Strategy } from '../core/strategy/dsl';
 import type { BacktestOptions, Trade } from '../core/backtest/engine';
 import type { BacktestMetrics } from '../core/backtest/metrics';
@@ -57,6 +57,13 @@ export interface PulseRequest {
   /** Yeni zirve/dip penceresi (bar). */
   window?: number;
   minBars?: number;
+  /**
+   * Rotasyon penceresi (bar). Verilirse sembol başına pencere toplamları da
+   * döner — sektör rotasyonu bunlardan hesaplanıyor. Verilmezse HESAPLANMAZ:
+   * tek barlık nabza bakan kullanıcı 200 sembollük ikinci bir döngüyü
+   * boşuna ödemesin.
+   */
+  rotationBars?: number;
 }
 
 export interface BacktestRequest {
@@ -188,6 +195,8 @@ export interface PulseResponse {
   type: 'pulse';
   rows: PulseRow[];
   summary: PulseSummary;
+  /** `rotationBars` istendiyse: sembol başına pencere toplamları. */
+  windows?: WindowRow[];
   ms: number;
 }
 

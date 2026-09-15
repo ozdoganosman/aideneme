@@ -282,7 +282,7 @@ export class AnalysisClient {
   /** Piyasa nabzı: genişlik + para akışı (tek worker). */
   async pulse(
     market: Market,
-    options: { window?: number; minBars?: number } = {},
+    options: { window?: number; minBars?: number; rotationBars?: number } = {},
   ): Promise<PulseOutcome> {
     const response = unwrap(
       await this.pool.run((id) => ({
@@ -291,6 +291,7 @@ export class AnalysisClient {
         market,
         window: options.window,
         minBars: options.minBars,
+        rotationBars: options.rotationBars,
       })),
     );
     if (response.type !== 'pulse') throw new Error('beklenmeyen yanıt');

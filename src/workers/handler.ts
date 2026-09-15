@@ -1,7 +1,13 @@
 import { computeIndicators } from '../core/indicators/calc';
 import { decodeBundle, type Bundle } from '../core/data/pack';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
-import { pulseRow, summarizePulse, type PulseRow } from '../core/screen/pulse';
+import {
+  pulseRow,
+  summarizePulse,
+  windowRow,
+  type PulseRow,
+  type WindowRow,
+} from '../core/screen/pulse';
 import { clusterSymbols, correlationMatrix } from '../core/stats/correlation';
 import { runBacktest } from '../core/backtest/engine';
 import { computeMetrics, type BacktestMetrics } from '../core/backtest/metrics';
@@ -52,6 +58,7 @@ export function createHandler() {
           const started = now();
           const bundle = need(bundles, req.market);
           const rows: PulseRow[] = [];
+          const windows: WindowRow[] = [];
           for (const symbol of bundle.names) {
             const candles = bundle.seriesOf(symbol);
             if (!candles) continue;
@@ -60,6 +67,12 @@ export function createHandler() {
               minBars: req.minBars,
             });
             if (row) rows.push(row);
+            // Pencere toplamları AYNI çözümlemede: paket zaten burada, seriyi
+            // ikinci kez kurmak boşuna iş olurdu.
+            if (req.rotationBars) {
+              const w = windowRow(symbol, candles, req.rotationBars);
+              if (w) windows.push(w);
+            }
           }
           return {
             id: req.id,
@@ -67,6 +80,7 @@ export function createHandler() {
             type: 'pulse',
             rows,
             summary: summarizePulse(rows),
+            windows: req.rotationBars ? windows : undefined,
             ms: now() - started,
           };
         }

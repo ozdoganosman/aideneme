@@ -7,7 +7,9 @@ import {
   sectorCoverage,
   sectorNames,
   sectorPeers,
+  rotationBySector,
   withSectors,
+  type SectorMap,
 } from './sectors';
 
 function row(symbol: string, value: number, changePct: number): PulseRow {
@@ -143,5 +145,71 @@ describe('sektör akranları', () => {
 
   it('tek üyeli sektörde sıra 1/1 olur', () => {
     expect(sectorPeers(rows, MAP, 'EREGL')).toMatchObject({ rank: 1, total: 1 });
+  });
+});
+
+/**
+ * Sektör rotasyonu.
+ *
+ * Asıl soru "hangi sektör büyük" değil, "para nereye KAYIYOR". Bu yüzden pay
+ * SEVİYESİ değil, pay DEĞİŞİMİ ölçülüyor.
+ */
+describe('rotationBySector', () => {
+  const map: SectorMap = {
+    of: { AAA: 'Banka', BBB: 'Banka', CCC: 'Çimento' },
+    source: 'test',
+    generated: 1,
+  };
+
+  function w(symbol: string, value: number, prevValue: number, returnPct = 0) {
+    return { symbol, value, prevValue, returnPct, bars: 5 };
+  }
+
+  it('pay değişimini PUAN olarak veriyor', () => {
+    // Banka: 600/1000 = %60, önceki 400/1000 = %40 → +20 puan.
+    const out = rotationBySector([w('AAA', 400, 250), w('BBB', 200, 150), w('CCC', 400, 600)], map);
+    const banka = out.find((x) => x.sector === 'Banka')!;
+    expect(banka.sharePct).toBeCloseTo(60, 6);
+    expect(banka.prevSharePct).toBeCloseTo(40, 6);
+    expect(banka.shareShiftPp).toBeCloseTo(20, 6);
+
+    const cimento = out.find((x) => x.sector === 'Çimento')!;
+    expect(cimento.shareShiftPp).toBeCloseTo(-20, 6);
+  });
+
+  // Yüzde DEĞİŞİM kullanılsaydı küçük sektör her zaman listenin başında
+  // olurdu: %1'den %2'ye çıkan bir pay "%100 arttı" diye okunur, oysa yer
+  // değiştiren para 1 puandır.
+  it('küçük sektörün oransal sıçraması listeyi ele geçirmiyor', () => {
+    const out = rotationBySector([w('AAA', 500, 900), w('BBB', 480, 80), w('CCC', 20, 20)], {
+      of: { AAA: 'Büyük', BBB: 'Orta', CCC: 'Küçük' },
+      source: 't',
+      generated: 1,
+    });
+    const kucuk = out.find((x) => x.sector === 'Küçük')!;
+    const orta = out.find((x) => x.sector === 'Orta')!;
+    // Küçük sektörün payı %2'den %2'ye ≈ sabit; Orta gerçekten büyük kaydı.
+    expect(Math.abs(kucuk.shareShiftPp)).toBeLessThan(Math.abs(orta.shareShiftPp));
+  });
+
+  it('getiri işlem değeriyle ağırlıklı', () => {
+    // 900 işlem değerli +10, 100 işlem değerli −10 → ağırlıklı +8.
+    const out = rotationBySector([w('AAA', 900, 900, 10), w('BBB', 100, 100, -10)], {
+      of: { AAA: 'Banka', BBB: 'Banka' },
+      source: 't',
+      generated: 1,
+    });
+    expect(out[0].returnPct).toBeCloseTo(8, 6);
+  });
+
+  it('sınıflandırılmamış grup gizlenmiyor ve en sonda duruyor', () => {
+    const out = rotationBySector([w('AAA', 500, 500), w('ZZZ', 500, 500)], map);
+    expect(out[out.length - 1].sector).toBe(UNCLASSIFIED);
+    // Paylar toplamı 100: eksik sınıflandırma payları şişirmiyor.
+    expect(out.reduce((a, b) => a + b.sharePct, 0)).toBeCloseTo(100, 6);
+  });
+
+  it('sınıflandırma yoksa boş döner (uydurma grup yok)', () => {
+    expect(rotationBySector([w('AAA', 1, 1)], null)).toEqual([]);
   });
 });
