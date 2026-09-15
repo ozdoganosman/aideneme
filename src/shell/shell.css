@@ -2021,6 +2021,10 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  /* SARMALANIYOR: panel 300 px'e daralınca araç çubuğu 401 px'e çıkıyor ve
+     "+ sembol" düğmesinin etiketi kesiliyordu (ölçüldü). Panelin kendisi de
+     bu yüzden taşıyordu — `scrollWidth` 413, `clientWidth` 298. */
+  flex-wrap: wrap;
 }
 .radar__araclar .ui-combobox {
   flex: 1;

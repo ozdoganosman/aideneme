@@ -183,6 +183,15 @@ describe('Radar — filtreler', () => {
 
     expect(await screen.findByText('Hacim oranı ≥ 2,00')).toBeInTheDocument();
     expect((await satirlar())[0]).toContain('THYAO');
+
+    // Panel KAPANMALI: filtre uygulandığında değişen şey arkadaki tablo ve
+    // panel onun üstünde duruyor. Açık kalırsa kullanıcı kendi seçiminin
+    // sonucunu göremez. Odak da tetikleyiciye dönmeli — panel gövdeye
+    // taşındığı için odağı geri vermeyen bir kapanış klavyeyi kaybettirir.
+    const tetik = screen.getByRole('button', { name: 'Hazır' });
+    expect(screen.queryByRole('dialog', { name: 'Hazır filtreler' })).toBeNull();
+    expect(tetik).toHaveAttribute('aria-expanded', 'false');
+    expect(document.activeElement).toBe(tetik);
   });
 
   it('çip kaldırılabiliyor ve tercih saklanıyor', async () => {

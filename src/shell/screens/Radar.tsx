@@ -506,6 +506,11 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
         */}
         <Popover
           title="Filtreler"
+          // Radar SAĞ kenarda duruyor: panel sağa açılınca ekranın dışına
+          // taşıyor. Ölçüldü — "Hazır filtreler" listesi 1.500 px'lik
+          // pencerede 1.585 px'e uzanıyordu, yani açıklamaların 85 px'i
+          // görünmüyordu ve okunamıyordu.
+          align="end"
           trigger={(p) => (
             <Button
               size="sm"
@@ -583,26 +588,58 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
 
         <Popover
           title="Hazır filtreler"
+          // Radar SAĞ kenarda duruyor: panel sağa açılınca ekranın dışına
+          // taşıyor. Ölçüldü — "Hazır filtreler" listesi 1.500 px'lik
+          // pencerede 1.585 px'e uzanıyordu, yani açıklamaların 85 px'i
+          // görünmüyordu ve okunamıyordu.
+          align="end"
           trigger={(p) => (
             <Button size="sm" variant="secondary" {...p}>
               Hazır
             </Button>
           )}
         >
-          <ul className="radar__hazirlar">
-            {HAZIRLAR.map((h) => (
-              <li key={h.ad}>
-                <button type="button" onClick={() => araliklarYaz(h.araliklar)}>
-                  <b>{h.ad}</b>
-                  <span className="desk__muted">{h.aciklama}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          {(kapat) => {
+            /*
+              SEÇİMDE KAPANIYOR. İki nedeni var, ikisi de ölçüldü:
+
+              1. Panel radar tablosunun ÜSTÜNDE duruyor. Hazır filtre
+                 uygulandığında değişen şey tablo; panel açık kalınca kullanıcı
+                 kendi yaptığı seçimin sonucunu göremiyor.
+              2. Panel gövdeye taşındığı için odak tuzağı taşıyor (bkz.
+                 `Popover`). Uygulandıktan sonra açık kalan panel Tab'ı beş
+                 düğmeye hapsediyordu — klavye denetimi bunu yakaladı.
+
+              Kapanışta odak "Hazır" düğmesine geri dönüyor.
+            */
+            return (
+              <ul className="radar__hazirlar">
+                {HAZIRLAR.map((h) => (
+                  <li key={h.ad}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        araliklarYaz(h.araliklar);
+                        kapat();
+                      }}
+                    >
+                      <b>{h.ad}</b>
+                      <span className="desk__muted">{h.aciklama}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            );
+          }}
         </Popover>
 
         <Popover
           title="Sütunlar"
+          // Radar SAĞ kenarda duruyor: panel sağa açılınca ekranın dışına
+          // taşıyor. Ölçüldü — "Hazır filtreler" listesi 1.500 px'lik
+          // pencerede 1.585 px'e uzanıyordu, yani açıklamaların 85 px'i
+          // görünmüyordu ve okunamıyordu.
+          align="end"
           trigger={(p) => (
             <Button size="sm" variant="secondary" aria-label="Sütun seçici" {...p}>
               Sütun

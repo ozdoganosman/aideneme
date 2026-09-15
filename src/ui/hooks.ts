@@ -78,16 +78,25 @@ export function useClickOutside(
   ref: RefObject<HTMLElement | null>,
   onOutside: () => void,
   active = true,
+  /**
+   * Ek "dışarıda mı" sorusu. Portal ile GÖVDEYE taşınan bir panel, kökün
+   * DOM alt ağacında değildir; onsuz panele tıklamak "dışarı" sayılır ve
+   * panel kendi kendini kapatır.
+   */
+  ayricaDisarida?: (hedef: Node) => boolean,
 ): void {
   useEffect(() => {
     if (!active) return;
     const onDown = (e: MouseEvent) => {
       const el = ref.current;
-      if (el && !el.contains(e.target as Node)) onOutside();
+      const hedef = e.target as Node;
+      if (!el || el.contains(hedef)) return;
+      if (ayricaDisarida && !ayricaDisarida(hedef)) return;
+      onOutside();
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [ref, onOutside, active]);
+  }, [ref, onOutside, active, ayricaDisarida]);
 }
 
 /** Medya sorgusu — tek responsive ağaç için (ayrı mobil bileşen yok). */
