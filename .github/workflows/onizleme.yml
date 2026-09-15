@@ -1,0 +1,157 @@
+name: onizleme
+
+# Bu dalın canlı önizlemesi: https://<kullanıcı>.github.io/<depo>/onizleme/next.html
+#
+# Kökteki yayın (main'in dağıttığı eski arayüz) ELLENMEZ; bu iş yalnızca
+# `onizleme/` klasörünü ve kökteki `data/bist/pack/` paketini günceller.
+#
+# Veri neden kökte: uygulama alt yolda yayımlanıyor ama veriyi kökteki TEK
+# kopyadan okuyor (`VITE_DATA_BASE`). İkinci bir kopya ~29 MB yer kaplar ve
+# iki kopya farklı zamanlarda tazelenip birbirini tutmaz.
+on:
+  push:
+    branches: [claude/stoic-planck-vxaul2]
+  # Elle tetikleme: veri yeniden paketlensin diye (sembol seçimi artık
+  # `finansallar` işinin girdisi).
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Kök dağıtımıyla AYNI kuyruk: gh-pages'e iki iş aynı anda yazmasın.
+# İptal edilmiyor, çünkü yarıda kesilen bir yayın kısmi ağaç bırakır.
+# (`finansallar` işi AYRI kuyrukta — bu iş onu bekletmiyor, iptal etmiyor.)
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  onizleme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Yayındaki veriyi yeniden indirmiyoruz. Sığ (shallow) klon push'ta
+      # reddedilebildiği için tam klon: gh-pages her dağıtımda tek commit'e
+      # sıfırlandığı için geçmiş zaten kısa.
+      - name: Yayındaki veriyi al
+        run: |
+          git clone -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" _site
+          mkdir -p public/data
+          if [ -d _site/data/bist ]; then cp -r _site/data/bist public/data/; fi
+
+      # Kaynaklara erişilemezse dosyalar yazılmaz; arayüz "veri yok" der,
+      # derleme kırılmaz (deploy.yml ile aynı sözleşme).
+      #
+      # FİNANSAL TABLOLAR BURADA ÇEKİLMİYOR — ayrı `finansallar` işinde.
+      # Ölçüldü: tarama bu işin içindeyken her push onu aç bırakıyordu.
+      # Aynı kuyrukta oldukları için sıradaki tarama iptal ediliyor, ayrıca
+      # push başına 420 sn bütçe sembol başına 15–30 sn ile tur başına ~20
+      # sembole denk geliyordu. Önizleme artık gh-pages'te NE VARSA onu
+      # yayımlıyor; isteğe bağlı veriyi beklemiyor.
+      - name: Sektör sınıflandırması
+        continue-on-error: true
+        timeout-minutes: 3
+        run: python scripts/build_sectors.py
+
+      # `continue-on-error` gerçek kesinti için duruyor: anahtarın konmamış
+      # olması artık 0 dönüyor, yani BU ADIM KIRMIZIYSA gerçekten bir şey
+      # bozulmuştur. Eskiden ikisi de 1 dönüyordu ve ayrım kaybolmuştu.
+      - name: Kur serisi (TCMB)
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: python scripts/build_fx.py
+
+      # Verbose JSON → kolonsal .bin + manifest + latest-250 paketi.
+      - name: Kolonsal veri paketi
+        timeout-minutes: 10
+        run: |
+          python -m pip install --quiet numpy
+          python scripts/pack_data.py --market all --bundle-bars 250 --verify
+
+      - run: npm ci
+      - run: npm run typecheck
+
+      # ÖLÜ FİLTRE BEKÇİSİ. Birim testler sentetik veriyle koşuyor ve orada
+      # her ölçüt hesaplanıyor; bir filtre ancak GERÇEK veride sessizce
+      # ölüyor. Yaşandı: "Cari oran" hangi eşikte olursa olsun sıfır sonuç
+      # veriyordu, çünkü `currentAssets` hiçbir sembolde yoktu. Bu iş
+      # yayındaki veriyi zaten klonluyor, yani ölçüm burada bedavaya geliyor.
+      #
+      # Veri gelmediyse test kendini atlıyor; derlemeyi veri yokluğu
+      # kırmamalı, ama veri VARSA ölü filtre kırmalı.
+      - name: Ölü filtre bekçisi (gerçek veri)
+        env:
+          GERCEK_VERI: ${{ github.workspace }}/public/data
+        run: npx vitest run src/core/screen/kapsamGercek.test.ts --reporter=basic
+
+      - name: Önizleme derlemesi
+        env:
+          VITE_DATA_BASE: /${{ github.event.repository.name }}/data/
+        run: npx vite build --base=/${{ github.event.repository.name }}/onizleme/
+
+      - name: gh-pages'e yayımla
+        run: |
+          set -e
+          W="${GITHUB_WORKSPACE}"
+          url="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git"
+
+          # Yayımlanacak her şeyi klonun ÜSTÜNE kopyalar. Ayrı bir kabuk
+          # fonksiyonu, çünkü push reddedilirse en yeni gh-pages alınıp bu
+          # kopyalama baştan yapılıyor — rebase yerine üstüne yazma.
+          # Rebase denendi ve çakıştı: aynı yolu iki iş yazdığında git bunu
+          # add/add çakışması sayıyor, oysa içerik çakışması yok.
+          yayimla() {
+            # Uygulama alt klasöre; kendi data/ kopyası atılıyor (kökten okunuyor).
+            rm -rf _site/onizleme
+            mkdir -p _site/onizleme
+            cp -r dist/. _site/onizleme/
+            rm -rf _site/onizleme/data
+
+            # Paket köke: eski arayüzün JSON'ları duruyor, yanına pack/ ekleniyor.
+            mkdir -p _site/data/bist
+            rm -rf _site/data/bist/pack
+            cp -r public/data/bist/pack _site/data/bist/pack
+            for f in sectors.json sectors-tani.json fx.json; do
+              if [ -f "public/data/bist/$f" ]; then cp "public/data/bist/$f" "_site/data/bist/$f"; fi
+            done
+            # Finansal tablolara dokunulmuyor: onları `finansallar` işi yazıyor
+            # ve buradaki kopya o işin klonu alındığı andan eski olabilir.
+            touch _site/.nojekyll
+          }
+
+          cd "$W/_site"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for deneme in 1 2 3 4 5; do
+            cd "$W" && yayimla && cd "$W/_site"
+            git add -A
+            if git diff --cached --quiet; then
+              echo "Değişiklik yok — yayımlanacak bir şey yok."
+              exit 0
+            fi
+            git commit -q -m "onizleme ${GITHUB_SHA}"
+            if git push "$url" gh-pages; then exit 0; fi
+            echo "push reddedildi ($deneme), en yeni gh-pages alınıp üstüne yazılıyor"
+            git fetch "$url" gh-pages
+            git reset --hard FETCH_HEAD
+            sleep $((deneme * 3))
+          done
+          exit 1
+
+      - name: Adres
+        run: |
+          echo "### Önizleme yayında" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/onizleme/next.html" >> $GITHUB_STEP_SUMMARY

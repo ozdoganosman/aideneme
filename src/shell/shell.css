@@ -1,0 +1,2364 @@
+/* Kabuk yerleşimi. Tek ağaç: dar ekranda ray alta iner, ayrı bileşen yok. */
+
+.shell {
+  display: flex;
+  height: 100%;
+  background: var(--surface-1);
+}
+
+.shell-skip {
+  position: absolute;
+  left: -9999px;
+  z-index: var(--z-toast);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+}
+.shell-skip:focus {
+  left: var(--sp-3);
+  top: var(--sp-3);
+}
+
+/* ── Ray ──────────────────────────────────────────────────────────────── */
+.shell-rail {
+  flex: none;
+  width: var(--rail-w);
+  background: var(--surface-0);
+  border-right: 1px solid var(--border-subtle);
+}
+.shell-rail ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-1);
+  list-style: none;
+}
+.shell-rail__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+.shell-rail__item:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+.shell-rail__item.is-active {
+  background: var(--accent-weak);
+  color: var(--accent-text);
+}
+.shell-rail__label {
+  display: none;
+}
+
+/* ── Ana sütun ────────────────────────────────────────────────────────── */
+.shell-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.shell-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-0);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.shell-topbar__title h1 {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.shell-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.shell-muted {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.shell-palette__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 32px;
+  padding: 0 var(--sp-2) 0 var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.shell-palette__trigger:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+.shell-palette__trigger kbd,
+.shell-palette__foot kbd,
+.shell-palette__hint {
+  padding: 1px var(--sp-1);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface-0);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.shell-topbar__legacy {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+}
+.shell-topbar__legacy:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
+.shell-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-5) var(--sp-4);
+}
+
+.shell-foot {
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-0);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* ── Boş ekran içeriği ────────────────────────────────────────────────── */
+.shell-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.shell-placeholder__plan {
+  width: min(620px, 100%);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.shell-placeholder__plan h3 {
+  margin-bottom: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.shell-placeholder__plan ul {
+  margin: 0;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+}
+.shell-placeholder__plan li + li {
+  margin-top: var(--sp-1);
+}
+
+/* ── Komut paleti ─────────────────────────────────────────────────────── */
+.shell-palette__overlay {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+.shell-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: 70vh;
+  background: var(--surface-0);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.shell-palette__input {
+  height: 48px;
+  padding: 0 var(--sp-4);
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  font-size: var(--fs-lg);
+}
+.shell-palette__list {
+  margin: 0;
+  padding: var(--sp-1);
+  list-style: none;
+  overflow-y: auto;
+}
+.shell-palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.shell-palette__item.is-active {
+  background: var(--accent-weak);
+}
+.shell-palette__grouphead {
+  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.shell-palette__input:focus-visible {
+  outline: none;
+}
+.shell-palette__title {
+  flex: 1;
+}
+.shell-palette__empty {
+  padding: var(--sp-4);
+  color: var(--text-muted);
+  text-align: center;
+}
+.shell-palette__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* ── Kitaplık ─────────────────────────────────────────────────────────── */
+.shell-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.shell-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--sp-4);
+}
+.shell-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.shell-card h3 {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.shell-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+.shell-row--wrap {
+  flex-wrap: wrap;
+}
+
+/* ── Dar ekran: ray alta, tek ağaç ────────────────────────────────────── */
+@media (max-width: 760px) {
+  .shell {
+    flex-direction: column;
+  }
+  .shell-rail {
+    order: 2;
+    width: 100%;
+    border-right: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .shell-rail ul {
+    flex-direction: row;
+    /* Ekran sayısı arttıkça (şimdi dokuz) öğeler dar telefona sığmıyor ve
+       `space-around` bunları sayfanın dışına taşırıyordu: tüm sayfa yatay
+       kaydırılabilir hale geliyor, tarayıcı da görünümü küçültüyordu.
+       Çözüm, RAYIN KENDİSİNİ kaydırılabilir yapmak — sayfa dar kalır. */
+    justify-content: flex-start;
+    padding: var(--sp-1);
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .shell-rail ul::-webkit-scrollbar {
+    display: none;
+  }
+  .shell-rail__item {
+    flex-direction: column;
+    gap: 2px;
+    height: 46px;
+    /* Küçülerek sığmak yerine kaydırılsın: 44px dokunma hedefi korunur. */
+    flex: 0 0 auto;
+    min-width: 52px;
+    font-size: 16px;
+  }
+  .shell-rail__label {
+    display: block;
+    font-size: 9px;
+    max-width: 52px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .shell-main {
+    order: 1;
+  }
+  .shell-topbar {
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+  .shell-topbar__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  /* Palet tetikleyicisi dar ekranda ikona iner — başlık satırı sarmasın. */
+  .shell-palette__trigger-text,
+  .shell-palette__trigger-kbd {
+    display: none;
+  }
+  .shell-palette__trigger {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  .shell-content {
+    padding: var(--sp-4) var(--sp-3);
+  }
+}
+
+/* ── Sembol Masası ────────────────────────────────────────────────────── */
+.desk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-height: 0;
+  /* Grafik sekmesinin kalan yüksekliği ALABİLMESİ için kabın kendisinin
+     belirli bir yüksekliği olmalı; yoksa `flex: 1` içerik kadar kalır.
+     `min-height` (height değil): finansallar sekmesi içeriği taştığında
+     kap büyümeye devam ediyor. */
+  min-height: 100%;
+}
+.desk__bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.desk__bar > :first-child {
+  min-width: 120px;
+}
+.desk__tf {
+  margin-bottom: 2px;
+}
+/* [hidden] hiçbir display kuralı tarafından ezilmemeli: gizlenen bir kontrol
+   ekranda kalırsa yanlış sekmenin ayarı görünür (gerçek bir kusurdu). */
+[hidden] {
+  display: none !important;
+}
+.desk__toggles {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-left: auto;
+  margin-bottom: var(--sp-1);
+  flex-wrap: wrap;
+}
+.desk__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.desk__chart {
+  /* Grafik ekranın ASIL işi; sabit 420 px ekranın yarısını boş bırakıyordu.
+     Kalan dikey alanın tamamını alıyor, altındaki kartlar için taban bir
+     yükseklik bırakarak. `min-height` şart: flex çocuğu varsayılan olarak
+     içeriğinden küçülemez ve grafik kabı taşardı. */
+  flex: 1;
+  min-height: 460px;
+  /* Grafik kabı da flex: içindeki `.chart-host`'un yüksekliği `height: 100%`
+     ile çözülemez, çünkü `flex: 1` düzenin verdiği yüksekliği HESAPLANAN
+     `height` özelliğine yazmaz ve yüzde yükseklik `auto` ebeveynde `auto`ya
+     düşer. Ölçüldü: kap 553 px iken grafik ~30 px kalıyor, mumlar en üstte
+     ince bir şeride sıkışıyordu. Flex çocuğu olarak esneyince sorun yok. */
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.chart-host {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+/* Sayı kartları TEK ŞERİT. Grafik bu ekranın asıl işi; dokuz kart iki
+   satıra sarıp ~230 px yiyordu ve grafiğe büyüyecek yer kalmıyordu.
+   Şerit yatay kayıyor, kartlar küçülüyor — sayı ve provenance duruyor. */
+.desk__metrics {
+  display: flex;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  padding-bottom: var(--sp-1);
+  scrollbar-width: thin;
+}
+.desk__metrics > * {
+  flex: 0 0 auto;
+  min-width: 128px;
+  padding: var(--sp-2) var(--sp-3);
+}
+.desk__metrics .ui-stat__value {
+  font-size: var(--fs-lg);
+}
+.desk__prov {
+  /* Görsel daire 16 px kalıyor ama dokunma hedefi 24×24 (WCAG 2.5.8):
+     saydam kenar boşluğu hedefi büyütür, hizayı bozmaz. */
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-clip: content-box;
+  border: 4px solid transparent;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+.desk__prov:hover {
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.desk__provlist {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  margin: 0;
+}
+.desk__provlist dt {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.desk__provlist dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+.desk__health {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.desk__health header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-2);
+}
+.desk__health h2 {
+  font-size: var(--fs-md);
+}
+.desk__health ul {
+  margin: 0 0 var(--sp-2);
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+}
+.desk__health li + li {
+  margin-top: var(--sp-1);
+}
+.desk__muted {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+@media (max-width: 760px) {
+  .desk__bar {
+    gap: var(--sp-3);
+  }
+  .desk__toggles {
+    margin-left: 0;
+    width: 100%;
+  }
+  .desk__chart {
+    height: 320px;
+  }
+}
+
+/* ── Tarayıcı ─────────────────────────────────────────────────────────── */
+.screener {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  height: 100%;
+  min-height: 0;
+}
+.screener__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.screener__row {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.screener__row > * {
+  min-width: 96px;
+}
+.screener__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+}
+.screener__rule {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.screener__rule > :first-child {
+  min-width: 150px;
+}
+.screener__prov {
+  margin-bottom: var(--sp-2);
+}
+.screener__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.screener__status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.screener__results {
+  flex: 1;
+  min-height: 320px;
+}
+.screener__watch {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  font-size: var(--fs-sm);
+}
+.screener__watch b {
+  font-weight: 600;
+}
+.screener__watch ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Karşılaştır ──────────────────────────────────────────────────────── */
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.compare__bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.compare__chips {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-1);
+}
+.compare__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px 2px 2px var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-left-width: 3px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.compare__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.compare__panel {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.compare__panel header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.compare__panel h2 {
+  font-size: var(--fs-md);
+}
+.normchart {
+  display: block;
+}
+.compare__matrix {
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.compare__matrix th {
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-align: left;
+}
+.compare__matrix td {
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--surface-0);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  min-width: 56px;
+}
+.compare__mates {
+  margin: 0;
+  padding-left: var(--sp-4);
+}
+.compare__mates li + li {
+  margin-top: var(--sp-1);
+}
+
+@media (max-width: 760px) {
+  .screener__rule > :first-child {
+    min-width: 120px;
+  }
+  .compare__matrix {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+/* ── Nabız ────────────────────────────────────────────────────────────── */
+.pulse {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.pulse__bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.pulse__status {
+  margin-left: auto;
+  margin-bottom: var(--sp-1);
+}
+.pulse__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.pulse__panel {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.pulse__panel header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.pulse__panel h2 {
+  font-size: var(--fs-md);
+}
+.heatmap canvas {
+  display: block;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.heatmap__hint {
+  margin-top: var(--sp-2);
+  min-height: 16px;
+}
+.pulse__flows {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.pulse__flows th,
+.pulse__flows td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.pulse__flows th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.pulse__flows .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Sektör satırındaki "Tara" eylemi: ghost düğme olarak sektör adının yanına
+   düz metin gibi oturuyordu ("Ulaştırma Tara" diye okunuyordu). Çerçeveli
+   küçük bir çip, tıklanabilir olduğunu kendi başına söylüyor. */
+.pulse__scan {
+  margin-left: var(--sp-2);
+  padding: 2px var(--sp-2);
+  min-height: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.pulse__scan:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.pulse__flowcell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+.pulse__flowtrack {
+  flex: 0 0 60px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.pulse__flowbar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  opacity: 0.7;
+}
+.pulse__flowval {
+  white-space: nowrap;
+}
+
+/* ── Strateji Laboratuvarı ────────────────────────────────────────────── */
+.lab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.lab__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.lab__row {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.lab__row > * {
+  min-width: 110px;
+}
+.lab__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+}
+.lab__rules h3 {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.lab__rule {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.lab__operand {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-end;
+}
+.lab__operand > :first-child {
+  min-width: 120px;
+}
+.lab__operand .ui-field {
+  max-width: 110px;
+}
+.lab__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.lab__badges {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.lab__badge {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.lab__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-3);
+}
+.lab__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.lab__header h2 {
+  font-size: var(--fs-md);
+}
+.lab__trades {
+  min-height: 320px;
+}
+.lab__regimes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.lab__regimes th,
+.lab__regimes td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.lab__regimes th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.lab__regimes .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.linechart {
+  display: block;
+}
+
+@media (max-width: 760px) {
+  .lab__operand {
+    flex-wrap: wrap;
+  }
+  .lab__rule {
+    padding-bottom: var(--sp-2);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
+
+/* ── Portföy ──────────────────────────────────────────────────────────── */
+.pf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.pf__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.pf__row {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.pf__row > * {
+  min-width: 100px;
+}
+.pf__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.pf__header h2 {
+  font-size: var(--fs-md);
+}
+.pf__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--sp-3);
+}
+.pf__warnings {
+  margin: 0;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+.pf__scenarios {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.pf__scenarios th,
+.pf__scenarios td {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.pf__scenarios th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.pf__scenarios .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Finansallar ──────────────────────────────────────────────────────── */
+.fin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.fin__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+}
+.fin__panel {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.fin__panel header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-3);
+}
+.fin__panel h3 {
+  font-size: var(--fs-md);
+}
+.fin__checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--sp-1) var(--sp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+.fin__checks li.is-true {
+  color: var(--up);
+}
+.fin__checks li.is-false {
+  color: var(--down);
+}
+.fin__checks li.is-unknown {
+  color: var(--text-muted);
+}
+
+/* ── Rapor ────────────────────────────────────────────────────────────── */
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.report__toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.report__sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.report__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 2px solid var(--border-strong);
+}
+.report__head h2 {
+  font-size: var(--fs-xl);
+}
+.report__section h3 {
+  margin-bottom: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.report__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.report__table th,
+.report__table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+.report__table th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.report__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Özet tablosu: değer sütunu dar kalsın, formül metnine yapışmasın. */
+.report__table--metrics {
+  table-layout: fixed;
+}
+.report__table--metrics th:nth-child(1) {
+  width: 22%;
+}
+.report__table--metrics th:nth-child(2) {
+  width: 11%;
+}
+.report__table--metrics th:nth-child(4) {
+  width: 26%;
+}
+/* Temel göstergeler: etiket–değer çiftleri; değer etiketin yanında dursun. */
+.report__table--pairs {
+  table-layout: fixed;
+}
+.report__table--pairs th[scope='row'] {
+  width: 28%;
+}
+.report__table--pairs .num {
+  width: 22%;
+}
+.report__list {
+  margin: 0;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+.report__foot {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+/* Sembol masası — sektör bağlamı. */
+.desk__sector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.desk__sector header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.desk__sector-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.desk__sector-cta p {
+  margin: 0;
+  max-width: 62ch;
+}
+.desk__sector-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.desk__sector-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.desk__sector-table th,
+.desk__sector-table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.desk__sector-table th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+}
+.desk__sector-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.desk__sector-table tr.is-current {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+/* Tarayıcı — koleksiyon aktarım kutusu. */
+.screener__transfer {
+  width: 100%;
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+  resize: vertical;
+}
+.screener__transfer-note {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+/* Tarayıcı — sektör rozetleri. */
+.screener__sectors {
+  margin: 0;
+  padding: var(--sp-2) 0 0;
+  border: 0;
+}
+.screener__sectors legend {
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.screener__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.screener__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-0);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.screener__chip.is-on {
+  border-color: var(--accent);
+  /* Metin olarak accent açık temada 4,27:1 kalıyor; --accent-text tam bu iş
+     için var (6,93:1). Kenarlık rengi accent kalabilir: metin değil. */
+  color: var(--accent-text);
+}
+.screener__chip input {
+  margin: 0;
+}
+/* Odak halkası küçük kutuda değil ROZETİN tamamında görünsün: klavyeyle gezen
+   kullanıcı nerede olduğunu bir bakışta görmeli. */
+.screener__chip:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Strateji sıralaması. */
+.rank {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.rank__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.rank__lead {
+  margin: 0;
+  max-width: 92ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+.rank__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.rank__deep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  font-size: var(--fs-sm);
+}
+.rank__deep p {
+  margin: 0;
+}
+.rank__deep progress {
+  flex: 1 1 200px;
+  height: 6px;
+}
+.rank__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.rank__table th,
+.rank__table td {
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+.rank__table th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.rank__table th[scope='row'] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 32ch;
+  font-weight: 600;
+}
+.rank__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rank__name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rank__name:hover {
+  text-decoration: underline;
+}
+.rank__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-weight: 400;
+}
+.rank__detail p {
+  margin: 0;
+}
+.rank__open {
+  display: block;
+  margin-top: var(--sp-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.lab__warn {
+  margin: 0;
+  color: var(--warn-text, var(--text-secondary));
+  font-size: var(--fs-sm);
+}
+.rank__best {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rank__best button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Model ekranı — kart, ölçüm ızgarası ve uyarı listesi. */
+.model {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.model__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.model__verdict {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.model__lead {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+.model__latest {
+  align-self: stretch;
+}
+.model__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.model__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.model__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.model__header h3 {
+  margin: 0;
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.model__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.model__table th,
+.model__table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+}
+.model__table th[scope='col'] {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.model__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.model__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+.model__bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+}
+.model__bar--said {
+  background: var(--text-muted);
+}
+.model__bar--was {
+  background: var(--accent);
+}
+.model__list {
+  margin: 0;
+  padding-left: var(--sp-4);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+/* Yazdırma: kabuk gider, rapor kâğıda sığar. */
+@media print {
+  .shell-rail,
+  .shell-topbar,
+  .shell-foot,
+  .shell-skip,
+  .report__toolbar {
+    display: none !important;
+  }
+  .shell,
+  .shell-main,
+  .shell-content {
+    display: block;
+    height: auto;
+    overflow: visible;
+    padding: 0;
+    background: #fff;
+  }
+  .report__sheet {
+    border: 0;
+    padding: 0;
+    gap: 16px;
+  }
+  .report__section {
+    break-inside: avoid;
+  }
+  .report__table th,
+  .report__table td {
+    padding: 2px 4px;
+  }
+}
+
+/* ── Sektör para akışı haritası ───────────────────────────────────────── */
+/* Kutular yüzdeyle konumlanıyor: kapsayıcı genişliğini ölçmek, yeniden
+   çizmek ve ResizeObserver kurmak gerekmiyor. */
+.flowmap {
+  position: relative;
+  margin: 0 0 var(--sp-3);
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.flowmap__cell {
+  position: absolute;
+  border: 1px solid var(--surface-0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.flowmap__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+.flowmap__btn[disabled] {
+  cursor: default;
+}
+.flowmap__btn:hover:not([disabled]) {
+  background: rgb(0 0 0 / 8%);
+}
+.flowmap__key {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  /* Dar kutuda ad taşmasın; sayı her hâlükârda okunur kalsın. */
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.flowmap__val {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+/* Çok küçük kutuda yazı sığmıyor: adı gizle, yalnızca renk kalsın.
+   Sıkışmış okunmaz bir etiket, etiket yokluğundan kötüdür. */
+.flowmap__cell {
+  container-type: size;
+}
+@container (max-width: 64px) {
+  .flowmap__val {
+    display: none;
+  }
+}
+@container (max-height: 28px) {
+  .flowmap__val {
+    display: none;
+  }
+}
+
+/* ── Yıllık seriler: küçük çoklu ───────────────────────────────────────── */
+/* Üç seri tek eksende çizilince net kâr görünmez oluyordu (satış milyarlarla,
+   kâr sıfıra yakın). Her seri kendi ölçeğinde; sahte karşılaştırma yok. */
+.fin__series {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-3);
+}
+.fin__serie {
+  min-width: 0;
+}
+.fin__serie-label {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ── İndikatör panelleri (grafik sekmesi) ─────────────────────────────── */
+/* Ayrı satır: parametre alanlarıyla birlikte üst çubuğa sığmıyorlar. */
+.desk__panels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+.desk__panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.desk__panelparams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
+/* Parametre kutuları dar: dört tanesi yan yana duracak. */
+.desk__panelparams .ui-field input {
+  width: 72px;
+}
+.desk__reset {
+  align-self: flex-end;
+  /* WCAG 2.5.8: dokunma hedefi en az 24×24. */
+  min-height: 32px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.desk__reset:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
+/* ── Karne ─────────────────────────────────────────────────────────────── */
+/* Tek bir toplam skor üç ayrı soruyu karıştırıyordu; başlıklar ayrı. */
+.fin__karne {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fin__karne-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.fin__karne-score {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fin__karne-label {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+/* Çubuk: oranı RENKTEN BAĞIMSIZ da okunur kılıyor (renk körlüğü, gri baskı). */
+.fin__karne-bar {
+  position: absolute;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: var(--sp-2);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.fin__karne-bar::after {
+  content: '';
+  display: block;
+  width: var(--oran, 0%);
+  height: 100%;
+  background: currentColor;
+}
+.fin__karne-item.is-up {
+  color: var(--up);
+}
+.fin__karne-item.is-warn {
+  color: var(--warn);
+}
+.fin__karne-item.is-down {
+  color: var(--down);
+}
+.fin__karne-item.is-unknown {
+  color: var(--text-muted);
+}
+/* Sayı ve etiket metin renginde kalsın; renk yalnızca çubukta ve kenarda. */
+.fin__karne-score,
+.fin__karne-label {
+  color: var(--text-primary);
+}
+.fin__karne-label {
+  color: var(--text-secondary);
+}
+
+/* ── Finansal: üst satır (karne + dar fiyat grafiği) ───────────────────── */
+/* Kullanıcı isteği: grafik ve finansallar ayrı panel kalsın, finansal
+   sekmesinde de grafik olsun ama DAR. Dar ekranda alt alta düşüyor —
+   sabit iki kolon, telefonda iki grafiği de okunmaz kılardı. */
+.fin__ust {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .fin__ust {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.fin__mini {
+  min-width: 0;
+}
+
+/* ── Finansal: dönemsel kolonlar ──────────────────────────────────────── */
+.fin__kontrol {
+  display: flex;
+  gap: var(--sp-3);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.fin__kolonlar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-4);
+}
+
+/* Kolon grafiği: SVG esnetiliyor, etiketler dışarıda (yazı esnemesin). */
+/* Izgara: solda ölçek kolonu, sağda grafik ve ALTINDA dönem etiketleri.
+   Ölçeği ayrı bir satır kabına koymak etiketleri çubuk merkezlerinden
+   kaydırıyordu — etiketler grafikle AYNI kolonda olmak zorunda. */
+.barseries {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--sp-2);
+  margin: 0;
+  min-width: 0;
+}
+.barseries__olcek {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.barseries__kap {
+  grid-row: 1;
+  position: relative;
+  min-width: 0;
+}
+.barseries__svg {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+/* İpucu: çubuğun ÜSTÜNDE değil grafiğin üst kenarında — çubuk boyuna göre
+   yer değiştiren bir kutu okurken göz takip edemiyordu. */
+.barseries__ipucu {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  box-shadow: var(--shadow-2);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.barseries__labels {
+  grid-column: 2;
+  display: grid;
+  /* `minmax(0, 1fr)` — `1fr` tek başına `minmax(auto, 1fr)` demek ve uzun bir
+     etiket ("2025/12") kendi kolonunu genişletiyordu: ölçüldü, sekiz kolonun
+     ikisi 45,7 px, altısı 38,7 px oluyor, etiketler çubuk merkezlerinden
+     KAYIYOR ve satır 289 px kaba 338 px sığmaya çalışıp taşıyordu.
+     Ölçülen katkı: 338 → 300 px. Kalan 11 px'i aşağıdaki `overflow` kapatıyor;
+     ikisi de gerekli ve ikisi de e2e testiyle korunuyor (geri alındığında
+     test kırılıyor — ayrı ayrı denendi). */
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  text-align: center;
+  gap: 2px;
+  margin-top: var(--sp-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.barseries__labels > span {
+  /* Kolonundan taşan etiket komşusunun üstüne biniyordu. Ölçülen katkı:
+     300 → 289 px (kabın tam genişliği). */
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* `display: none` DEĞİL: gizlenen etiket kolonunu bırakırsa kalanlar kayar. */
+.barseries__labels .is-hidden {
+  visibility: hidden;
+}
+.barseries__table {
+  grid-column: 1 / -1;
+}
+.barseries__empty {
+  margin: 0;
+  padding: var(--sp-4) 0;
+  font-size: var(--fs-sm);
+}
+
+/* ── Finansal: şirket detayları ───────────────────────────────────────── */
+.fin__detay {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+}
+.fin__detay dt {
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.fin__detay dd {
+  margin: 2px 0 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Provenance: "kaç iyi, kaç kötü, kaç anlamsız" ─────────────────────── */
+/* Formülü bilmek sayıyı okumaya yetmiyordu: PD/Satış 0,56 iyi mi kötü mü?
+   Bantlar KABA ve sektöre bağlı; her birinin yanında geçersizleştiği koşul
+   yazıyor — kesin eşik vermek olmayan bir kesinlik uydurmak olurdu. */
+.prov__govde {
+  margin: 0 0 var(--sp-3);
+}
+.prov__bant {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+}
+.prov__bant dt {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.prov__bant dd {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+}
+.prov__bant .is-up dt {
+  color: var(--up);
+}
+.prov__bant .is-down dt {
+  color: var(--down);
+}
+.prov__bant .is-unknown dt {
+  color: var(--text-muted);
+}
+
+/* ── Grafik alanı: grafik + radar ─────────────────────────────────────── */
+/* `.desk` bir flex KOLON; grafik alanı onun içinde esneyen tek satır.
+   `min-height: 0` şart — yoksa iç grafik kabı taşar (aynı kusur `.desk__chart`
+   yorumunda anlatılıyor). */
+/* Yükseklik EKRANA bağlı, içeriğe değil.
+   ÖLÇÜLDÜ: `flex: 1` + kapsayıcının `min-height: 100%` birleşimi grafiği
+   1.344 px'e çıkarıyordu, görünür alan ise 905 px — yani grafiğin alt üçte
+   biri ve altındaki metrik kartları her açılışta ekranın dışında kalıyordu.
+   (Bu kusur radar eklenmeden ÖNCE de vardı; ölçüm bir önceki sürümde de
+   aynı sayıyı verdi.) Artık grafik görünür alanı dolduruyor, taşmıyor. */
+.desk__alan {
+  display: flex;
+  flex: 0 0 auto;
+  height: calc(100dvh - 290px);
+  min-height: 340px;
+  gap: 0;
+}
+.desk__alan .desk__chart {
+  flex: 1;
+  min-width: 0;
+  /* Satır içinde yükseklik kabından geliyor; taban ölçü burada engel olurdu. */
+  min-height: 0;
+}
+/* Ayırıcı: dokunma hedefi 8 px görünür + kenar boşluğu; klavye odağı görünür. */
+.desk__ayirici {
+  flex: 0 0 8px;
+  cursor: col-resize;
+  background: var(--border-subtle);
+  border: none;
+  touch-action: none;
+}
+.desk__ayirici:hover,
+.desk__ayirici:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+.desk__radar {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* Dar ekranda yan yana durmuyor: 390 px'te iki sütun ikisini de okunmaz
+   kılardı. Radar grafiğin ALTINA iniyor ve tam genişlik alıyor. */
+@media (max-width: 860px) {
+  .desk__alan {
+    flex-direction: column;
+  }
+  .desk__ayirici {
+    display: none;
+  }
+  .desk__radar {
+    width: auto !important;
+    max-height: 320px;
+  }
+}
+
+/* ── Radar ────────────────────────────────────────────────────────────── */
+.radar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  height: 100%;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+.radar__bas {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.radar__bas h3 {
+  font-size: var(--fs-md);
+}
+.radar__bos {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.radar__kontrol {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-items: center;
+}
+.radar__ara {
+  min-width: 0;
+}
+/* Araç satırı: filtre, hazırlar ve ekleme yan yana — üç tam genişlik form
+   alanı dar panelin dikey alanını yiyordu. */
+.radar__araclar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  /* SARMALANIYOR: panel 300 px'e daralınca araç çubuğu 401 px'e çıkıyor ve
+     "+ sembol" düğmesinin etiketi kesiliyordu (ölçüldü). Panelin kendisi de
+     bu yüzden taşıyordu — `scrollWidth` 413, `clientWidth` 298. */
+  flex-wrap: wrap;
+}
+.radar__araclar .ui-combobox {
+  flex: 1;
+  min-width: 0;
+}
+.radar__bas .radar__sayac {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Filtre paneli: ölçütler gruplu, her biri "en az / en çok". Koşul seçtiren
+   eski akış tek filtre için dört etkileşim istiyordu. */
+.radar__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  /* GENİŞLİK POPOVER'IN İŞİ. Burada `width: min(360px, 78vw)` yazıyordu;
+     popover'ın `max-width`'i de 360 px ve o değer DOLGUYU İÇERİYOR
+     (border-box). Yani çocuk, ebeveyninin iç genişliğinden tam olarak
+     dolgu + kenarlık kadar geniş kalıyordu: ölçüldü, panelin scrollWidth'i
+     372, clientWidth'i 358 — 14 px'lik yatay kaydırma, filtre panelinin
+     sağ kenarı kırpılmış hâlde. Genişlik iddiası kalktı; panel kendi doğal
+     genişliğine göre popover'ın sınırlarına yerleşiyor ve dar ekranda
+     popover'ın kendi viewport payandası geçerli oluyor (78vw'den daha
+     doğru). */
+  min-width: 0;
+  /* YÜKSEKLİK DE POPOVER'IN İŞİ. Burada `max-height: min(60vh, 460px)` ve
+     kendi kaydırıcısı vardı; popover ekranda kalan yere göre sınır koyunca
+     ikinci bir kaydırıcı olurdu (iç içe kaydırma) ve 460 px'lik sabit sınır
+     dar ekranda zaten yanlış sayıydı. Tek kaydırıcı, katmanın kendisi. */
+}
+.radar__grup h4 {
+  margin: 0 0 var(--sp-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+/* Sektör süzgeci — filtre panelinin en üstünde, rozet listesi olarak.
+   `fieldset` varsayılan kenarlık ve dolgusunu taşıyor; dar panelde onu
+   sıfırlamak gerekiyor, yoksa iki kat çerçeve oluşuyor. */
+.radar__sektor {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.radar__sektor legend {
+  padding: 0;
+  margin-bottom: var(--sp-1);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.radar__sektor-cipler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+.radar__sektor-cip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-0);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.radar__sektor-cip.is-on {
+  border-color: var(--accent);
+  /* Metin rengi olarak --accent açık temada 4,27:1'de kalıyor; --accent-text
+     tam bu iş için var (6,93:1). */
+  color: var(--accent-text);
+}
+.radar__sektor-cip input {
+  margin: 0;
+}
+/* Odak halkası küçük kutuda değil rozetin tamamında görünsün. */
+.radar__sektor-cip:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.radar__olcut {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 5.5rem 5.5rem;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 0;
+}
+.radar__olcut-ad {
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radar__olcut .ui-input {
+  padding: 4px var(--sp-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hazır filtreler: bir tıkla kurulan soru. */
+.radar__hazirlar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(320px, 76vw);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.radar__hazirlar button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--sp-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.radar__hazirlar button:hover {
+  background: var(--surface-1);
+}
+.radar__hazirlar .desk__muted {
+  font-size: var(--fs-xs);
+}
+
+/* Etkin filtre çipleri. */
+.radar__cipler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.radar__cipler li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-0);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.radar__cip-temizle {
+  border: none !important;
+  background: none !important;
+  padding: 0 !important;
+}
+.radar__cip-temizle button {
+  padding: 2px var(--sp-2);
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  text-decoration: underline;
+}
+/* Tablo dar panelde YATAY kayıyor: sütunları kırpmak sayıyı okunmaz yapardı
+   (aynı kusur tarayıcı tablosunda ölçülmüştü: "+%18,67" → "+%18,…"). */
+.radar__tablo {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.radar__tablo .ui-vtable__scroll {
+  overflow-x: auto;
+}
+.radar__ad.is-aktif {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Nabız: sektör rotasyonu ──────────────────────────────────────────── */
+/* "Para nereye kaydı" sorusunun tek cümlelik cevabı; tablodan önce geliyor. */
+.pulse__rotasyon {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  font-size: var(--fs-sm);
+}
+
+/* ── Sektör sekmesi: karşılaştırma grafiği ────────────────────────────── */
+/* "Bu hisse %2 düştü" eksik bir cümle; sektörü %3 düştüyse hisse iyi
+   gitmiştir. İki seri ortak tabanda (%0) yan yana. */
+.desk__sector-chart {
+  margin: var(--sp-4) 0;
+  min-width: 0;
+}
+.desk__sector-chart .desk__muted {
+  display: block;
+  margin-top: var(--sp-2);
+  font-size: var(--fs-xs);
+}
+
+/* Sütun seçici: onay kutusu + ad, tek satır. */
+.radar__sutun-secim {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 0;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+/* ── Stratejiler: tek cümlelik cevap ──────────────────────────────────── */
+/* Tablo 27 satır ve iki p-değeri gösteriyordu; ekranın başlığı tek bir soru.
+   Cevap tablodan önce ve düz cümleyle. */
+.rank__ozet {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  font-size: var(--fs-sm);
+}
+.rank__ozet.is-var {
+  border-left-color: var(--up);
+}
+.rank__ozet.is-yok {
+  border-left-color: var(--warn);
+}
+
+/* ── Sektör endeksleri ────────────────────────────────────────────────────
+   "Hangi sektör kazandırdı" tablosu. Sayılar sağa yaslı ve tabular: sütun
+   boyunca göz tek bir hizada iniyor, virgüller alt alta geliyor. */
+.sektor__ozet {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.sektor__tablo {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.sektor__tablo th,
+.sektor__tablo td {
+  padding: var(--sp-2) var(--sp-2);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  font-weight: 400;
+}
+.sektor__tablo thead th {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sektor__tablo .is-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sektor__tablo .is-up {
+  color: var(--up);
+}
+.sektor__tablo .is-down {
+  color: var(--down);
+}
+.sektor__ad {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.sektor__ad:hover {
+  text-decoration: underline;
+}
+/* Çubuk SIFIRDAN iki yöne uzuyor: orta çizgi sıfır. Tek yöne uzayan bir
+   çubukta "az kazandı" ile "az kaybetti" aynı görünürdü. */
+.sektor__bar-hucre {
+  width: 40%;
+  min-width: 120px;
+}
+.sektor__bar {
+  position: relative;
+  display: block;
+  height: 10px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.sektor__bar::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+}
+.sektor__bar > span {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 2px;
+}
+.sektor__bar > span.is-up {
+  left: 50%;
+  background: var(--up);
+}
+.sektor__bar > span.is-down {
+  right: 50%;
+  background: var(--down);
+}
+/* Telefon: çubuk sütunu düşüyor, sayı kalıyor — ölçülen değer sayıda. */
+@media (max-width: 560px) {
+  .sektor__bar-hucre {
+    display: none;
+  }
+}
+
+/* Radar dar bir panel: not sayacın altında, tam genişlikte ve küçük. */
+.radar__olculemedi {
+  margin: 0 var(--sp-3) var(--sp-2);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+}

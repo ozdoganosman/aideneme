@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { lsWrite, lsRemove, lsReadRaw } from '../storage';
+import { clickable } from './clickable';
+import { ModalShell } from './ModalShell';
 import { Candles } from '../data/types';
 import { evalPosition, StrategyResult, idxYearsAgo } from '../indicators/backtest';
 import { inflationDailyRates, inflationAvgAnnual } from '../data/inflation';
@@ -95,8 +98,8 @@ function hydrateScanCache(): void {
   if (memHydrated) return;
   memHydrated = true;
   try {
-    memDataVer = Number(localStorage.getItem(DATAVER_KEY)) || 0;
-    const obj = JSON.parse(localStorage.getItem(METRICS_KEY) || '{}') as Record<string, Record<string, ScanMetrics | null>>;
+    memDataVer = Number(lsReadRaw(DATAVER_KEY)) || 0;
+    const obj = JSON.parse(lsReadRaw(METRICS_KEY) || '{}') as Record<string, Record<string, ScanMetrics | null>>;
     for (const [sym, cell] of Object.entries(obj)) metricsMem.set(sym, new Map(Object.entries(cell)));
   } catch {
     /* ignore corrupt cache */
@@ -109,8 +112,8 @@ function invalidateIfStale(gen: number): void {
   metricsMem.clear();
   memDataVer = gen;
   try {
-    localStorage.setItem(DATAVER_KEY, String(gen));
-    localStorage.removeItem(METRICS_KEY);
+    lsWrite(DATAVER_KEY, String(gen));
+    lsRemove(METRICS_KEY);
   } catch {
     /* ignore */
   }
@@ -130,7 +133,7 @@ function persistScanCache(keepHashes: Set<string>, keepSyms: Set<string>): void 
     if (Object.keys(o).length) obj[sym] = o;
   }
   try {
-    localStorage.setItem(METRICS_KEY, JSON.stringify(obj));
+    lsWrite(METRICS_KEY, obj);
   } catch {
     /* quota — keep the in-memory cache, skip persisting */
   }
@@ -144,7 +147,7 @@ interface SavedScan {
 }
 function loadSavedScan(): SavedScan | null {
   try {
-    const raw = localStorage.getItem(ROWS_KEY);
+    const raw = lsReadRaw(ROWS_KEY);
     return raw ? (JSON.parse(raw) as SavedScan) : null;
   } catch {
     return null;
@@ -152,7 +155,7 @@ function loadSavedScan(): SavedScan | null {
 }
 function saveScan(s: SavedScan): void {
   try {
-    localStorage.setItem(ROWS_KEY, JSON.stringify(s));
+    lsWrite(ROWS_KEY, s);
   } catch {
     /* skip */
   }
@@ -364,7 +367,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
   };
 
   // Load an optimizer result into the builder so it can be tuned + saved.
-  const useCandidate = (s: CustomStrategy) =>
+  const applyCandidate = (s: CustomStrategy) =>
     setDraft({ id: '', name: s.name, buy: s.buy.map((c) => ({ ...c })), sell: s.sell.map((c) => ({ ...c })) });
 
   const setBuy = (buy: Cond[]) => setDraft((d) => ({ ...d, buy }));
@@ -476,8 +479,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onClose} className="modal" label="Stratejilerim">
         <div className="modal-head">
           <b>Stratejilerim {strats.length > 0 && `· ${strats.length}`}</b>
           <button className="row-x" onClick={onClose} title="Kapat">×</button>
@@ -627,7 +629,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
                                 </span>
                               </div>
                             </div>
-                            <button className="opt-use" onClick={() => useCandidate(o.strat)} title="Kuralı düzenleyiciye yükle">Kullan →</button>
+                            <button className="opt-use" onClick={() => applyCandidate(o.strat)} title="Kuralı düzenleyiciye yükle">Kullan →</button>
                           </div>
                         );
                       })}
@@ -743,8 +745,11 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
                       <div
                         key={t.sym + t.strat.id}
                         className="bt-srow clickable"
-                        onClick={() => onPickCombo(t.sym, t.strat)}
                         title="Hisseyi aç + grafikte göster"
+                        {...clickable(
+                          () => onPickCombo(t.sym, t.strat),
+                          `${t.sym} · ${t.strat.name} sonucunu aç`,
+                        )}
                       >
                         <div className="bt-srow-head">
                           <span className="bt-rank">{i + 1}</span>
@@ -787,8 +792,7 @@ export function Backtest({ candles, symbol, universe, strats, params, onSave, on
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -1059,7 +1063,10 @@ function Heatmap({ data }: { data: MonthRow[] }) {
       <table className="hm">
         <thead>
           <tr>
-            <th />
+            {/* Sol üst köşe: satır başlıkları (yıl) için boş hücre. */}
+            <th>
+              <span className="visually-hidden">Yıl</span>
+            </th>
             {MONTHS.map((m, i) => (
               <th key={i}>{m}</th>
             ))}

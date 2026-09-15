@@ -31,10 +31,21 @@ export function SymbolSearch({ value, symbols, onChange, onSubmit }: Props) {
 
   return (
     <div className="search" ref={wrapRef}>
+      {/* ARIA birleşik kutu (APG): odak girişte kalır, etkin seçenek
+          aria-activedescendant ile bildirilir. Seçeneklerin kendisi odak ALMAZ —
+          desen budur; ok tuşları girişte çalışır. */}
       <input
         value={value}
         placeholder="Sembol ara… (örn. BTC)"
         spellCheck={false}
+        role="combobox"
+        aria-label="Sembol ara"
+        aria-expanded={open && matches.length > 0}
+        aria-controls="sym-search-list"
+        aria-autocomplete="list"
+        aria-activedescendant={
+          open && matches.length > 0 ? `sym-search-opt-${active}` : undefined
+        }
         onChange={(e) => {
           onChange(e.target.value.toUpperCase());
           setOpen(true);
@@ -63,10 +74,14 @@ export function SymbolSearch({ value, symbols, onChange, onSubmit }: Props) {
         }}
       />
       {matches.length > 0 && (
-        <div className="search-dropdown">
+        <div className="search-dropdown" id="sym-search-list" role="listbox" aria-label="Eşleşen semboller">
           {matches.map((m, i) => (
+            // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- APG birleşik kutu deseni: seçenekler odak almaz, aria-activedescendant kullanılır
             <div
               key={m}
+              id={`sym-search-opt-${i}`}
+              role="option"
+              aria-selected={i === active}
               className={'search-item' + (i === active ? ' active' : '')}
               // onMouseDown fires before the input blurs, so the pick registers.
               onMouseDown={(e) => {

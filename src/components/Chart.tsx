@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { lsWrite, lsReadRaw } from '../storage';
 import {
   createChart,
   createSeriesMarkers,
@@ -144,7 +145,7 @@ interface FView {
 const drawKey = (sym: string) => 'borsaDraw:' + sym;
 function loadDraws(sym: string): Draw[] {
   try {
-    const v = JSON.parse(localStorage.getItem(drawKey(sym)) || 'null');
+    const v = JSON.parse(lsReadRaw(drawKey(sym)) || 'null');
     return Array.isArray(v) ? v : [];
   } catch {
     return [];
@@ -452,7 +453,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
 
   const persistDraws = useCallback(() => {
     try {
-      localStorage.setItem(drawKey(symRef.current), JSON.stringify(drawingsRef.current));
+      lsWrite(drawKey(symRef.current), drawingsRef.current);
     } catch {
       /* quota */
     }
@@ -718,7 +719,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       const n = c.length;
       const from = vr.from as number;
       const to = vr.to as number;
-      let i0 = Math.max(0, idxGte(c.time, from, n));
+      const i0 = Math.max(0, idxGte(c.time, from, n));
       let i1 = idxGte(c.time, to, n);
       if (i1 >= n || c.time[i1] > to) i1--;
       i1 = Math.min(n - 1, i1);
@@ -1054,7 +1055,10 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       markersRef.current = null;
       chart.remove();
     };
-  }, []);
+    // Bu geri çağırımların HEPSİ sabit: kendi bağımlılıkları boş (ya da yine
+    // sabit) ve durumu ref üzerinden okuyorlar. Listeye eklemek efektin tekrar
+    // koşmasına yol açmaz; kuralı susturmak yerine listeyi dürüstçe tamamlıyoruz.
+  }, [addDraw, paintDraws, persistDraws, recomputeDraw, recomputeForm, removeDraw]);
 
   // Load data + compute indicators; cache last values for the (non-hover) legend.
   useEffect(() => {
@@ -1159,8 +1163,7 @@ export const Chart = forwardRef<ChartHandle, Props>(function Chart(
       bands[k].applyOptions({ baseValue: { type: 'price', price: candles.close[seg.a] } });
     });
     if (lod) lod.setBands(segs.slice(0, bands.length));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strategy, candles, params]); // params → re-draw signals/bands when periods change
+  }, [strategy, candles, params]); // params → periyot değişince sinyal/bant yeniden çizilir
 
   // Portfolio average-cost line on the price pane (Portföy sekmesi açıkken).
   useEffect(() => {

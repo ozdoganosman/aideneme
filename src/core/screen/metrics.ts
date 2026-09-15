@@ -1,0 +1,396 @@
+import { adxArr, emaArr } from '../indicators/calc';
+import { atrArr, rsiArr } from '../indicators/rsi';
+import { changeSince } from '../stats/summary';
+import { sparkPoints } from '../chart/spark';
+import type { Candles } from '../data/types';
+
+/**
+ * Tarama metrikleri — saf, sembol başına bir kez hesaplanır.
+ *
+ * Referans projede tarama sonucu CI'da pişirilip `scan.json` olarak donduruluyor;
+ * kullanıcı RSI uzunluğunu değiştiremiyor. Burada metrikler parametreden
+ * türetiliyor ve Worker'da anında yeniden hesaplanıyor.
+ */
+
+export type MetricId =
+  | 'last'
+  | 'chg1'
+  | 'chg5'
+  | 'chg21'
+  | 'chg63'
+  | 'rsi'
+  | 'adx'
+  | 'emaFastGap'
+  | 'emaSlowGap'
+  | 'volRatio'
+  | 'turnover'
+  | 'atrPct'
+  | 'fromHigh';
+
+export interface ScreenParams {
+  rsiLength: number;
+  adxLength: number;
+  emaFast: number;
+  emaSlow: number;
+  atrLength: number;
+  /** Hacim oranında referans alınan ortalama penceresi. */
+  volLookback: number;
+  /** "Zirveden uzaklık" penceresi (bar). */
+  highLookback: number;
+}
+
+export const DEFAULT_SCREEN_PARAMS: ScreenParams = {
+  rsiLength: 14,
+  adxLength: 14,
+  emaFast: 20,
+  emaSlow: 50,
+  atrLength: 14,
+  volLookback: 20,
+  highLookback: 250,
+};
+
+export interface MetricDef {
+  id: string;
+  label: string;
+  unit: 'pct' | 'price' | 'ratio' | 'level' | 'money';
+  /** Provenance: metrik nasıl hesaplanıyor (parametreler yerine konur). */
+  formula: (p: ScreenParams) => string;
+  /** Değer işaretine göre renklensin mi. */
+  signed?: boolean;
+  decimals?: number;
+  /**
+   * Sütun başlığına eklenecek pencere (ör. "250 bar").
+   *
+   * Yalnızca penceresi araç çubuğunda GÖRÜNMEYEN metrikler için doldurulur:
+   * "Zirveden" başlığı tek başına, Sembol Masası'ndaki tarihsel zirveyle aynı
+   * şeyi ölçüyormuş gibi okunuyordu — oysa biri son 250 barın en yükseğine,
+   * öteki tüm geçmişin kapanış zirvesine bakıyor.
+   */
+  windowLabel?: (p: ScreenParams) => string;
+}
+
+export const METRIC_DEFS: MetricDef[] = [
+  {
+    id: 'last',
+    label: 'Fiyat',
+    unit: 'price',
+    formula: () => 'Son barın kapanışı',
+    decimals: 2,
+  },
+  {
+    id: 'chg1',
+    label: '1 gün',
+    unit: 'pct',
+    signed: true,
+    formula: () => '(kapanış ÷ önceki kapanış − 1) × 100',
+  },
+  {
+    id: 'chg5',
+    label: '1 hafta',
+    unit: 'pct',
+    signed: true,
+    formula: () => '(kapanış ÷ 7 takvim günü öncesinin ilk kapanışı − 1) × 100',
+  },
+  {
+    id: 'chg21',
+    label: '1 ay',
+    unit: 'pct',
+    signed: true,
+    formula: () => '(kapanış ÷ 30 takvim günü öncesinin ilk kapanışı − 1) × 100',
+  },
+  {
+    id: 'chg63',
+    label: '3 ay',
+    unit: 'pct',
+    signed: true,
+    formula: () => '(kapanış ÷ 90 takvim günü öncesinin ilk kapanışı − 1) × 100',
+  },
+  {
+    id: 'rsi',
+    label: 'RSI',
+    unit: 'level',
+    formula: (p) => `Wilder RSI, uzunluk ${p.rsiLength}`,
+  },
+  {
+    id: 'adx',
+    label: 'ADX',
+    unit: 'level',
+    formula: (p) => `Wilder ADX, uzunluk ${p.adxLength} — trend gücü (yön değil)`,
+  },
+  {
+    id: 'emaFastGap',
+    label: 'EMA hızlı fark',
+    unit: 'pct',
+    signed: true,
+    formula: (p) => `(kapanış ÷ EMA${p.emaFast} − 1) × 100`,
+  },
+  {
+    id: 'emaSlowGap',
+    label: 'EMA yavaş fark',
+    unit: 'pct',
+    signed: true,
+    formula: (p) => `(kapanış ÷ EMA${p.emaSlow} − 1) × 100`,
+  },
+  {
+    id: 'volRatio',
+    label: 'Hacim oranı',
+    unit: 'ratio',
+    windowLabel: (p) => `${p.volLookback} bar`,
+    formula: (p) => `Son bar hacmi ÷ son ${p.volLookback} barın ortalama hacmi`,
+  },
+  {
+    id: 'turnover',
+    label: 'İşlem değeri',
+    unit: 'money',
+    windowLabel: (p) => `${p.volLookback} bar ort.`,
+    formula: (p) =>
+      `Son ${p.volLookback} barın (kapanış × hacim) ortalaması — günlük ortalama işlem değeri`,
+  },
+  {
+    id: 'atrPct',
+    label: 'ATR %',
+    unit: 'pct',
+    formula: (p) => `ATR(${p.atrLength}) ÷ kapanış × 100 — bar içi oynaklık`,
+  },
+  {
+    id: 'fromHigh',
+    label: 'Zirveden',
+    unit: 'pct',
+    signed: true,
+    windowLabel: (p) => `${p.highLookback} bar`,
+    formula: (p) => `(kapanış ÷ son ${p.highLookback} barın en yükseği − 1) × 100`,
+  },
+];
+
+export const METRIC_BY_ID = new Map(METRIC_DEFS.map((d) => [d.id, d]));
+
+/**
+ * Metrik değerleri string anahtarlı: teknik metrikler (bu dosya) ve temel
+ * metrikler (fundamentalMetrics.ts) aynı satırda yaşar, filtre/sıralama
+ * makinesi ikisini ayırt etmek zorunda kalmaz.
+ */
+export type MetricValues = Record<string, number>;
+
+export interface ScreenRow {
+  symbol: string;
+  values: MetricValues;
+  /** Hesaba giren bar sayısı — az barlı sembol sonuçları yanıltmasın. */
+  bars: number;
+  /** Sektör (varsa) — sayısal olmadığı için `values` içinde duramaz. */
+  sector?: string;
+  /**
+   * Tablo içi mini grafik için seyreltilmiş kapanış serisi.
+   *
+   * Sayı kesindir ama ŞEKİL okunur: 14 sütun sayıya bakıp "bu hisse nasıl
+   * hareket ediyor" sorusunu cevaplamak için tek tek tıklamak gerekiyordu.
+   * Worker'dan geçtiği için burada duruyor — ekran tarafında yeniden
+   * hesaplamak 200 sembolün tam serisini ana iş parçacığına taşımak demekti.
+   */
+  spark?: number[];
+}
+
+const pctChange = (c: Candles, back: number): number => {
+  const i = c.length - 1 - back;
+  if (i < 0) return NaN;
+  const base = c.close[i];
+  return base > 0 ? (c.close[c.length - 1] / base - 1) * 100 : NaN;
+};
+
+/** Bir sembolün tüm metrikleri. Yetersiz veride null (satır hiç üretilmez). */
+export function metricsFor(
+  symbol: string,
+  c: Candles,
+  params: ScreenParams = DEFAULT_SCREEN_PARAMS,
+): ScreenRow | null {
+  const n = c.length;
+  if (n < 2) return null;
+
+  const last = c.close[n - 1];
+  const rsi = rsiArr(c.close, params.rsiLength);
+  const adx = adxArr(c, params.adxLength);
+  const atr = atrArr(c.high, c.low, c.close, params.atrLength);
+  const fast = emaArr(c.close, params.emaFast);
+  const slow = emaArr(c.close, params.emaSlow);
+
+  let volSum = 0;
+  let turnoverSum = 0;
+  let volCount = 0;
+  for (let i = Math.max(0, n - params.volLookback); i < n; i++) {
+    volSum += c.volume[i];
+    // İşlem DEĞERİ, adet değil: "hacim oranı" göreli bir ölçü (bugün normale
+    // göre ne kadar), likidite ise mutlak bir eşiktir. 1,40× hacim oranı,
+    // günde 50 bin TL dönen bir sembolde de görülür — o sembolde bulunan
+    // strateji gerçekte uygulanamaz.
+    turnoverSum += c.close[i] * c.volume[i];
+    volCount++;
+  }
+  const avgVol = volCount ? volSum / volCount : NaN;
+  const turnover = volCount ? turnoverSum / volCount : NaN;
+
+  let high = -Infinity;
+  for (let i = Math.max(0, n - params.highLookback); i < n; i++) {
+    if (c.high[i] > high) high = c.high[i];
+  }
+
+  return {
+    symbol,
+    bars: n,
+    // Son bir yıl: tablodaki "1 ay" sütunundan daha geniş bir bağlam veriyor
+    // ama tüm geçmişi sıkıştırıp son hareketi görünmez kılmıyor.
+    spark: sparkPoints(c.close.subarray(Math.max(0, n - 250)), 40),
+    values: {
+      last,
+      chg1: pctChange(c, 1),
+      // Dönem getirileri TAKVİM penceresi: Sembol Masası ve Rapor da aynı
+      // pencereyi kullanıyor. Burada "21 bar", orada "30 gün" olsaydı aynı
+      // sembol iki ekranda iki farklı "1 aylık getiri" gösterirdi.
+      chg5: changeSince(c, 7),
+      chg21: changeSince(c, 30),
+      chg63: changeSince(c, 90),
+      rsi: rsi[n - 1],
+      adx: adx[n - 1],
+      emaFastGap: fast[n - 1] > 0 ? (last / fast[n - 1] - 1) * 100 : NaN,
+      emaSlowGap: slow[n - 1] > 0 ? (last / slow[n - 1] - 1) * 100 : NaN,
+      volRatio: avgVol > 0 ? c.volume[n - 1] / avgVol : NaN,
+      turnover,
+      atrPct: last > 0 ? (atr[n - 1] / last) * 100 : NaN,
+      fromHigh: high > 0 ? (last / high - 1) * 100 : NaN,
+    },
+  };
+}
+
+// ── Filtre ───────────────────────────────────────────────────────────────────
+
+export type Operator = 'gt' | 'lt' | 'between';
+
+export interface Rule {
+  /** Teknik ya da temel metrik kimliği. */
+  metric: string;
+  op: Operator;
+  a: number;
+  b?: number;
+}
+
+export interface ScreenSpec {
+  rules: Rule[];
+  sort?: { metric: string; dir: 'asc' | 'desc' };
+  /** Bu kadar bardan az veriye sahip semboller elenir. */
+  minBars?: number;
+  /**
+   * Seçili sektörler. Boş/verilmemiş = sektöre göre eleme yok.
+   *
+   * Sayısal kural olarak modellenmedi: sektör kategoriktir, "> 3" gibi bir
+   * karşılaştırması yoktur ve sayıya çevirmek sıralamayı anlamlıymış gibi
+   * gösterirdi.
+   */
+  sectors?: string[];
+}
+
+/** Tek satır kuralları geçiyor mu? NaN metrik ASLA geçmez (bilinmeyen ≠ uygun). */
+export function passes(row: ScreenRow, rules: Rule[]): boolean {
+  for (const rule of rules) {
+    const v = row.values[rule.metric];
+    if (!Number.isFinite(v)) return false;
+    if (rule.op === 'gt' && !(v > rule.a)) return false;
+    if (rule.op === 'lt' && !(v < rule.a)) return false;
+    if (rule.op === 'between') {
+      const lo = Math.min(rule.a, rule.b ?? rule.a);
+      const hi = Math.max(rule.a, rule.b ?? rule.a);
+      if (v < lo || v > hi) return false;
+    }
+  }
+  return true;
+}
+
+/** Filtrele + sırala. Girdi dizisi değiştirilmez. */
+export function applyScreen(rows: ScreenRow[], spec: ScreenSpec): ScreenRow[] {
+  const minBars = spec.minBars ?? 0;
+  // Sektör filtresi seçiliyse sektörü BİLİNMEYEN sembol de elenir: "bilinmiyor"
+  // seçilen sektöre ait sayılamaz (NaN'ın kuralı geçmemesiyle aynı ilke).
+  const wanted = spec.sectors && spec.sectors.length > 0 ? new Set(spec.sectors) : null;
+  const out = rows.filter(
+    (r) =>
+      r.bars >= minBars &&
+      (!wanted || (r.sector !== undefined && wanted.has(r.sector))) &&
+      passes(r, spec.rules),
+  );
+  if (!spec.sort) return out;
+
+  const { metric, dir } = spec.sort;
+  const sign = dir === 'asc' ? 1 : -1;
+  return out.sort((x, y) => {
+    const a = x.values[metric];
+    const b = y.values[metric];
+    // NaN her zaman sona — "bilinmiyor" listenin başında durmamalı.
+    if (!Number.isFinite(a)) return 1;
+    if (!Number.isFinite(b)) return -1;
+    return (a - b) * sign;
+  });
+}
+
+/**
+ * Hiçbir sembolde verisi olmayan kural metrikleri.
+ *
+ * NaN'ın hiçbir kuralı geçmemesi doğru bir ilke ama tek başına yanıltıcı bir
+ * ekran üretiyor: metriğin verisi HİÇ yoksa sonuç boş çıkıyor ve arayüz
+ * "Kriterlere uyan sembol yok" diyor — yani kullanıcıyı kendi eşiğini
+ * gevşetmeye yönlendiriyor, oysa gevşetmek de işe yaramayacak.
+ *
+ * Ölçüldü: yayındaki 559 sembolün TAMAMINDA `currentAssets` ve
+ * `operatingCashFlow` boş (kaynak bu kalemleri vermiyor). Yani "Cari oran"
+ * filtresi hangi eşikle kurulursa kurulsun sıfır sonuç döndürüyor ve neden
+ * olduğunu söylemiyor.
+ *
+ * Ayrım önemli: "hiçbir sembolde yok" ile "bu eşiği geçen yok" ayrı şeyler.
+ * Birincisi veri boşluğu, ikincisi kullanıcının kararı.
+ */
+export function metricsWithoutData(rows: ScreenRow[], rules: Rule[]): string[] {
+  if (rows.length === 0) return [];
+  const out: string[] = [];
+  for (const rule of rules) {
+    if (out.includes(rule.metric)) continue;
+    if (!rows.some((r) => Number.isFinite(r.values[rule.metric]))) out.push(rule.metric);
+  }
+  return out;
+}
+
+export interface OlculemeyenOzet {
+  /** Kuralların istediği ölçüt en az birinde OLMAYAN sembol sayısı. */
+  count: number;
+  /** Hangi ölçütte kaç sembol ölçülemedi — çoktan aza. */
+  byMetric: { metric: string; count: number }[];
+}
+
+/**
+ * Kurallar yüzünden değil, ÖLÇÜLEMEDİĞİ için elenen semboller.
+ *
+ * Neden gerekiyor: "582 sembolden 10 tanesi ölçütlere uyuyor" cümlesi 572
+ * sembolün SINANDIĞINI ve kaldığını söylüyor. Oysa NaN hiçbir kuralı geçmiyor,
+ * yani ölçüsü olmayan sembol de "uymadı" kovasına düşüyor. Gerçek veride
+ * ölçüldü: 582 hissenin yalnızca 293'ünün F/K'sı var (zarar edende F/K
+ * tanımsız, 23 sembolde tablo hiç yok). Yani bir F/K kuralı, kullanıcı fark
+ * etmeden evrenin yarısını sessizce eliyor.
+ *
+ * Bu, Karne'de zaten uygulanan ilkenin aynısı: payda küçülünce bunu söyle.
+ *
+ * Sektör ve minimum bar elemesi BURAYA girmiyor — onlar kullanıcının açıkça
+ * kurduğu kapsam, eksik ölçü değil.
+ */
+export function olculemeyen(rows: ScreenRow[], rules: Rule[]): OlculemeyenOzet {
+  if (rules.length === 0) return { count: 0, byMetric: [] };
+  const sayac = new Map<string, number>();
+  let count = 0;
+  for (const row of rows) {
+    let eksikVar = false;
+    for (const rule of rules) {
+      if (Number.isFinite(row.values[rule.metric])) continue;
+      eksikVar = true;
+      sayac.set(rule.metric, (sayac.get(rule.metric) ?? 0) + 1);
+    }
+    if (eksikVar) count++;
+  }
+  const byMetric = [...sayac.entries()]
+    .map(([metric, n]) => ({ metric, count: n }))
+    .sort((a, b) => b.count - a.count || a.metric.localeCompare(b.metric));
+  return { count, byMetric };
+}
