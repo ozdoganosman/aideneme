@@ -4,41 +4,47 @@ BIST sektör sınıflandırması üreticisi.
 
     public/data/bist/sectors.json   {"source": ..., "generated": ..., "of": {SEMBOL: sektör}}
 
-Neden ayrı bir dosya: nabız ekranındaki para akışı şimdiye kadar yalnızca
-DAVRANIŞ kümelerine (birlikte hareket edenler) bakabiliyordu. Bu iyi bir
-ölçüdür ama "endüstriden para akışı" sorusunun cevabı değildir; onun için
-resmî sınıflandırma gerekir.
+KAYNAK: Borsa İstanbul'un KENDİ yayımladığı endeks bileşen dosyası —
+`https://www.borsaistanbul.com/datum/hisse_endeks_ds.csv`. Her satır bir
+(endeks, bileşen hisse) çifti. Bir hissenin BIST'in alt sektör endekslerinden
+hangisinde olduğu, o hissenin sektörüdür; tahmin değil, borsanın kendi
+listesi.
 
-Dürüstlük sınırı: HİÇBİR kaynak sektör alanı döndürmezse dosya YAZILMAZ.
-Eksik dosya, arayüzde "sektör sınıflandırması yok, davranış kümeleri
-gösteriliyor" olarak görünür; tahmini bir sınıflandırma üretmek — örneğin
-şirket unvanından sektör çıkarmak — olmayan bilgiyi varmış gibi göstermek
-olur. Şirket adı sektör DEĞİLDİR.
+BU DOSYAYI NASIL BULDUM — önceki üç deneme TAHMİNDİ ve üçü de `HTTP 401`
+döndürdü (İş Yatırım'da `HisseYuzeysel`, `IndexCompanies`,
+`SektorKarsilastirma`; koşu 34922818979). Uç nokta adı uydurmak mühendislik
+değil. Doğru hamle, fiyat verimizi ZATEN çeken kütüphanenin (borsapy)
+kaynağını okumaktı: `borsapy/_providers/bist_index.py` bu CSV'yi indiriyor.
+Yani çalıştığı kanıtlı bir yol vardı ve ben onu aramak yerine ad tahmin
+ediyordum.
 
-Birden çok aday kaynak sırayla deneniyor ve her biri AYRI raporlanıyor:
-"erişilemedi", "cevap boş" ve "geldi ama sektör alanı yok" üç farklı arıza;
-tek satırlık bir hata kaydı bunları birbirine karıştırıyordu.
+Kütüphane BAĞIMLILIK OLARAK EKLENMEDİ: `onizleme` işinde borsapy kurulu değil
+ve tek bir CSV için kurmak 30 saniyelik bir adımı dakikalara çıkarırdı. URL ve
+kolon adları buraya alındı; `--self-test` kolon sözleşmesini çevrimdışı
+koruyor.
 
-BİLİNEN DURUM (15 Eylül 2026, GitHub koşucusu, koşu 34922818979):
-üç adayın ÜÇÜ de tarayıcı başlıklarıyla bile `HTTP 401 Unauthorized`
-döndürüyor. Aynı alan adındaki `Data.aspx/MaliTablo` ve `Data.aspx/HisseTekil`
-uç noktaları çalışıyor (finansal tabloları oradan çekiyoruz), yani engellenen
-ağ ya da başlık değil: bu metot adları dışarıya açık değil. Buradaki üç ad
-TAHMİNDİ ve üçü de tutmadı.
+SEKTÖR LİSTESİ TEK YERDE: 23 alt sektör endeksinin kodu ve Türkçe adı
+`src/core/screen/sectorIndices.ts` içinde yaşıyor ve bu betik ONU okuyor.
+İkinci bir liste tutmak, bu oturumda beş kez yaptığım "listelerden biri
+güncellenmedi" kusurunun aynısı olurdu. `--self-test` listenin okunabildiğini
+ve beklenen omurgayı taşıdığını doğruluyor; TS tarafı değişip burası
+okuyamaz hâle gelirse `verify` işi kırılıyor.
 
-Sıradaki adım tahmin etmek DEĞİL: erişilebilir olduğu KANITLI bir uç noktanın
-sektör alanı taşıyıp taşımadığına bakmak ya da sınıflandırmayı elde hazır bir
-dosyadan almak. Tahmin edilen uç nokta adlarıyla CI turu harcamak mühendislik
-değil.
+DIŞLANANLAR: XU100/XU030 gibi ANA endeksler ve XUSIN/XUMAL gibi ÜST kümeler
+listede yok. Aynı şirket hem XBANK'ta hem XUMAL'da; ikisini de sektör saymak
+şirketi iki kez saymak olurdu.
 
 Çalıştırma:
-    python scripts/build_sectors.py [--self-test]
+    python scripts/build_sectors.py [--self-test] [--csv DOSYA]
 """
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -47,133 +53,116 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "public" / "data" / "bist" / "sectors.json"
 SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
+SEKTOR_TS = ROOT / "src" / "core" / "screen" / "sectorIndices.ts"
 
-# ADAY KAYNAKLAR — sırayla denenir, İLK dolu cevap kazanır.
-#
-# Neden liste: tek uç nokta 401 döndürüyordu ve tek satırlık "erişilemedi"
-# kaydı hangi katmanın reddettiğini söylemiyordu (ölçüldü: iş akışı adımı
-# `continue-on-error` olduğu için YEŞİL görünüyor, dosya ise aylarca
-# yazılmıyordu). Artık her aday ayrı ayrı raporlanıyor.
-#
-# Sıra kasıtlı: `HisseYuzeysel` sembol başına özet satır döndürdüğü için
-# sektör alanını da taşır; `IndexCompanies` yalnızca endeks üyeliğini verir.
-KAYNAKLAR: tuple[tuple[str, str], ...] = (
-    (
-        "İş Yatırım — hisse yüzeysel",
-        "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/Data.aspx/"
-        "HisseYuzeysel?hisse=&endeks=09&sektor=",
-    ),
-    (
-        "İş Yatırım — endeks şirketleri",
-        "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/Data.aspx/"
-        "IndexCompanies?endeks=09",
-    ),
-    (
-        "İş Yatırım — sektör karşılaştırma",
-        "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/Data.aspx/"
-        "SektorKarsilastirma?endeks=09",
-    ),
-)
+KAYNAK_URL = "https://www.borsaistanbul.com/datum/hisse_endeks_ds.csv"
+KAYNAK_ADI = "Borsa İstanbul — endeks bileşenleri (hisse_endeks_ds.csv)"
 
-# Tarayıcı başlıkları: kaynak, kütüphanesiz düz isteklere 401 döndürüyor
-# (ölçüldü — GitHub koşucusunda `Python-urllib` ile 401 Unauthorized).
-# Aynı uç noktalar tarayıcıdan açık; eksik olan kimlik değil, başlıklar.
+# Tarayıcı başlığı: kütüphanesiz düz `Python-urllib` isteklerini reddeden
+# kaynaklar gördük (İş Yatırım 401 verdi). Bu kaynakta gerekip gerekmediği
+# ölçülmedi; göndermenin bedeli yok.
 BASLIKLAR = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0 Safari/537.36"
     ),
-    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept": "text/csv,text/plain,*/*",
     "Accept-Language": "tr-TR,tr;q=0.9",
-    "Referer": "https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/default.aspx",
-    "X-Requested-With": "XMLHttpRequest",
 }
 
-SOURCE_URL = KAYNAKLAR[0][1]
-SOURCE_NAME = KAYNAKLAR[0][0]
+# CSV kolon adları (borsapy'nin okuduğu sözleşme).
+KOLON_ENDEKS = "ENDEKS KODU"
+KOLON_BILESEN = "BILESEN KODU"
 
-# Kaynakta sektör alanı sürüme göre farklı adlarla geliyor; ilk eşleşen alınır.
-SECTOR_KEYS = (
-    "SECTOR",
-    "SEKTOR",
-    "SEKTOR_ADI",
-    "Sektor",
-    "SektorAdi",
-    "sector",
-    "sektor",
-    "IndustryName",
-)
-SYMBOL_KEYS = (
-    "CODE",
-    "HISSE_KODU",
-    "SEMBOL",
-    "Kod",
-    "HisseKodu",
-    "Sembol",
-    "code",
-    "symbol",
-)
+# Endeks kodu deseni. İkinci başlık satırını (İngilizce kolon adları) ve boş
+# satırları AYIKLAR: "INDEX CODE" bu desene uymuyor. Ayrı bir "kaçıncı satırı
+# atla" kuralından daha sağlam — dosyaya bir satır eklenirse bozulmuyor.
+ENDEKS_DESENI = re.compile(r"^X[A-Z0-9]{3,5}$")
 
 
-def pick(record: dict, keys: tuple[str, ...]) -> str | None:
-    """Kayıttan ilk dolu alanı seçer; hiçbiri yoksa None."""
-    for key in keys:
-        value = record.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return None
-
-
-def parse_records(records: list[dict], known: set[str] | None = None) -> dict[str, str]:
+def sektor_listesi(ts_path: Path = SEKTOR_TS) -> dict[str, str]:
     """
-    Ham kayıtları {SEMBOL: sektör} sözlüğüne çevirir.
+    `sectorIndices.ts` içindeki `BIST_SEKTOR_ENDEKSLERI` → {KOD: ad}.
 
-    Ağ ERİŞİMİ YOK — saf dönüşüm, bu yüzden `--self-test` ile çevrimdışı
-    doğrulanabiliyor. Sembolü ya da sektörü okunamayan kayıt ATLANIR; boş
-    string yazmak "sektörü yok" ile "okunamadı"yı birbirine karıştırırdı.
+    TS'i okumak kırılgan görünüyor ama ALTERNATİFİ daha kötü: 23 kodu ve
+    Türkçe adı ikinci bir dosyada tutmak. Bu oturumda beş kez aynı kusuru
+    yaptım — iki liste vardı, biri güncellendi, öteki unutuldu. Tek liste
+    kalsın; okunamazsa `--self-test` bağırıyor.
     """
-    out: dict[str, str] = {}
-    for record in records:
-        if not isinstance(record, dict):
-            continue
-        symbol = pick(record, SYMBOL_KEYS)
-        sector = pick(record, SECTOR_KEYS)
-        if not symbol or not sector:
-            continue
-        symbol = symbol.upper()
-        if known is not None and symbol not in known:
-            continue
-        out[symbol] = sector
-    return out
+    metin = ts_path.read_text(encoding="utf-8")
+    govde = re.search(
+        r"BIST_SEKTOR_ENDEKSLERI[^=]*=\s*\[(.*?)\];", metin, re.S
+    )
+    if not govde:
+        raise RuntimeError(f"{ts_path.name}: BIST_SEKTOR_ENDEKSLERI listesi bulunamadı")
+    ciftler = re.findall(r"\{\s*kod:\s*'([^']+)'\s*,\s*ad:\s*'([^']+)'\s*\}", govde.group(1))
+    if not ciftler:
+        raise RuntimeError(f"{ts_path.name}: liste okundu ama kod/ad çifti çıkmadı")
+    return {kod: ad for kod, ad in ciftler}
 
 
-def fetch_records(url: str = SOURCE_URL, timeout: int = 30) -> list[dict]:
+def csv_satirlari(metin: str) -> list[dict[str, str]]:
+    """
+    Noktalı virgülle ayrılmış CSV → kayıt listesi.
+
+    Ağ ERİŞİMİ YOK; `--self-test` bunu çevrimdışı doğruluyor.
+    """
+    okuyucu = csv.DictReader(io.StringIO(metin), delimiter=";")
+    return [{(k or "").strip(): (v or "").strip() for k, v in satir.items()} for satir in okuyucu]
+
+
+def eslesmeler(
+    kayitlar: list[dict[str, str]],
+    sektorler: dict[str, str],
+    bilinen: set[str] | None = None,
+) -> tuple[dict[str, str], dict[str, list[str]]]:
+    """
+    Kayıtlar → ({SEMBOL: sektör adı}, {SEMBOL: çakışan endeks kodları}).
+
+    ÇAKIŞMA GERÇEK BİR OLASILIK: bir hisse birden çok alt sektör endeksinde
+    görünebilir. O sembol sektörsüz bırakılıyor ve ayrıca raporlanıyor —
+    ikisinden birini seçmek, veri söylemediği hâlde bir tercih uydurmak
+    olurdu. Kaç tane çıktığı özet satırında yazıyor.
+    """
+    uyeler: dict[str, list[str]] = {}
+    for kayit in kayitlar:
+        kod = kayit.get(KOLON_ENDEKS, "").upper()
+        if not ENDEKS_DESENI.match(kod) or kod not in sektorler:
+            continue
+        sembol = kayit.get(KOLON_BILESEN, "").upper()
+        # ".E" (Pay Piyasası) son eki kaynakta var, sembol listemizde yok.
+        sembol = re.sub(r"\.[A-Z]$", "", sembol)
+        if not sembol:
+            continue
+        if bilinen is not None and sembol not in bilinen:
+            continue
+        kodlar = uyeler.setdefault(sembol, [])
+        if kod not in kodlar:
+            kodlar.append(kod)
+
+    harita: dict[str, str] = {}
+    cakismalar: dict[str, list[str]] = {}
+    for sembol, kodlar in uyeler.items():
+        if len(kodlar) == 1:
+            harita[sembol] = sektorler[kodlar[0]]
+        else:
+            cakismalar[sembol] = sorted(kodlar)
+    return harita, cakismalar
+
+
+def indir(url: str = KAYNAK_URL, timeout: int = 30) -> str:
     request = urllib.request.Request(url, headers=BASLIKLAR)
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    return payload_kayitlari(payload)
-
-
-def payload_kayitlari(payload: object) -> list[dict]:
-    """
-    Cevabı kayıt listesine indirger.
-
-    Ağ ERİŞİMİ YOK — `--self-test` bunu çevrimdışı doğruluyor. Uç nokta
-    sürümüne göre düz liste, `{"value": [...]}` ya da ASP.NET'in `{"d": ...}`
-    sarmalıyla dönebiliyor; `d` bir kez daha sarmalanmış olabiliyor.
-    """
-    for _ in range(3):
-        if isinstance(payload, list):
-            return [r for r in payload if isinstance(r, dict)]
-        if not isinstance(payload, dict):
-            return []
-        for key in ("value", "d", "data", "Data"):
-            if key in payload:
-                payload = payload[key]
-                break
-        else:
-            return []
-    return []
+        ham = response.read()
+    # Kaynak Türkçe metni Windows-1254 ile yayımlayabiliyor. Kod ve sembol
+    # kolonları ASCII olduğu için çözüm hatası SONUCU etkilemiyor; yine de
+    # doğru çözüp tanı çıktısını okunur tutuyoruz.
+    for kodlama in ("utf-8-sig", "cp1254", "latin-1"):
+        try:
+            return ham.decode(kodlama)
+        except UnicodeDecodeError:
+            continue
+    return ham.decode("utf-8", errors="replace")
 
 
 def known_symbols() -> set[str]:
@@ -183,53 +172,12 @@ def known_symbols() -> set[str]:
     return {s["name"].upper() for s in data.get("stocks", []) if s.get("name")}
 
 
-def self_test() -> int:
-    sample = [
-        {"CODE": "garan", "SECTOR": "Bankacılık"},
-        {"Kod": "EREGL", "Sektor": "Demir Çelik"},
-        {"CODE": "NOSECTOR"},
-        {"SECTOR": "Kimya"},
-        "bozuk kayıt",
-        {"CODE": "XXXXX", "SECTOR": "Bilinmeyen"},
-    ]
-    parsed = parse_records(sample, known={"GARAN", "EREGL"})
-    assert parsed == {"GARAN": "Bankacılık", "EREGL": "Demir Çelik"}, parsed
-
-    # Bilinen sembol listesi verilmezse filtreleme yapılmaz.
-    parsed_all = parse_records(sample)
-    assert set(parsed_all) == {"GARAN", "EREGL", "XXXXX"}, parsed_all
-
-    # Sektörü okunamayan kayıt boş string ile YAZILMAZ.
-    assert "NOSECTOR" not in parsed_all
-
-    # Kaynak sürümüne göre farklı alan adları: HisseYuzeysel `HISSE_KODU`
-    # + `SEKTOR` kullanıyor, IndexCompanies `CODE` + `SECTOR`.
-    yuzeysel = parse_records([{"HISSE_KODU": "thyao", "SEKTOR": "Ulaştırma"}])
-    assert yuzeysel == {"THYAO": "Ulaştırma"}, yuzeysel
-
-    # Sarmal çözümü: düz liste, {"value": [...]}, ASP.NET {"d": ...} ve
-    # {"d": {"value": [...]}} — dördü de aynı kayıt listesine inmeli.
-    kayit = [{"CODE": "GARAN", "SECTOR": "Bankacılık"}]
-    for sarmal in (kayit, {"value": kayit}, {"d": kayit}, {"d": {"value": kayit}}):
-        assert payload_kayitlari(sarmal) == kayit, sarmal
-    # Tanınmayan sarmal sessizce boş liste: "kayıt yok" ile "biçim bilinmiyor"
-    # ayrımını çağıran taraf (dene) ayrı satırlarla raporluyor.
-    assert payload_kayitlari({"bilinmeyen": kayit}) == []
-    assert payload_kayitlari("metin") == []
-    # Sözlük olmayan öğeler AYIKLANIYOR: parse_records'a çöp girmesin.
-    assert payload_kayitlari([*kayit, "bozuk", 7]) == kayit
-
-    print("build_sectors self-test: tamam")
-    return 0
-
-
 def ozet_yaz(satir: str) -> None:
     """
     İş akışı özetine tek satır ekler.
 
     Neden: adım `continue-on-error` olduğu için eksik sınıflandırma koşu
-    sayfasında YEŞİL görünüyordu ve fark edilmesi aylar aldı. Özet satırı
-    koşu sayfasının en üstünde duruyor.
+    sayfasında YEŞİL görünüyordu ve fark edilmesi aylar aldı.
     """
     yol = os.environ.get("GITHUB_STEP_SUMMARY")
     if not yol:
@@ -241,69 +189,126 @@ def ozet_yaz(satir: str) -> None:
         pass
 
 
-def dene(adlar: tuple[tuple[str, str], ...], known: set[str] | None) -> tuple[str, dict[str, str]] | None:
-    """
-    Adayları sırayla dener; İLK dolu eşlemeyi döndürür.
+ORNEK_CSV = """ENDEKS KODU;ENDEKS ADI;BILESEN KODU;BULTEN_ADI
+INDEX CODE;INDEX NAME;COMPONENT CODE;BULLETIN NAME
+XBANK;BIST BANKA;GARAN.E;GARANTI BANKASI
+XBANK;BIST BANKA;AKBNK.E;AKBANK
+XU100;BIST 100;GARAN.E;GARANTI BANKASI
+XUMAL;BIST MALI;GARAN.E;GARANTI BANKASI
+XGIDA;BIST GIDA, ICECEK;ULKER.E;ULKER BISKUVI
+XULAS;BIST ULASTIRMA;THYAO.E;TURK HAVA YOLLARI
+XTCRT;BIST TICARET;THYAO.E;TURK HAVA YOLLARI
+XBLSM;BIST BILISIM;YOKBU.E;LISTEMIZDE OLMAYAN
+;;;
+"""
 
-    Her aday için AYRI bir tanı satırı basılıyor: "erişilemedi" ile
-    "erişildi ama sektör alanı yok" bambaşka iki arıza ve tek satırlık
-    kayıt bunları birbirine karıştırıyordu.
-    """
-    for ad, url in adlar:
-        try:
-            records = fetch_records(url)
-        except Exception as err:  # noqa: BLE001 — kaynak hatası ölümcül değil
-            print(f"  [{ad}] erişilemedi: {err}", file=sys.stderr)
-            continue
-        if not records:
-            print(f"  [{ad}] cevap boş ya da beklenmeyen biçimde", file=sys.stderr)
-            continue
-        mapping = parse_records(records, known=known)
-        if not mapping:
-            alanlar = sorted(records[0]) if isinstance(records[0], dict) else []
-            print(
-                f"  [{ad}] {len(records)} kayıt geldi ama sektör okunamadı; "
-                f"alanlar: {', '.join(alanlar[:12]) or 'yok'}",
-                file=sys.stderr,
-            )
-            continue
-        print(f"  [{ad}] {len(mapping)} sembol okundu", file=sys.stderr)
-        return ad, mapping
-    return None
+
+def self_test() -> int:
+    sektorler = sektor_listesi()
+    # Omurga: liste TS'ten okunabiliyor ve bilinen çekirdek orada.
+    assert len(sektorler) >= 20, len(sektorler)
+    assert sektorler.get("XBANK") == "Banka", sektorler.get("XBANK")
+    assert sektorler.get("XGIDA") == "Gıda, İçecek", sektorler.get("XGIDA")
+    # ANA endeksler ve ÜST kümeler sektör sayılmamalı.
+    for disarida in ("XU100", "XU030", "XUSIN", "XUMAL", "XUTUM"):
+        assert disarida not in sektorler, disarida
+
+    kayitlar = csv_satirlari(ORNEK_CSV)
+    harita, cakismalar = eslesmeler(
+        kayitlar, sektorler, bilinen={"GARAN", "AKBNK", "ULKER", "THYAO"}
+    )
+
+    # ".E" son eki düşüyor, sektör adı TS listesinden geliyor.
+    assert harita["GARAN"] == "Banka", harita
+    assert harita["AKBNK"] == "Banka", harita
+    assert harita["ULKER"] == "Gıda, İçecek", harita
+
+    # XU100/XUMAL üyeliği GARAN'ı çakışma yapmamalı: ikisi de sektör değil.
+    assert "GARAN" not in cakismalar, cakismalar
+
+    # İki ALT sektörde birden görünen sembol sektörsüz kalıyor ve raporlanıyor.
+    assert "THYAO" not in harita, harita
+    assert cakismalar["THYAO"] == ["XTCRT", "XULAS"], cakismalar
+
+    # Sembol listemizde olmayan bileşen yazılmıyor.
+    assert "YOKBU" not in harita, harita
+
+    # İkinci başlık satırı (İngilizce) ve boş satır ayıklanıyor: endeks kodu
+    # desene uymuyor.
+    assert "INDEX CODE" not in {k for k in harita}, harita
+    assert all(s for s in harita), harita
+
+    # Bilinen sembol listesi verilmezse filtre yok.
+    hepsi, _ = eslesmeler(kayitlar, sektorler)
+    assert "YOKBU" in hepsi, hepsi
+
+    print("build_sectors self-test: tamam")
+    return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
-    parser.add_argument("--url", help="Tek bir kaynağı zorlar (adaylar denenmez).")
+    parser.add_argument("--csv", help="Ağ yerine yerel bir CSV dosyası okur.")
     args = parser.parse_args()
 
     if args.self_test:
         return self_test()
 
-    adaylar = ((SOURCE_NAME, args.url),) if args.url else KAYNAKLAR
-    sonuc = dene(adaylar, known=known_symbols() or None)
-    if sonuc is None:
-        print("sectors.json YAZILMADI; arayüz davranış kümelerine düşecek.", file=sys.stderr)
+    try:
+        sektorler = sektor_listesi()
+    except Exception as err:  # noqa: BLE001
+        print(f"sektör listesi okunamadı: {err}", file=sys.stderr)
+        ozet_yaz(f"⚠️ **Sektör sınıflandırması üretilemedi** — sektör listesi okunamadı: {err}")
+        return 1
+
+    try:
+        metin = Path(args.csv).read_text(encoding="utf-8") if args.csv else indir()
+    except Exception as err:  # noqa: BLE001 — kaynak hatası ölümcül değil
+        print(f"[{KAYNAK_ADI}] erişilemedi: {err}", file=sys.stderr)
         ozet_yaz(
-            "⚠️ **Sektör sınıflandırması üretilemedi** — hiçbir kaynak sektör "
-            "alanı döndürmedi. Nabız ekranı davranış kümelerine düşecek."
+            f"⚠️ **Sektör sınıflandırması üretilemedi** — kaynağa erişilemedi: {err}. "
+            "Arayüz sektör filtresini gizleyecek."
         )
         return 1
 
-    ad, mapping = sonuc
+    kayitlar = csv_satirlari(metin)
+    harita, cakismalar = eslesmeler(kayitlar, sektorler, bilinen=known_symbols() or None)
+    if not harita:
+        basliklar = ", ".join(sorted(kayitlar[0])[:8]) if kayitlar else "yok"
+        print(
+            f"[{KAYNAK_ADI}] {len(kayitlar)} satır geldi ama eşleşme çıkmadı; "
+            f"kolonlar: {basliklar}",
+            file=sys.stderr,
+        )
+        ozet_yaz(
+            f"⚠️ **Sektör sınıflandırması üretilemedi** — {len(kayitlar)} satır okundu, "
+            f"eşleşme çıkmadı. Kolonlar: {basliklar}"
+        )
+        return 1
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(
         json.dumps(
-            {"source": ad, "generated": int(time.time()), "of": mapping},
+            {"source": KAYNAK_ADI, "generated": int(time.time()), "of": harita},
             ensure_ascii=False,
             separators=(",", ":"),
         ),
         encoding="utf-8",
     )
-    sektor_sayisi = len(set(mapping.values()))
-    print(f"{len(mapping)} sembol · {sektor_sayisi} sektör → {OUT.relative_to(ROOT)}")
-    ozet_yaz(f"Sektör sınıflandırması: {len(mapping)} sembol · {sektor_sayisi} sektör ({ad}).")
+    sektor_sayisi = len(set(harita.values()))
+    not_cakisma = (
+        f" · {len(cakismalar)} sembol birden çok sektör endeksinde olduğu için yazılmadı"
+        if cakismalar
+        else ""
+    )
+    print(f"{len(harita)} sembol · {sektor_sayisi} sektör{not_cakisma} → {OUT.relative_to(ROOT)}")
+    if cakismalar:
+        ornek = ", ".join(f"{s} ({'+'.join(k)})" for s, k in sorted(cakismalar.items())[:8])
+        print(f"  çakışanlar: {ornek}", file=sys.stderr)
+    ozet_yaz(
+        f"Sektör sınıflandırması: {len(harita)} sembol · {sektor_sayisi} sektör{not_cakisma}."
+    )
     return 0
 
 
