@@ -292,3 +292,78 @@ test('tazelik rozeti her ekranda aynı bilgiyi veriyor', async ({ page }) => {
   // Aynı piyasada tek bir doğru cevap var; ekrana göre değişemez.
   expect([...seen]).toHaveLength(1);
 });
+
+/**
+ * ÜRÜNÜN ANA CÜMLESİ, tek akışta.
+ *
+ * Kullanıcının istediği sistem şuydu: "endüstriden para akışına bir çok
+ * filtreyle hisse arayıp en doğru stratejilere". Parçaların her biri ayrı
+ * ayrı sınanıyor ama ZİNCİR sınanmıyordu — oysa kırılma tam olarak
+ * bağlantılarda olur (sektör adı tarayıcıya taşınmazsa, sembol listesi
+ * stratejilere geçmezse akış sessizce kopar).
+ */
+test('sektör rotasyonu → tarayıcı → karne filtresi → stratejiler', async ({ page }) => {
+  const hatalar: string[] = [];
+  page.on('pageerror', (e) => hatalar.push(e.message));
+
+  // 1) Nabız: pencere görünümünde para hangi sektöre kaydı?
+  await page.goto('/next.html?m=bist&v=nabiz', { waitUntil: 'networkidle' });
+  await page.waitForSelector('.pulse__flows', { timeout: 90_000 });
+  await page.getByLabel('Dönem').selectOption('21');
+  await page.waitForSelector('.pulse__rotasyon', { timeout: 90_000 });
+
+  // 2) O sektörü tarayıcıda aç.
+  await page
+    .getByRole('button', { name: /sektörünü tarayıcıda aç/ })
+    .first()
+    .click();
+  await page.waitForSelector('.ui-vtable tbody tr', { timeout: 90_000 });
+
+  /**
+   * Sonuç sayısı DÜĞMEDEN okunuyor, satır sayısından değil.
+   *
+   * Tablo pencerelenmiş: DOM'da yalnızca görünen satırlar var, üstelik
+   * kaydırma çubuğunu doğru tutmak için boşluk satırları da ekleniyor.
+   * `tbody tr` saymak bu yüzden sonucu vermiyor — ilk yazımda tam bu oldu.
+   */
+  const sonucSayisi = async (): Promise<number> => {
+    const metin = await page.getByRole('button', { name: /Stratejilerde test et/ }).innerText();
+    return Number(metin.match(/\((\d+)\)/)?.[1] ?? 0);
+  };
+
+  const sektorSonrasi = await sonucSayisi();
+  expect(sektorSonrasi, 'sektör taraması boş döndü').toBeGreaterThan(0);
+
+  // 3) Karne ölçütüyle daralt. Bu ölçüt TÜM SEMBOLLERİN dönem tablosunu
+  //    ister; dosya yayımlanmamışsa ekran bunu söyler ve sonuç boş kalır —
+  //    test o durumu da "sessiz sıfır sonuç"tan ayırır.
+  await page.getByRole('button', { name: '+ Kural' }).click();
+  const secici = page.locator('select').filter({ hasText: 'Karne: kârlılık' }).first();
+  await secici.selectOption({ label: 'Karne: kârlılık' });
+  await page.waitForTimeout(1500);
+
+  await expect(
+    page.getByText('Finansal tablolar yüklenemedi'),
+    'tam tablo dosyası yayımlanmamış',
+  ).toHaveCount(0);
+  const karneSonrasi = await sonucSayisi();
+  expect(karneSonrasi, 'karne ölçütü hiçbir sembolü geçirmedi').toBeGreaterThan(0);
+  expect(karneSonrasi, 'karne ölçütü hiçbir şeyi elemedi').toBeLessThanOrEqual(sektorSonrasi);
+
+  // 4) Bulunan semboller strateji testine gitsin.
+  const gonder = page.getByRole('button', { name: /Stratejilerde test et/ });
+  await expect(gonder).toContainText(String(karneSonrasi));
+  await gonder.click();
+
+  // Plan kabı ANINDA çiziliyor ama içi "İndirme boyutu hesaplanıyor…" ile
+  // başlıyor: boyut manifest ve nabız indikten sonra oturuyor. Kabı beklemek
+  // yetmiyor, PLANIN KENDİSİNİ beklemek gerekiyor.
+  await page.waitForSelector('.rank__deep button', { timeout: 90_000 });
+  await expect(page.getByLabel('Kapsam')).toHaveValue('liste');
+  // İndirme planı sembol sayısını ve boyutu SÖYLÜYOR; boyut Türkçe biçimde.
+  const plan = await page.locator('.rank__deep').innerText();
+  expect(plan).toContain(`${karneSonrasi} sembol`);
+  expect(plan, 'indirme boyutu Türkçe ondalıkla yazılmalı').toMatch(/\d+,\d+ MB/);
+
+  expect(hatalar, 'akış sırasında sayfa hatası').toEqual([]);
+});
