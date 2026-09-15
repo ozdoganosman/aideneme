@@ -79,6 +79,19 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
 
+      # ÖLÜ FİLTRE BEKÇİSİ. Birim testler sentetik veriyle koşuyor ve orada
+      # her ölçüt hesaplanıyor; bir filtre ancak GERÇEK veride sessizce
+      # ölüyor. Yaşandı: "Cari oran" hangi eşikte olursa olsun sıfır sonuç
+      # veriyordu, çünkü `currentAssets` hiçbir sembolde yoktu. Bu iş
+      # yayındaki veriyi zaten klonluyor, yani ölçüm burada bedavaya geliyor.
+      #
+      # Veri gelmediyse test kendini atlıyor; derlemeyi veri yokluğu
+      # kırmamalı, ama veri VARSA ölü filtre kırmalı.
+      - name: Ölü filtre bekçisi (gerçek veri)
+        env:
+          GERCEK_VERI: ${{ github.workspace }}/public/data
+        run: npx vitest run src/core/screen/kapsamGercek.test.ts --reporter=basic
+
       - name: Önizleme derlemesi
         env:
           VITE_DATA_BASE: /${{ github.event.repository.name }}/data/
