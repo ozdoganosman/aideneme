@@ -19,6 +19,18 @@ Birden çok aday kaynak sırayla deneniyor ve her biri AYRI raporlanıyor:
 "erişilemedi", "cevap boş" ve "geldi ama sektör alanı yok" üç farklı arıza;
 tek satırlık bir hata kaydı bunları birbirine karıştırıyordu.
 
+BİLİNEN DURUM (15 Eylül 2026, GitHub koşucusu, koşu 34922818979):
+üç adayın ÜÇÜ de tarayıcı başlıklarıyla bile `HTTP 401 Unauthorized`
+döndürüyor. Aynı alan adındaki `Data.aspx/MaliTablo` ve `Data.aspx/HisseTekil`
+uç noktaları çalışıyor (finansal tabloları oradan çekiyoruz), yani engellenen
+ağ ya da başlık değil: bu metot adları dışarıya açık değil. Buradaki üç ad
+TAHMİNDİ ve üçü de tutmadı.
+
+Sıradaki adım tahmin etmek DEĞİL: erişilebilir olduğu KANITLI bir uç noktanın
+sektör alanı taşıyıp taşımadığına bakmak ya da sınıflandırmayı elde hazır bir
+dosyadan almak. Tahmin edilen uç nokta adlarıyla CI turu harcamak mühendislik
+değil.
+
 Çalıştırma:
     python scripts/build_sectors.py [--self-test]
 """

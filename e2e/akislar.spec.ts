@@ -392,10 +392,32 @@ test('endeksler taramada yok ama grafikte açılabiliyor', async ({ page }) => {
   await open(page, 'v=tarayici');
   await expect(page.locator('.ui-vtable')).toBeVisible();
 
-  // Tarama evreni: örnek veride 60 hisse + 1 endeks var, tarayıcı 60 görmeli.
+  // Beklenen sayı MANİFEST'ten okunuyor, sabit yazılmıyor: uçtan uca iş akışı
+  // örnek veriyi `--symbols 200` ile üretiyor, yerelde varsayılan 60. Sabit bir
+  // sayı yazmak testi CI'da kırardı — ölçüldü, önce öyle yazılmıştı.
+  const sayilar = await page.evaluate(async () => {
+    const res = await fetch('/data/bist/pack/manifest.json');
+    const m = (await res.json()) as { symbols: Record<string, { e?: number }> };
+    const hepsi = Object.values(m.symbols);
+    return { toplam: hepsi.length, endeks: hepsi.filter((v) => v.e === 1).length };
+  });
+  // Örnek veride en az bir endeks OLMALI; yoksa bu test hiçbir şey sınamıyor.
+  expect(sayilar.endeks, 'örnek veride endeks yok — eleme sınanamıyor').toBeGreaterThan(0);
+
   const durum = await page.locator('.screener__status').first().innerText();
-  expect(durum).toContain('60 sembol');
-  expect(durum).not.toContain('61 sembol');
+  const hisse = sayilar.toplam - sayilar.endeks;
+  expect(durum).toContain(`${hisse} sembol`);
+  expect(durum).not.toContain(`${sayilar.toplam} sembol`);
+
+  // NABIZ en çok zarar gören ekrandı. Gerçek veride ölçüldü: endeksler
+  // içerideyken ısı haritasının TAMAMI üç kutuydu (XU100, XU030, XBANK) ve
+  // para akışının %99,96'sı "XU100 grubu" adlı tek davranış kümesindeydi;
+  // "PARA AKIŞI" başlığı -%100,0 diyordu. Elemeden sonra aynı veride başlık
+  // -%33,2 ve harita gerçek hisseleri gösteriyor.
+  await open(page, 'v=nabiz');
+  await expect(page.locator('.pulse__flows')).toBeVisible();
+  const nabiz = await page.locator('#icerik').innerText();
+  expect(nabiz).not.toContain('XU100');
 
   // Sembol masası manifest'ten okuyor: endeks orada DURUYOR.
   await open(page, 'v=sembol&s=XU100');
