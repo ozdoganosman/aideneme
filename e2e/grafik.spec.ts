@@ -103,7 +103,10 @@ test.describe('Finansallar — kolon grafiği etiketleri', () => {
   test('etiketler panele sığıyor ve çubuklarla hizalı', async ({ page }) => {
     await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
-    await page.getByRole('tab', { name: /finansal/i }).first().click();
+    await page
+      .getByRole('tab', { name: /finansal/i })
+      .first()
+      .click();
     await page.waitForSelector('.barseries', { timeout: 30_000 });
 
     const paneller = await page.evaluate(() =>
@@ -139,14 +142,15 @@ test.describe('Finansallar — kolon grafiği etiketleri', () => {
       expect(p.satirIcerik, 'etiket satırı kabını taşıyor').toBeLessThanOrEqual(
         p.satirGenislik + 1,
       );
-      expect(p.figIcerik, 'kolon grafiği panelini taşıyor').toBeLessThanOrEqual(
-        p.figGenislik + 1,
-      );
+      expect(p.figIcerik, 'kolon grafiği panelini taşıyor').toBeLessThanOrEqual(p.figGenislik + 1);
       // Hizalama: çubuklar EŞİT aralıklı çiziliyor, kolonlar da eşit olmalı.
       // Alt piksel yuvarlaması için 1 px tolerans.
       const enDar = Math.min(...p.genislikler);
       const enGenis = Math.max(...p.genislikler);
-      expect(enGenis - enDar, 'ızgara kolonları eşit değil — etiketler çubuktan kayar').toBeLessThanOrEqual(1);
+      expect(
+        enGenis - enDar,
+        'ızgara kolonları eşit değil — etiketler çubuktan kayar',
+      ).toBeLessThanOrEqual(1);
       // Etiket satırı grafik kabıyla aynı genişlikte: ikisi aynı ızgara
       // sütununda, kayarlarsa hizalama yine bozulur.
       expect(Math.abs(p.satirGenislik - p.kapGenislik)).toBeLessThanOrEqual(1);

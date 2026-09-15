@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { denetimEkranlari, type Ekran } from './ekranlar';
 
 /**
  * Ekran genelinde erişilebilirlik denetimi.
@@ -19,65 +20,8 @@ import { expect, test } from '@playwright/test';
  * denetim o sekmeyi hiç açmadığı için yeşil kalıyordu. Ölçülmemiş durum,
  * denetlenmemiş durumdur.
  */
-type Ekran = {
-  ad: string;
-  url: string;
-  hazir: string;
-  /** Açılışta tıklanacak sekme. */
-  sekme?: string;
-  /** Sekmeyle açılmayan yüzeyler (radar, rotasyon) için. */
-  ac?: (page: import('@playwright/test').Page) => Promise<void>;
-};
 
-const SCREENS: Ekran[] = [
-  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
-  // Sektör endeksi paneli ASENKRON yükleniyor: `.pulse__flows` hazır olduğunda
-  // tablosu daha çizilmemiş olabiliyor. Ayrı giriş, çünkü denetimin kör
-  // noktası tam olarak buydu — varsayılan durumda GÖRÜNMEYEN yüzeyler.
-  { ad: 'Nabız — sektör endeksleri', url: 'v=nabiz', hazir: '.sektor__tablo' },
-  {
-    // Rotasyon görünümü yalnızca dönem 1 barın üstündeyken çiziliyor:
-    // varsayılan durumda denetlenmemiş kalırdı.
-    ad: 'Nabız — sektör rotasyonu',
-    url: 'v=nabiz',
-    hazir: '.pulse__rotasyon',
-    ac: async (page) => {
-      await page.getByLabel('Dönem').selectOption('21');
-    },
-  },
-  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
-  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
-  {
-    // Radar varsayılan KAPALI: açılmadan denetlenmiş sayılmaz.
-    ad: 'Sembol Masası — Radar',
-    url: 'v=sembol&s=X001',
-    hazir: '.radar__tablo',
-    ac: async (page) => {
-      await page.getByText('Radar', { exact: true }).first().click();
-      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
-      await page.getByLabel('Kapsam').selectOption('piyasa');
-      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
-      // Temel veri filtresi UYGULANIYOR: "ölçülemedi" notu yalnızca böyle
-      // görünüyor ve denetim görmediği yüzeyi koruyamaz.
-      await page.getByRole('button', { name: 'Hazır', exact: true }).click();
-      await page.getByRole('button', { name: /Ucuz ve kârlı/ }).click();
-      await page.waitForSelector('.radar__olculemedi', { timeout: 30_000 });
-    },
-  },
-  {
-    ad: 'Sembol Masası — Finansallar',
-    url: 'v=sembol&s=X001',
-    hazir: '.fin',
-    sekme: 'Finansallar',
-  },
-  { ad: 'Sembol Masası — Sektör', url: 'v=sembol&s=X001', hazir: '.desk__sector', sekme: 'Sektör' },
-  { ad: 'Karşılaştır', url: 'v=karsilastir&cmp=X001,X002,X003', hazir: '.compare__matrix' },
-  { ad: 'Strateji Laboratuvarı', url: 'v=laboratuvar&s=X001', hazir: '.lab__stats' },
-  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
-  { ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
-  { ad: 'Portföy', url: 'v=portfoy', hazir: '.ui-field' },
-  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
-];
+const SCREENS: Ekran[] = denetimEkranlari('erisilebilirlik');
 
 for (const { ad: name, url: query, hazir: ready, sekme: tab, ac } of SCREENS) {
   test(`${name}: etiketler eksiksiz ve ayırt edici`, async ({ page }) => {

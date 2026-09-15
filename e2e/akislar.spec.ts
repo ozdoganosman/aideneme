@@ -532,7 +532,10 @@ test('sektör endeksi → birlikte hareket eden hisseler → stratejiler', async
 test('finansal tablo yokluğu: araç mı öyle, veri mi eksik', async ({ page }) => {
   // Fon: tablo YAYIMLAMAZ. (GLDTR — "GOLDIST - Istanbul Gold ETF")
   await open(page, 'v=sembol&s=GLDTR');
-  await page.getByRole('tab', { name: /finansal/i }).first().click();
+  await page
+    .getByRole('tab', { name: /finansal/i })
+    .first()
+    .click();
   await expect(page.getByText('Bu araç finansal tablo yayımlamıyor')).toBeVisible();
 
   // Gerçek şirket ama tablosu bizde yok: BAŞKA cümle.
@@ -545,7 +548,10 @@ test('finansal tablo yokluğu: araç mı öyle, veri mi eksik', async ({ page })
   expect(tablosuz.length, 'örnek veride "tablosuz ama hisse" sembol yok').toBeGreaterThan(0);
 
   await open(page, `v=sembol&s=${tablosuz[0]}`);
-  await page.getByRole('tab', { name: /finansal/i }).first().click();
+  await page
+    .getByRole('tab', { name: /finansal/i })
+    .first()
+    .click();
   await expect(page.getByText('Bu şirketin tablosu kaynakta bulunamadı')).toBeVisible();
   await expect(page.getByText('Bu araç finansal tablo yayımlamıyor')).toHaveCount(0);
 });
@@ -600,10 +606,9 @@ test('radar: ölçülemeyen sembolleri "uymadı" diye saymıyor', async ({ page 
   await page.getByText('Radar', { exact: true }).first().click();
   await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
   await page.getByLabel('Kapsam').selectOption('piyasa');
-  await page.waitForFunction(
-    () => document.querySelectorAll('.radar__tablo tbody tr').length > 5,
-    { timeout: 90_000 },
-  );
+  await page.waitForFunction(() => document.querySelectorAll('.radar__tablo tbody tr').length > 5, {
+    timeout: 90_000,
+  });
 
   // Filtresiz: ölçülemeyen yok, uyarı da yok.
   await expect(page.locator('.radar__olculemedi')).toHaveCount(0);

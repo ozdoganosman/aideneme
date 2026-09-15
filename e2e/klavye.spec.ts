@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { denetimEkranlari, type Ekran } from './ekranlar';
 
 /**
  * Klavye gezintisi.
@@ -8,39 +9,7 @@ import { expect, test } from '@playwright/test';
  * tarayıcıda ortaya çıkar.
  */
 
-type Ekran = {
-  ad: string;
-  url: string;
-  hazir: string;
-  /** Varsayılan KAPALI yüzeyler (radar) için açma adımı. */
-  ac?: (page: import('@playwright/test').Page) => Promise<void>;
-};
-
-const SCREENS: Ekran[] = [
-  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
-  // Sektör endeksi paneli ASENKRON yükleniyor: `.pulse__flows` hazır olduğunda
-  // tablosu daha çizilmemiş olabiliyor. Ayrı giriş, çünkü denetimin kör
-  // noktası tam olarak buydu — varsayılan durumda GÖRÜNMEYEN yüzeyler.
-  { ad: 'Nabız (sektör endeksleri)', url: 'v=nabiz', hazir: '.sektor__tablo' },
-  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
-  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
-  {
-    // Radar üç yeni etkileşim getirdi: sürüklenebilir ayırıcı (ok tuşlarıyla
-    // da çalışmalı), filtre ve sütun panelleri. Kapalıyken denetlenmiş
-    // sayılmaz — biçim ve erişilebilirlik denetimlerinde aynı kör nokta
-    // gerçek kusur çıkarmıştı.
-    ad: 'Sembol Masası (radar)',
-    url: 'v=sembol&s=X001',
-    hazir: '.radar__tablo',
-    ac: async (page) => {
-      await page.getByText('Radar', { exact: true }).first().click();
-      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
-    },
-  },
-  { ad: 'Strateji Laboratuvarı', url: 'v=laboratuvar&s=X001', hazir: '.lab__stats' },
-  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
-  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
-];
+const SCREENS: Ekran[] = denetimEkranlari('klavye');
 
 for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
   test(`${name}: klavyeyle gezilebiliyor`, async ({ page }) => {

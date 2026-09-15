@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { denetimEkranlari, type Ekran } from './ekranlar';
 
 /**
  * Metin kontrastı (WCAG AA).
@@ -19,69 +20,8 @@ import { expect, test } from '@playwright/test';
  * yüzden denetimsiz kalmıştı. `ac` verilen satırlarda denetim yüzeyi önce
  * açıyor.
  */
-type Ekran = {
-  ad: string;
-  url: string;
-  hazir: string;
-  ac?: (page: import('@playwright/test').Page) => Promise<void>;
-};
 
-const SCREENS: Ekran[] = [
-  { ad: 'Nabız', url: 'v=nabiz', hazir: '.pulse__flows' },
-  // Sektör endeksi paneli ASENKRON yükleniyor: `.pulse__flows` hazır olduğunda
-  // tablosu daha çizilmemiş olabiliyor. Ayrı giriş, çünkü denetimin kör
-  // noktası tam olarak buydu — varsayılan durumda GÖRÜNMEYEN yüzeyler.
-  { ad: 'Nabız (sektör endeksleri)', url: 'v=nabiz', hazir: '.sektor__tablo' },
-  {
-    ad: 'Nabız (sektör rotasyonu)',
-    url: 'v=nabiz',
-    hazir: '.pulse__rotasyon',
-    ac: async (page) => {
-      await page.getByLabel('Dönem').selectOption('21');
-    },
-  },
-  { ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
-  { ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
-  {
-    ad: 'Sembol Masası (radar)',
-    url: 'v=sembol&s=X001',
-    hazir: '.radar__tablo',
-    ac: async (page) => {
-      await page.getByText('Radar', { exact: true }).first().click();
-      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
-      await page.getByLabel('Kapsam').selectOption('piyasa');
-      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
-      // Temel veri filtresi UYGULANIYOR: "ölçülemedi" notu yalnızca böyle
-      // görünüyor ve denetim görmediği yüzeyi koruyamaz.
-      await page.getByRole('button', { name: 'Hazır', exact: true }).click();
-      await page.getByRole('button', { name: /Ucuz ve kârlı/ }).click();
-      await page.waitForSelector('.radar__olculemedi', { timeout: 30_000 });
-    },
-  },
-  {
-    ad: 'Sembol Masası (finansallar)',
-    url: 'v=sembol&s=X001',
-    hazir: '.fin__karne',
-    ac: async (page) => {
-      await page.getByRole('tab', { name: 'Finansallar' }).click();
-    },
-  },
-  {
-    ad: 'Sembol Masası (sektör)',
-    url: 'v=sembol&s=X001',
-    hazir: '.desk__sector-table',
-    ac: async (page) => {
-      await page.getByRole('tab', { name: 'Sektör' }).click();
-      await page.getByRole('button', { name: 'Akranları yükle' }).click();
-    },
-  },
-  { ad: 'Karşılaştır', url: 'v=karsilastir&cmp=X001,X002,X003', hazir: '.compare__matrix' },
-  { ad: 'Laboratuvar', url: 'v=laboratuvar&s=X001', hazir: '.lab__stats' },
-  { ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
-  { ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
-  { ad: 'Portföy', url: 'v=portfoy', hazir: '.ui-field' },
-  { ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
-];
+const SCREENS: Ekran[] = denetimEkranlari('kontrast');
 
 /** Sayfada çalışır: her metin düğümünün rengini zeminine karşı ölçer. */
 const AUDIT = () => {

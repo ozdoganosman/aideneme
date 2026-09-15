@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, EmptyState, Select, Skeleton, Stat, trPct, trNum } from '../../ui';
 import { Icon } from '../../ui/icons';
+import { Prov } from '../Prov';
 import {
   compositeSeries,
   sectorPeers,
@@ -58,6 +59,18 @@ export function SectorPanel({ market, symbol, onSelect, client }: Props) {
   const [map, setMap] = useState<SectorMap | null>(null);
   /** Harita korelasyondan mı geldi? Arayüz bunu açıkça yazıyor. */
   const [korelasyondan, setKorelasyondan] = useState(false);
+  /**
+   * "Akranları yükle" düğmesine basılınca düğme DOM'dan kalkıyor ve odak
+   * gövdeye düşüyor: klavye kullanıcısı yerini tamamen kaybediyor, sekmeye
+   * baştan başlamak zorunda kalıyor. Klavye denetimi bunu "odaklanabilir öğe
+   * bulunamadı" diye yakaladı (3 durak, beklenen >5).
+   *
+   * Sonuç geldiğinde odak sonuç bölgesine taşınıyor — ama YALNIZCA kullanıcı
+   * düğmeye bastıysa. Sekme zaten yüklü açıldığında odağı çalmak, kullanıcının
+   * bulunduğu yerden koparmak olurdu.
+   */
+  const sonucRef = useRef<HTMLDivElement>(null);
+  const kullaniciYukledi = useRef(false);
   const [rows, setRows] = useState<PeerRow[] | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   /**
@@ -179,6 +192,12 @@ export function SectorPanel({ market, symbol, onSelect, client }: Props) {
 
   const peers = useMemo(() => (rows ? sectorPeers(rows, map, symbol) : null), [rows, map, symbol]);
 
+  useEffect(() => {
+    if (status !== 'ready' || !peers || !kullaniciYukledi.current) return;
+    kullaniciYukledi.current = false;
+    sonucRef.current?.focus();
+  }, [status, peers]);
+
   /**
    * Karşılaştırma serileri: sembol ve sektör bileşiği, ikisi de pencerenin
    * başında %0. Ortak taban olmadan iki seri yan yana okunamaz.
@@ -283,7 +302,13 @@ export function SectorPanel({ market, symbol, onSelect, client }: Props) {
             Akranları karşılaştırmak için tüm sembollerin son barları gerekiyor (tek paket, yaklaşık
             1 MB). Sembol Masası'nın geri kalanı bu paketi indirmiyor.
           </p>
-          <Button variant="primary" onClick={() => setStatus('loading')}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              kullaniciYukledi.current = true;
+              setStatus('loading');
+            }}
+          >
             Akranları yükle
           </Button>
         </div>
@@ -302,21 +327,54 @@ export function SectorPanel({ market, symbol, onSelect, client }: Props) {
 
       {status === 'ready' && peers ? (
         <>
-          <div className="desk__sector-stats">
+          <div
+            className="desk__sector-stats"
+            ref={sonucRef}
+            tabIndex={-1}
+            aria-label={`${sector} akranları yüklendi`}
+          >
+            {/*
+              PROVENANCE. Ürün ilkesi #2: yayımlanan her sayı "bu nereden
+              geliyor?" katmanını taşımalı. Bu dört kartta hiç yoktu ve
+              kimse fark etmedi — çünkü sektör sekmesi erişilebilirlik
+              denetiminin listesinde değildi. Denetim listesi tekleşince
+              ilk koşuda çıktı.
+            */}
             <Stat
               label="Sektör içindeki sıra"
               value={`${peers.rank} / ${peers.total}`}
               hint="işlem değerine göre"
+              provenance={
+                <Prov label="Sektör içindeki sıra">
+                  Sektördeki semboller son barların ortalama İŞLEM DEĞERİNE (kapanış × hacim) göre
+                  sıralanıyor; gösterilen, bu sembolün o sıradaki yeri. Sıralama fiyata ya da piyasa
+                  değerine göre DEĞİL: "sektörün parası nerede dönüyor" sorusunun cevabı işlem
+                  değeridir.
+                </Prov>
+              }
             />
             <Stat
               label="Sektör değişimi"
               value={fmtPct(peers.weightedChangePct)}
               hint="işlem değeriyle ağırlıklı"
+              provenance={
+                <Prov label="Sektör değişimi">
+                  Sektördeki sembollerin son bar değişimlerinin, işlem değeriyle AĞIRLIKLI
+                  ortalaması. Düz ortalama alınsaydı günde 50 bin TL dönen bir sembol, milyarlarca
+                  TL dönen bir sembolle aynı ağırlığa sahip olurdu.
+                </Prov>
+              }
             />
             <Stat
               label="Bu sembol"
               value={fmtPct(peers.peers.find((p) => p.symbol === symbol)?.changePct ?? NaN)}
               hint="son bar"
+              provenance={
+                <Prov label="Bu sembol">
+                  Bu sembolün SON BARDAKİ değişimi — yukarıdaki sektör ortalamasıyla aynı bar, aynı
+                  hesap. Farklı pencereler karşılaştırılsaydı ikisinin farkı anlamsız olurdu.
+                </Prov>
+              }
             />
             {/*
               ASIL CEVAP. "Bu hisse %2 düştü" eksik bir cümle: sektörü %3
@@ -327,6 +385,14 @@ export function SectorPanel({ market, symbol, onSelect, client }: Props) {
               label="Sektöre göre"
               value={goreliGuc === null ? '—' : `${trPct(goreliGuc, 1, true)} puan`}
               hint={`${DONEM_ADI[donem] ?? `${donem} bar`} · hisse − sektör`}
+              provenance={
+                <Prov label="Sektöre göre">
+                  Seçilen pencerede hissenin getirisinden, sektörün EŞİT AĞIRLIKLI bileşik getirisi
+                  çıkarılıyor. Sonuç PUAN olarak veriliyor: iki yüzdenin farkı bir yüzde değil,
+                  puandır. Bileşikte her akran kendi pencere başlangıcına göre normalleniyor; tabanı
+                  geçersiz olan akran hesaba GİRMİYOR.
+                </Prov>
+              }
             />
           </div>
 
