@@ -27,6 +27,7 @@ import argparse
 import json
 import math
 import random
+import shutil
 import sys
 import zlib
 import time
@@ -156,6 +157,16 @@ def main() -> int:
     base = ROOT / "public" / "data" / args.market
     pack = base / "pack"
     fund = base / "fundamentals"
+    # ÜRETİLEN DİZİNLER ÖNCE SİLİNİYOR. Aksi hâlde disktekiler geçmiş
+    # koşuların BİRLEŞİMİ oluyor, bugünkü tanım değil: `--symbols 200` ile bir
+    # kez üretip sonra 60 ile üretince 140 yetim dosya kalıyordu ve sembol
+    # setinden çıkardığım bir sembolün finansalları yerinde durmaya devam
+    # ediyordu (ölçüldü — X059 tam olarak böyle hayatta kaldı).
+    #
+    # Yalnızca ÜRETİCİNİN sahip olduğu iki dizin siliniyor.
+    for d in (pack, fund):
+        if d.exists():
+            shutil.rmtree(d)
     pack.mkdir(parents=True, exist_ok=True)
     fund.mkdir(parents=True, exist_ok=True)
 
@@ -240,7 +251,17 @@ def main() -> int:
     }
     (pack / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")), encoding="utf-8")
 
-    hisseler_temel = [s for s in symbols if s.upper() not in hisse_disi(args.market)]
+    # TABLOSUZ AMA GERÇEK ŞİRKET. Yayındaki veride tablosu gelmeyen 96
+    # sembolün 52'si endeks, 19'u fon — ama 25'i gerçek şirket (leasing,
+    # faktoring, sigorta: tabloları farklı şablonda). Arayüz bu ikisine AYRI
+    # cümle kuruyor; örnek veride böyle bir sembol olmazsa o cümle hiç
+    # görünmez ve yanlış olduğu fark edilmez (nitekim aylarca edilmedi).
+    TABLOSUZ_HISSE = f"X{args.symbols - 1:03d}"
+    hisseler_temel = [
+        s
+        for s in symbols
+        if s.upper() not in hisse_disi(args.market) and s != TABLOSUZ_HISSE
+    ]
 
     # Finansallar: oran hesabına giren kalemler, sembole göre tutarlı.
     #

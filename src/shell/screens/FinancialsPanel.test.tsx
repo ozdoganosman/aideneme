@@ -13,6 +13,10 @@ vi.mock('../../data-client/fundamentals', () => ({
     noStatementSymbols: (...a: unknown[]) => noStatementFn(...a),
   },
 }));
+const manifestFn = vi.fn();
+vi.mock('../../data-client/client', () => ({
+  dataClient: { manifest: (...a: unknown[]) => manifestFn(...a) },
+}));
 const sectorMapFn = vi.fn();
 vi.mock('../../data-client/sectors', () => ({
   sectorsClient: { map: (...a: unknown[]) => sectorMapFn(...a) },
@@ -78,6 +82,8 @@ beforeEach(() => {
   // sonrakine sızar ve teşhisi zor bir kırılma üretir.
   localStorage.clear();
   noStatementFn.mockResolvedValue(new Set<string>());
+  // Manifest varsayılanı: hiçbir sembol "hisse dışı" işaretli değil.
+  manifestFn.mockResolvedValue({ symbols: {} });
   sectorMapFn.mockResolvedValue({ of: { THYAO: 'Ulaştırma' }, source: 'test', generated: 1 });
   snapshotFn.mockResolvedValue(snapshot);
   financialsFn.mockResolvedValue(
@@ -155,12 +161,35 @@ describe('Finansallar paneli', () => {
   });
 
   // Endekste "veri yok" demek YANLIŞ: XU100'ün bilançosu eksik değil, hiç
-  // yoktur. Ölçüldü — tablosu gelmeyen 97 sembolün 52'si doğrudan endeks.
-  // Kullanıcı olmayan bir kusurun düzelmesini beklememeli.
+  // yoktur. Ölçüldü — tablosu gelmeyen 96 sembolün 52'si doğrudan endeks,
+  // 19'u fon/sertifika. Kullanıcı olmayan bir kusurun düzelmesini beklememeli.
+  /**
+   * ÜÇÜNCÜ durum: tablosu yok AMA hisse.
+   *
+   * Ölçüldü — tablosu gelmeyen 96 sembolün 25'i GERÇEK ŞİRKET (Garanti
+   * Faktoring, QNB Finansal Kiralama, Ray Sigorta, DO & CO…). Çoğu leasing/
+   * faktoring/sigorta: tabloları farklı şablonda ve üretici okuyamıyor.
+   * Onlara "bu araç finansal tablo yayımlamıyor" demek YANLIŞTI.
+   */
+  it('tablosuz ama hisse olan sembole "yayımlamıyor" demiyor', async () => {
+    snapshotFn.mockResolvedValue(null);
+    financialsFn.mockResolvedValue(null);
+    noStatementFn.mockResolvedValue(new Set(['GARFA']));
+    // Manifest'te `e` işareti YOK: hisse dışı olduğunu bilmiyoruz.
+    manifestFn.mockResolvedValue({ symbols: { GARFA: { f: 'GARFA.bin' } } });
+    render(<FinancialsPanel market="bist" symbol="GARFA" price={10} />);
+    await waitFor(() =>
+      expect(screen.getByText('Bu şirketin tablosu kaynaktan alınamadı')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Bu araç finansal tablo yayımlamıyor')).not.toBeInTheDocument();
+  });
+
   it('endeks/fon için "tablo yayımlamıyor" der, "veri yok" demez', async () => {
     snapshotFn.mockResolvedValue(null);
     financialsFn.mockResolvedValue(null);
     noStatementFn.mockResolvedValue(new Set(['XU100']));
+    // `e: 1` = hisse DEĞİL. İddianın dayanağı bu işaret.
+    manifestFn.mockResolvedValue({ symbols: { XU100: { e: 1 } } });
     render(<FinancialsPanel market="bist" symbol="XU100" price={10} />);
     await waitFor(() =>
       expect(screen.getByText('Bu araç finansal tablo yayımlamıyor')).toBeInTheDocument(),

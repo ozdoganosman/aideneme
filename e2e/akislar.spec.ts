@@ -512,3 +512,37 @@ test('sektör endeksi → birlikte hareket eden hisseler → stratejiler', async
   // Sembol listesi gerçekten taşındı: stratejiler "liste" kapsamında açılıyor.
   await expect(page.getByText(/o kriterlere koşulludur/)).toBeVisible();
 });
+
+/**
+ * "Tablo yok" ile "bizde yok" AYNI ŞEY DEĞİL.
+ *
+ * Arayüz önce iki cümle kuruyordu ve ikincisi YANLIŞTI. Ölçüldü: tablosu
+ * gelmeyen 96 sembolün 52'si endeks, 19'u fon/sertifika — ama kalan 25'i
+ * GERÇEK ŞİRKET (Garanti Faktoring, QNB Finansal Kiralama, Ray Sigorta,
+ * DO & CO…). Çoğu leasing/faktoring/sigorta: tabloları farklı şablonda ve
+ * üretici okuyamıyor. Onlara "bu araç finansal tablo yayımlamıyor" demek
+ * düpedüz yanlıştı — yayımlıyorlar, biz alamadık.
+ *
+ * Ayrım manifest'teki `e` işaretinden: endeks/fon olduğunu BİLDİĞİMİZ
+ * semboller orada işaretli, bilmiyorsak iddia etmiyoruz.
+ */
+test('finansal tablo yokluğu: araç mı öyle, veri mi eksik', async ({ page }) => {
+  // Fon: tablo YAYIMLAMAZ. (GLDTR — "GOLDIST - Istanbul Gold ETF")
+  await open(page, 'v=sembol&s=GLDTR');
+  await page.getByRole('tab', { name: /finansal/i }).first().click();
+  await expect(page.getByText('Bu araç finansal tablo yayımlamıyor')).toBeVisible();
+
+  // Gerçek şirket ama tablosu bizde yok: BAŞKA cümle.
+  const tablosuz: string[] = await page.evaluate(async () => {
+    const res = await fetch('/data/bist/fundamentals/tablosuz.json');
+    const j = (await res.json()) as { symbols: string[] };
+    const man = await (await fetch('/data/bist/pack/manifest.json')).json();
+    return j.symbols.filter((s) => man.symbols[s]?.e !== 1);
+  });
+  expect(tablosuz.length, 'örnek veride "tablosuz ama hisse" sembol yok').toBeGreaterThan(0);
+
+  await open(page, `v=sembol&s=${tablosuz[0]}`);
+  await page.getByRole('tab', { name: /finansal/i }).first().click();
+  await expect(page.getByText('Bu şirketin tablosu kaynaktan alınamadı')).toBeVisible();
+  await expect(page.getByText('Bu araç finansal tablo yayımlamıyor')).toHaveCount(0);
+});

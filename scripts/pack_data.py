@@ -60,15 +60,20 @@ SYMBOLS_FILE = Path(__file__).resolve().parent / "bist_symbols.json"
 # ŞİRKETİ de aynı kelimeyi taşır ve o gerçek bir hissedir. Yanlış eleme,
 # elememekten kötüdür.
 #
-# TESPİT EKSİK VE BUNU BİLEREK YAZIYORUM. Yayındaki veride adı kısaltıldığı
-# için yakalanamayan dört araç var: OPK30 ("…Katilim 30 Endeksi Hisse Se"),
-# ZTLRK, HTPSB ("Hedef Portfoy Yone Npv"), NPCLN ("Neo Portfoy Yoneti
-# Perles"). Eleme TEK YÖNDE hatasız — fon olmayan hiçbir şey elenmiyor — ama
-# tam değil.
+# TESPİT EKSİK VE KALANLARI ADIYLA YAZIYORUM. Yayındaki veride adı
+# kısaltıldığı ya da işareti fazla belirsiz olduğu için yakalanamayan beş
+# araç: OPK30 ("…Katilim 30 Endeksi Hisse Se"), ZTLRK, HTPSB ("Hedef Portfoy
+# Yone Npv"), FTPGS ("Ft Gayrimenkul Ve Npv"), NPCLN ("Neo Portfoy Yoneti
+# Perles"). "Npv" ve "Perles" işaret olarak EKLENMEDİ: üç harflik belirsiz bir
+# kısaltmayla gerçek bir şirketi sessizce elemek, o beş aracı listede
+# bırakmaktan kötüdür. Eleme TEK YÖNDE hatasız ama tam değil.
 FON_ISARETLERI = (
     "byf",
     "etf",
     "gsyf",  # girişim sermayesi yatırım fonu
+    "gmyf",  # gayrimenkul yatırım fonu
+    "sertifika",  # ALTIN "DARPHANE ALTIN SERTIFIKASI"
+    "certificate",  # DMLKT "… 0 % Certificates 2025-…"
     "borsa yatir",
     "borsa yatır",
     "yatirim fonu",

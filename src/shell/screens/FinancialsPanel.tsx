@@ -13,6 +13,7 @@ import {
   type Ratios,
 } from '../../core/fundamentals/metrics';
 import type { FieldId, Financials, FundamentalsSnapshot } from '../../core/fundamentals/types';
+import { dataClient } from '../../data-client/client';
 import { fundamentalsClient } from '../../data-client/fundamentals';
 import { sectorsClient } from '../../data-client/sectors';
 import type { Market } from '../../data-client/markets';
@@ -146,6 +147,16 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
   const [snapshot, setSnapshot] = useState<FundamentalsSnapshot | null>(null);
   const [fin, setFin] = useState<Financials | null>(null);
   const [noStatement, setNoStatement] = useState(false);
+  /**
+   * Sembol HİSSE DEĞİL mi (endeks/fon)? Manifest'teki `e` işaretinden.
+   *
+   * "Tablosu yok" ile "tablo yayımlamaz" AYNI ŞEY DEĞİL ve ölçtüm: tablosu
+   * gelmeyen 96 sembolün 52'si endeks, 19'u fon/sertifika — ama kalan 25'i
+   * GERÇEK ŞİRKET (Garanti Faktoring, QNB Finansal Kiralama, Ray Sigorta,
+   * DO & CO…). Onlara "bu araç finansal tablo yayımlamıyor" demek düpedüz
+   * yanlıştı; yayımlıyorlar, biz alamadık.
+   */
+  const [hisseDisi, setHisseDisi] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sector, setSector] = useState<string | null>(null);
   /**
@@ -170,12 +181,14 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
       fundamentalsClient.snapshot(market),
       fundamentalsClient.financials(market, symbol),
       fundamentalsClient.noStatementSymbols(market),
+      dataClient.manifest(market).catch(() => null),
     ])
-      .then(([snap, financials, tablosuz]) => {
+      .then(([snap, financials, tablosuz, manifest]) => {
         if (cancelled) return;
         setSnapshot(snap);
         setFin(financials);
         setNoStatement(tablosuz.has(symbol));
+        setHisseDisi(manifest?.symbols[symbol]?.e === 1);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -278,11 +291,18 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
   if (loading) return <Skeleton count={4} height="60px" />;
 
   if (!row && !fin) {
-    // İki ayrı durum, iki ayrı cümle. "Veri yok" demek endeks ve fonlarda
-    // YANLIŞ: XU100'ün bilançosu eksik değil, hiç yoktur. Ölçüldü — tablosu
-    // gelmeyen 97 sembolün 52'si doğrudan endeks, kalanının çoğu fon ve
-    // varant. Kullanıcıyı olmayan bir kusuru beklemeye bırakmamak gerekiyor.
-    return noStatement ? (
+    // ÜÇ ayrı durum, üç ayrı cümle.
+    //
+    // Önce ikisi vardı ve ikincisi YANLIŞ cümle kuruyordu. Ölçtüm: tablosu
+    // gelmeyen 96 sembolün 52'si endeks ve 19'u fon/sertifika — ama kalan
+    // 25'i GERÇEK ŞİRKET (Garanti Faktoring, QNB Finansal Kiralama, İş
+    // Finansal Kiralama, Ray Sigorta, DO & CO…). Çoğu leasing/faktoring/
+    // sigorta, yani tabloları farklı şablonda. Onlara "bu araç finansal tablo
+    // yayımlamıyor" demek düpedüz yanlıştı.
+    //
+    // Ayrım manifest'teki `e` işaretinden: endeks/fon olduğunu BİLDİĞİMİZ
+    // semboller orada işaretli. Bilmiyorsak iddia da etmiyoruz.
+    return noStatement && hisseDisi ? (
       <EmptyState
         icon={<Icon name="report" size={28} />}
         title="Bu araç finansal tablo yayımlamıyor"
@@ -290,6 +310,19 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
           <>
             Endeksler (XU100, XBANK…), fonlar ve varantlar bilanço ya da gelir tablosu açıklamaz —
             burada gösterilecek bir şey yok. Fiyat, grafik ve teknik ölçüler diğer sekmelerde
+            çalışmaya devam ediyor.
+          </>
+        }
+      />
+    ) : noStatement ? (
+      <EmptyState
+        icon={<Icon name="report" size={28} />}
+        title="Bu şirketin tablosu kaynaktan alınamadı"
+        description={
+          <>
+            Şirket finansal tablo yayımlıyor ama kaynağımızdan çekilemedi — leasing, faktoring ve
+            sigorta şirketlerinin tabloları farklı şablonda ve üretici bunları okuyamıyor.{' '}
+            <b>"Tablo yok" değil, "bizde yok"</b>. Fiyat, grafik ve teknik ölçüler diğer sekmelerde
             çalışmaya devam ediyor.
           </>
         }
