@@ -180,6 +180,14 @@ _EKSIK_ANAHTAR = {
 # kaydı okunamaz hale getirir, bir örnek ise soruyu cevaplamaya yetiyor.
 _eksik_basildi: set[str] = set()
 
+# Eksik alan → kaynakta görülen İLGİLİ kalem adları. Tek bir sembolün
+# çıktısını stderr'e basmak yetmedi: kayıt 400 satır ve teşhis onun başında,
+# yani okumak için tüm kaydı indirmek gerekiyordu. Adlar birikip yayımlanan
+# bir dosyaya yazılıyor (bkz. `write_tani`).
+_aday_adlar: dict[str, list[str]] = {}
+# Aday toplanan sembol sayısı — her sembolde tablo taramak boşuna iş.
+_ADAY_SEMBOL_SINIRI = 20
+
 
 def missing_candidates(df, name_col: str, missing: list[str], limit: int = 30) -> list[str]:
     """
@@ -270,14 +278,21 @@ def extract(df, symbol: str) -> dict | None:
         return None
 
     missing = sorted(set(FIELDS) - seen)
-    if missing and not _eksik_basildi:
-        # Tur başına tek örnek: hangi adların geldiğini görmek için yeterli.
+    if missing and len(_eksik_basildi) < _ADAY_SEMBOL_SINIRI:
+        ilk = not _eksik_basildi
         _eksik_basildi.add(symbol)
         adaylar = missing_candidates(df, name_col, missing)
-        print(
-            f"[fund] {symbol}: eksik alan {missing} · ilgili gelen adlar: {adaylar}",
-            file=sys.stderr,
-        )
+        for alan in missing:
+            for ad in missing_candidates(df, name_col, [alan]):
+                liste = _aday_adlar.setdefault(alan, [])
+                if ad not in liste and len(liste) < 12:
+                    liste.append(ad)
+        if ilk:
+            # Tur başına tek satır: kayıt zaten uzun, dosya asıl kaynak.
+            print(
+                f"[fund] {symbol}: eksik alan {missing} · ilgili gelen adlar: {adaylar}",
+                file=sys.stderr,
+            )
 
     return {
         "symbol": symbol,
@@ -896,6 +911,32 @@ def self_test() -> None:
     assert kayit["fields"]["assets"] == [900.0], kayit["fields"]["assets"]
 
 
+    # ÜRETİM TANISI. Yayındaki veriyle ölçtüm: üç alan 561 sembolün hiçbirinde
+    # yok ve ikisi ürüne doğrudan yansıyor ("Nakde dönüşüm" hep boş, "Cari
+    # oran" süzgeci hiç sonuç veremez). Doğru kalem adını tahmin etmemek için
+    # teşhis yayımlanıyor.
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        (out / "AAA.json").write_text(
+            json.dumps(
+                {
+                    "symbol": "AAA",
+                    "periods": ["2024/6"],
+                    "fields": {f: ([1.0] if f != "currentAssets" else [None]) for f in FIELDS},
+                }
+            ),
+            encoding="utf-8",
+        )
+        write_tani(records_on_disk(out), out)
+        tani = json.loads((out / TANI_FILE).read_text(encoding="utf-8"))
+        assert tani["sembol"] == 1, tani
+        assert tani["kapsam"]["revenue"] == 1, tani["kapsam"]
+        # Boş seri DOLU sayılmamalı: "alan var" ile "değer var" farklı şeyler.
+        assert tani["kapsam"]["currentAssets"] == 0, tani["kapsam"]
+
+        # Tanı dosyası SEMBOL KAYDI sanılmamalı, yoksa kendi kendini sayar.
+        assert [r["symbol"] for r in records_on_disk(out)] == ["AAA"], records_on_disk(out)
+
     print("[fund] self-test tamam")
 
 
@@ -905,6 +946,9 @@ FAILURES_FILE = "failures.json"
 # Kaynağın "bu sembolde finansal tablo yok" dediği semboller. Arayüz bunu
 # "henüz indirilmedi"den ayırmak için okuyor.
 NOSTATEMENT_FILE = "tablosuz.json"
+# ÜRETİM TANISI — uygulamanın okuduğu bir veri değil, üretim sürecine ait.
+# Alt çizgiyle başlıyor: sembol dosyalarıyla karışmasın.
+TANI_FILE = "_tani.json"
 MAX_ATTEMPTS = 3
 
 # Ayıklama kurallarının sürümü. Kalem adları, madde numarası soyma ya da
@@ -1021,7 +1065,7 @@ def records_on_disk(out_dir: Path) -> list[dict]:
     """Diskteki tüm sembol kayıtları. Bozuk dosya sessizce atlanır."""
     records: list[dict] = []
     for path in sorted(out_dir.glob("*.json")):
-        if path.name in (SNAPSHOT_FILE, ALL_FILE, FAILURES_FILE, NOSTATEMENT_FILE):
+        if path.name in (SNAPSHOT_FILE, ALL_FILE, FAILURES_FILE, NOSTATEMENT_FILE, TANI_FILE):
             continue
         try:
             records.append(json.loads(path.read_text(encoding="utf-8")))
@@ -1036,6 +1080,43 @@ def write_snapshot(records: list[dict], out_dir: Path) -> None:
         return
     (out_dir / SNAPSHOT_FILE).write_text(
         json.dumps(build_snapshot(records), ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+
+def write_tani(records: list[dict], out_dir: Path) -> None:
+    """
+    ÜRETİM TANISI dosyası: hangi alan kaç sembolde dolu ve eksik olanlar için
+    kaynakta hangi kalem adları görülüyor.
+
+    Neden yayımlanıyor: yayındaki veriyle ölçtüm, üç alan 561 sembolün
+    HİÇBİRİNDE yok — `currentAssets`, `operatingCashFlow`, `capex`. İlk ikisi
+    ürüne doğrudan yansıyor: "Nakde dönüşüm" kartı her şirkette boş ve "Cari
+    oran" süzgeci hiçbir sonuç veremez. Sebep muhtemelen ad eşleşmesi:
+    `currentLiabilities` %96,3 dolu ama `currentAssets` %0 ve bilanço birini
+    verip ötekini vermez.
+
+    Doğru adı TAHMİN ETMEK yerine kaynağa sordurmak gerekiyor. Teşhis stderr'e
+    basılıyordu ama iş kaydı dört yüz satır ve satır kaydın BAŞINDA: okumak
+    için tüm kaydı indirmek gerekiyordu. Yayımlanan küçük bir dosya hem ucuz
+    hem kalıcı.
+    """
+    kapsam: dict[str, int] = {f: 0 for f in FIELDS}
+    for rec in records:
+        for alan, seri in (rec.get("fields") or {}).items():
+            if alan in kapsam and seri and any(v is not None for v in seri):
+                kapsam[alan] += 1
+    (out_dir / TANI_FILE).write_text(
+        json.dumps(
+            {
+                "generated": int(time.time()),
+                "sembol": len(records),
+                "kapsam": kapsam,
+                "aday_adlar": _aday_adlar,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
         encoding="utf-8",
     )
 
@@ -1249,6 +1330,7 @@ def build_all(
             )
     write_snapshot(records, out_dir)
     write_all(records, out_dir)
+    write_tani(records_on_disk(out_dir), out_dir)
     return records, fetched, failed
 
 
