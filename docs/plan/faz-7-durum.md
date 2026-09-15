@@ -1484,9 +1484,27 @@ yolunda (`fold`); eşleşme yolu güncellenmemişti. `currentLiabilities` tuzağ
 düşmemişti çünkü listede iki yazım da vardı, yani kusur "her ada iki yazım
 eklemeyi unutmak" ile gizleniyordu.
 
-**`operatingCashFlow` ve `capex` — gerçekten yok.** Teşhisin getirdiği aday
-adların hiçbiri nakit akış kalemi değil; bu şablonda o tablo bulunmuyor. Boş
-kartın boş kalması doğru davranış.
+**`operatingCashFlow` ve `capex` — VAR, ama başka adla.** Bu satırda önce
+"gerçekten yok" yazıyordu ve YANLIŞTI. Sonucu kendi teşhisimin kapağından
+çıkarmışım: aday adlar satır sırasıyla taranıp alan başına on ikide
+kesiliyordu ve bilanço satırları önce geldiği için kapak nakit akış
+satırlarına hiç ulaşmıyordu.
+
+Cevapta bir `FINANCIAL_ITEM_CODE` sütunu olduğunu, aynı uç noktayı kullanan
+borsapy'nin kaynağından öğrendim (nakit akışını `itemCode` öneki "4" ile
+süzüyor). Teşhis o soruyu sorunca 25 nakit akış satırı geldi:
+
+    4C    İşletme Faaliyetlerinden Kaynaklanan Net Nakit
+    4CAI  Sabit Sermaye Yatırımları
+
+Listemizde "İŞLETME FAALİYETLERİNDEN NAKİT AKIŞLARI" aranıyordu; kaynak
+"…Kaynaklanan Net Nakit" diyor. Eşleşme artık ÖNCE KODA bakıyor — ad kararsız
+(şablona, yazıma, sürüme göre değişiyor), kod kararlı. Kod sütunu olmayan
+şablonda ada düşülüyor.
+
+ÖLÇÜLEN SONUÇ: v5 kuralıyla çekilen 152 sembolün 145'inde (%95,4) nakit akışı
+dolu; kalan 408 sembol henüz tazelenmedi (tur 45 dakikalık bütçesine takıldı)
+ve sıradaki turlar kaldığı yerden devam ediyor.
 
 **Üçüncü kusur: zorlamalı tazeleme yakınsamıyordu.** `force_all` her turda
 aynı sırayla tüm sembolleri veriyordu; bütçe 559'un yarısına yetiyor ve her
@@ -1496,13 +1514,22 @@ düzeltme mevcut verinin yarısına ulaşamazdı — bu düzeltme dahil. Kayıtl
 
 ÖLÇÜLEN SONUÇ (zorlamalı tazeleme sonrası, 559 sembol):
 
-|                          | önce | sonra     |
-| ------------------------ | ---- | --------- |
-| `currentAssets` dolu     | 0    | **522**   |
-| Cari oran hesaplanabilir | %0   | **%93,4** |
-| Medyan cari oran         | —    | 1,43      |
+|                          | önce | sonra                      |
+| ------------------------ | ---- | -------------------------- |
+| `currentAssets` dolu     | 0    | **540**                    |
+| Cari oran hesaplanabilir | %0   | **%96,6**                  |
+| Medyan cari oran         | —    | 1,43                       |
+| `operatingCashFlow` dolu | 0    | tazelenenlerin **%95,4**'ü |
 
-Kalan 37 sembol banka ve benzeri: bilançolarında dönen/duran ayrımı yok.
+Kalan semboller banka ve benzeri: bilançolarında dönen/duran ayrımı yok.
+
+### Ortak ders
+
+Bu dört kusur birbirini gizliyordu ve üçü aynı kalıptan çıktı: **bir aracın
+"bulamadım"ı, "yok" demek değildir.** Aynı oturumda üç kez düştüm — kaydırma
+ölçümü yapılmamış bir ölçümün güzel sayısını raporluyordu, ölçüm aracı gerçek
+veride hiç çalışmıyordu, teşhis kapağı "nakit akış satırı yok" gibi okundu.
+Her seferinde doğru hamle cevabı değil ARACI sorgulamak oldu.
 
 ## Sırada
 
