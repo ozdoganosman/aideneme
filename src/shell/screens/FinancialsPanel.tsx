@@ -583,7 +583,22 @@ export function FinancialsPanel({ market, symbol, price, candles }: Props) {
           <Stat
             label="Nakde dönüşüm"
             value={fmtRatio(ratios?.cashConversion ?? null)}
-            hint="faaliyet nakit akışı ÷ net kâr"
+            /*
+              BOŞLUĞUN SEBEBİ YAZILIYOR. Kart her şirkette tire gösteriyordu ve
+              ipucu yalnızca formülü söylüyordu; kullanıcı kusur mu, veri mi
+              eksik, ayırt edemiyordu. Yayındaki 559 sembolün TAMAMINDA
+              `operatingCashFlow` boş — kaynağın bu şablonunda nakit akış
+              tablosu yok (teşhis turu doğruladı: gelen kalem adlarının hiçbiri
+              nakit akış satırı değil).
+
+              Cümle veriden TÜRETİLİYOR, sabit yazılmıyor: kaynak bir gün bu
+              tabloyu vermeye başlarsa ipucu kendiliğinden formüle dönüyor.
+            */
+            hint={
+              row && row.operatingCashFlowTtm === null
+                ? 'kaynak nakit akış tablosu vermiyor'
+                : 'faaliyet nakit akışı ÷ net kâr'
+            }
             provenance={prov(
               'Nakde dönüşüm',
               '1’in altı, kârın nakde dönmediğini gösterir (alacak/stok şişmesi). Tahakkuk kalitesinin en basit ölçüsü.',

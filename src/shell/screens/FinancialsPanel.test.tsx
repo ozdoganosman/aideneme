@@ -109,6 +109,33 @@ describe('Finansallar paneli', () => {
     expect(screen.getByText('5,00')).toBeInTheDocument(); // PD/DD
   });
 
+  /*
+    BOŞ KARTIN SEBEBİ. Yayındaki 559 sembolün TAMAMINDA nakit akış tablosu
+    yok — kaynağın bu şablonu onu vermiyor. Kart her şirkette tire
+    gösteriyordu ve ipucu yalnızca formülü söylüyordu; kullanıcı kusur mu veri
+    mi eksik ayırt edemiyordu.
+
+    Cümle veriden türetiliyor: kaynak bu tabloyu vermeye başlarsa ipucu
+    kendiliğinden formüle dönmeli. İki yön de sınanıyor.
+  */
+  it('nakit akışı yoksa sebebini yazıyor', async () => {
+    const yok = {
+      ...snapshot,
+      symbols: { THYAO: { ...snapshot.symbols.THYAO, operatingCashFlowTtm: null } },
+    };
+    snapshotFn.mockResolvedValue(yok);
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await waitFor(() => expect(screen.getByText('Nakde dönüşüm')).toBeInTheDocument());
+    expect(screen.getByText('kaynak nakit akış tablosu vermiyor')).toBeInTheDocument();
+    expect(screen.queryByText('faaliyet nakit akışı ÷ net kâr')).toBeNull();
+  });
+
+  it('nakit akışı varsa formülü yazıyor', async () => {
+    render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
+    await waitFor(() => expect(screen.getByText('Nakde dönüşüm')).toBeInTheDocument());
+    expect(screen.getByText('faaliyet nakit akışı ÷ net kâr')).toBeInTheDocument();
+  });
+
   it('kalite ölçütlerini tek tek listeler', async () => {
     render(<FinancialsPanel market="bist" symbol="THYAO" price={40} />);
     await waitFor(() => expect(screen.getByText(/Net kâr pozitif/)).toBeInTheDocument());
