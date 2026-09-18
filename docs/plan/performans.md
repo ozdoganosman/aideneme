@@ -81,6 +81,47 @@ Ayrıca: `radar_açılış_ms=1650` bir DONMA değil. Aynı ekranın ana thread 
 toplamı 574 ms; kalan süre worker hesabı ve veri okuma, yani arayüz o sırada
 yanıt veriyor. Grafik yakınlaştırma ve kaydırma blokları 0–58 ms.
 
+### En kötü blok profille ayrıştırıldı: 425 → 208 ms
+
+Tablodaki en kötü tek takılma Stratejiler'deydi (425 ms). Dokunmadan önce CPU
+profili alındı (6× kısma, adları koruyan derleme) ve tek bir tepe çıktı:
+
+    236 ms  %5,8  logFactorial @ Strategies.js
+
+Listedeki ikinci sıranın neredeyse iki katı. Sebep `signTest`teydi: kuyruk
+döngüsünün İÇİNDEN `logFactorial` çağrılıyor, biri (`logFactorial(trials)`)
+döngü değişmezi olduğu hâlde her yinelemede baştan hesaplanıyor, üstelik
+`logFactorial` kendisi O(n) döngü. Toplam O(deneme²).
+
+Ön toplam tablosuyla O(deneme)'ye indi. Tablo aynı toplamı AYNI SIRAYLA
+biriktiriyor, yani değerler bit düzeyinde özdeş — bu bir yaklaşım değişikliği
+değil, aynı hesabın bir kez yapılması. `rank.referans.test.ts` eski uygulamayı
+referans tutup 300 deneme boyutu × 7 başarı değerinde `Object.is` ile
+karşılaştırıyor.
+
+ÖLÇÜM (aynı kap, aynı oturum, aynı küçültülmüş derleme, üçer koşu):
+
+|              | önce                  | sonra                     |
+| ------------ | --------------------- | ------------------------- |
+| en kötü blok | 425 / 446 / 418 ms    | **211 / 204 / 208 ms**    |
+| hazır        | 2054 / 2435 / 2002 ms | **1825 / 1812 / 1825 ms** |
+
+Aralıklar örtüşmüyor; bu sefer karşılaştırma meşru, çünkü iki ölçüm aynı kapta
+dakikalar arayla alındı. Stratejiler artık en kötü ekran değil.
+
+### Ölçüldü ve BİLEREK dokunulmadı: `trDate` 87 ms
+
+Düzeltmeden sonra profilde ikinci sıraya Türkçe tarih biçimlendirmesi çıktı
+(87 ms). İlk bakışta "her çağrıda `Intl.DateTimeFormat` kuruluyor, önbelleğe
+al" denecek bir kalıp. Ölçülünce öyle çıkmadı:
+
+    ilk çağrı        82,8 ms
+    sonraki 20 çağrı  0,45 ms/çağrı
+
+Yani bu tekrarlayan bir israf değil, Türkçe yerel verisinin BİR KEREYE MAHSUS
+kurulum bedeli; biçimlendiriciyi saklamak onu ortadan kaldırmaz, yalnızca
+başka bir ana taşır. Üstelik `marketFreshness` tek kez çağrılıyor. Dokunulmadı.
+
 ### Kaydırma ölçümü SESSİZCE yapılmamış hâldeydi
 
 Sentetik sette "40 adım 61 ms" yazıyordu; gerçek veride aynı ölçüm 670 ms

@@ -87,23 +87,42 @@ export function median(values: number[]): number {
   return clean.length % 2 ? clean[mid] : (clean[mid - 1] + clean[mid]) / 2;
 }
 
-/** log(n!) — Lanczos yaklaşımı; n büyürken taşma olmasın diye log uzayında. */
-function logFactorial(n: number): number {
-  if (n < 2) return 0;
+/**
+ * log(i!) ÖN TOPLAM TABLOSU, 0..n. Taşma olmasın diye log uzayında.
+ *
+ * Eskiden `logFactorial(n)` ayrı bir fonksiyondu ve her çağrıda 2'den n'e
+ * kadar dönüyordu; `signTest` de onu KUYRUK DÖNGÜSÜNÜN İÇİNDEN, üstelik biri
+ * döngü değişmezi olan üç ayrı argümanla çağırıyordu. Toplam maliyet
+ * O(deneme²) çıkıyordu.
+ *
+ * Ölçüldü (6× kısma, gerçek veri, Stratejiler ekranı): `logFactorial` tek
+ * başına örneklenen JS süresinin %5,8'i, 236 ms — listedeki ikinci sıranın
+ * neredeyse iki katı ve en büyük tek kalem.
+ *
+ * Tablo aynı toplamı AYNI SIRAYLA biriktiriyor, yani değerler bit düzeyinde
+ * özdeş; bu bir yaklaşım değişikliği değil, aynı hesabın bir kez yapılması.
+ */
+function logFactorialTable(n: number): Float64Array {
+  const tablo = new Float64Array(n + 1);
   let sum = 0;
-  for (let i = 2; i <= n; i++) sum += Math.log(i);
-  return sum;
+  for (let i = 2; i <= n; i++) {
+    sum += Math.log(i);
+    tablo[i] = sum;
+  }
+  return tablo;
 }
 
 /** İki yönlü tam binom işaret testi (p = 0.5). */
 export function signTest(successes: number, trials: number): number {
   if (trials <= 0) return NaN;
   const k = Math.min(successes, trials - successes);
+  const lf = logFactorialTable(trials);
+  // Döngü değişmezleri döngüden ÇIKARILDI.
+  const logYari = trials * Math.log(0.5);
+  const lfDeneme = lf[trials];
   let tail = 0;
   for (let i = 0; i <= k; i++) {
-    const logP =
-      logFactorial(trials) - logFactorial(i) - logFactorial(trials - i) + trials * Math.log(0.5);
-    tail += Math.exp(logP);
+    tail += Math.exp(lfDeneme - lf[i] - lf[trials - i] + logYari);
   }
   return Math.min(1, 2 * tail);
 }
