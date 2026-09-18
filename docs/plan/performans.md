@@ -145,6 +145,41 @@ EN KÖTÜ TEK GÖREVİN içinde baskın değil; o görev başka bir şeyle dolu.
 Kazanç, aynı kodu paylaşan Tarayıcı'da göründü. Radar'ın 345 ms'lik bloğu
 hâlâ açık bir hedef.
 
+### Radar'ın en kötü görevi: paketin worker'lara kopyalanması
+
+Önceki tur yanlış soruyu sormuştu — profilin "en büyük kalemi" ile "EN KÖTÜ
+TEK GÖREVİN içeriği" aynı şey değil. Bu kez uzun görevler `PerformanceObserver`
+ile toplanıp en kötüsünün zaman penceresi bulundu, profil örnekleri de yalnızca
+o pencereye kısıtlandı:
+
+    EN KÖTÜ UZUN GÖREV: 276 ms
+      222 ms  %82,3  responses @ Announce.js:116   ← paketin kopyalanması
+       12 ms   %4,4  çöp toplama
+       11 ms   %4,2  (program)
+
+Yani görevin dörtte üçünden fazlası TEK bir yerde: `AnalysisClient.load`,
+`buffer.slice(0)` ile paketi her worker için kopyalıyor. Bu maliyet zaten
+biliniyordu ve bir kez optimize edilmişti (klon yerine aktarım: worker başına
+2 kopya → 1 dilim); ölçüm onu bağımsız olarak doğruluyor.
+
+KALAN KOPYALAR KALDIRILMADI ve sebebi ölçüldü. Akla ilk gelen "son worker'a
+dilim değil ASLINI aktar" hamlesi GÜVENLİ DEĞİL: `dataClient` iki önbellek
+uygulaması taşıyor ve ikisi farklı davranıyor —
+
+- IndexedDB yolu her `get`'te TAZE bir `ArrayBuffer` veriyor (yapısal kopya),
+- bellek yedeği ise `map.get` ile AYNI NESNEYİ veriyor.
+
+Aslı aktarmak ikinci yolda önbelleği zehirlerdi: tampon boşalır ve sonraki
+ekran (Sektör paneli aynı paketi istiyor) boşalmış bir tamponla karşılaşırdı.
+Bellek yedeği tam da IndexedDB'nin kapalı olduğu yerde devreye giriyor —
+Safari özel sekme, ki bu ürün o durumu daha önce ayrıca ele almıştı. Yani
+`slice` bir israf değil, SAHİPLİK KORUMASI.
+
+Gerçek çözüm mimari: her worker paketi kendisi `fetch` etsin (aynı URL, HTTP
+önbelleğinden gelir), ana thread hiç kopyalamasın. Bu turda yapılmadı — soğuk
+önbellekte N paralel indirme riski var ve ölçülmeden girilecek bir değişiklik
+değil.
+
 ### Ölçüldü ve BİLEREK dokunulmadı: `trDate` 87 ms
 
 Düzeltmeden sonra profilde ikinci sıraya Türkçe tarih biçimlendirmesi çıktı
