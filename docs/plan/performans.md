@@ -49,8 +49,37 @@ artık argüman:
 Gerçek veri sentetikten yaklaşık 1,5 kat ağır: hazır süreleri 1,3–1,9 sn'den
 1,1–3,0 sn'ye, en kötü blok 342 ms'den 587 ms'ye çıkıyor. 6× yavaşlatma bir
 EMÜLASYON — normal bir makinede bu sayıların altıda birine karşılık geliyor.
-Zayıf bir makinede ekranlar 1,5–3 saniyede açılıyor ve ara sıra yarım
-saniyelik takılmalar oluyor.
+
+### Yeniden ölçüm (gerçek veri, 541 sembol · 162 MB)
+
+Aracın kendi uyarısı gereği TEK koşuya bakılmadı: üç ayrı çağrı, her biri üç
+tekrarın medyanı, yani dokuz sayfa yükü. Üç çağrı birbirine çok yakın çıktı.
+
+| Ekran              | Hazır   | En kötü blok | Etkileşim                           |
+| ------------------ | ------- | ------------ | ----------------------------------- |
+| Portföy            | 873 ms  | 84 ms        | —                                   |
+| Rapor              | 1119 ms | 87 ms        | —                                   |
+| Model              | 1296 ms | 91 ms        | —                                   |
+| Sektör akranları   | 1519 ms | 308 ms       | akran yükleme 720 ms                |
+| Sembol Masası      | 1524 ms | 317 ms       | yakınlaştırma 51 ms · kaydırma 0 ms |
+| Radar (tüm piyasa) | 1559 ms | 337 ms       | açılış 1650 ms                      |
+| Laboratuvar        | 1605 ms | 242 ms       | doğrulama 581 ms                    |
+| Tarayıcı           | 1652 ms | 232 ms       | parametre→sonuç 598 ms              |
+| Nabız              | 1977 ms | 124 ms       | —                                   |
+| Stratejiler        | 2054 ms | 425 ms       | kapsam 199 ms                       |
+| Karşılaştır        | 2069 ms | 103 ms       | —                                   |
+
+Zayıf makinede ekranlar **0,9–2,1 saniyede** açılıyor; en kötü tek takılma
+**425 ms** (Stratejiler, 1600 backtest).
+
+FARK KODA YAZILMIYOR. Bütün sayılar üstteki tablodan düşük, ama iki ölçüm
+FARKLI KAPTA koştu; aradaki farkın ne kadarı koddan ne kadarı makineden,
+bu veriyle ayrılamaz. Kayda geçen şey ŞU ANKİ durum, bir kazanç iddiası
+değil. Karşılaştırma yapılacaksa iki sürüm de aynı kapta ölçülmeli.
+
+Ayrıca: `radar_açılış_ms=1650` bir DONMA değil. Aynı ekranın ana thread blok
+toplamı 574 ms; kalan süre worker hesabı ve veri okuma, yani arayüz o sırada
+yanıt veriyor. Grafik yakınlaştırma ve kaydırma blokları 0–58 ms.
 
 ### Kaydırma ölçümü SESSİZCE yapılmamış hâldeydi
 
