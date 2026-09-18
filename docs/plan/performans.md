@@ -283,6 +283,22 @@ olarak sayılmıyor.
 
 ## Kalan tek blok: grafik kütüphanesinin ilk kurulumu
 
+BAĞIMSIZ OLARAK YENİDEN DOĞRULANDI. Yukarıdaki radar düzeltmesi "tablodaki
+345 ms radara değil, Sembol Masası YÜKLEMESİNE ait" diyordu; o yükleme
+penceresine kısıtlanmış profil de bu bölümü doğruluyor. İki koşu:
+
+    en kötü uzun görev: 336 ms / 395 ms
+      useBitmapCoordinateSpace  @ lod  39 / 34 ms
+      _invalidateBitmapSize     @ lod  19 / 32 ms
+      bm                        @ lod  23 / 21 ms
+      tryCreateCanvasRenderingTarget2D @ lod
+      (program)                        29 / 47 ms
+      …ve onlarca küçük `lod` çerçevesi
+
+Yani tablodaki "sembol masası 317 ms" ve "radar 345 ms" AYNI görevdir ve o
+görev bu bölümün konusudur. Zincir kapandı: radar → sembol masası yüklemesi →
+grafik kütüphanesinin canvas kurulumu. Yeni bir kusur yok, karar da değişmedi.
+
 **CPU profiliyle ayrıştırıldı (6× kısma, gezinme anından itibaren):**
 
 | Kalem                                      | Süre    |
