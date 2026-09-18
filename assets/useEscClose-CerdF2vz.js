@@ -1,0 +1,1 @@
+import{r as o}from"./index-CMC1Eyd9.js";function s(e){o.useEffect(()=>{const n=t=>{t.key==="Escape"&&e()};return window.addEventListener("keydown",n),()=>window.removeEventListener("keydown",n)},[e])}export{s as u};
