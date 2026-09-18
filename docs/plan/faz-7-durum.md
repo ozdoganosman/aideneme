@@ -1609,6 +1609,38 @@ Tablodaki hükümler de buna uyuyor: `belirsiz` ve `zayıf`, tek bir sahte
 "anlamlı" yok; p sütunu Holm ile düzeltilmiş. Yani sıralı bir tablo gösterip
 "işte kazandıran kurallar" izlenimi verilmiyor. Değişiklik gerekmedi.
 
+### Karar verildi: `strategies.json` yeni kabuğa BAĞLANMAMALI
+
+Bir sonraki turda "iki motor aynı cevabı veriyor mu" ölçülecekti. Ölçüldü ve
+soru daha temelde çözüldü: **iki motor aynı SORUYA bile cevap vermiyor.**
+
+- TS çekirdeği (`src/core/backtest/engine.ts`) bir `CostModel` taşıyor —
+  `DEFAULT_COSTS` tek yön 10 bps komisyon + 5 bps slipaj, üstüne hacim sınırı
+  — ve bunu hem stratejiye hem AL-TUT'a uyguluyor.
+- Python motoru (`scripts/strategies.py`) maliyet uygulamıyor:
+  `held = where(pos > 0, rets, 1.0)`, saf pozisyon takibi.
+
+Yani `strategies.json` KABA (maliyetsiz) bir backtest. Uygulamanın kendi
+varsayılan maliyetini o taramanın işlem sayılarına uygulayınca sapmanın yönü
+de büyüklüğü de ortaya çıkıyor (gidiş-dönüş %0,30):
+
+| strateji (Python sıralamasında) | işlem | maliyetin yiyeceği pay |
+| ------------------------------- | ----- | ---------------------- |
+| **%R 14 > 50** — 1. sırada      | 167   | **~%39,5**             |
+| MACD 8/21/5 > Sinyal            | 152   | ~%36,7                 |
+| RSI 14 > 50                     | 134   | ~%33,1                 |
+| EMA 377/610 kesişimi            | 2     | ~%0,6                  |
+
+Sıralama, maliyetin EN ÇOK cezalandırdığı yüksek devirli stratejileri en
+tepeye koyuyor. Çarpan kaba bir gösterge (gerçek etki giriş/çıkış fiyatına ve
+pozisyon büyüklüğüne bağlı) ama sıralamanın işlem sayısına duyarlı olduğu
+açık.
+
+Bu dosyayı yeni kabuğa bağlamak, "ekranlar arası tutarsızlık" kusurunu geri
+getirmekle kalmaz; kullanıcıya maliyetten önce parlayan bir listeyi en doğru
+cevap gibi gösterirdi. Bağlanacaksa önce Python motoruna aynı maliyet modeli
+girmeli — o zaman da iki motoru ayrı tutmanın anlamı kalmıyor.
+
 ### Bulunan boşluk: en güçlü kanıt arayüzde yok
 
 `strategies.json` — 651 sembol × TAM GEÇMİŞ, 27 strateji — üretiliyor,
