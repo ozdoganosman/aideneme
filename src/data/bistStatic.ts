@@ -112,50 +112,22 @@ export async function fetchBistQuotes(signal?: AbortSignal): Promise<Quotes> {
   }
 }
 
-// Market-wide strategy backtest aggregate (built in CI by scripts/strategies.py).
-export interface StrategyAgg {
-  name: string;
-  avgRet: number;
-  medRet: number;
-  avgAnn?: number; // average annualized (per-day-normalized) return %
-  medAnn?: number; // median annualized return %
-  beatPct: number;
-  avgWin: number;
-  avgDD: number;
-  avgHold?: number; // average holding period in bars
-  avgTrades?: number;
-  n: number;
-}
-// One (stock × strategy) combo for the overall Top-20 view.
-export interface TopCombo {
-  sym: string;
-  name: string;
-  ann: number; // annualized %
-  ret: number; // total %
-  trades: number;
-  win: number;
-  dd: number;
-  hold: number;
-}
-export interface StrategiesFile {
-  generated: number;
-  nSymbols: number;
-  holdAvg: number;
-  holdAnnAvg?: number; // average annualized buy & hold %
-  results: StrategyAgg[];
-  top?: TopCombo[];
-  topMinYears?: number; // Top-20 only includes firms with >= this many years of history
-}
+/*
+  `strategies.json` OKUNMUYOR — tipleri ve `fetchStrategies` buradan kaldırıldı.
 
-export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesFile | null> {
-  try {
-    const res = await fetch(`${dataBase()}bist/strategies.json`, { signal });
-    if (!res.ok) return null;
-    return (await res.json()) as StrategiesFile;
-  } catch {
-    return null;
-  }
-}
+  Dosya her dağıtımda `scripts/strategies.py` ile üretilip yayımlanıyor ama
+  hiçbir uygulama onu okumuyordu: `fetchStrategies`in bütün depoda tek geçtiği
+  yer kendi tanımıydı, `StrategyAgg`/`TopCombo`/`StrategiesFile` yalnızca
+  birbirine bakıyordu ve derlenmiş paketlerin hiçbirinde `strategies.json`
+  geçmiyordu (üç ayrı kontrol).
+
+  Yeni kabuk zaten kendi sıralamasını TS çekirdeğiyle yapıyor. Üstelik iki
+  motor aynı soruya cevap vermiyor: TS tarafı `DEFAULT_COSTS` uygularken
+  Python tarafı maliyetsiz — ayrıntısı `docs/plan/faz-7-durum.md`'de.
+
+  Üretim adımının kendisi (deploy.yml + scripts/strategies.py) BİLEREK
+  bırakıldı: bir veri varlığını silmek ürün kararı ve dosya hâlâ yayında.
+*/
 
 export async function fetchBistNames(signal?: AbortSignal): Promise<Record<string, string>> {
   try {

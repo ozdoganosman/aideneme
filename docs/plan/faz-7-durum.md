@@ -1644,7 +1644,14 @@ girmeli — o zaman da iki motoru ayrı tutmanın anlamı kalmıyor.
 ### Bulunan boşluk: en güçlü kanıt arayüzde yok
 
 `strategies.json` — 651 sembol × TAM GEÇMİŞ, 27 strateji — üretiliyor,
-yayımlanıyor ve yalnızca ESKİ uygulama okuyor (`src/data/bistStatic.ts`).
+yayımlanıyor ve **HİÇBİR UYGULAMA OKUMUYOR**.
+
+(Bunu önce "yalnızca eski uygulama okuyor" diye yazmıştım; YANLIŞTI.
+`src/data/bistStatic.ts` içindeki `fetchStrategies` ölü koddu. Üç kontrol:
+fonksiyonun bütün depoda tek geçtiği yer kendi tanımıydı, tipleri yalnızca
+birbirine bakıyordu, ve derlenmiş paketlerin hiçbirinde `strategies.json`
+geçmiyordu. Eski uygulamada strateji taraması ekranı da yok — `Backtest.tsx`
+tek sembollük. Ölü kod kaldırıldı.)
 Yeni kabuk onu hiç kullanmıyor; kendi hesabını yapıyor ve kapsamları şöyle:
 
 - **Piyasa**: tüm semboller ama yalnızca son 250 bar (bir yıl),
