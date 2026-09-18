@@ -1630,6 +1630,36 @@ olarak aynı sınıfı. Doğru sıra: önce iki motorun aynı soruya aynı cevab
 verdiğini ÖLÇMEK, sonra bağlamak. Bu bir ürün kararı olduğu için kullanıcıya
 bırakıldı.
 
+## Sektör para akışı gerçek veride denetlendi
+
+Döngü hedefinin son denetlenmemiş ayağı. Ekranın gösterdiği tablo çekilip
+sayıları kendi içinde sınandı (yayındaki gerçek veri):
+
+| kontrol                             | sonuç                            |
+| ----------------------------------- | -------------------------------- |
+| sektör satırı / sembol              | 28 / 582                         |
+| payların toplamı                    | **%99,9** (yuvarlama farkı)      |
+| pay = değer ÷ toplam tutmayan satır | **0**                            |
+| sınıflandırılmamış                  | 42 sembol · 295,1 mn · **%0,13** |
+| toplam işlem değeri                 | 220,9 mlr TL                     |
+
+En büyük üç sektör: Kimya/Petrol/Plastik %16,7 · Banka %16,3 · Holding %11,7.
+
+ÖNEMLİ OLAN SINIFLANDIRILMAMIŞ SATIRI: gizlenmiyor, kendi grubunda duruyor.
+`flowBySector` bunu bilerek yapıyor — gizlenseydi toplam küçülür ve bütün
+paylar sessizce şişerdi. Ölçüm bunu doğruluyor: payların toplamı %100 ve
+sınıflandırılmamışın payı %0,13.
+
+### Yine kendi aracıma kandım (beşinci)
+
+İlk koşumda "28 satırın 28'i tutarsız" çıktı ve neredeyse öyle bildirecektim.
+Sayılar saçmaydı — "en büyük" sektörler en küçükleri olarak listeleniyordu.
+Sebep ayrıştırıcımdaydı: birim listeme `mlr` (milyar) yazmamıştım, o yüzden
+"37,0 mlr" değeri 37 olarak okunuyordu. Uygulamada kusur yoktu.
+
+Ders yine aynı: bir ölçüm aracının verdiği alarmı, aracın kendisini
+sınamadan raporlamak, kusur uydurmaktır.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.
