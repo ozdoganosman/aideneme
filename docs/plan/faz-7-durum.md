@@ -1568,8 +1568,7 @@ daha geçmiyor.
 | v5 ile yazılmış kayıt    | —    | 559/559 |
 | sanayi şablonunda boşluk | —    | **0**   |
 
-Kalan 19 YAPISAL: 12 banka + 5 sigorta + 2 sınıfsız, hepsi şablon grubu 2 ve
-3. O şablonlar nakit akış tablosu vermiyor — kaynak sınırı, kod sınırı değil.
+Kalan 19 YAPISAL: 12 banka + 5 sigorta + 2 sınıfsız, hepsi şablon grubu 2 ve 3. O şablonlar nakit akış tablosu vermiyor — kaynak sınırı, kod sınırı değil.
 `operatingCashFlow` artık `currentAssets` ile aynı seviyede (540), yani
 bilançosu olan her şirkette nakit akışı da var.
 
@@ -1587,6 +1586,52 @@ sığdırmanın yolu "yüksekliği sınırla, içeriği kaydırılabilir yap" �
 kaydırmanın GERÇEKTEN çalıştığını hiçbir test ölçmüyordu. **"Sığıyor" ile
 "kullanılabiliyor" aynı şey değil.**
 
+## Strateji sunumu gerçek veride denetlendi
+
+Döngü hedefinin "en doğru stratejilere sunan" ayağı, yayındaki gerçek veriyle
+uçtan uca denetlendi.
+
+ÖLÇÜM — yayındaki piyasa taraması (651 sembol, tam geçmiş, 27 strateji):
+
+|                         | en iyi                                       |
+| ----------------------- | -------------------------------------------- |
+| yenme oranı             | **%47,9** (yani yarıdan AZ sembolde yeniyor) |
+| medyan yıllık           | %26,3 · al-tut ortalaması %36,1              |
+| al-tut'u yenen strateji | **0 / 27**                                   |
+
+SUNUM DÜRÜST ÇIKTI. Ekran gerçek veride şunu yazıyor:
+
+> 15 ölçülebilen stratejinin **hiçbiri** al-tut'u istatistiksel olarak
+> yenmiyor. En yüksek fark MACD 12/26/9 > Sinyal (+%2,6) ama düzeltilmiş
+> p=0,986 — bu kadar kombinasyon denendiğinde bu fark şansla da çıkar.
+
+Tablodaki hükümler de buna uyuyor: `belirsiz` ve `zayıf`, tek bir sahte
+"anlamlı" yok; p sütunu Holm ile düzeltilmiş. Yani sıralı bir tablo gösterip
+"işte kazandıran kurallar" izlenimi verilmiyor. Değişiklik gerekmedi.
+
+### Bulunan boşluk: en güçlü kanıt arayüzde yok
+
+`strategies.json` — 651 sembol × TAM GEÇMİŞ, 27 strateji — üretiliyor,
+yayımlanıyor ve yalnızca ESKİ uygulama okuyor (`src/data/bistStatic.ts`).
+Yeni kabuk onu hiç kullanmıyor; kendi hesabını yapıyor ve kapsamları şöyle:
+
+- **Piyasa**: tüm semboller ama yalnızca son 250 bar (bir yıl),
+- **Derin**: tam geçmiş ama en fazla **100** sembol.
+
+Yani yeni arayüz, elindeki en güçlü kanıtı (651 sembol × tam geçmiş) hiçbir
+kapsamda gösteremiyor — oysa o hesap zaten yapılmış ve veride duruyor.
+
+BUNU KENDİ BAŞIMA BAĞLAMADIM ve sebebi bu deponun kendi tarihinde yazılı:
+`strategies.json`'ı Python (`scripts/strategies.py`), kabuktaki tabloyu ise
+TypeScript çekirdeği üretiyor. İki motoru aynı ekranda yan yana koymak, daha
+önce yaşanan ve bir denetim turu gerektiren "ekranlar arası tutarsızlık"
+kusurunun (X140'ın iki farklı pencereyle iki farklı getiri vermesi) tam
+olarak aynı sınıfı. Doğru sıra: önce iki motorun aynı soruya aynı cevabı
+verdiğini ÖLÇMEK, sonra bağlamak. Bu bir ürün kararı olduğu için kullanıcıya
+bırakıldı.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.
+- `strategies.json` (651 × tam geçmiş) yeni kabuğa bağlanacak mı — önce iki
+  motorun uyumu ölçülmeli.
