@@ -1,1 +1,0 @@
-import{j as r}from"./markets-CXrgc-7F.js";import{E as e,I as s}from"./next-BKqlxN1i.js";function i({title:t,detail:o}){return r.jsx(e,{tone:"error",icon:r.jsx(s,{name:"alert",size:28}),title:t,description:o??""})}export{i as D};
