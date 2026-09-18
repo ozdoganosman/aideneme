@@ -1699,6 +1699,26 @@ Sebep ayrıştırıcımdaydı: birim listeme `mlr` (milyar) yazmamıştım, o y�
 Ders yine aynı: bir ölçüm aracının verdiği alarmı, aracın kendisini
 sınamadan raporlamak, kusur uydurmaktır.
 
+## Veri yüzeyi tarandı: başka okunmayan dosya yok
+
+`strategies.json` bulgusundan sonra aynı soru bütün yayına soruldu: üretilip
+YAYIMLANAN her toplu dosyanın bir okuyucusu var mı? Ölçüt "derlenmiş pakette
+geçiyor mu" — kaynakta bir ada rastlamak yetmiyor, ölü kod da kaynakta
+geçiyordu.
+
+| dosya                                                 | durum                               |
+| ----------------------------------------------------- | ----------------------------------- |
+| names · quotes · screener · sectors · spark · symbols | pakette, okunuyor                   |
+| fundamentals: hepsi · snapshot · tablosuz             | pakette, okunuyor                   |
+| `sectors-tani.json` · `_tani.json` · `failures.json`  | TEŞHİS dosyaları, bilerek okunmuyor |
+| `strategies.json`                                     | okuyucusu yok (bkz. yukarısı)       |
+
+Sembol başına dosyalar (`THYAO.json` gibi) bu taramanın dışında: adları
+çalışma anında kuruluyor, düz arama onları bulamaz. İlk denememde tam bu
+yüzden 550 dosya "okunmuyor" çıktı — ölçüt yanlıştı, dosyalar değil.
+
+Sonuç: `strategies.json` dışında sahipsiz veri yok.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.
