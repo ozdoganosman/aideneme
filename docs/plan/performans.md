@@ -145,40 +145,51 @@ EN KÖTÜ TEK GÖREVİN içinde baskın değil; o görev başka bir şeyle dolu.
 Kazanç, aynı kodu paylaşan Tarayıcı'da göründü. Radar'ın 345 ms'lik bloğu
 hâlâ açık bir hedef.
 
-### Radar'ın en kötü görevi: paketin worker'lara kopyalanması
+### Radar: teşhisim YANLIŞTI, düzeltiliyor
 
-Önceki tur yanlış soruyu sormuştu — profilin "en büyük kalemi" ile "EN KÖTÜ
-TEK GÖREVİN içeriği" aynı şey değil. Bu kez uzun görevler `PerformanceObserver`
-ile toplanıp en kötüsünün zaman penceresi bulundu, profil örnekleri de yalnızca
-o pencereye kısıtlandı:
+Önce yazdığım sonuç şuydu: "en kötü uzun görev 276 ms ve %82,3'ü paketin
+worker'lara kopyalanması". İKİSİ DE YANLIŞ ÇIKTI. Kaydı düzeltiyorum çünkü
+yanlış bir teşhis, hiç teşhis olmamasından kötüdür.
 
-    EN KÖTÜ UZUN GÖREV: 276 ms
-      222 ms  %82,3  responses @ Announce.js:116   ← paketin kopyalanması
-       12 ms   %4,4  çöp toplama
-       11 ms   %4,2  (program)
+**1) `load()` 222 ms değil, 27 ms.** Kodun içine geçici ölçüm konup doğrudan
+ölçüldü (6× kısma, gerçek veri):
 
-Yani görevin dörtte üçünden fazlası TEK bir yerde: `AnalysisClient.load`,
-`buffer.slice(0)` ile paketi her worker için kopyalıyor. Bu maliyet zaten
-biliniyordu ve bir kez optimize edilmişti (klon yerine aktarım: worker başına
-2 kopya → 1 dilim); ölçüm onu bağımsız olarak doğruluyor.
+    buffer.slice(0) çağrılarının toplamı   23,5 ms
+    broadcast'in tamamı (dilimler dahil)   27,4 ms
 
-KALAN KOPYALAR KALDIRILMADI ve sebebi ölçüldü. Akla ilk gelen "son worker'a
-dilim değil ASLINI aktar" hamlesi GÜVENLİ DEĞİL: `dataClient` iki önbellek
-uygulaması taşıyor ve ikisi farklı davranıyor —
+Ayrı bir denemede 3 × 2,92 MB dilimleme 26 ms sürdü — aynı büyüklük. Yani
+kopyalama 222 ms olamaz.
 
-- IndexedDB yolu her `get`'te TAZE bir `ArrayBuffer` veriyor (yapısal kopya),
-- bellek yedeği ise `map.get` ile AYNI NESNEYİ veriyor.
+Profil beni nasıl yanılttı: örnekleyici, `await` sonrasında DEVAM EDEN işi
+bekleyen çerçeveye yazıyor. `const responses = await this.pool.broadcast(...)`
+satırındaki çerçeve, o beklemeden sonra çalışan her şeyi topluyor. Çerçeve adı
+bir SUÇLAMA değil, yalnızca bir ADRES.
 
-Aslı aktarmak ikinci yolda önbelleği zehirlerdi: tampon boşalır ve sonraki
-ekran (Sektör paneli aynı paketi istiyor) boşalmış bir tamponla karşılaşırdı.
-Bellek yedeği tam da IndexedDB'nin kapalı olduğu yerde devreye giriyor —
-Safari özel sekme, ki bu ürün o durumu daha önce ayrıca ele almıştı. Yani
-`slice` bir israf değil, SAHİPLİK KORUMASI.
+**2) O 276 ms radar etkileşiminin görevi değil.** Etkileşim penceresine
+kısıtlanmış üç koşu tutarlı bir sonuç veriyor:
 
-Gerçek çözüm mimari: her worker paketi kendisi `fetch` etsin (aynı URL, HTTP
-önbelleğinden gelir), ana thread hiç kopyalamasın. Bu turda yapılmadı — soğuk
-önbellekte N paralel indirme riski var ve ölçülmeden girilecek bir değişiklik
-değil.
+    en kötü uzun görev: 123 / 120 / 123 ms
+      ~%45  (program) — yerleşim, boyama, stil
+      ~%14  save — canvas
+      ~%9   _resizeBitmap — grafik tuvali
+      ~%8   getClientRects — yerleşim
+
+Yani radar etkileşiminin en kötü görevi ~120 ms ve içeriği YERELDİR; burada
+optimize edilecek bir JS yok.
+
+**3) Tablodaki "345 ms" radara ait değil.** `measure-perf.mjs` uzun görev
+gözlemcisini `addInitScript` ile NAVİGASYONDAN ÖNCE kuruyor, yani "en kötü
+blok" sayfa yüklemesi dahil TÜM oturumu kapsıyor. Radar satırı önce Sembol
+Masası sayfasını açıyor; o yüklemenin bloğu bu satıra da yazılıyor. Nitekim
+"sembol masası" satırı da ~317 ms diyor — aynı görev, iki satırda.
+
+SONUÇ: radara özgü bir blok sorunu yok. Sıradaki gerçek hedef Sembol Masası
+sayfa yüklemesi ve oradaki iş de büyük ölçüde yerel boyama.
+
+Önceki turda "aslını aktarmak güvenli değil" diye yazdığım gerekçe DEĞERİNİ
+KORUYOR (bellek yedeği aynı `ArrayBuffer` nesnesini paylaşıyor, aktarım onu
+zehirlerdi) — ama artık 222 ms'lik bir kazancı değil, 20 ms'lik bir kazancı
+elemek için geçerli. Yani o değişikliği yapmamak şimdi çok daha kolay bir karar.
 
 ### Ölçüldü ve BİLEREK dokunulmadı: `trDate` 87 ms
 
