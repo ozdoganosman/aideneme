@@ -2,7 +2,8 @@ import {
   computeRatios,
   growth,
   karne,
-  percentileRank,
+  percentileScale,
+  percentileRankOn,
   qualityScore,
   type KarneGrubu,
   type Ratios,
@@ -188,8 +189,9 @@ export function withFundamentals(rows: ScreenRow[], context: FundamentalContext)
     ratios.set(row.symbol, computeRatios({ row: snapshotRow, price }));
   }
 
-  const peUniverse = [...ratios.values()].map((r) => r.pe);
-  const roeUniverse = [...ratios.values()].map((r) => r.roePct);
+  // Ölçek BİR KEZ kuruluyor. Eskiden her satır için evren baştan süzülüyordu.
+  const peOlcek = percentileScale([...ratios.values()].map((r) => r.pe));
+  const roeOlcek = percentileScale([...ratios.values()].map((r) => r.roePct));
 
   return rows.map((row) => {
     const r = ratios.get(row.symbol);
@@ -218,8 +220,8 @@ export function withFundamentals(rows: ScreenRow[], context: FundamentalContext)
         karneKarlilik: karneOran(k, 'kârlılık'),
         karneBuyume: karneOran(k, 'büyüme'),
         karneBorc: karneOran(k, 'borçluluk'),
-        pePercentile: num(percentileRank(peUniverse, r?.pe ?? null, true)),
-        roePercentile: num(percentileRank(roeUniverse, r?.roePct ?? null)),
+        pePercentile: num(percentileRankOn(peOlcek, r?.pe ?? null, true)),
+        roePercentile: num(percentileRankOn(roeOlcek, r?.roePct ?? null)),
       },
     };
   });

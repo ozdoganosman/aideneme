@@ -456,14 +456,88 @@ export function growth(fin: Financials): Growth {
  * `lowerIsBetter` (F/K gibi) için sıralama ters çevrilir, böylece 100 her
  * zaman "en iyi" demektir.
  */
+/**
+ * Yüzdelik ÖLÇEĞİ: evren bir kez temizlenip sıralanır.
+ *
+ * `percentileRank` evreni HER ÇAĞRIDA iki kez süzüyordu (iki dizi tahsisi) ve
+ * `withFundamentals` onu SATIR BAŞINA, tüm evren dizisiyle çağırıyordu — 541
+ * sembol × 2 ölçüt, yani O(n²) karşılaştırma artı bin küsur geçici dizi.
+ *
+ * Ölçüldü (6× kısma, gerçek veri, Radar "tüm piyasa"): `percentileRank`
+ * örneklenen JS süresinin %3,3'ü, 99 ms ile en büyük tek kalem; çöp toplama
+ * ayrıca 56 ms.
+ *
+ * Ölçek bir kez kurulup ikili arama ile sorgulanıyor: O(n log n) + satır
+ * başına O(log n). Sayılan şey değişmedi — aşağıdaki iki sınır fonksiyonu
+ * "kesinlikle küçük" ve "kesinlikle büyük" adetlerini aynı eşitlik kuralıyla
+ * veriyor, yani sonuçlar bit düzeyinde özdeş.
+ */
+export interface PercentileScale {
+  /** Artan sıralı, sonlu değerler. */
+  sorted: Float64Array;
+}
+
+export function percentileScale(values: (number | null)[]): PercentileScale {
+  const clean: number[] = [];
+  for (const v of values) if (v !== null && Number.isFinite(v)) clean.push(v);
+  clean.sort((a, b) => a - b);
+  return { sorted: Float64Array.from(clean) };
+}
+
+/** `sorted` içinde `value`dan KESİNLİKLE küçük olanların adedi. */
+function altSinir(sorted: Float64Array, value: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** `sorted` içinde `value`dan küçük VEYA EŞİT olanların adedi. */
+function ustSinir(sorted: Float64Array, value: number): number {
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] <= value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+export function percentileRankOn(
+  scale: PercentileScale,
+  value: number | null,
+  lowerIsBetter = false,
+): number | null {
+  if (value === null) return null;
+  const { sorted } = scale;
+  if (sorted.length < 5) return null;
+  /*
+    NaN AYRI TUTULUYOR ve bu bir ayrıntı değil: NaN ile yapılan HER
+    karşılaştırma false döner, yani ikili arama "hiçbiri küçük veya eşit
+    değil" sonucuna varır ve `lowerIsBetter` yolunda adet ters çevrildiği
+    için sonuç %100 çıkardı. Eski uygulama aynı durumda 0 veriyordu.
+
+    Üretimdeki karşılığı ağır olurdu: F/K'sı ÖLÇÜLEMEYEN bir hisse, "düşük
+    olan iyidir" ölçeğinde piyasanın en ucuzu gibi görünürdü. Referans
+    sınaması (metrics.referans.test.ts) bunu yakaladı.
+
+    Buradaki 0, eski davranışın birebir korunmasıdır — NaN'ın 0 yerine
+    "ölçülemedi" sayılması ayrı bir karar ve bu hız düzeltmesinin işi değil.
+  */
+  if (Number.isNaN(value)) return 0;
+  const below = lowerIsBetter ? sorted.length - ustSinir(sorted, value) : altSinir(sorted, value);
+  return (below / sorted.length) * 100;
+}
+
 export function percentileRank(
   values: (number | null)[],
   value: number | null,
   lowerIsBetter = false,
 ): number | null {
-  if (value === null) return null;
-  const clean = values.filter((v): v is number => v !== null && Number.isFinite(v));
-  if (clean.length < 5) return null;
-  const below = clean.filter((v) => (lowerIsBetter ? v > value : v < value)).length;
-  return (below / clean.length) * 100;
+  return percentileRankOn(percentileScale(values), value, lowerIsBetter);
 }

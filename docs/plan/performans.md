@@ -109,6 +109,42 @@ karşılaştırıyor.
 Aralıklar örtüşmüyor; bu sefer karşılaştırma meşru, çünkü iki ölçüm aynı kapta
 dakikalar arayla alındı. Stratejiler artık en kötü ekran değil.
 
+### Yüzdelik ölçeği satır döngüsünden çıkarıldı: Tarayıcı 236 → 127 ms
+
+Sıradaki tepe Radar'daydı (337 ms). Yine önce profil alındı ve en büyük JS
+kalemi çıktı:
+
+    99 ms  %3,3  percentileRank @ fundamentals.js
+
+`percentileRank` evreni HER ÇAĞRIDA iki kez süzüyordu (iki geçici dizi) ve
+`withFundamentals` onu SATIR BAŞINA, tüm evren dizisiyle çağırıyordu — 541
+sembol × 2 ölçüt, yani O(n²) karşılaştırma artı bin küsur tahsis (profilde çöp
+toplama 56 ms). Ölçek artık bir kez kurulup ikili aramayla sorgulanıyor.
+
+REFERANS SINAMASI GERÇEK BİR KUSUR YAKALADI. İlk hâli bit düzeyinde özdeş
+DEĞİLDİ: `value` NaN olduğunda her karşılaştırma false döndüğü için ikili
+arama "hiçbiri küçük veya eşit değil" diyor ve `lowerIsBetter` yolunda adet
+ters çevrildiği için sonuç %100 çıkıyordu; eski uygulama 0 veriyordu.
+Üretimdeki karşılığı ağırdı — F/K'sı ÖLÇÜLEMEYEN bir hisse, "düşük olan
+iyidir" ölçeğinde piyasanın en ucuzu gibi görünecekti. NaN ayrıca ele alındı
+ve özdeşlik sağlandı.
+
+ÖLÇÜM — kazanç İZOLE EDİLDİ. Arada iki değişiklik birden inmişti, o yüzden
+yalnızca yüzdelik düzeltmesi geri alınıp (signTest dururken) yeniden ölçüldü:
+
+| Tarayıcı        | düzeltme yokken | düzeltmeyle         |
+| --------------- | --------------- | ------------------- |
+| en kötü blok    | 236 / 248 / 236 | **123 / 127 / 152** |
+| parametre→sonuç | 623 / 628 / 602 | **380 / 408 / 501** |
+
+Aralıklar örtüşmüyor.
+
+RADAR'DA ÖLÇÜLEBİLİR BİR KAZANÇ YOK: 337 / 346 / 309 → 269 / 346 / 345.
+`percentileRank` bu etkileşimin toplam JS süresinin en büyük kalemiydi ama
+EN KÖTÜ TEK GÖREVİN içinde baskın değil; o görev başka bir şeyle dolu.
+Kazanç, aynı kodu paylaşan Tarayıcı'da göründü. Radar'ın 345 ms'lik bloğu
+hâlâ açık bir hedef.
+
 ### Ölçüldü ve BİLEREK dokunulmadı: `trDate` 87 ms
 
 Düzeltmeden sonra profilde ikinci sıraya Türkçe tarih biçimlendirmesi çıktı
