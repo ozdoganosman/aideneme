@@ -218,21 +218,6 @@ test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor
   await other.close();
 });
 
-test('tarama → stratejiler: bulunan semboller strateji testine gidiyor', async ({ page }) => {
-  await open(page, 'v=tarayici');
-  await expect(page.locator('.ui-vtable')).toBeVisible();
-
-  await page.getByRole('button', { name: /Stratejilerde test et/ }).click();
-  await expect(page).toHaveURL(/v=stratejiler/);
-  await expect(page.getByText(/o kriterlere koşulludur/)).toBeVisible();
-
-  // Ağır iş kullanıcı onayı olmadan başlamaz.
-  const start = page.getByRole('button', { name: 'Bu sembollerde test et' });
-  await expect(start).toBeVisible();
-  await start.click();
-  await expect(page.locator('.rank__table tbody tr').first()).toBeVisible();
-});
-
 test('sembol masası: grafik, finansallar ve sektör sekmeleri', async ({ page }) => {
   await open(page, 'v=sembol&s=X001');
   await expect(page.locator('.chart-host canvas').first()).toBeVisible();
@@ -247,35 +232,6 @@ test('sembol masası: grafik, finansallar ve sektör sekmeleri', async ({ page }
   await expect(page.getByText(/yaklaşık 1 MB/)).toBeVisible();
   await page.getByRole('button', { name: 'Akranları yükle' }).click();
   await expect(page.locator('.desk__sector-table tbody tr').first()).toBeVisible();
-});
-
-test('laboratuvar: hazır strateji bağlantıyla taşınıyor ve doğrulanıyor', async ({ page }) => {
-  await open(page, 'v=stratejiler');
-  await expect(page.locator('.rank__table tbody tr').first()).toBeVisible();
-
-  await page.getByRole('button', { name: 'Laboratuvarda aç' }).first().click();
-  await expect(page).toHaveURL(/v=laboratuvar/);
-  await expect(page.locator('.lab__stats')).toBeVisible();
-  // Kural URL'e yazılmış olmalı (paylaşılabilir strateji).
-  expect(decodeURIComponent(page.url())).toContain('str=1|');
-
-  await page.getByRole('button', { name: 'Doğrulamayı çalıştır' }).click();
-  await expect(page.locator('.lab__badge').first()).toBeVisible();
-  // Doğrulama rozetleri: beş sınavın hepsi görünmeli.
-  await expect(page.locator('.lab__badge')).toHaveCount(5);
-});
-
-test('model: kart olmadan olasılık gösterilmiyor', async ({ page }) => {
-  await open(page, 'v=model&s=X001');
-  await expect(page.locator('.model__verdict')).toBeVisible();
-
-  const verdict = await page.locator('.model__verdict .ui-badge').innerText();
-  const hasProbability = await page.locator('.model__latest').count();
-  // Sözleşme: hüküm "kullanma" ise ekranda olasılık YOKTUR.
-  if (verdict.includes('kullanma')) expect(hasProbability).toBe(0);
-
-  // Kart her hâlükârda sınırlarını yazar.
-  await expect(page.getByText(/işlem maliyeti/)).toBeVisible();
 });
 
 /**
@@ -307,7 +263,7 @@ test('veri tazeliği rozeti gerçek veri yaşını söylüyor', async ({ page })
 
 test('tazelik rozeti her ekranda aynı bilgiyi veriyor', async ({ page }) => {
   const seen = new Set<string>();
-  for (const query of ['v=nabiz', 'v=tarayici', 'v=stratejiler', 'v=rapor&s=X001']) {
+  for (const query of ['v=nabiz', 'v=tarayici', 'v=sembol&s=X001', 'v=rapor&s=X001']) {
     await open(page, query);
     const badge = page.locator('.shell-topbar__actions .ui-badge').first();
     await expect(badge).toHaveText(/^Veri /, { timeout: 90_000 });
@@ -321,12 +277,14 @@ test('tazelik rozeti her ekranda aynı bilgiyi veriyor', async ({ page }) => {
  * ÜRÜNÜN ANA CÜMLESİ, tek akışta.
  *
  * Kullanıcının istediği sistem şuydu: "endüstriden para akışına bir çok
- * filtreyle hisse arayıp en doğru stratejilere". Parçaların her biri ayrı
- * ayrı sınanıyor ama ZİNCİR sınanmıyordu — oysa kırılma tam olarak
- * bağlantılarda olur (sektör adı tarayıcıya taşınmazsa, sembol listesi
- * stratejilere geçmezse akış sessizce kopar).
+ * filtreyle hisse arayıp...". Parçaların her biri ayrı ayrı sınanıyor ama
+ * ZİNCİR sınanmıyordu — oysa kırılma tam olarak bağlantılarda olur (sektör
+ * adı tarayıcıya taşınmazsa akış sessizce kopar).
+ *
+ * Zincirin son halkası eskiden Stratejiler ekranıydı; o ekran kullanıcının
+ * isteğiyle kaldırıldı ve akış artık daraltılmış tarama sonucunda bitiyor.
  */
-test('sektör rotasyonu → tarayıcı → karne filtresi → stratejiler', async ({ page }) => {
+test('sektör rotasyonu → tarayıcı → karne filtresi', async ({ page }) => {
   const hatalar: string[] = [];
   page.on('pageerror', (e) => hatalar.push(e.message));
 
@@ -351,8 +309,8 @@ test('sektör rotasyonu → tarayıcı → karne filtresi → stratejiler', asyn
    * `tbody tr` saymak bu yüzden sonucu vermiyor — ilk yazımda tam bu oldu.
    */
   const sonucSayisi = async (): Promise<number> => {
-    const metin = await page.getByRole('button', { name: /Stratejilerde test et/ }).innerText();
-    return Number(metin.match(/\((\d+)\)/)?.[1] ?? 0);
+    const metin = await page.locator('.screener__status .ui-badge').first().innerText();
+    return Number(metin.match(/^(\d+)\s*\//)?.[1] ?? 0);
   };
 
   const sektorSonrasi = await sonucSayisi();
@@ -374,20 +332,10 @@ test('sektör rotasyonu → tarayıcı → karne filtresi → stratejiler', asyn
   expect(karneSonrasi, 'karne ölçütü hiçbir sembolü geçirmedi').toBeGreaterThan(0);
   expect(karneSonrasi, 'karne ölçütü hiçbir şeyi elemedi').toBeLessThanOrEqual(sektorSonrasi);
 
-  // 4) Bulunan semboller strateji testine gitsin.
-  const gonder = page.getByRole('button', { name: /Stratejilerde test et/ });
-  await expect(gonder).toContainText(String(karneSonrasi));
-  await gonder.click();
-
-  // Plan kabı ANINDA çiziliyor ama içi "İndirme boyutu hesaplanıyor…" ile
-  // başlıyor: boyut manifest ve nabız indikten sonra oturuyor. Kabı beklemek
-  // yetmiyor, PLANIN KENDİSİNİ beklemek gerekiyor.
-  await page.waitForSelector('.rank__deep button', { timeout: 90_000 });
-  await expect(page.getByLabel('Kapsam')).toHaveValue('liste');
-  // İndirme planı sembol sayısını ve boyutu SÖYLÜYOR; boyut Türkçe biçimde.
-  const plan = await page.locator('.rank__deep').innerText();
-  expect(plan).toContain(`${karneSonrasi} sembol`);
-  expect(plan, 'indirme boyutu Türkçe ondalıkla yazılmalı').toMatch(/\d+,\d+ MB/);
+  // 4) Sonuç gerçekten TABLOYA düşsün: sayı doğru ama tablo boşsa akış kopuk.
+  await expect(page.locator('.ui-vtable tbody tr').first()).toBeVisible();
+  // Bağlantı paylaşılabilir olmalı: daraltılmış tarama URL'e yazılı.
+  expect(decodeURIComponent(page.url())).toContain('f=');
 
   expect(hatalar, 'akış sırasında sayfa hatası').toEqual([]);
 });
@@ -489,18 +437,18 @@ test('sektör endeksleri: getiri sınıflandırma gerektirmiyor', async ({ page 
   await page.getByLabel('Getiri penceresi').selectOption('5');
   await expect(page.locator('.sektor__tablo thead')).toContainText(/1 hafta/i);
 
-  // Sektör adına tıklayınca o endeks grafikte açılıyor. Satır başlığındaki
-  // düğme: aynı satırda "N hisse →" düğmesi de var ve o stratejilere gidiyor.
+  // Sektör adına tıklayınca o endeks grafikte açılıyor; satır BAŞLIĞINDAKİ
+  // düğme seçiliyor çünkü hisse sayısı sütunu artık düz metin.
   await satir.first().locator('th button').click();
   await expect(page).toHaveURL(/v=sembol/);
 });
 
 /**
- * SEKTÖR → HİSSE → STRATEJİ zinciri.
+ * SEKTÖR → O SEKTÖRÜN HİSSELERİ.
  *
- * Hedef cümlenin son halkası: "endüstriden para akışına ... hisse arayıp en
- * doğru stratejilere". Sektör endeksinden o sektörün hisselerine, oradan
- * strateji testine geçilebiliyor mu?
+ * "Endüstriden para akışına" halkası: sektör endeksinden o sektörün
+ * hisselerine geçilebiliyor mu? (Zincirin strateji halkası kullanıcının
+ * isteğiyle kaldırıldı.)
  *
  * ÜYELİK RESMÎ DOSYADAN. Bu sütun önce korelasyon vekilinden geliyordu;
  * `sectors.json` Borsa İstanbul'un kendi bileşen dosyasından üretilebilir
@@ -513,7 +461,7 @@ test('sektör endeksleri: getiri sınıflandırma gerektirmiyor', async ({ page 
  * testleriyle korunuyor (`sectorIndices.test.ts`); örnek veride her piyasanın
  * sınıflandırması olduğu için o yol buradan geçmiyor.
  */
-test('sektör endeksi → sektörün hisseleri → stratejiler', async ({ page }) => {
+test('sektör endeksi → sektörün hisseleri', async ({ page }) => {
   await open(page, 'v=nabiz');
   await expect(page.locator('.sektor__tablo')).toBeVisible();
 
@@ -527,13 +475,15 @@ test('sektör endeksi → sektörün hisseleri → stratejiler', async ({ page }
   // yazılmıyor ve bu "o sektörde hisse yok" demek değil.
   await expect(page.locator('.sektor__ozet').last()).toContainText(/bir sektöre YAZILMIYOR/);
 
-  const bagli = page.locator('.sektor__tablo tbody button', { hasText: /hisse/ });
+  /*
+    Sütun eskiden "N hisse →" düğmesiydi ve sembolleri Stratejiler ekranına
+    gönderiyordu. O ekran kaldırılınca düğmenin gideceği yer kalmadı; SAYI
+    duruyor çünkü asıl bilgi o: sektörle birlikte hareket eden kaç hisse var.
+  */
+  const bagli = page.locator('.sektor__tablo tbody td', { hasText: /\d+ hisse/ });
   expect(await bagli.count(), 'hiçbir sektörde hisse yok').toBeGreaterThan(0);
-
-  await bagli.first().click();
-  await expect(page).toHaveURL(/v=stratejiler/);
-  // Sembol listesi gerçekten taşındı: stratejiler "liste" kapsamında açılıyor.
-  await expect(page.getByText(/o kriterlere koşulludur/)).toBeVisible();
+  // Gideceği yer olmayan düğme kalmamalı.
+  await expect(page.locator('.sektor__tablo tbody button', { hasText: /hisse/ })).toHaveCount(0);
 });
 
 /**

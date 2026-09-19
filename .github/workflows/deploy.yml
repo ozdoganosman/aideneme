@@ -75,12 +75,6 @@ jobs:
           python -m pip install --quiet yfinance requests
           python scripts/build_crypto.py
 
-      - name: Market-wide strategy scan (self-gates; recomputes when stale)
-        continue-on-error: true
-        env:
-          FORCE_ALL: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[full-data]')) && '1' || '' }}
-        run: python scripts/strategies.py
-
       - name: Screener snapshots — bist + us + crypto
         continue-on-error: true
         env:

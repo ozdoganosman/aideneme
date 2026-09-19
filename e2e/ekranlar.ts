@@ -138,59 +138,6 @@ export const EKRANLAR: Ekran[] = [
     url: 'v=karsilastir&cmp=X001,X002,X003',
     hazir: '.compare__matrix',
   },
-  {
-    id: 'laboratuvar',
-    ad: 'Strateji Laboratuvarı',
-    url: 'v=laboratuvar&s=X001',
-    hazir: '.lab__stats',
-  },
-  { id: 'stratejiler', ad: 'Stratejiler', url: 'v=stratejiler', hazir: '.rank__table' },
-  {
-    // İNDİRME PLANI: "x MB indirilecek" satırı yalnızca bu kapsamda çiziliyor.
-    id: 'stratejiler:derin-plan',
-    ad: 'Stratejiler — derin tarama planı',
-    url: 'v=stratejiler',
-    hazir: '.rank__deep',
-    ac: async (page) => {
-      await page.getByLabel('Kapsam').selectOption('deep');
-    },
-  },
-  {
-    /*
-      SEKTÖR PLANI. `stratejiler:derin-plan` derin kapsamı kapsıyor ama sektör
-      kapsamı AYRI bir yüzey: kendi "Sektör" seçicisi, kendi cümlesi ("11
-      sembol · 0,9 MB indirilecek ve 297 backtest koşacak") ve kendi düğmesi
-      ("… sektöründe test et") var.
-
-      Gerçek veride elle denerken buldum ve denetim listesinde yoktu. Bu
-      oturumda beş kez aynı kusuru yaptım — yüzey ekleyip listeyi unutmak.
-      Bu sefer kusur ısırmadan yazıldı.
-    */
-    id: 'stratejiler:sektor-plan',
-    ad: 'Stratejiler — sektör planı',
-    url: 'v=stratejiler',
-    hazir: '.rank__deep',
-    ac: async (page) => {
-      await page.getByLabel('Kapsam').selectOption('sektor');
-      // Sektör listesi sınıflandırma dosyasından geliyor; ilk GERÇEK seçenek
-      // alınıyor (sıfırıncı "Seçin…"). Ad sabit yazmak, örnek verinin sektör
-      // adları değişince testi 120 saniye bekletip düşürürdü — bu oturumda
-      // tam olarak öyle oldu.
-      await page.getByLabel('Sektör').selectOption({ index: 1 });
-      await page.waitForSelector('.rank__deep', { timeout: 30_000 });
-    },
-  },
-  { id: 'model', ad: 'Model', url: 'v=model&s=X001', hazir: '.model__verdict' },
-  {
-    // Havuz eğitiminin indirme PLANI: "x sembol · y MB indirilecek" satırı.
-    id: 'model:havuz-plan',
-    ad: 'Model — havuz planı',
-    url: 'v=model&s=X001',
-    hazir: '.rank__deep',
-    ac: async (page) => {
-      await page.getByLabel('Kapsam').selectOption('pool');
-    },
-  },
   { id: 'portfoy', ad: 'Portföy', url: 'v=portfoy', hazir: '.ui-field' },
   { id: 'rapor', ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
   {

@@ -136,7 +136,7 @@ def hisse_disi(market_name: str) -> set[str]:
 # Sembol dosyası olmayan yardımcı JSON'lar.
 META_FILES = {
     "symbols.json", "quotes.json", "names.json", "spark.json",
-    "screener.json", "strategies.json", "manifest.json",
+    "screener.json", "manifest.json",
 }
 
 

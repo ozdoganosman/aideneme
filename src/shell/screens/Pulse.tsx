@@ -679,7 +679,6 @@ export default function Pulse({ state, push }: Props) {
         market={market}
         client={analysis.status === 'ready' ? analysis.client : null}
         onSelect={(symbol) => push({ v: 'sembol', s: symbol })}
-        onTest={(symbols) => push({ v: 'stratejiler', sy: symbols.join(',') })}
       />
     </div>
   );

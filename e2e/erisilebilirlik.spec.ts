@@ -101,14 +101,6 @@ const DUYURU: [string, string, string, RegExp][] = [
   ['Tarayıcı', 'v=tarayici', '.ui-vtable', /Tarama tamamlandı: \d+ sembolden \d+/],
   ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart', /X001 hazır: \d+ bar/],
   ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix', /Korelasyon hazır/],
-  [
-    'Strateji Laboratuvarı',
-    'v=laboratuvar&s=X001',
-    '.lab__stats',
-    /Backtest tamamlandı: \d+ işlem/,
-  ],
-  ['Stratejiler', 'v=stratejiler', '.rank__table', /Strateji sıralaması hazır: \d+ strateji/],
-  ['Model', 'v=model&s=X001', '.model__verdict', /Model eğitimi tamamlandı\. Hüküm:/],
   ['Rapor', 'v=rapor&s=X001', '.report__sheet', /X001 raporu hazır: \d+ bar/],
 ];
 

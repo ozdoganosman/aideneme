@@ -45,32 +45,11 @@ export const SCREENS: Screen[] = [
     phase: 'Faz 3',
   },
   {
-    id: 'laboratuvar',
-    label: 'Strateji Laboratuvarı',
-    icon: 'flask',
-    question: 'Bu strateji gerçekten çalışıyor mu, tesadüf mü?',
-    phase: 'Faz 4',
-  },
-  {
     id: 'portfoy',
     label: 'Portföy',
     icon: 'wallet',
     question: 'Param nerede, riskim ne?',
     phase: 'Faz 5',
-  },
-  {
-    id: 'stratejiler',
-    label: 'Stratejiler',
-    icon: 'rank',
-    question: 'Hangi strateji gerçekten çalışıyor?',
-    phase: 'Faz 7',
-  },
-  {
-    id: 'model',
-    label: 'Model',
-    icon: 'model',
-    question: 'Bu tahmin gerçekten bilgi taşıyor mu?',
-    phase: 'Faz 6',
   },
   {
     id: 'rapor',

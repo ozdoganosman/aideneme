@@ -752,23 +752,6 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
             >
               Koleksiyonu içe aktar
             </Button>
-            <Button
-              size="sm"
-              onClick={() =>
-                push({
-                  v: 'stratejiler',
-                  // Sembol listesi URL'e sığsın diye ilk 60 ile sınırlı; sıra
-                  // tablonun sırasıdır (kullanıcının gördüğü sıra).
-                  sy: filtered
-                    .slice(0, 60)
-                    .map((r) => r.symbol)
-                    .join(','),
-                })
-              }
-              disabled={filtered.length === 0}
-            >
-              Stratejilerde test et ({Math.min(filtered.length, 60)})
-            </Button>
             {saved.map((s) => {
               const d = savedDiffs[s.name]?.diff;
               const moved = d?.status === 'degisti' ? d.entered.length + d.exited.length : 0;
@@ -866,15 +849,6 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
                 <span className="desk__muted">liste aynı kaldı.</span>
               )}
             </>
-          ) : null}
-          {diff.entered.length > 0 ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => push({ v: 'stratejiler', sy: diff.entered.slice(0, 60).join(',') })}
-            >
-              Girenleri stratejilerde test et ({Math.min(diff.entered.length, 60)})
-            </Button>
           ) : null}
           {diff.status !== 'ayni-veri' ? (
             <Button size="sm" variant="secondary" onClick={() => markSnapshot(activeSaved)}>

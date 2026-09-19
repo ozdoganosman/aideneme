@@ -2,7 +2,7 @@
 Per-symbol CURRENT indicator snapshot for the in-app stock screener. Reads the
 per-symbol OHLCV JSON produced by build_bist.py and emits a compact
 public/data/bist/screener.json the browser can filter instantly (no need to
-fetch every symbol's full history). Reuses helpers from strategies.py.
+fetch every symbol's full history). Reuses helpers from gostergeler.py.
 
 Run after build_bist.py:
   python scripts/screener.py
@@ -20,13 +20,13 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from strategies import ema, rsi_arr, supertrend_pos  # noqa: E402
+from gostergeler import ema, rsi_arr, supertrend_pos  # noqa: E402
 
 MARKET = os.environ.get("MARKET", "bist")
 OUT = Path(__file__).resolve().parent.parent / "public" / "data" / MARKET
 # Crypto trades ~365 gün/yıl; hisse ~252 işlem günü. Oynaklık penceresi + yıllıklama.
 BARS_PER_YEAR = 365 if MARKET == "crypto" else 252
-SKIP = {"symbols.json", "quotes.json", "strategies.json", "names.json", "spark.json", "screener.json"}
+SKIP = {"symbols.json", "quotes.json", "names.json", "spark.json", "screener.json"}
 SCHEMA_VERSION = 6  # bump when item/file fields change to force a recompute
 
 

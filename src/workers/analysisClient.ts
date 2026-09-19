@@ -2,19 +2,7 @@ import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { SektorEslesmesi } from '../core/screen/sectorIndices';
 import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
-import type {
-  BacktestResponse,
-  ModelResponse,
-  SymbolResponse,
-  CorrelateResponse,
-  PulseResponse,
-  WorkerResponse,
-} from './protocol';
-import type { Candles } from '../core/data/types';
-import type { Strategy } from '../core/strategy/dsl';
-import type { BacktestOptions } from '../core/backtest/engine';
-import type { ValidationOptions } from '../core/backtest/validate';
-import type { SymbolResult } from '../core/strategy/rank';
+import type { SymbolResponse, CorrelateResponse, PulseResponse, WorkerResponse } from './protocol';
 
 /**
  * Uygulamanın analiz servisi: paketi bir kez indirir, worker'lara dağıtır,
@@ -36,9 +24,7 @@ export interface ScreenOutcome {
 
 export type CorrelateOutcome = Omit<CorrelateResponse, 'id' | 'ok' | 'type'>;
 export type PulseOutcome = Omit<PulseResponse, 'id' | 'ok' | 'type'>;
-export type BacktestOutcome = Omit<BacktestResponse, 'id' | 'ok' | 'type'>;
 export type SymbolOutcome = Omit<SymbolResponse, 'id' | 'ok' | 'type'>;
-export type ModelOutcome = Omit<ModelResponse, 'id' | 'ok' | 'type'>;
 
 function defaultSize(): number {
   const cores = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency ?? 4) : 4;
@@ -159,25 +145,6 @@ export class AnalysisClient {
     return { rows, ms };
   }
 
-  /**
-   * Tek sembolde backtest (+ istenirse doğrulama katmanı).
-   * Mumlar ana iş parçacığından kopyalanarak gider; worker'daki paket 250 barla
-   * sınırlı, backtest ise tam geçmişi ister.
-   */
-  async backtest(
-    candles: Candles,
-    strategy: Strategy,
-    options: BacktestOptions = {},
-    validate: ValidationOptions | false = false,
-  ): Promise<BacktestOutcome> {
-    const response = unwrap(
-      await this.pool.run((id) => ({ id, type: 'backtest', candles, strategy, options, validate })),
-    );
-    if (response.type !== 'backtest') throw new Error('beklenmeyen yanıt');
-    const { id: _id, ok: _ok, type: _type, ...rest } = response;
-    return rest;
-  }
-
   /** Sembol analizi: periyot dönüşümü + indikatör + özet + veri sağlığı. */
   async symbol(
     candles: import('../core/data/types').Candles,
@@ -194,119 +161,6 @@ export class AnalysisClient {
       await this.pool.run((id) => ({ id, type: 'symbol', candles, ...options })),
     );
     if (response.type !== 'symbol') throw new Error('beklenmeyen yanıt');
-    const { id: _id, ok: _ok, type: _type, ...rest } = response;
-    return rest;
-  }
-
-  /**
-   * Piyasa geneli strateji sıralaması: her sembolde her strateji, worker'lara
-   * sembol aralığına göre bölünerek. Sonuçlar strateji kimliğinde birleşir.
-   */
-  async rank(
-    market: Market,
-    strategies: { id: string; strategy: Strategy }[],
-    options: BacktestOptions = {},
-    minUsableBars = 60,
-  ): Promise<{
-    results: Record<string, SymbolResult[]>;
-    skipped: Record<string, number>;
-    symbols: number;
-    ms: number;
-  }> {
-    const info = this.loaded.get(market);
-    if (!info) throw new Error(`${market}: paket yüklenmedi`);
-
-    const total = info.symbols.length;
-    const chunks = Math.min(this.pool.size, Math.max(1, Math.ceil(total / 25)));
-    const per = Math.ceil(total / chunks);
-
-    const responses = await Promise.all(
-      Array.from({ length: chunks }, (_, i) =>
-        this.pool.run((id) => ({
-          id,
-          type: 'rank',
-          market,
-          strategies,
-          options,
-          minUsableBars,
-          from: i * per,
-          to: Math.min(total, (i + 1) * per),
-        })),
-      ),
-    );
-
-    const results: Record<string, SymbolResult[]> = {};
-    const skipped: Record<string, number> = {};
-    let ms = 0;
-    for (const response of responses) {
-      const ok = unwrap(response);
-      if (ok.type !== 'rank') continue;
-      for (const [key, rows] of Object.entries(ok.results)) {
-        (results[key] ??= []).push(...rows);
-      }
-      for (const [key, count] of Object.entries(ok.skipped)) {
-        skipped[key] = (skipped[key] ?? 0) + count;
-      }
-      ms = Math.max(ms, ok.ms);
-    }
-    return { results, skipped, symbols: total, ms };
-  }
-
-  /** Tek sembolün tam geçmişinde tüm stratejiler (derin tarama adımı). */
-  async rankSeries(
-    symbol: string,
-    candles: import('../core/data/types').Candles,
-    strategies: { id: string; strategy: Strategy }[],
-    options: BacktestOptions = {},
-    minUsableBars = 60,
-  ): Promise<{
-    symbol: string;
-    metrics: Record<string, import('../core/backtest/metrics').BacktestMetrics>;
-    skipped: string[];
-    bars: number;
-    ms: number;
-  }> {
-    const response = unwrap(
-      await this.pool.run((id) => ({
-        id,
-        type: 'rankSeries',
-        symbol,
-        candles,
-        strategies,
-        options,
-        minUsableBars,
-      })),
-    );
-    if (response.type !== 'rankSeries') throw new Error('beklenmeyen yanıt');
-    const { id: _id, ok: _ok, type: _type, ...rest } = response;
-    return rest;
-  }
-
-  /** Model kartı: üçlü bariyer etiketleme + purged CV + kalibrasyon. */
-  async model(
-    candles: import('../core/data/types').Candles,
-    options: import('../core/ml/model').TrainRequest = {},
-  ): Promise<ModelOutcome> {
-    const response = unwrap(await this.pool.run((id) => ({ id, type: 'model', candles, options })));
-    if (response.type !== 'model') throw new Error('beklenmeyen yanıt');
-    const { id: _id, ok: _ok, type: _type, ...rest } = response;
-    return rest;
-  }
-
-  /** Havuzlanmış (kesitsel) model: çok sembolün örnekleri tek havuzda. */
-  async pooledModel(
-    series: { symbol: string; candles: import('../core/data/types').Candles }[],
-    options: import('../core/ml/pooled').PooledRequest = {},
-  ): Promise<{
-    card: import('../core/ml/model').ModelCard;
-    used: string[];
-    skipped: { symbol: string; reason: string }[];
-    ms: number;
-  }> {
-    const response = unwrap(
-      await this.pool.run((id) => ({ id, type: 'pooledModel', series, options })),
-    );
-    if (response.type !== 'pooledModel') throw new Error('beklenmeyen yanıt');
     const { id: _id, ok: _ok, type: _type, ...rest } = response;
     return rest;
   }

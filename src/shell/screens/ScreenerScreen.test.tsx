@@ -360,31 +360,6 @@ describe('Tarayıcı — paylaşılabilir filtre', () => {
   });
 });
 
-describe('Tarayıcı — stratejilere aktarma', () => {
-  it('görünen sonucu strateji ekranına taşır', async () => {
-    const user = userEvent.setup();
-    render(<ScreenerScreen state={STATE} push={push} />);
-    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
-
-    await user.click(screen.getByRole('button', { name: /Stratejilerde test et/ }));
-    expect(push).toHaveBeenCalledWith({ v: 'stratejiler', sy: 'AAA,CCC' });
-  });
-
-  it('sonuç yoksa düğme pasif', async () => {
-    const user = userEvent.setup();
-    render(<ScreenerScreen state={STATE} push={push} />);
-    await waitFor(() => expect(screen.getByText('AAA')).toBeInTheDocument());
-
-    // İlk kuralın alt sınırını 90'a çek → hiç sonuç kalmaz.
-    const value = screen.getAllByLabelText('Değer')[0];
-    await user.clear(value);
-    await user.type(value, '90');
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Stratejilerde test et/ })).toBeDisabled(),
-    );
-  });
-});
-
 describe('Tarayıcı — koleksiyon taşıma', () => {
   it('kayıt yoksa dışa aktarma pasif', async () => {
     render(<ScreenerScreen state={STATE} push={push} />);
@@ -487,27 +462,6 @@ describe('Tarayıcı — kayıtlı taramada ne değişti', () => {
     expect(
       within(bar).getByRole('button', { name: 'ZZZ taramadan çıktı, sembol masasında aç' }),
     ).toBeInTheDocument();
-  });
-
-  it('yeni girenleri strateji testine taşır', async () => {
-    seed({
-      'bist|Tarama 1': {
-        name: 'Tarama 1',
-        market: 'bist',
-        code: CODE,
-        data: 'hash-a',
-        generated: 1_757_800_000,
-        symbols: ['AAA', 'ZZZ'],
-      },
-    });
-    const user = userEvent.setup();
-    render(<ScreenerScreen state={STATE} push={push} />);
-    await user.click(await screen.findByRole('button', { name: /^Tarama 1/ }));
-    await user.click(
-      await screen.findByRole('button', { name: /Girenleri stratejilerde test et/ }),
-    );
-    // Yalnızca YENİ GİRENLER gidiyor; listenin tamamı değil.
-    expect(push).toHaveBeenCalledWith({ v: 'stratejiler', sy: 'BBB' });
   });
 
   it('kaydı açmadan da rozet değişimi duyurur', async () => {

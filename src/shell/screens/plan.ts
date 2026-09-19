@@ -24,12 +24,6 @@ export const SCREEN_PLAN: Record<string, string[]> = {
     'Hiyerarşik kümeleme ile sıralanmış korelasyon matrisi',
     'Rejim kırılımı: yüksek/düşük volatilite, trend/yatay',
   ],
-  laboratuvar: [
-    'Kural DSL editörü (görsel + ham JSON, çift yönlü)',
-    'Olay güdümlü backtest: komisyon, slipaj, likidite tavanı, T+1 emir',
-    'Doğrulama rozetleri: OOS · maliyet · sağlamlık · permütasyon · çoklu test',
-    'Karşılaştırma: strateji vs al-tut vs rastgele giriş',
-  ],
   portfoy: [
     'Pozisyonlar, işlem günlüğü, gerçekleşen vs planlanan',
     'Risk: VaR/CVaR, Calmar, Ulcer, korelasyon limitleri',

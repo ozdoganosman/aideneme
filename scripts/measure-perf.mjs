@@ -263,46 +263,11 @@ results.push(
 
 results.push(
   await repeat(
-    'laboratuvar (backtest)',
-    coz(`${BASE}?v=laboratuvar&s={SEMBOL}`),
-    HAZIR['laboratuvar'],
-    async (page) => {
-      const t = Date.now();
-      await page.getByRole('button', { name: 'Doğrulamayı çalıştır' }).click();
-      await page.waitForSelector('.lab__badge', { timeout: 180000 });
-      return { doğrulama_ms: Date.now() - t };
-    },
-  ),
-);
-
-results.push(
-  await repeat(
     'karşılaştır',
     coz(`${BASE}?v=karsilastir&cmp={SEMBOL},{SEMBOL2},{SEMBOL3}`),
     HAZIR['karşılaştır'],
   ),
 );
-
-// Fazlardan sonra eklenen ekranlar: en ağır iki iş (1600 backtest ve model
-// eğitimi) burada. İkisi de worker'da koşuyor; ölçüm bunu doğruluyor.
-results.push(
-  await repeat(
-    'stratejiler (1600 backtest)',
-    coz(`${BASE}?v=stratejiler`),
-    HAZIR['stratejiler'],
-    async (page) => {
-      const t = Date.now();
-      await page.getByLabel('Kapsam').selectOption('symbol');
-      await page.waitForFunction(
-        () => document.querySelectorAll('.rank__table tbody tr').length > 0,
-        { timeout: 120000 },
-      );
-      return { kapsam_değişimi_ms: Date.now() - t };
-    },
-  ),
-);
-
-results.push(await repeat('model (purged CV)', coz(`${BASE}?v=model&s={SEMBOL}`), HAZIR['model']));
 
 results.push(await repeat('rapor', coz(`${BASE}?v=rapor&s={SEMBOL}`), HAZIR['rapor']));
 

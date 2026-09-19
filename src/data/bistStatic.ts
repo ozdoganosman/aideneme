@@ -113,20 +113,13 @@ export async function fetchBistQuotes(signal?: AbortSignal): Promise<Quotes> {
 }
 
 /*
-  `strategies.json` OKUNMUYOR — tipleri ve `fetchStrategies` buradan kaldırıldı.
+  `strategies.json` ARTIK ÜRETİLMİYOR.
 
-  Dosya her dağıtımda `scripts/strategies.py` ile üretilip yayımlanıyor ama
-  hiçbir uygulama onu okumuyordu: `fetchStrategies`in bütün depoda tek geçtiği
-  yer kendi tanımıydı, `StrategyAgg`/`TopCombo`/`StrategiesFile` yalnızca
-  birbirine bakıyordu ve derlenmiş paketlerin hiçbirinde `strategies.json`
-  geçmiyordu (üç ayrı kontrol).
-
-  Yeni kabuk zaten kendi sıralamasını TS çekirdeğiyle yapıyor. Üstelik iki
-  motor aynı soruya cevap vermiyor: TS tarafı `DEFAULT_COSTS` uygularken
-  Python tarafı maliyetsiz — ayrıntısı `docs/plan/faz-7-durum.md`'de.
-
-  Üretim adımının kendisi (deploy.yml + scripts/strategies.py) BİLEREK
-  bırakıldı: bir veri varlığını silmek ürün kararı ve dosya hâlâ yayında.
+  Dosyanın hiçbir okuyucusu yoktu (üç ayrı kontrolle doğrulanmıştı) ve strateji
+  ekranları kaldırılınca üretim adımı da anlamsız kaldı: `scripts/strategies.py`
+  ve deploy adımı silindi. `screener.py`nin kullandığı üç gösterge ortak bir
+  modüle (`scripts/gostergeler.py`) taşındı — silinen bir özelliğin dosyası
+  yalnızca import edilebilsin diye ayakta kalmasın.
 */
 
 export async function fetchBistNames(signal?: AbortSignal): Promise<Record<string, string>> {

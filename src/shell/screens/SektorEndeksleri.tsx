@@ -21,11 +21,6 @@ interface Props {
   market: Market;
   /** Sektöre tıklanınca endeksi grafikte açar. */
   onSelect?: (symbol: string) => void;
-  /**
-   * Sektörle birlikte hareket eden hisseleri stratejilere gönderir. Analiz
-   * istemcisi hazır değilse verilmez ve o sütun hiç çizilmez.
-   */
-  onTest?: (symbols: string[]) => void;
   /** Hazır worker istemcisi — eşleşme hesabı ORADA yapılıyor. */
   client?: AnalysisClient | null;
 }
@@ -62,7 +57,7 @@ const DONEMLER: { bars: number; ad: string }[] = [
  * ana pakette yoklar, tek tek seri dosyaları ise tam geçmiş taşıdığından aynı
  * iş ~1,8 MB olurdu.
  */
-export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
+export function SektorEndeksleri({ market, onSelect, client }: Props) {
   const [seriler, setSeriler] = useState<Map<string, Candles> | null>(null);
   const [durum, setDurum] = useState<'yukleniyor' | 'hazir' | 'yok' | 'hata'>('yukleniyor');
   const [bars, setBars] = useState(21);
@@ -318,21 +313,7 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
                         const liste = resmiSektorunHisseleri(resmi.of, s.ad);
                         if (liste.length === 0) return <span className="desk__muted">—</span>;
                         const baslik = liste.slice(0, 12).join(', ');
-                        return onTest ? (
-                          <button
-                            type="button"
-                            className="sektor__ad"
-                            title={`Stratejilerde test et: ${baslik}`}
-                            // Erişilebilir ad SEKTÖRÜ de söylüyor: "9 hisse →"
-                            // tek başına birden çok satırda aynı ad olurdu.
-                            aria-label={`${s.ad}: ${liste.length} hisseyi stratejilerde test et`}
-                            onClick={() => onTest(liste.slice(0, 60))}
-                          >
-                            {liste.length} hisse →
-                          </button>
-                        ) : (
-                          <span title={baslik}>{liste.length} hisse</span>
-                        );
+                        return <span title={baslik}>{liste.length} hisse</span>;
                       })()}
                     </td>
                   ) : eslesmeler ? (
@@ -340,30 +321,11 @@ export function SektorEndeksleri({ market, onSelect, onTest, client }: Props) {
                       {(() => {
                         const h = sektorunHisseleri(eslesmeler, s.kod);
                         if (h.length === 0) return <span className="desk__muted">—</span>;
-                        const liste = h.map((e) => e.symbol);
                         const baslik = h
                           .slice(0, 12)
                           .map((e) => `${e.symbol} (${trNum(e.korelasyon, 2)})`)
                           .join(', ');
-                        return onTest ? (
-                          <button
-                            type="button"
-                            className="sektor__ad"
-                            title={`Stratejilerde test et: ${baslik}`}
-                            /*
-                              Erişilebilir ad SEKTÖRÜ de söylüyor. "1 hisse →"
-                              tek başına birden çok satırda AYNI ad olurdu
-                              (gerçek veride yedi sektörde birer hisse eşleşti)
-                              ve ekran okuyucu bunları ayırt edemezdi.
-                            */
-                            aria-label={`${s.ad}: ${h.length} hisseyi stratejilerde test et`}
-                            onClick={() => onTest(liste.slice(0, 60))}
-                          >
-                            {h.length} hisse →
-                          </button>
-                        ) : (
-                          <span title={baslik}>{h.length} hisse</span>
-                        );
+                        return <span title={baslik}>{h.length} hisse</span>;
                       })()}
                     </td>
                   ) : null}

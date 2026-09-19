@@ -1838,6 +1838,54 @@ aynı tuzağa daha önce de düşmüştüm.
 Ölçülemeyen kazanç için davranış değiştirmiyoruz. Kayıt burada duruyor ki
 ileride aynı "iyileştirme" yeniden denenmesin.
 
+## Strateji ekranları kaldırıldı
+
+Kullanıcı isteği: "strateji kısımlarını sil şimdilik" ve ardından "strateji
+laboratuvarı ve stratejiler ekranlarını da sil". Kaldırılanlar: **Stratejiler**,
+**Strateji Laboratuvarı**, **Model (purged CV)**.
+
+Kod da silindi, yalnızca menüden gizlenmedi:
+
+| katman     | silinen                                                                |
+| ---------- | ---------------------------------------------------------------------- |
+| ekranlar   | `Strategies` · `Lab` · `ModelScreen` · `labRules` (+ testleri)         |
+| çekirdek   | `core/strategy` · `core/backtest` · `core/ml` · `core/stats/regime`    |
+| worker     | `backtest` · `model` · `rank` · `rankSeries` · `pooledModel` mesajları |
+| veri hattı | `scripts/strategies.py` ve onun deploy adımı; `strategies.json`        |
+| denetim    | e2e ekran listesi, akış testleri, ölçüm aracının ekran listesi         |
+
+Toplam ~10.300 satır gitti. Derlenmiş paket 1,1 MB → **932 KB** (49 → 44 JS
+parçası); `next.html` giriş bütçesi 57,2 → 56,7 KB gzip.
+
+### Kalan bağların hepsi çözüldü
+
+Silinen ekranlara giden bağlantılar sessizce kırık kalmasın diye tek tek
+arandı:
+
+- **Tarayıcı**: "Stratejilerde test et" ve "Girenleri stratejilerde test et"
+  düğmeleri kaldırıldı (testleriyle birlikte).
+- **Nabız → sektör endeksleri**: "N hisse →" düğmesi sembolleri Stratejiler'e
+  yolluyordu. Gideceği yer kalmadı; SAYI duruyor çünkü asıl bilgi o —
+  sektörle birlikte hareket eden kaç hisse var. e2e artık düğme KALMADIĞINI
+  da doğruluyor.
+- **Ana akış testi** ("ürünün ana cümlesi") son halkası Stratejiler'di; akış
+  artık daraltılmış tarama sonucunda bitiyor ve sonucun gerçekten tabloya
+  düştüğünü + bağlantının paylaşılabilir olduğunu sınıyor.
+
+### `screener.py` strategies.py'den fonksiyon alıyordu
+
+Silme sırasında çıktı: `screener.py` (tarama anlık görüntüsünü üreten Python
+betiği, strateji ekranlarıyla ilgisi yok) `ema`, `rsi_arr` ve
+`supertrend_pos`'u `strategies.py`den import ediyordu. Silinen bir özelliğin
+dosyasını "import edilebilsin" diye ayakta tutmak yerine üç gösterge (ve
+bağımlısı `wilder_atr`) `scripts/gostergeler.py`ye taşındı ve doğrulandı.
+
+### Eski arayüze dokunulmadı
+
+`index.html` (eski uygulama) kendi bağımsız strateji motorunu kullanıyor
+(`src/indicators/backtest.ts`, `src/components/Backtest.tsx`). Kullanıcı yeni
+kabuğun ekranlarını saydığı için oraya dokunulmadı.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

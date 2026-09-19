@@ -16,11 +16,8 @@ const SymbolDesk = lazy(() => import('./screens/SymbolDesk'));
 const ScreenerScreen = lazy(() => import('./screens/ScreenerScreen'));
 const Compare = lazy(() => import('./screens/Compare'));
 const Pulse = lazy(() => import('./screens/Pulse'));
-const Lab = lazy(() => import('./screens/Lab'));
 const Portfolio = lazy(() => import('./screens/Portfolio'));
 const Report = lazy(() => import('./screens/Report'));
-const ModelScreen = lazy(() => import('./screens/ModelScreen'));
-const Strategies = lazy(() => import('./screens/Strategies'));
 
 /**
  * URL şeması: /?v=<ekran>&s=<sembol>&tf=<periyot>&m=<piyasa>&cmp=<sembol,sembol>
@@ -162,14 +159,8 @@ export function App() {
                   <Compare state={state} push={push} />
                 ) : screen.id === 'nabiz' ? (
                   <Pulse state={state} push={push} />
-                ) : screen.id === 'laboratuvar' ? (
-                  <Lab state={state} push={push} replace={replace} />
                 ) : screen.id === 'portfoy' ? (
                   <Portfolio state={state} push={push} />
-                ) : screen.id === 'stratejiler' ? (
-                  <Strategies state={state} push={push} />
-                ) : screen.id === 'model' ? (
-                  <ModelScreen state={state} push={push} />
                 ) : screen.id === 'rapor' ? (
                   <Report state={state} push={push} />
                 ) : (

@@ -17,24 +17,9 @@
       "hazir": ".chart-host canvas"
     },
     {
-      "ad": "laboratuvar",
-      "url": "v=laboratuvar&s={SEMBOL}",
-      "hazir": ".lab__stats"
-    },
-    {
       "ad": "karşılaştır",
       "url": "v=karsilastir&cmp={SEMBOL},{SEMBOL2},{SEMBOL3}",
       "hazir": ".compare__matrix"
-    },
-    {
-      "ad": "stratejiler",
-      "url": "v=stratejiler",
-      "hazir": ".rank__table tbody tr"
-    },
-    {
-      "ad": "model",
-      "url": "v=model&s={SEMBOL}",
-      "hazir": ".model__verdict"
     },
     {
       "ad": "rapor",
