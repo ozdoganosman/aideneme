@@ -1,0 +1,1 @@
+import{j as t}from"./markets-CXrgc-7F.js";import{P as s}from"./Popover-BuNQ3AgG.js";import"./next-sO8ivBaY.js";function p({label:r,children:o}){return t.jsx(s,{title:r,align:"start",trigger:e=>t.jsx("button",{type:"button",className:"desk__prov",...e,"aria-label":`${r}: bu sayı nereden geliyor?`,children:"?"}),children:o})}export{p as P};
