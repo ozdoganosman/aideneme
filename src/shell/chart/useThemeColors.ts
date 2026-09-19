@@ -35,11 +35,25 @@ function read(): ChartColors {
   };
 }
 
+/**
+ * İki renk kümesi aynı mı?
+ *
+ * Nesne KİMLİĞİ önemli: bu değer grafik efektlerinin bağımlılığı. Aynı
+ * renkler için yeni bir nesne dönmek, hiçbir şey değişmemişken tuvali
+ * baştan çizdiriyordu. Ölçüldü: ısı haritası tek yüklemede DÖRT kez
+ * çiziliyordu (582 kutu, toplam 206 ms) — biri tam bu yüzden.
+ */
+function ayni(a: ChartColors, b: ChartColors): boolean {
+  return (Object.keys(a) as (keyof ChartColors)[]).every((k) => a[k] === b[k]);
+}
+
 export function useChartColors(): ChartColors {
   const [colors, setColors] = useState<ChartColors>(read);
 
   useEffect(() => {
-    const update = () => setColors(read());
+    // Değer eşitse ÖNCEKİ nesne korunuyor: React güncellemeyi atlar ve
+    // tüketen efektler yeniden koşmaz.
+    const update = () => setColors((onceki) => (ayni(onceki, read()) ? onceki : read()));
     update();
 
     // Açık tema seçimi kökteki data-theme'i değiştirir…

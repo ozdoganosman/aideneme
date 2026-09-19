@@ -1886,6 +1886,68 @@ bağımlısı `wilder_atr`) `scripts/gostergeler.py`ye taşındı ve doğruland�
 (`src/indicators/backtest.ts`, `src/components/Backtest.tsx`). Kullanıcı yeni
 kabuğun ekranlarını saydığı için oraya dokunulmadı.
 
+## Nabız: aynı tuval dört kez çiziliyordu
+
+Strateji ekranları gidince en yavaş ekran Nabız kaldı. İz kaydı (CDP Tracing,
+6× yavaşlatma, gerçek BIST verisi) ana iş parçacığını türe göre böldü:
+
+| tür               | süre   |
+| ----------------- | ------ |
+| FunctionCall      | 779 ms |
+| Paint             | 198 ms |
+| Layout            | 175 ms |
+| EvaluateScript    | 103 ms |
+| HandlePostMessage | 14 ms  |
+
+`HandlePostMessage` 14 ms: worker'dan gelen yükü ana iş parçacığının
+çözmesi PAHALI DEĞİL — 582×582'lik korelasyon matrisi "kopyalanıyor" diye
+kurduğum hipotez buradan çöktü (matris zaten transfer ediliyor, klonlanmıyor).
+
+En uzun FunctionCall olaylarının hepsi React'in çalışma döngüsüydü
+(135/124/113/80/62/47 ms). Isı haritasının çizimine sayaç koydum:
+
+```
+ısı haritası çizimi: 4 kez, toplam 206 ms
+  1687 ms  efekt   +109 ms
+  1775 ms  resize  +33 ms
+  1950 ms  efekt   +31 ms
+  2000 ms  resize  +33 ms
+```
+
+582 kutuluk tuval tek yüklemede DÖRT kez çiziliyordu. İki ayrı sebep:
+
+1. **`useChartColors` her kuruluşta yeni nesne döndürüyordu.** Kanca
+   kuruluşta koşulsuz `setColors(read())` çağırıyor; değerler aynı olsa bile
+   nesne YENİ, React bunu değişiklik sayıyor ve bu değeri bağımlılık olarak
+   tutan her grafik efekti bir kez daha koşuyor. Artık değer eşitse önceki
+   nesne korunuyor.
+2. **ResizeObserver `observe` anında ateşliyor.** Az önce çizdiğimiz
+   genişlikle aynı boyutu bildiriyor ve tuval boşuna baştan çiziliyordu.
+   Genişlik gerçekten değişmediyse çizmiyoruz (HeatMap ve LineChart).
+
+Ölçüm (3 tekrarın medyanı):
+
+|                        | önce           | sonra              |
+| ---------------------- | -------------- | ------------------ |
+| ısı haritası çizimi    | 4 kez · 206 ms | **1 kez · 106 ms** |
+| Nabız hazır            | 2139 ms        | **1940 ms**        |
+| ana iş parçacığı bloku | 506 ms         | **407–425 ms**     |
+| uzun görev sayısı      | 10             | **8**              |
+
+`useChartColors` grafiklerin ortak kancası, yani kazanç Nabız'a özel değil.
+Kimlik sabitliği birim testiyle bağlandı: düzeltme kapatılınca test düşüyor
+(doğrulandı). Test SESSİZLİĞİ değil DAVRANIŞI koruyor — ikinci bir sınama
+gerçek tema değişiminde yeni nesne döndüğünü de doğruluyor.
+
+### Bu turda çürüyen iki hipotez
+
+- "Worker havuzu kurulumu darboğaz": ölçüldü, 3 worker + 2,9 MB paket için
+  **105 ms**. Değil.
+- "Korelasyon matrisi ana iş parçacığına kopyalanıyor": `HandlePostMessage`
+  toplam **14 ms**. Değil — matris zaten transfer ediliyor.
+
+Ölçmeden düzeltmeye kalksaydım ikisi de "iyileştirme" diye yazılacaktı.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

@@ -192,8 +192,15 @@ export function LineChart({
       ctx.fillText(endLabel, padL + plotW - ctx.measureText(endLabel).width, height - 6);
     };
 
+    let sonGenislik = canvas.clientWidth;
     draw();
-    const observer = new ResizeObserver(draw);
+    // `observe` anında bir kez ateşler: az önce çizdiğimiz genişlikle aynı.
+    // Genişlik değişmediyse çizmiyoruz (bkz. HeatMap'teki aynı ölçüm).
+    const observer = new ResizeObserver(() => {
+      if (canvas.clientWidth === sonGenislik) return;
+      sonGenislik = canvas.clientWidth;
+      draw();
+    });
     observer.observe(canvas);
     return () => observer.disconnect();
   }, [series, normalize, height, unit, zeroLine, colors]);

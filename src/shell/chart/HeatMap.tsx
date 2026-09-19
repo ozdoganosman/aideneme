@@ -126,8 +126,18 @@ export function HeatMap({
       tilesRef.current = tiles;
     };
 
+    let sonGenislik = canvas.clientWidth;
     draw();
-    const observer = new ResizeObserver(draw);
+    /*
+      ResizeObserver `observe` anında bir kez ateşler: az önce çizdiğimiz
+      genişlikle aynı. GENİŞLİK DEĞİŞMEDİYSE çizmiyoruz — 582 kutuluk tuval
+      zayıf makinede ~110 ms tutuyor ve bu çağrı hiçbir şeyi değiştirmiyordu.
+    */
+    const observer = new ResizeObserver(() => {
+      if (canvas.clientWidth === sonGenislik) return;
+      sonGenislik = canvas.clientWidth;
+      draw();
+    });
     observer.observe(canvas);
     return () => observer.disconnect();
   }, [rows, order, scale, height, layout, colors]);
