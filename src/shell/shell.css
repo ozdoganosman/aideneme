@@ -2103,6 +2103,22 @@
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+/*
+  KAPALI `details` İÇERİĞİ GİZLİ KALMALI — ve bu satır olmadan kalmıyor.
+
+  Tarayıcı kapalı `<details>` içeriğini kendi kuralıyla gizliyor, ama o kural
+  yazarın `display` bildirimiyle EZİLİYOR: aşağıdaki `.radar__sektor-cipler`
+  kuralı `display: flex` diyor ve 27 onay kutusu kapalıyken de yerleşmeye
+  devam ediyordu. Kutu boyu sıfır olduğu için altındaki bölümlerin ÜSTÜNE
+  biniyorlardı — görünmez ama tıklamayı çalan bir katman.
+
+  Kendi yazdığım tıklanabilirlik denetimi yakaladı (42 bulgu: sınıfsız
+  `input`ler `h4` ve `.radar__olcut` ile örtülü). Denetimi yazarken
+  hedeflediğim kusur sınıfının ilk gerçek örneği, kendi değişikliğim oldu.
+*/
+.radar__sektor:not([open]) > .radar__sektor-cipler {
+  display: none;
+}
 .radar__sektor-cipler {
   display: flex;
   flex-wrap: wrap;
