@@ -10,7 +10,6 @@ export type IconName =
   | 'candles'
   | 'search'
   | 'compare'
-  | 'flask'
   | 'wallet'
   | 'report'
   | 'swatch'
@@ -20,7 +19,6 @@ export type IconName =
   | 'star'
   | 'refresh'
   | 'close'
-  | 'model'
   | 'rank'
   | 'alert'
   | 'plus';
@@ -31,7 +29,6 @@ const PATHS: Record<IconName, string> = {
     'M7 4v3m0 10v3M7 7h0a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM17 3v5m0 8v5m0-13h0a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   compare: 'M4 8h13M14 5l3 3-3 3M20 16H7m3 3-3-3 3-3',
-  flask: 'M10 3v6L5 18a2 2 0 0 0 1.7 3h10.6A2 2 0 0 0 19 18l-5-9V3M9 3h6M7.5 14h9',
   wallet: 'M4 7a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zM16 12h3M4 9h15',
   report: 'M7 3h7l5 5v13H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h7M9 17h5',
   swatch: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
@@ -41,8 +38,6 @@ const PATHS: Record<IconName, string> = {
   star: 'M12 4l2.4 5 5.6.8-4 3.9.9 5.5-4.9-2.6-4.9 2.6.9-5.5-4-3.9 5.6-.8z',
   refresh: 'M20 11a8 8 0 1 0-.6 4M20 5v6h-6',
   close: 'M6 6l12 12M18 6 6 18',
-  model:
-    'M6 5.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6 14.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM18 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 8.5l8 2.5M8 15.5l8-2.5',
   rank: 'M4 20h16M7 20V9M12 20V4M17 20v-7',
   plus: 'M12 5v14M5 12h14',
   alert: 'M12 4 2.5 20h19L12 4zM12 10v4m0 3h.01',
