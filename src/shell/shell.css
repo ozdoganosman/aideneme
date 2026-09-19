@@ -2073,13 +2073,35 @@
   padding: 0;
   border: 0;
 }
-.radar__sektor legend {
-  padding: 0;
-  margin-bottom: var(--sp-1);
+/* Katlanır sektör başlığı: `fieldset/legend` yerine `details/summary`.
+   27 onay kutusu paneli kaplıyordu; başlık artık hem özet hem düğme. */
+.radar__sektor > summary {
+  padding: var(--sp-1) 0;
   color: var(--text-secondary);
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  cursor: pointer;
+  list-style: none;
+}
+.radar__sektor > summary::-webkit-details-marker {
+  display: none;
+}
+/* Açılır olduğunu gösteren ok; katlandığında sağa, açıkken aşağı bakar. */
+.radar__sektor > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 1em;
+  margin-right: var(--sp-1);
+  transition: transform 120ms ease;
+}
+.radar__sektor[open] > summary::before {
+  transform: rotate(90deg);
+}
+.radar__sektor > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 .radar__sektor-cipler {
   display: flex;
@@ -2124,6 +2146,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Birim, adın yanında ve soluk: "1 gün %" satırın neyin sayısını istediğini
+   söylüyor. Eskiden yalnızca "en az / en çok" yazıyordu ve kullanıcı yüzde mi
+   kat mı lira mı olduğunu tahmin ediyordu. */
+.radar__olcut-birim {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
 .radar__olcut .ui-input {
   padding: 4px var(--sp-2);
   font-size: var(--fs-sm);
@@ -2134,28 +2164,55 @@
 .radar__hazirlar {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  /* Kartlar birbirine yapışmasın: 2 px'te kenarlıklar tek blok gibi okunuyordu. */
+  gap: var(--sp-1);
   width: min(320px, 76vw);
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* HAZIR FİLTRELER TIKLANABİLİR GÖRÜNMELİ. `border: none; background: none`
+   ile bunlar düz metin gibi duruyordu: beş satır başlık+açıklama, hiçbirinde
+   tıklanacak bir şey olduğuna dair işaret yok. Artık her biri kendi kartı,
+   kenarlığı ve üstüne gelince vurgusu var; sağdaki ok "buraya basılır"
+   diyor. */
 .radar__hazirlar button {
   display: flex;
   flex-direction: column;
   gap: 2px;
   width: 100%;
   padding: var(--sp-2);
-  border: none;
+  padding-right: calc(var(--sp-2) + 14px);
+  position: relative;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: none;
+  background: var(--surface-0);
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 }
-.radar__hazirlar button:hover {
+.radar__hazirlar button::after {
+  content: '›';
+  position: absolute;
+  right: var(--sp-2);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  line-height: 1;
+}
+.radar__hazirlar button:hover,
+.radar__hazirlar button:focus-visible {
+  border-color: var(--accent);
   background: var(--surface-1);
+}
+.radar__hazirlar button:hover::after,
+.radar__hazirlar button:focus-visible::after {
+  color: var(--accent);
 }
 .radar__hazirlar .desk__muted {
   font-size: var(--fs-xs);

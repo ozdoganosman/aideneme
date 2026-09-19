@@ -184,7 +184,12 @@ export default function SymbolDesk({ state, push }: Props) {
   }));
   const [radarAcik, setRadarAcik] = useState(() => kayit.current.radar ?? false);
   const [radarGenislik, setRadarGenislik] = useState(() =>
-    Math.min(RADAR_MAX, Math.max(RADAR_MIN, tercihOku<number>(RADAR_ANAHTARI, 300))),
+    // VARSAYILAN 300 DEĞİL 420. 300 px'te radar tablosunun görünen alanı 272
+    // px kalıyordu ve varsayılan sütunlar 520 px yer istiyordu: kullanıcı
+    // fiyatı görmek için bile yatay kaydırmak zorundaydı (ölçüldü). 420 px'te
+    // sembol + fiyat + 1 gün + hacim oranı + eylem sığıyor; sektör sütunu
+    // ayırıcı genişletilince kendiliğinden geliyor.
+    Math.min(RADAR_MAX, Math.max(RADAR_MIN, tercihOku<number>(RADAR_ANAHTARI, 420))),
   );
   const requestId = useRef(0);
   const surukleme = useRef<{ x: number; w: number } | null>(null);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Combobox,
@@ -167,9 +167,42 @@ function fmtOlcut(id: string, v: number): string {
   const def = OLCUT_BY_ID.get(id);
   if (def?.unit === 'pct') return trPct(v, 2, true);
   if (def?.unit === 'ratio') return `${trNum(v, 2)}×`;
-  if (def?.unit === 'price') return trNum(v, def.decimals ?? 2);
+  if (def?.unit === 'price') {
+    /*
+      BÜYÜK FİYATTA KURUŞ GÖSTERİLMİYOR ve bu bir kısaltma değil, KIRPILMAYI
+      ÖNLEME. Sabit iki basamakla "4.125.000,00" on iki hane ediyor ve 88
+      px'lik sütuna sığmıyor: gerçek veride ISKUR "4.125.00…" diye kırpılmış
+      görünüyordu. Kırpılmış sayı okunamaz, yani yanlış sayıdır — bu kural
+      tabloda zaten yazılı, burada uygulanmamıştı.
+
+      Binin üstünde kuruş bilgi taşımıyor; anlamlı basamak korunuyor.
+    */
+    const ondalik = Math.abs(v) >= 1000 ? 0 : (def.decimals ?? 2);
+    return trNum(v, ondalik);
+  }
   if (def?.unit === 'money') return trCompact(v);
   return trNum(v, 1);
+}
+
+/**
+ * Ölçütün birimi — filtre satırında adın yanına yazılıyor.
+ *
+ * "1 gün · en az · en çok" satırı neyin sayısını istediğini söylemiyordu:
+ * yüzde mi, kat mı, lira mı? Kullanıcı tahmin etmek zorunda kalıyordu.
+ */
+function birimEki(def: MetricDef): string {
+  const birim =
+    def.unit === 'pct'
+      ? '%'
+      : def.unit === 'ratio'
+        ? '×'
+        : def.unit === 'money' || def.unit === 'price'
+          ? 'TL'
+          : '';
+  // Etiket birimi ZATEN taşıyorsa tekrarlanmıyor: "ATR %" satırı ilk
+  // denememde "ATR % %" diye çıktı.
+  if (!birim || def.label.includes(birim)) return '';
+  return birim;
 }
 
 /** Çip metni: "F/K ≤ 10" ya da "Değ % 2 – 5". */
@@ -358,7 +391,44 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
     return applyScreen(sektorlu, { rules: kurallar });
   }, [satirlar, ara, kurallar, sektorSecim]);
 
-  const columns: Column<ScreenRow>[] = useMemo(() => {
+  /*
+    PANEL GENİŞLİĞİ ÖLÇÜLÜYOR, SÜTUNLAR ONA GÖRE SEÇİLİYOR.
+
+    Radar bir raf ve genişliği düzene göre değişiyor. Sütunlar sabit
+    genişlikteydi, toplamları rafın iki katını aşıyordu: ölçüldü — görünen
+    alan 272 px, sütun toplamı 520 px (filtresiz), 712 px (iki filtreyle).
+    Yani tablonun yarısından fazlası her zaman yatay kaydırmanın arkasındaydı
+    ve kullanıcı fiyatı görmek için bile kaydırmak zorundaydı.
+
+    Artık sığan seçiliyor. Öncelik: sembol → FİLTRELENEN ölçütler → kullanıcının
+    seçtiği sütunlar → sektör. Gizlenen sütun SESSİZCE düşürülmüyor, sayısı
+    yazılıyor; kullanıcının seçimini habersiz iptal etmek de bir kullanıcı
+    düşmanlığıdır.
+  */
+  const [tabloGenislik, setTabloGenislik] = useState(0);
+  const gozlemciRef = useRef<ResizeObserver | null>(null);
+  /*
+    GERİ ÇAĞIRMALI REF, `useEffect` değil. İlk yazışım `useEffect(..., [])`
+    idi ve HİÇ ÇALIŞMADI: tablo veri gelene kadar render edilmiyor, yani
+    efekt kurulduğunda `ref.current` boştu ve bir daha denenmiyordu. Ölçüm
+    0 kalınca sütun bütçesi de sonsuz kalıyor, düzeltme sessizce devre dışı
+    oluyordu (ölçüldü: içerik yine 712 px).
+
+    Geri çağırmalı ref düğüm BAĞLANDIĞI anda çalışıyor, sökülünce de
+    gözlemciyi bırakıyor.
+  */
+  const tabloRef = (el: HTMLDivElement | null) => {
+    gozlemciRef.current?.disconnect();
+    gozlemciRef.current = null;
+    if (!el) return;
+    setTabloGenislik(el.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setTabloGenislik(el.clientWidth));
+    ro.observe(el);
+    gozlemciRef.current = ro;
+  };
+
+  const sutunSecimi = useMemo((): { cols: Column<ScreenRow>[]; gizli: number } => {
     const sayisal = (id: string, genislik: string): Column<ScreenRow> => ({
       key: id,
       header: OLCUT_BY_ID.get(id)?.label ?? id,
@@ -376,11 +446,33 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
       },
     });
 
+    /*
+      SIRA ÖNEM SIRASI: sembol → FİLTRELENEN ölçütler → seçili sütunlar.
+
+      "Filtrelenen ölçüt sütun olarak da gelsin" kuralı zaten vardı ama sütun
+      listenin SONUNA ekleniyordu ve orası görünmüyor: panel bir raf, ölçüldü
+      — kaydırma alanı 272 px, sütunların toplamı 520 px, yani 248 px yatay
+      kaydırmanın arkasında. Kullanıcı "EMA hızlı fark ≥ 0" filtresini kurup
+      tam o sütunu göremiyordu. Cevabı ekrana koymanın anlamı, GÖRÜNEN yere
+      koymaktır.
+    */
+    const filtreli = Object.keys(araliklar).filter((id) => OLCUT_BY_ID.has(id));
+    const secili = sutunlar.filter((id) => OLCUT_BY_ID.has(id) && !filtreli.includes(id));
+
+    // Sembol + eylem her zaman duruyor; kalan bütçe sütunlara dağıtılıyor.
+    // Genişlik henüz ölçülmediyse (ilk kare) sınır uygulanmıyor.
+    let butce = tabloGenislik > 0 ? tabloGenislik - 76 - 36 : Number.POSITIVE_INFINITY;
+    const sigar = (px: number): boolean => {
+      if (butce - px < 0) return false;
+      butce -= px;
+      return true;
+    };
+
     const cols: Column<ScreenRow>[] = [
       {
         key: 'symbol',
         header: 'Sembol',
-        width: '88px',
+        width: '76px',
         sortValue: (r) => r.symbol,
         render: (r) => (
           <span className={r.symbol === symbol ? 'radar__ad is-aktif' : 'radar__ad'}>
@@ -388,29 +480,35 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           </span>
         ),
       },
-      ...sutunlar.filter((id) => OLCUT_BY_ID.has(id)).map((id) => sayisal(id, '88px')),
     ];
 
-    // FİLTRELENEN ölçüt sütun olarak da geliyor: "neden bu satır kaldı"
-    // sorusunun cevabı ekranda olsun, kullanıcı aklında tutmasın.
-    for (const id of Object.keys(araliklar)) {
-      if (!cols.some((c) => c.key === id)) cols.push(sayisal(id, '96px'));
+    // Filtrelenen ölçüt ATLANMIYOR: satırın neden kaldığını anlatan sütun,
+    // yer dar diye gizlenirse filtre yine anlaşılmaz olur.
+    let gizli = 0;
+    for (const id of filtreli) {
+      sigar(84);
+      cols.push(sayisal(id, '84px'));
+    }
+    for (const id of secili) {
+      if (sigar(84)) cols.push(sayisal(id, '84px'));
+      else gizli++;
     }
 
-    if (sektorler) {
+    if (sektorler && sigar(120)) {
       cols.push({
         key: 'sector',
         header: 'Sektör',
-        width: '128px',
+        width: '120px',
         sortValue: (r) => r.sector ?? '',
-        render: (r) => r.sector ?? UNCLASSIFIED,
+        // Uzun sektör adı dar rafta sığmıyor; tam adı `title` ile kurtarılıyor.
+        render: (r) => <span title={r.sector ?? UNCLASSIFIED}>{r.sector ?? UNCLASSIFIED}</span>,
       });
     }
 
     cols.push({
       key: 'eylem',
       header: '',
-      width: '40px',
+      width: '36px',
       render: (r) =>
         liste.includes(r.symbol) ? (
           <IconButton
@@ -426,11 +524,14 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           </IconButton>
         ),
     });
-    return cols;
-    // `liste`, `symbol`, sınıflandırma, sütunlar ve etkin filtreler dışındaki
-    // her şey sabit.
+    return { cols, gizli };
+    // `liste`, `symbol`, sınıflandırma, sütunlar, etkin filtreler ve PANEL
+    // GENİŞLİĞİ dışındaki her şey sabit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liste, symbol, sektorler, araliklar, sutunlar]);
+  }, [liste, symbol, sektorler, araliklar, sutunlar, tabloGenislik]);
+
+  const columns = sutunSecimi.cols;
+  const gizliSutun = sutunSecimi.gizli;
 
   const sirali = useMemo(() => sortRows(suzulmus, columns, sira), [suzulmus, columns, sira]);
 
@@ -469,8 +570,23 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
     <aside className="radar" aria-label="Radar">
       <header className="radar__bas">
         <h3>Radar</h3>
-        <span className="radar__sayac">
-          {sirali.length} / {satirlar.length}
+        {/*
+          "20 / 582" ne demek belli değildi: bölü işareti hem "sayfa" hem
+          "oran" hem "eşleşme" okunabiliyor. Sayının yanına ne olduğu
+          yazılıyor ve filtre varken FARKLI cümle kuruluyor — süzülmemiş
+          listede "eşleşti" demek yanıltıcı olurdu.
+        */}
+        <span
+          className="radar__sayac"
+          title={`Radardaki ${satirlar.length} sembolden ${sirali.length} tanesi görünüyor`}
+        >
+          {sirali.length === satirlar.length ? (
+            <>{satirlar.length} sembol</>
+          ) : (
+            <>
+              <b>{sirali.length}</b> / {satirlar.length} eşleşti
+            </>
+          )}
         </span>
         <IconButton label="Radarı kapat" onClick={onClose}>
           <Icon name="close" size={16} />
@@ -568,15 +684,25 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
               başlığı, filtrenin var olduğunu ama çalışmadığını düşündürür.
             */}
             {sektorAdlari.length > 0 ? (
-              <fieldset className="radar__grup radar__sektor">
-                <legend>
+              /*
+                SEKTÖR ARTIK KATLI AÇILIYOR. 27 onay kutusu panelin yarısından
+                fazlasını kaplıyordu: ölçüldü — panel 580 px yüksekliğinde ve
+                sayısal filtrelerin ilki ancak sektör duvarının altında
+                başlıyordu. "Hangi sektör" sorusu önce gelebilir ama HER
+                açılışta 27 satır ödetmek, asıl aracı (30 ölçüt) gömüyor.
+
+                Seçim varken KENDİLİĞİNDEN açık: kullanıcı kendi kurduğu
+                süzgeci kapalı bir kutunun arkasında aramamalı.
+              */
+              <details className="radar__grup radar__sektor" open={sektorSecim.length > 0}>
+                <summary>
                   Sektör{' '}
                   <span className="desk__muted">
                     {sektorSecim.length === 0
                       ? 'hepsi'
                       : `${sektorSecim.length} seçili · sektörü bilinmeyenler elenir`}
                   </span>
-                </legend>
+                </summary>
                 <div className="radar__sektor-cipler">
                   {sektorAdlari.map((ad) => {
                     const acik = sektorSecim.includes(ad);
@@ -596,7 +722,7 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
                     );
                   })}
                 </div>
-              </fieldset>
+              </details>
             ) : null}
             {GRUPLAR.map((grup) => {
               const gorunen = grup.idler
@@ -609,7 +735,12 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
                   <h4>{grup.ad}</h4>
                   {gorunen.map((def) => (
                     <div key={def.id} className="radar__olcut">
-                      <span className="radar__olcut-ad">{def.label}</span>
+                      <span className="radar__olcut-ad">
+                        {def.label}
+                        {birimEki(def) ? (
+                          <span className="radar__olcut-birim">{birimEki(def)}</span>
+                        ) : null}
+                      </span>
                       <input
                         className="ui-input"
                         type="number"
@@ -707,8 +838,20 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           // görünmüyordu ve okunamıyordu.
           align="end"
           trigger={(p) => (
-            <Button size="sm" variant="secondary" aria-label="Sütun seçici" {...p}>
-              Sütun
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={
+                gizliSutun > 0
+                  ? `Sütun seçici — ${gizliSutun} sütun panele sığmadığı için gizli`
+                  : 'Sütun seçici'
+              }
+              /* Gizlenen sütun SESSİZCE düşürülmüyor: kullanıcı bir sütunu
+                 açtıysa ve panel dar diye görünmüyorsa, bunu bilmeli. */
+              title={gizliSutun > 0 ? `${gizliSutun} sütun panele sığmadı` : undefined}
+              {...p}
+            >
+              Sütun{gizliSutun > 0 ? ` (−${gizliSutun})` : ''}
             </Button>
           )}
         >
@@ -808,7 +951,7 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
       ) : !ham ? (
         <p className="radar__bos desk__muted">Paket indiriliyor…</p>
       ) : (
-        <div className="radar__tablo">
+        <div className="radar__tablo" ref={tabloRef}>
           <VirtualTable
             rows={sirali}
             columns={columns}

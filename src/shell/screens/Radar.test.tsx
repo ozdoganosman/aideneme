@@ -94,6 +94,18 @@ async function tumPiyasa(user: ReturnType<typeof userEvent.setup>) {
   await user.selectOptions(await screen.findByLabelText('Kapsam'), 'piyasa');
 }
 
+/**
+ * Sayaç metni artık düğümlere bölünüyor ("<b>1</b> / 2 eşleşti"), o yüzden
+ * düz metin araması tutmuyor. Eşleştirici KABIN metnine bakıyor.
+ */
+function sayac(beklenen: string) {
+  return async () =>
+    await screen.findByText((_metin, el) => {
+      if (!el?.classList.contains('radar__sayac')) return false;
+      return (el.textContent ?? '').replace(/\s+/g, ' ').trim() === beklenen;
+    });
+}
+
 describe('araliklarKurallara', () => {
   it('tek sınır tek kurala, iki sınır aralığa dönüyor', () => {
     expect(araliklarKurallara({ pe: { max: 10 } })).toEqual([{ metric: 'pe', op: 'lt', a: 10 }]);
@@ -151,12 +163,12 @@ describe('Radar — filtreler', () => {
   it('aralık filtresi satırları eliyor ve sayaç düşüyor', async () => {
     const user = userEvent.setup();
     await tumPiyasa(user);
-    expect(await screen.findByText('2 / 2')).toBeInTheDocument();
+    expect(await sayac('2 sembol')()).toBeInTheDocument();
 
     await filtrePaneliniAc(user);
     await user.type(screen.getByLabelText('Hacim oranı en az'), '2');
 
-    expect(await screen.findByText('1 / 2')).toBeInTheDocument();
+    expect(await sayac('1 / 2 eşleşti')()).toBeInTheDocument();
     const kalan = await satirlar();
     expect(kalan).toHaveLength(1);
     expect(kalan[0]).toContain('THYAO');
@@ -199,11 +211,11 @@ describe('Radar — filtreler', () => {
     await tumPiyasa(user);
     await filtrePaneliniAc(user);
     await user.type(screen.getByLabelText('Hacim oranı en az'), '2');
-    await screen.findByText('1 / 2');
+    await sayac('1 / 2 eşleşti')();
     expect(JSON.parse(localStorage.getItem('radar.filtre.v2')!)).toHaveProperty('volRatio');
 
     await user.click(screen.getByRole('button', { name: /Filtreyi kaldır: Hacim oranı/ }));
-    expect(await screen.findByText('2 / 2')).toBeInTheDocument();
+    expect(await sayac('2 sembol')()).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem('radar.filtre.v2')!)).toEqual({});
   });
 
@@ -214,7 +226,7 @@ describe('Radar — filtreler', () => {
     await filtrePaneliniAc(user);
     // Çarpan verisi yok (snapshot null) → F/K her satırda boş.
     await user.type(screen.getByLabelText('F/K en çok'), '1000');
-    expect(await screen.findByText('0 / 2')).toBeInTheDocument();
+    expect(await sayac('0 / 2 eşleşti')()).toBeInTheDocument();
     expect(screen.getByText(/Filtrelere uyan sembol yok/)).toBeInTheDocument();
   });
 
@@ -255,12 +267,12 @@ describe('Radar — filtreler', () => {
     });
     const user = userEvent.setup();
     await tumPiyasa(user);
-    expect(await screen.findByText('2 / 2')).toBeInTheDocument();
+    expect(await sayac('2 sembol')()).toBeInTheDocument();
 
     await filtrePaneliniAc(user);
     await user.click(screen.getByRole('checkbox', { name: 'Ulaştırma' }));
 
-    expect(await screen.findByText('1 / 2')).toBeInTheDocument();
+    expect(await sayac('1 / 2 eşleşti')()).toBeInTheDocument();
     expect((await satirlar())[0]).toContain('THYAO');
     // Düğme sayacı sektörü de sayıyor; aksi hâlde "filtre yok" der gibi durur.
     expect(screen.getByRole('button', { name: /^Filtre paneli, 1 etkin/ })).toBeInTheDocument();
