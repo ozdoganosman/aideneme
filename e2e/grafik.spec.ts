@@ -252,3 +252,60 @@ test.describe('Sembol Masası — hisse değişiminde görünüm', () => {
     expect(await ozet(), 'hisse değişince görünüm sıfırlandı').toBe(once);
   });
 });
+
+/**
+ * Sekme değişiminde grafik SÖKÜLMÜYOR.
+ *
+ * Kullanıcı isteği "hem finansallara hem grafiklere kolayca erişip"
+ * diyordu. Grafik başka sekmeye geçince yok edilip geri dönüşte yeniden
+ * kuruluyordu; zayıf makinede ölçüldü (6× yavaşlatma, gerçek BIST verisi):
+ * finansallardan grafiğe dönüş 540 ms ve içinde 233 ms'lik bir donma.
+ * Gizlemeyle 334 ms ve 149 ms. Gizliyken uzun görev üretmiyor ve düzende
+ * yer kaplamıyor (0×0), yani bedeli yok.
+ */
+test.describe('Sembol Masası — sekme değişimi', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('finansallara geçince grafik yaşıyor, dönünce görünüm duruyor', async ({ page }) => {
+    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+    await page.waitForTimeout(1500);
+
+    const kutu = (await page.locator('.chart-host').boundingBox())!;
+    await page.mouse.move(kutu.x + kutu.width * 0.7, kutu.y + kutu.height / 2);
+    for (let i = 0; i < 8; i++) {
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(40);
+    }
+    await page.waitForTimeout(700);
+    const once = (await page.locator('.chart-ozet').first().textContent()) ?? '';
+    expect(once).toMatch(/Görünen aralık:/);
+
+    await page
+      .getByRole('tab', { name: /finansal/i })
+      .first()
+      .click();
+    await page.waitForSelector('.barseries', { timeout: 30_000 });
+
+    // Grafik DOM'da duruyor ama gizli: ne çizim yapıyor ne yer kaplıyor.
+    const kap = page.locator('.desk__grafikalan');
+    await expect(kap, 'grafik sekme değişiminde sökülmüş').toHaveCount(1);
+    await expect(kap).toBeHidden();
+    expect(
+      await page.evaluate(() => {
+        const d = document.querySelector('.desk__grafikalan') as HTMLElement | null;
+        const r = d?.getBoundingClientRect();
+        return r ? Math.round(r.width * r.height) : -1;
+      }),
+      'gizli grafik düzende yer kaplıyor',
+    ).toBe(0);
+
+    await page.getByRole('tab', { name: 'Grafik' }).first().click();
+    await page.waitForTimeout(1200);
+    await expect(kap).toBeVisible();
+    expect(
+      (await page.locator('.chart-ozet').first().textContent()) ?? '',
+      'sekmeden dönünce görünüm sıfırlandı',
+    ).toBe(once);
+  });
+});

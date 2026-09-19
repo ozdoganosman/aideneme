@@ -367,6 +367,23 @@
      kap büyümeye devam ediyor. */
   min-height: 100%;
 }
+/*
+  Grafik sekmesinin kabı: düzene GÖRÜNMEZ.
+
+  Grafik başka sekmeye geçince SÖKÜLMÜYOR, gizleniyor — yeniden kurmak zayıf
+  makinede pahalı (ölçüldü: finansallardan grafiğe dönüş 540 ms ve 233 ms'lik
+  bir donma; gizlemeyle 334 ms ve 149 ms). Ama araya bir kap koymak `.desk`
+  esnek düzenini bozardı: `.desk__alan`ın `flex: 1`i kabın içinde kalır ve
+  grafik yüksekliğini alamazdı. `display: contents` kabı düzenden siler;
+  `[hidden]` hâli yine gizler (UA'nın `display: none`'ı contents tarafından
+  ezildiği için açıkça yazılıyor).
+*/
+.desk__grafikalan {
+  display: contents;
+}
+.desk__grafikalan[hidden] {
+  display: none;
+}
 .desk__bar {
   display: flex;
   align-items: flex-end;

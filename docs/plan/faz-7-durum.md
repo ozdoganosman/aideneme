@@ -2052,6 +2052,40 @@ ekranın tamamını değil. Kazanç EKRAN YÜKLEMESİNDE ölçülebilir hâle ge
 Kurucunun bir kez çağrıldığı birim testiyle bağlandı; önbellek kaldırılınca
 test düşüyor (doğrulandı).
 
+## Sekme değişiminde grafik sökülüyordu
+
+Kullanıcının cümlesinin diğer yarısı: "hem finansallara hem grafiklere
+kolayca erişip". Sembol masasında ikisi ayrı sekme ve grafik sekmeden
+çıkınca YOK EDİLİYORDU; geri dönüşte baştan kuruluyor.
+
+Ölçüm (6× yavaşlatma, gerçek BIST verisi, tuval gerçekten görünür olana
+kadar):
+
+| geçiş               | sökülüyor             | gizleniyor              |
+| ------------------- | --------------------- | ----------------------- |
+| → Grafik (1. dönüş) | 540 ms · donma 233 ms | **334 ms · 149 ms**     |
+| → Grafik (2. dönüş) | 446 ms · donma 195 ms | **350 ms · 154 ms**     |
+| → Finansallar       | 424 / 239 ms          | 463 / 227 ms (fark yok) |
+
+Gizli grafiğin bedeli ölçüldü: finansallarda 3 saniye beklerken **hiç uzun
+görev üretmiyor** ve düzende **0×0** yer kaplıyor.
+
+Araya kap koymak `.desk` esnek düzenini bozardı (`.desk__alan`ın `flex: 1`i
+kabın içinde kalır, grafik yüksekliğini alamazdı); kap `display: contents`
+ile düzenden siliniyor, `[hidden]` hâli açıkça `display: none` yazılarak
+korunuyor. Grafik yüksekliği ölçüldü: görünür alanın %76'sı — eskisiyle aynı.
+
+e2e bağladı: finansallardayken kap DOM'da ama gizli ve 0×0; dönüşte görünüm
+aynı kalıyor. Sökme davranışına geri dönülünce test düşüyor (doğrulandı).
+
+### Önceki ölçümüm yanlıştı
+
+İlk denemede "grafiğe dönüş 2011 ms" yazmıştım ve düzeltmeden sonra
+1866 ms görüp "kazanç yok" diye geçecektim. İkisi de yanlıştı: ölçüm
+kancasında sabit bir `waitForTimeout(1500)` vardı, yani sayının 1,5 saniyesi
+benim beklememdi. Kanca tuvalin GERÇEKTEN görünür olmasını bekleyecek şekilde
+yeniden yazıldı; gerçek sayılar yukarıdaki tabloda.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

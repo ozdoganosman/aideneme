@@ -586,8 +586,18 @@ export default function SymbolDesk({ state, push }: Props) {
         </Suspense>
       ) : null}
 
-      {load.status === 'ready' && candles && tab === 'grafik' ? (
-        <>
+      {/*
+        Grafik sekmesi SÖKÜLMÜYOR, gizleniyor.
+
+        Kullanıcı isteği "hem finansallara hem grafiklere kolayca erişip"
+        diyordu; sekme değişiminde grafiği yok edip yeniden kurmak zayıf
+        makinede pahalı. Ölçüldü (6× yavaşlatma, gerçek BIST verisi):
+        finansallardan grafiğe dönüş 540 ms ve içinde 233 ms'lik bir donma;
+        gizlemeyle 334 ms ve 149 ms. Gizliyken hiç uzun görev üretmiyor ve
+        düzende yer kaplamıyor (0×0), yani bedeli yok.
+      */}
+      {load.status === 'ready' && candles ? (
+        <div className="desk__grafikalan" hidden={tab !== 'grafik'}>
           <div className="desk__alan">
             <section className="desk__chart" aria-label={`${symbol} fiyat grafiği`}>
               {chartReady ? (
@@ -713,7 +723,7 @@ export default function SymbolDesk({ state, push }: Props) {
               />
             ))}
           </section>
-        </>
+        </div>
       ) : null}
     </div>
   );
