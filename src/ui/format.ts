@@ -10,8 +10,31 @@
  * ÖNÜNDE (%3,61). İşaret yüzde işaretinden de önce gelir: +%3,61 / -%3,61.
  */
 
-const nf = (digits: number) =>
-  new Intl.NumberFormat('tr-TR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+/**
+ * Biçimlendirici ÖNBELLEKTE.
+ *
+ * `new Intl.NumberFormat(...)` her çağrıda kurulmak zorunda değil ve kurulumu
+ * biçimlendirmenin yanında çok pahalı. Ölçüldü (6× yavaşlatılmış işlemci,
+ * 2000 çağrı): her çağrıda yeniden kurmak 490 ms, önbellekli 12 ms — 41 kat.
+ *
+ * Bu fonksiyon uygulamanın HER sayısını yazıyor: tarayıcı tablosunda tek
+ * çizimde 346 hücre, ısı haritasında 582 etiket, radar ve finansallar
+ * tablolarında yüzlerce daha. Basamak sayısı küçük bir küme (0–3), yani
+ * önbellek de küçük kalıyor.
+ */
+const bicimler = new Map<number, Intl.NumberFormat>();
+
+const nf = (digits: number): Intl.NumberFormat => {
+  let f = bicimler.get(digits);
+  if (!f) {
+    f = new Intl.NumberFormat('tr-TR', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+    bicimler.set(digits, f);
+  }
+  return f;
+};
 
 /** Düz sayı: 1234.5 → "1.234,50" (digits = 2). */
 export function trNum(value: number, digits = 2): string {

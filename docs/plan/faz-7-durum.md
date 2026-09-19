@@ -2000,6 +2000,58 @@ Kalan 292 ms'lik kare kütüphanenin kendi çizimi (`useBitmapCoordinateSpace`,
 `_invalidateBitmapSize`). Bunu küçültmenin küçük bir yolu görünmüyor; asıl
 karar kütüphanenin kendisi.
 
+## Her sayı için yeni bir biçimlendirici kuruluyordu
+
+Tarayıcıda tek tuşa basmak (RSI uzunluğunu değiştirmek) 667 ms sürüyor ve
+296 ms'lik bir donma üretiyordu — oysa worker'ın hesabı yalnızca 38 ms.
+İz kaydı ana iş parçacığında 580 ms FunctionCall gösterdi.
+
+Sebep `src/ui/format.ts`teydi: `trNum`/`trPct`/`trAmount`/`trCompact` her
+çağrıda `new Intl.NumberFormat(...)` kuruyordu. Kurulum, biçimlendirmenin
+yanında çok pahalı. Ölçüldü (6× yavaşlatma, 2000 çağrı):
+
+|                            | süre      |
+| -------------------------- | --------- |
+| her çağrıda yeniden kurmak | 490 ms    |
+| önbellekli                 | **12 ms** |
+
+41 kat. Ve bu fonksiyonlar uygulamanın HER sayısını yazıyor. Tek ekran
+yüklemesinde kaç çağrı olduğunu saydım:
+
+| ekran         | çağrı | önbelleksiz maliyeti (6×) |
+| ------------- | ----- | ------------------------- |
+| nabız         | 533   | ≈ 131 ms                  |
+| tarayıcı      | 534   | ≈ 131 ms                  |
+| rapor         | 21    | ≈ 5 ms                    |
+| sembol masası | 9     | ≈ 2 ms                    |
+
+Basamak sayısı küçük bir küme (0–3), yani önbellek de küçük kalıyor.
+
+Uçtan uca (gerçek BIST verisi, 3 tekrarın medyanı):
+
+| ekran    |                  | önce    | sonra       |
+| -------- | ---------------- | ------- | ----------- |
+| nabız    | ana thread bloku | 432 ms  | **296 ms**  |
+|          | en kötü görev    | 138 ms  | **118 ms**  |
+|          | hazır            | 1934 ms | **1813 ms** |
+| tarayıcı | ana thread bloku | 351 ms  | **274 ms**  |
+|          | en kötü görev    | 191 ms  | **127 ms**  |
+|          | hazır            | 1773 ms | **1709 ms** |
+
+### Ölçümün kendisi de yanıltabiliyor
+
+İlk "önce" ölçümüm 667 ms / 296 ms'ti; aynı kodu üç kez daha koşturunca
+477–528 ms / 140–177 ms çıktı. Yani ilk koşum soğuk (JIT ısınmamış) ve tek
+bir sayıya bakıp "218 ms kazandık" demek yanlış olurdu. Doğru karşılaştırma
+her iki sürümü de birkaç kez koşturmak; tablodaki sayılar öyle alındı.
+
+Aynı sebeple TEK TUŞ etkileşimindeki kazanç gürültü bandında kaldı
+(medyan 494 → 449 ms): o etkileşim yalnızca tabloyu yeniden çiziyor,
+ekranın tamamını değil. Kazanç EKRAN YÜKLEMESİNDE ölçülebilir hâle geliyor.
+
+Kurucunun bir kez çağrıldığı birim testiyle bağlandı; önbellek kaldırılınca
+test düşüyor (doğrulandı).
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

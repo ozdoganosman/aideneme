@@ -94,3 +94,43 @@ describe('axisLabel', () => {
     expect(axisLabel(NaN, 100)).toBe('—');
   });
 });
+
+/**
+ * Biçimlendirici yeniden kurulmamalı.
+ *
+ * `new Intl.NumberFormat(...)` kurulumu biçimlendirmenin yanında çok pahalı.
+ * Ölçüldü (6× yavaşlatılmış işlemci, 2000 çağrı): her çağrıda yeniden kurmak
+ * 490 ms, önbellekli 12 ms — 41 kat. Bu fonksiyon uygulamanın HER sayısını
+ * yazıyor: tek ekran yüklemesinde nabızda 533, tarayıcıda 534 çağrı.
+ *
+ * Uçtan uca ölçüm (gerçek BIST verisi, 3 tekrarın medyanı):
+ *   nabız     blok 432 → 296 ms · en kötü görev 138 → 118 ms
+ *   tarayıcı  blok 351 → 274 ms · en kötü görev 191 → 127 ms
+ */
+describe('biçimlendirici önbelleği', () => {
+  it('aynı basamak sayısı için kurucu bir kez çağrılır', () => {
+    const gercek = Intl.NumberFormat;
+    let kurulum = 0;
+    // Sayaçlı vekil: kurucu çağrısını sayar, işi gerçek sınıfa devreder.
+    (Intl as unknown as { NumberFormat: unknown }).NumberFormat = function (
+      ...args: ConstructorParameters<typeof Intl.NumberFormat>
+    ) {
+      kurulum++;
+      return new gercek(...args);
+    } as unknown as typeof Intl.NumberFormat;
+
+    try {
+      // Alışılmadık basamak sayısı: önbellekte başka testlerden kalmış olmasın.
+      for (let i = 0; i < 50; i++) trNum(i * 1.234, 7);
+      expect(kurulum, 'her çağrıda yeni biçimlendirici kuruluyor').toBe(1);
+    } finally {
+      (Intl as unknown as { NumberFormat: unknown }).NumberFormat = gercek;
+    }
+  });
+
+  it('farklı basamak sayıları ayrı biçimlendirici alır', () => {
+    expect(trNum(1.5, 0)).toBe('2');
+    expect(trNum(1.5, 3)).toBe('1,500');
+    expect(trNum(1.5, 0)).toBe('2');
+  });
+});
