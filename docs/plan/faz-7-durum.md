@@ -1719,6 +1719,68 @@ yüzden 550 dosya "okunmuyor" çıktı — ölçüt yanlıştı, dosyalar değil
 
 Sonuç: `strategies.json` dışında sahipsiz veri yok.
 
+## Hisse değişiminde grafik görünümü korunmuyordu
+
+Kullanıcı bildirdi: "tarayıcıdan hisse değiştirdiğimizde grafikte konum ve
+genişlik korunmuyor". Gerçek BIST verisiyle ölçüldü (yakınlaştır + geçmişe
+kaydır, sonra radardan başka hisseye tıkla):
+
+| sembol | bar  | önce (kusurlu)              | sonra (düzeltilmiş)         |
+| ------ | ---- | --------------------------- | --------------------------- |
+| THYAO  | 3650 | 2026-05-26 → 2026-08-05 · 45,3 bar | (başlangıç görünümü)  |
+| A1CAP  | 817  | 2026-03-26 → 2026-09-18 · 119 bar  | 2026-05-26 → 2026-08-05 · 45,3 bar |
+| GARAN  | 3650 | 2026-03-26 → 2026-09-18 · 119 bar  | 2026-05-26 → 2026-08-05 · 45,3 bar |
+
+119 bar tesadüf değil: "sığdır" dalı son 120 mumu çerçeveliyor. Yani görünüm
+korunmuyor DEĞİL, hiç denenmiyordu. Üç ayrı kusur vardı:
+
+1. **Grafik gerçekten sökülüyordu.** `fitKey` sembolü içermiyordu (daha önce
+   bilerek çıkarılmıştı) ama sembol değişince `load.status` bir süre
+   `loading` oluyor ve yükleme ekranı grafiğin YERİNE geçiyor: React bileşeni
+   söküyor, grafik nesnesi ve LOD denetleyicisi yok oluyor. Korunacak canlı
+   bir görünüm kalmıyordu. Görünüm artık bileşenin DIŞINDA, `SymbolDesk`
+   içindeki bir ref'te taşınıyor.
+2. **Çıpa bar indisiydi.** Görünüm "sağ kenardan kaç bar geride" diye
+   saklanıyordu; bar sayısı semboller arasında değiştiği için (A1CAP 817,
+   THYAO 3650) aynı indis başka bir tarihe düşüyor. Çıpa artık TARİH.
+   Ölçüldü: seyrek takvimli bir sembolde eski çıpa 201 gün sapıyordu.
+3. **Anahtar veriden bir adım önce değişiyordu.** Periyot değişince worker
+   sonucu gelene kadar GÜNLÜK mumlar HAFTALIK anahtarla çiziliyordu: önce
+   günlük veri sığdırılıyor, sonra gerçek haftalık veri "aynı anahtar"
+   sayılıp o yanlış görünüme oturuyordu (haftalıkta 119 bar beklenirken 25
+   bar görünüyordu). Anahtar artık canlı `tf`/`market`ten değil, ÇİZİLEN
+   verinin kendisinden türüyor.
+
+Üçüncüsünü kendi düzeltmem ortaya çıkardı: eski indis çıpası bu durumda
+kazara sığdırmayla aynı sonucu verdiği için kusuru gizliyordu.
+
+### Yine kendi aracıma kandım (altıncı)
+
+"Koruma olmadan da geçiyor" diye iki kez ölçtüm ve neredeyse testi zayıf
+sanıp değiştirecektim. Gerçekte `npm run build` tip hatasıyla DÜŞMÜŞTÜ
+(kullanılmayan değişken) ve ölçüm hep düzeltilmiş paketi görüyordu; çıkış
+kodunu `tail`e boru ile bağladığım için 0 okunuyordu. Kural yine aynı:
+kaynağı değiştirdikten sonra derlemenin çıkış kodunu DOĞRUDAN oku.
+
+### Nasıl korunuyor
+
+- Birim (`src/chart/lod.test.ts`): tarih çıpası, kısa/uzun geçmiş geçişleri,
+  örtüşme yokken yakınlaştırmanın korunması, yeniden kurulumda tohumlama,
+  ve periyot değişiminde sığdırmanın SÜRMESİ.
+- Uçtan uca (`e2e/grafik.spec.ts`): yakınlaştır + kaydır, radardan hisse
+  değiştir, görünüm aynı kalsın. Veri bilerek yavaşlatılıyor — örnek veri
+  anında geldiği için yükleme durumu hiç commit edilmiyor ve test kusurlu
+  sürümde de yeşil kalıyordu (ölçüldü). Koruma kapatılınca test 45 bar
+  yerine 119 bar görüp düşüyor.
+
+Yan kazanç: grafiğin görünen tarih aralığı artık metin olarak da yayımlanıyor
+(`aria-describedby`). Canvas ekran okuyucuya kapalıydı; "ne görüyorum"un bir
+yanıtı yoktu. Testin okuduğu yüzey de bu — ayrı bir sınama kancası değil.
+
+Bu metni ilk hâlinde ISO tarihle yazmıştım; biçim denetimi (`e2e/bicim.spec.ts`)
+üç ekranda yakaladı. Ekran okuyucuya giden metin de ARAYÜZ metnidir: artık
+`trDay` ile "28 Eyl 2025" yazıyor.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

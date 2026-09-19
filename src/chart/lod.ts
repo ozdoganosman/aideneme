@@ -26,6 +26,21 @@ export interface ExtraSpec {
   momentumColor?: boolean; // histogram coloring like the MACD script
 }
 
+/**
+ * Semboller arasında TAŞINAN görünüm.
+ *
+ * Çıpa bar indisi DEĞİL tarih: her sembolün bar sayısı farklı (ölçüldü:
+ * A1CAP 817, THYAO 3650). Sağ kenardan "kaç bar geride" diye saklanan bir
+ * görünüm, kısa geçmişli bir sembole geçince bambaşka bir tarihe düşüyordu.
+ * `bar` yalnızca yedek: yeni sembolün verisi o tarihleri hiç kapsamıyorsa
+ * en azından yakınlaştırma düzeyi (görünür bar sayısı) korunsun diye.
+ */
+export interface KorunanGorunum {
+  t0: number; // sol kenarın zamanı (unix saniye; veriden taşabilir)
+  t1: number; // sağ kenarın zamanı
+  bar: number; // görünür genişlik, gerçek bar sayısı
+}
+
 // Level-of-detail controller: holds the full dataset and only ever feeds the
 // chart a viewport-sized, decimated window — so render cost is bounded by the
 // screen, not the dataset size. Indicators ride along on the same buckets.
@@ -41,6 +56,9 @@ export class LodController {
   private win = { i0: 0, i1: 0, stride: 1 };
   private raf = 0;
   private hasView = false; // becomes true after the first render
+  // Grafik yeniden kurulduğunda (sembol değişince bileşen söküldüğü için)
+  // dışarıdan tohumlanan görünüm; ilk `setData` onu tüketir.
+  private disGorunum: KorunanGorunum | null = null;
   private bandSegs: { a: number; b: number }[] = []; // per-trade P&L band ranges
 
   constructor(
@@ -55,9 +73,6 @@ export class LodController {
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
   }
 
-  // fit=true frames the latest bars; fit=false keeps the SAME zoom when only the
-  // symbol changes — same visible bar count AND the same gap from the right edge,
-  // including any whitespace the user left on either side.
   /**
    * Görünürlüğü AÇILAN seriye veri yaz.
    *
@@ -83,22 +98,16 @@ export class LodController {
     }
   }
 
+  // fit=true en son barları çerçeveler; fit=false sembol değişiminde görünümü
+  // KORUR — aynı tarih aralığı, dolayısıyla aynı konum ve aynı genişlik.
   setData(full: Candles, extraVals: Float64Array[], fit = true) {
     // New dataset → drop any P&L bands from the previous symbol/strategy.
     this.bandSegs = [];
     for (const b of this.bandPool) b.setData([]);
-    let keep: { visReal: number; gapReal: number } | null = null;
-    if (!fit && this.hasView && this.full) {
-      const lr = this.chart.timeScale().getVisibleLogicalRange();
-      if (lr) {
-        // Convert the visible logical range → REAL bar coords of the OLD symbol.
-        const { i0, stride } = this.win;
-        const viewR = i0 + lr.to * stride;
-        const viewL = i0 + lr.from * stride;
-        // gapReal < 0 ⇒ whitespace to the right of the last bar (kept on purpose).
-        keep = { visReal: Math.max(1, viewR - viewL), gapReal: this.full.length - viewR };
-      }
-    }
+    // Canlı görünüm varsa ondan, yoksa dışarıdan tohumlanandan (grafik yeniden
+    // kurulmuşsa canlı görünüm yoktur).
+    const keep = fit ? null : (this.gorunumOku() ?? this.disGorunum);
+    this.disGorunum = null;
 
     this.full = full;
     this.extraVals = extraVals;
@@ -110,12 +119,54 @@ export class LodController {
       return;
     }
 
-    if (keep) this.renderForView(keep.visReal, keep.gapReal);
+    if (keep) this.gorunumUygula(keep);
     else {
       const show = Math.min(400, full.length);
       this.renderWindow(full.length - show, full.length, true);
     }
     this.hasView = true;
+  }
+
+  /**
+   * Şu anki görünümü tarih olarak oku (sembol değişimine dayanıklı biçimde).
+   *
+   * Veri yoksa ya da henüz hiç çizim yapılmadıysa null: koruyacak bir şey yok.
+   */
+  gorunumOku(): KorunanGorunum | null {
+    if (!this.full || this.full.length === 0 || !this.hasView) return null;
+    const lr = this.chart.timeScale().getVisibleLogicalRange();
+    if (!lr) return null;
+    const { i0, stride } = this.win;
+    const sol = i0 + lr.from * stride;
+    const sag = i0 + lr.to * stride;
+    if (!Number.isFinite(sol) || !Number.isFinite(sag) || sag <= sol) return null;
+    return { t0: zamanAt(this.full, sol), t1: zamanAt(this.full, sag), bar: sag - sol };
+  }
+
+  /**
+   * Bir sonraki `setData(…, fit=false)` çağrısında uygulanacak görünümü tohumla.
+   *
+   * Sembol değişince grafik bileşeni söküldüğü için denetleyici de yeniden
+   * kuruluyor; korunan görünüm bileşenin DIŞINDA saklanıp buradan geri veriliyor.
+   */
+  gorunumYaz(g: KorunanGorunum) {
+    this.disGorunum = g;
+  }
+
+  private gorunumUygula(g: KorunanGorunum) {
+    if (!this.full) return;
+    const len = this.full.length;
+    const sol = indeksAt(this.full, g.t0);
+    const sag = indeksAt(this.full, g.t1);
+    const gen = sag - sol;
+    // Yeni sembolün verisi bu tarihleri hiç kapsamıyorsa tarih çıpası anlamsız
+    // (ör. 2015'e bakarken 2024'te halka arz olmuş bir sembole geçmek):
+    // en azından yakınlaştırma düzeyini koru, son bara yapış.
+    if (!(gen >= 1) || sag <= 1 || sol >= len - 1) {
+      this.renderForView(Math.max(1, Math.min(g.bar, len)), 0);
+      return;
+    }
+    this.renderForView(gen, len - sag);
   }
 
   // Hidden series cost as much to decimate as visible ones, but the user can't
@@ -531,6 +582,34 @@ function buildBand(c: Candles, a: number, b: number, i0: number, i1: number, str
 function strideFor(bars: number, target: number): number {
   const s = Math.max(1, Math.ceil(bars / target));
   return 1 << Math.ceil(Math.log2(s));
+}
+
+/**
+ * Kesirli bar indisi → zaman. İndis veri dışına taşabilir (kullanıcının sağda
+ * ya da solda bıraktığı boşluk); o zaman ortalama bar adımıyla uzatılır.
+ */
+function zamanAt(c: Candles, x: number): number {
+  const n = c.length;
+  if (n === 0) return 0;
+  if (n === 1) return c.time[0];
+  const adim = (c.time[n - 1] - c.time[0]) / (n - 1) || 1;
+  if (x <= 0) return c.time[0] + x * adim;
+  if (x >= n - 1) return c.time[n - 1] + (x - (n - 1)) * adim;
+  const i = Math.floor(x);
+  return c.time[i] + (x - i) * (c.time[i + 1] - c.time[i]);
+}
+
+/** `zamanAt`ın tersi: zaman → kesirli bar indisi (veri dışına taşabilir). */
+function indeksAt(c: Candles, t: number): number {
+  const n = c.length;
+  if (n === 0) return 0;
+  if (n === 1) return 0;
+  const adim = (c.time[n - 1] - c.time[0]) / (n - 1) || 1;
+  if (t <= c.time[0]) return (t - c.time[0]) / adim;
+  if (t >= c.time[n - 1]) return n - 1 + (t - c.time[n - 1]) / adim;
+  const i = lb(c.time, t); // time[i] >= t, i >= 1 (yukarıdaki iki dal eledi)
+  const d = c.time[i] - c.time[i - 1];
+  return i - 1 + (d > 0 ? (t - c.time[i - 1]) / d : 0);
 }
 
 // First index whose time is >= x (ascending binary search).

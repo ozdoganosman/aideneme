@@ -425,6 +425,21 @@
   min-height: 0;
   width: 100%;
 }
+/* Grafiğin görünen tarih aralığını yalnızca ekran okuyucuya söyleyen özet:
+   canvas görsel olmayan kullanıcıya hiçbir şey anlatmıyor. `display: none`
+   OLMAZ — o zaman erişilebilirlik ağacından da düşer ve `aria-describedby`
+   boşa çıkar. */
+.chart-ozet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 /* Sayı kartları TEK ŞERİT. Grafik bu ekranın asıl işi; dokuz kart iki
    satıra sarıp ~230 px yiyordu ve grafiğe büyüyecek yer kalmıyordu.
    Şerit yatay kayıyor, kartlar küçülüyor — sayı ve provenance duruyor. */

@@ -159,3 +159,82 @@ test.describe('Finansallar — kolon grafiği etiketleri', () => {
     }
   });
 });
+
+/**
+ * Hisse değişiminde görünüm korunmuyordu.
+ *
+ * Kullanıcı bildirdi: "tarayıcıdan hisse değiştirdiğimizde grafikte konum ve
+ * genişlik korunmuyor". Gerçek BIST verisiyle ölçüldü:
+ *   THYAO  yakınlaştır + geçmişe kaydır → 2026-05-26 → 2026-08-05 (45,3 bar)
+ *   A1CAP  radardan tıkla               → 2026-03-26 → 2026-09-18 (119 bar)
+ * 119 bar, "sığdır" dalının son 120 mumu çerçevelemesi: görünüm tamamen
+ * kayboluyordu. Sebep, `fitKey`in sembolü içermemesine RAĞMEN grafiğin
+ * gerçekten sökülmesiydi — yükleme ekranı bileşenin yerini alıyor, grafik
+ * nesnesi yok ediliyor, korunacak canlı bir görünüm kalmıyordu.
+ *
+ * Birim testi tek başına yetmiyor: kusur React'in söküp yeniden kurmasında,
+ * yani LOD denetleyicisinin DIŞINDA. (Tam sayfa yeniden yükleme kapsam dışı:
+ * orada belge de gidiyor, korunacak bir şey kalmıyor.)
+ */
+test.describe('Sembol Masası — hisse değişiminde görünüm', () => {
+  test.use({ viewport: { width: 1500, height: 950 } });
+
+  test('yakınlaştırma ve konum sembol değişince korunuyor', async ({ page }) => {
+    const ozet = async () => (await page.locator('.chart-ozet').first().textContent()) ?? '';
+
+    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+    await page.waitForTimeout(1500);
+
+    // Yakınlaştır ve geçmişe kaydır: hem genişlik hem konum varsayılandan uzak.
+    const kutu = (await page.locator('.chart-host').boundingBox())!;
+    await page.mouse.move(kutu.x + kutu.width * 0.7, kutu.y + kutu.height / 2);
+    for (let i = 0; i < 10; i++) {
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(40);
+    }
+    await page.mouse.down();
+    await page.mouse.move(kutu.x + kutu.width * 0.7 + 400, kutu.y + kutu.height / 2, { steps: 20 });
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+
+    const once = await ozet();
+    expect(once, 'görünen aralık özeti yazılmamış').toMatch(/Görünen aralık:/);
+
+    /**
+     * Veriyi YAVAŞLAT.
+     *
+     * Kusurun kendisi yükleme ekranında: `load.status === 'loading'` iken
+     * grafik bileşeni tamamen sökülüyor. Örnek veri anında geldiği için o
+     * durum hiç commit edilmiyordu ve test KUSURLU sürümde de yeşil kalıyordu
+     * (ölçüldü). Gerçek BIST verisinde yükleme yüzlerce ms sürüyor.
+     */
+    await page.route('**/data/**', async (route) => {
+      await new Promise((r) => setTimeout(r, 600));
+      await route.continue();
+    });
+
+    // Tarayıcıdan (radar) başka bir hisseye geç — kullanıcının bildirdiği yol.
+    await page.getByText('Radar', { exact: true }).first().click();
+    await page.waitForSelector('.radar__tablo', { timeout: 60_000 });
+    // Kapsam "piyasa": varsayılan daraltılmış kapsamda aranan sembol olmayabilir.
+    await page.getByLabel('Kapsam').selectOption('piyasa');
+    await page.waitForFunction(
+      () => document.querySelectorAll('.radar__tablo tbody tr').length > 5,
+      undefined,
+      { timeout: 60_000 },
+    );
+    await page.getByPlaceholder('Sembol ara').fill('X002');
+    await page.waitForFunction(
+      () => document.querySelectorAll('.radar__tablo tbody tr').length === 1,
+      undefined,
+      { timeout: 30_000 },
+    );
+    // Satırın ORTASI değil ilk hücresi tıklanabilir.
+    await page.locator('.radar__tablo tbody tr').first().locator('td').first().click();
+    await page.waitForTimeout(2200);
+
+    expect(new URL(page.url()).searchParams.get('s'), 'sembol değişmemiş').toBe('X002');
+    expect(await ozet(), 'hisse değişince görünüm sıfırlandı').toBe(once);
+  });
+});

@@ -29,6 +29,9 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import type { UrlState } from '../urlState';
 import { tercihOku, tercihYaz } from '../tercih';
 
+// Yalnızca TİP: `import type` derlemede silinir, grafik chunk'ını çekmez.
+import type { GrafikGorunumu } from '../chart/PriceChart';
+
 /** Grafik ayrı chunk'ta: lightweight-charts ilk yük bütçesine girmesin. */
 const LazyPriceChart = lazy(() =>
   import('../chart/PriceChart').then((m) => ({ default: m.PriceChart })),
@@ -192,6 +195,10 @@ export default function SymbolDesk({ state, push }: Props) {
     Math.min(RADAR_MAX, Math.max(RADAR_MIN, tercihOku<number>(RADAR_ANAHTARI, 420))),
   );
   const requestId = useRef(0);
+  // Grafik görünümü (tarih aralığı + yakınlaştırma). Sembol değişiminde grafik
+  // bileşeni sökülüp yeniden kurulduğu için görünüm burada, bileşenin dışında
+  // yaşıyor; yoksa her hisse geçişinde son 120 bara sığdırılıyordu.
+  const grafikGorunum = useRef<GrafikGorunumu | null>(null);
   const surukleme = useRef<{ x: number; w: number } | null>(null);
 
   const radarAyarla = (px: number) => {
@@ -323,6 +330,18 @@ export default function SymbolDesk({ state, push }: Props) {
     overlayValues: Float64Array[];
     /** Panel açıksa: Williams %R ve NizamiCedid MACD serileri. */
     indicators?: IndBundle;
+    /**
+     * Sonucun HANGİ piyasa ve periyot için hesaplandığı.
+     *
+     * Grafiğin "sığdır mı, koru mu" kararı buna bakmalı — canlı `tf`/`market`
+     * değişkenlerine değil. Ölçüldü: periyot değişince worker sonucu gelene
+     * kadar bir süre GÜNLÜK mumlar HAFTALIK anahtarla çiziliyor; anahtar
+     * veriden önce değiştiği için önce günlük veri sığdırılıyor, sonra gerçek
+     * haftalık veri "aynı anahtar" sayılıp o yanlış görünüme oturtuluyordu
+     * (haftalıkta 120 bar beklenirken 25 bar görünüyordu).
+     */
+    tf: string;
+    market: string;
   } | null>(null);
   /** Analiz (worker) hatası — seri indi ama hesap yapılamadı. */
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -345,7 +364,7 @@ export default function SymbolDesk({ state, push }: Props) {
         realReturn: market === 'bist',
       })
       .then((result) => {
-        if (!cancelled) setAnalysisResult(result);
+        if (!cancelled) setAnalysisResult({ ...result, tf, market });
       })
       .catch((err: unknown) => {
         // Sessizce null'a düşmek ekranı BOŞ bırakıyordu: grafik yok, metrik
@@ -577,17 +596,21 @@ export default function SymbolDesk({ state, push }: Props) {
                   overlays={overlays}
                   showVolume={showVolume}
                   /*
-                    Sembol ARTIK anahtarda değil.
+                    Sembol anahtarda DEĞİL: hisse değişince görünüm korunmalı.
+                    Periyot ya da piyasa değişince sığdırmak DOĞRU — bar
+                    uzunluğu değişince eski aralık başka bir zamana denk gelir.
 
-                    Kullanıcı isteği: "hisseler arası geçince de grafikteki
-                    zaman aralığı korunsun". LOD katmanı bunu zaten
-                    destekliyordu (aynı görünür bar sayısı ve sağ kenardan
-                    aynı boşluk) ama anahtar sembolü içerdiği için her geçişte
-                    yeniden sığdırılıyordu. Periyot ya da piyasa değişince
-                    sığdırmak DOĞRU: bar uzunluğu değişince eski aralık başka
-                    bir zamana denk gelir.
+                    Anahtar canlı `tf`/`market`ten DEĞİL, çizilen verinin
+                    kendisinden türüyor; yoksa anahtar veriden bir adım önce
+                    değişiyor (bkz. analysisResult.tf).
+
+                    Tek başına yetmiyordu: yükleme sırasında grafik tamamen
+                    sökülüyor (aşağıdaki `load.status === 'ready'` koşulu), yani
+                    grafik nesnesi de denetleyici de yok ediliyor. Görünüm bu
+                    yüzden bileşenin dışında, `grafikGorunum` ref'inde taşınıyor.
                   */
-                  fitKey={`${market}:${tf}`}
+                  fitKey={`${analysisResult?.market}:${analysisResult?.tf}`}
+                  gorunumRef={grafikGorunum}
                 />
               ) : (
                 <Skeleton height="320px" />

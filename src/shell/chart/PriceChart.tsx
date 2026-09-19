@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef, type MutableRefObject } from 'react';
 import {
   CandlestickSeries,
   CrosshairMode,
@@ -9,8 +9,9 @@ import {
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { LodController, type ExtraSpec } from '../../chart/lod';
+import { LodController, type ExtraSpec, type KorunanGorunum } from '../../chart/lod';
 import type { Candles } from '../../core/data/types';
+import { trDay } from '../../core/format/date';
 import { useChartColors } from './useThemeColors';
 
 export interface Overlay {
@@ -35,12 +36,27 @@ export interface Overlay {
   baseline?: number;
 }
 
+/**
+ * Bileşen SÖKÜLÜNCE de yaşayan görünüm.
+ *
+ * Sembol değişince yükleme ekranı grafiğin yerini alıyor, yani bileşen
+ * gerçekten sökülüyor ve grafik nesnesi yok ediliyor. Görünümü denetleyicinin
+ * içinde saklamak bu yüzden yetmiyordu: onu bileşenin DIŞINDAKİ bir ref'te
+ * tutup yeniden kurulumda geri veriyoruz. `anahtar` da taşınmalı — yoksa
+ * yeniden kurulan bileşen `fitKey`i "yeni" sanıp görünümü sığdırır.
+ */
+export interface GrafikGorunumu extends KorunanGorunum {
+  anahtar?: string;
+}
+
 export interface PriceChartProps {
   candles: Candles;
   overlays?: Overlay[];
   showVolume?: boolean;
   /** Sembol değişiminde görünümü koru (aynı zoom), veri değişiminde sığdır. */
   fitKey?: string;
+  /** Sökülme/yeniden kurulma arasında görünümü taşıyan ref. */
+  gorunumRef?: MutableRefObject<GrafikGorunumu | null>;
   height?: number | string;
 }
 
@@ -55,6 +71,7 @@ export function PriceChart({
   overlays = [],
   showVolume = true,
   fitKey,
+  gorunumRef,
   height = '100%',
 }: PriceChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -63,6 +80,9 @@ export function PriceChart({
   const volumeRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const overlayRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
   const lastFitKey = useRef<string | undefined>(undefined);
+  const ozetRef = useRef<HTMLParagraphElement>(null);
+  const ozetId = useId();
+  const ozetYazRef = useRef<(() => void) | null>(null);
   const colors = useChartColors();
 
   // Grafik bir kez kurulur; overlay serileri sabit kalır, görünürlük değişir.
@@ -233,9 +253,41 @@ export function PriceChart({
         link.setAttribute('aria-label', 'Grafik kütüphanesi hakkında (TradingView)');
       }
     }
-    lastFitKey.current = undefined;
+    /**
+     * Görünen tarih aralığını METİN olarak da yayınla.
+     *
+     * Grafik bir canvas: ekran okuyucu için tamamen opak, "ne görüyorum"
+     * sorusunun yanıtı yok. Kap `aria-describedby` ile bu özete bağlı.
+     * React durumu DEĞİL doğrudan DOM yazımı: kaydırma sırasında saniyede
+     * onlarca kez yeniden render etmek zayıf makinede ölçülebilir maliyet.
+     * `aria-live` de yok — her karede konuşan bir grafik işkence olurdu.
+     */
+    let sonOzet = '';
+    const ozetYaz = () => {
+      const el = ozetRef.current;
+      const g = lodRef.current?.gorunumOku();
+      if (!el || !g) return;
+      const metin = `Görünen aralık: ${trDay(g.t0)} – ${trDay(g.t1)} · ${Math.round(g.bar)} bar`;
+      if (metin === sonOzet) return;
+      sonOzet = metin;
+      el.textContent = metin;
+    };
+    ozetYazRef.current = ozetYaz;
+    chart.timeScale().subscribeVisibleLogicalRangeChange(ozetYaz);
+
+    // Önceki kurulumdan kalan görünümü geri ver. `lastFitKey` de oradan gelir:
+    // eşitse `fit=false` olur ve görünüm korunur.
+    const kayitli = gorunumRef?.current ?? null;
+    lastFitKey.current = kayitli?.anahtar;
+    if (kayitli) lodRef.current.gorunumYaz(kayitli);
 
     return () => {
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(ozetYaz);
+      ozetYazRef.current = null;
+      if (gorunumRef) {
+        const g = lodRef.current?.gorunumOku();
+        if (g) gorunumRef.current = { ...g, anahtar: lastFitKey.current };
+      }
       chart.remove();
       chartRef.current = null;
       lodRef.current = null;
@@ -258,6 +310,7 @@ export function PriceChart({
       overlays.map((o) => o.values),
       fit,
     );
+    ozetYazRef.current?.();
     // overlays her render'da yeni dizi; değer kimliği yeterli.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles, fitKey, overlayKeys, overlays.map((o) => o.values.length).join(',')]);
@@ -314,5 +367,10 @@ export function PriceChart({
     lodRef.current?.refreshExtras();
   }, [overlays]);
 
-  return <div className="chart-host" ref={hostRef} style={{ height }} />;
+  return (
+    <>
+      <div className="chart-host" ref={hostRef} style={{ height }} aria-describedby={ozetId} />
+      <p className="chart-ozet" id={ozetId} ref={ozetRef} />
+    </>
+  );
 }
