@@ -1725,9 +1725,9 @@ Kullanıcı bildirdi: "tarayıcıdan hisse değiştirdiğimizde grafikte konum v
 genişlik korunmuyor". Gerçek BIST verisiyle ölçüldü (yakınlaştır + geçmişe
 kaydır, sonra radardan başka hisseye tıkla):
 
-| sembol | bar  | önce (kusurlu)              | sonra (düzeltilmiş)         |
-| ------ | ---- | --------------------------- | --------------------------- |
-| THYAO  | 3650 | 2026-05-26 → 2026-08-05 · 45,3 bar | (başlangıç görünümü)  |
+| sembol | bar  | önce (kusurlu)                     | sonra (düzeltilmiş)                |
+| ------ | ---- | ---------------------------------- | ---------------------------------- |
+| THYAO  | 3650 | 2026-05-26 → 2026-08-05 · 45,3 bar | (başlangıç görünümü)               |
 | A1CAP  | 817  | 2026-03-26 → 2026-09-18 · 119 bar  | 2026-05-26 → 2026-08-05 · 45,3 bar |
 | GARAN  | 3650 | 2026-03-26 → 2026-09-18 · 119 bar  | 2026-05-26 → 2026-08-05 · 45,3 bar |
 
@@ -1780,6 +1780,63 @@ yanıtı yoktu. Testin okuduğu yüzey de bu — ayrı bir sınama kancası değ
 Bu metni ilk hâlinde ISO tarihle yazmıştım; biçim denetimi (`e2e/bicim.spec.ts`)
 üç ekranda yakaladı. Ekran okuyucuya giden metin de ARAYÜZ metnidir: artık
 `trDay` ile "28 Eyl 2025" yazıyor.
+
+## Radar ilk açılışta BOŞ geliyordu
+
+Zayıf makine ölçümünü (6× yavaşlatma, gerçek BIST verisi) tekrarlarken
+radarın açılış süresini parçalamak istedim ve ölçüm aracı "0 satır" diye
+60 saniye bekleyip düştü. Kusur ölçüm aracında değildi: kayıtlı tercihi
+olmayan bir kullanıcıda kapsam "İzleme listem" ve liste boş olduğu için
+tablo gerçekten 0 satırla açılıyordu. Kullanıcı "bir çok filtreyle hisse
+arayıp" dediği yüzeyi ilk açtığında hiçbir hisse görmüyor, ne yapacağını
+bir paragraf metinden çıkarması gerekiyordu.
+
+İki düzeltme:
+
+- **Varsayılan kapsam.** Kayıtlı tercih VARSA ona dokunulmuyor (kullanıcının
+  seçimi üstün). Yoksa ve izleme listesi boşsa radar tüm piyasayla açılıyor.
+  Listede sembol varsa varsayılan yine liste.
+- **Boş durumun çıkışı.** "Kapsamı Tüm piyasa yapın" diye anlatan metnin
+  yerine aynı işi yapan bir düğme kondu; filtreye uyan sembol kalmadığında da
+  "Filtreleri temizle" düğmesi çıkıyor.
+
+Ölçüm (6×, medyan): tıklama → piyasa satırları görünür **1584 ms → 1106 ms**.
+Eskiden bu yol iki adımdı (aç, açılır listeyi bul, kapsamı değiştir); artık
+tek adım. Ana iş parçacığı bloku 199 → 238 ms'ye çıkıyor, çünkü piyasa
+taraması artık sonraya değil açılışa denk geliyor — 478 ms daha erken veri
+için kabul edilebilir bir takas.
+
+### Zayıf makine tablosu (6× yavaşlatma, gerçek BIST verisi, 3 tekrarın medyanı)
+
+| ekran                  | hazır   | en kötü görev | toplam blok |
+| ---------------------- | ------- | ------------- | ----------- |
+| portföy                | 760 ms  | 104 ms        | 111 ms      |
+| rapor                  | 1175 ms | 101 ms        | 131 ms      |
+| model (purged CV)      | 1385 ms | 95 ms         | 128 ms      |
+| radar (tüm piyasa)     | 1645 ms | 337 ms        | 547 ms      |
+| sembol masası (grafik) | 1646 ms | 324 ms        | 526 ms      |
+| laboratuvar (backtest) | 1664 ms | 274 ms        | 389 ms      |
+| sektör akranları       | 1717 ms | 359 ms        | 599 ms      |
+| tarayıcı               | 1759 ms | 177 ms        | 316 ms      |
+| karşılaştır            | 1966 ms | 102 ms        | 276 ms      |
+| stratejiler            | 2280 ms | 237 ms        | 415 ms      |
+| nabız                  | 2372 ms | 188 ms        | 670 ms      |
+
+Bu tablodaki "en kötü görev" OTURUM genelinde: sayfa yükü ve grafik kurulumu
+da içinde. Radarın kendi açılışını ayrıca ölçtüm, orada en kötü görev 137 ms.
+
+### Çürüyen hipotez: IndexedDB yazımı
+
+Radar açılışının profilinde `put`/`save` (IndexedDB) ~96 ms görünüyordu ve üç
+çağıran da veriyi döndürmeden önce yazmayı BEKLİYORDU. Beklemeyi kaldırdım,
+uçtan uca ölçtüm: 1106 → 1163 ms, yani kazanç yok (aracın kendi sapması
+1,6×). Sonra yazmayı doğrudan ölçtüm: 6× yavaşlatmada 250 KB 4 ms, 1 MB
+14 ms, 3 MB 36 ms. Yani darboğaz orada değildi; değişiklik geri alındı.
+Profildeki 96 ms muhtemelen paylaşılan yığın adlarına yanlış atfedilmişti —
+aynı tuzağa daha önce de düşmüştüm.
+
+Ölçülemeyen kazanç için davranış değiştirmiyoruz. Kayıt burada duruyor ki
+ileride aynı "iyileştirme" yeniden denenmesin.
 
 ## Sırada
 

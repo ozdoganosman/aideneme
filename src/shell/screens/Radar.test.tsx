@@ -124,11 +124,50 @@ describe('araliklarKurallara', () => {
 });
 
 describe('Radar', () => {
-  it('liste boşken ne yapılacağını söyler', async () => {
+  /**
+   * İlk açılışta radar BOŞ gelmemeli.
+   *
+   * Ölçüldü: kayıtlı tercihi olmayan kullanıcıda kapsam "İzleme listem",
+   * liste de boş olduğu için tablo 0 satırla açılıyordu — tarayıcıyı ilk kez
+   * açan kişi hiçbir hisse görmüyordu.
+   */
+  it('kayıtlı tercih yokken ve liste boşken tüm piyasayla açılıyor', async () => {
     render(
       <Radar market="bist" symbol="THYAO" client={FAKE_CLIENT} onSelect={noop} onClose={noop} />,
     );
-    expect(await screen.findByText(/Liste boş/)).toBeInTheDocument();
+    expect(await screen.findByLabelText('Kapsam')).toHaveValue('piyasa');
+    expect((await satirlar()).length).toBeGreaterThan(0);
+  });
+
+  // Kullanıcının SEÇİMİ üstün: listeyi seçmişse boş bile olsa ona dokunulmuyor.
+  it('kayıtlı tercih "liste" ise liste boş olsa da ona uyuluyor', async () => {
+    localStorage.setItem('radar.kapsam.v1', JSON.stringify('liste'));
+    render(
+      <Radar market="bist" symbol="THYAO" client={FAKE_CLIENT} onSelect={noop} onClose={noop} />,
+    );
+    expect(await screen.findByLabelText('Kapsam')).toHaveValue('liste');
+    expect(await screen.findByText(/Listeniz boş/)).toBeInTheDocument();
+  });
+
+  // Listede sembol varsa varsayılan yine liste: kullanıcı onu doldurmuş.
+  it('listede sembol varsa varsayılan liste kalıyor', async () => {
+    localStorage.setItem('radar.liste.v1', JSON.stringify({ bist: ['THYAO'] }));
+    render(
+      <Radar market="bist" symbol="THYAO" client={FAKE_CLIENT} onSelect={noop} onClose={noop} />,
+    );
+    expect(await screen.findByLabelText('Kapsam')).toHaveValue('liste');
+  });
+
+  // Boş durumun ÇIKIŞI olmalı: metni okuyup açılır listeyi aramak yerine tek tık.
+  it('boş listede "Tüm piyasayı göster" düğmesi kapsamı değiştiriyor', async () => {
+    localStorage.setItem('radar.kapsam.v1', JSON.stringify('liste'));
+    const user = userEvent.setup();
+    render(
+      <Radar market="bist" symbol="THYAO" client={FAKE_CLIENT} onSelect={noop} onClose={noop} />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Tüm piyasayı göster' }));
+    expect(await screen.findByLabelText('Kapsam')).toHaveValue('piyasa');
+    expect((await satirlar()).length).toBeGreaterThan(0);
   });
 
   // Radar kendi küçük hesabını yapıyordu; artık tarama ekranıyla AYNI

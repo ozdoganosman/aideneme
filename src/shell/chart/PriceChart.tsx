@@ -370,7 +370,7 @@ export function PriceChart({
   return (
     <>
       <div className="chart-host" ref={hostRef} style={{ height }} aria-describedby={ozetId} />
-      <p className="chart-ozet" id={ozetId} ref={ozetRef} />
+      <p className="chart-ozet visually-hidden" id={ozetId} ref={ozetRef} />
     </>
   );
 }

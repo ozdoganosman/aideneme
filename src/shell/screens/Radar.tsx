@@ -232,9 +232,20 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
   const [tablolar, setTablolar] = useState<Map<string, Financials> | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [listeler, setListeler] = useState<Listeler>(() => tercihOku<Listeler>(LISTE_ANAHTARI, {}));
-  const [kapsam, setKapsam] = useState<Kapsam>(() =>
-    tercihOku<Kapsam>(KAPSAM_ANAHTARI, 'liste') === 'piyasa' ? 'piyasa' : 'liste',
-  );
+  /**
+   * İlk açılışta radar BOŞ gelmemeli.
+   *
+   * Ölçüldü: kayıtlı tercihi olmayan bir kullanıcıda kapsam "İzleme listem",
+   * liste de boş olduğu için tablo 0 satırla açılıyordu — tarayıcıyı ilk kez
+   * açan kişi hiçbir hisse görmüyor, ne yapacağını bir paragraf metinden
+   * çıkarması gerekiyordu. Kayıtlı tercih VARSA ona dokunulmuyor; yoksa ve
+   * listede sembol yoksa tüm piyasayla açılıyor.
+   */
+  const [kapsam, setKapsam] = useState<Kapsam>(() => {
+    const kayitli = tercihOku<Kapsam | null>(KAPSAM_ANAHTARI, null);
+    if (kayitli === 'piyasa' || kayitli === 'liste') return kayitli;
+    return (tercihOku<Listeler>(LISTE_ANAHTARI, {})[market] ?? []).length > 0 ? 'liste' : 'piyasa';
+  });
   const [sira, setSira] = useState<{ key: string; dir: 'asc' | 'desc' }>(() =>
     tercihOku(SIRA_ANAHTARI, { key: 'chg1', dir: 'desc' as const }),
   );
@@ -338,6 +349,12 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
   const ekle = (s: string) => {
     if (!s || liste.includes(s)) return;
     listeYaz([...liste, s]);
+  };
+
+  /** Kapsam değişimi tek yerde: açılır liste ve boş durum düğmesi aynı yolu kullanır. */
+  const kapsamYaz = (yeni: Kapsam) => {
+    setKapsam(yeni);
+    tercihYaz(KAPSAM_ANAHTARI, yeni);
   };
 
   const kapsamSemboller = useMemo(
@@ -619,11 +636,7 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           label="Kapsam"
           hideLabel
           value={kapsam}
-          onChange={(v) => {
-            const yeni: Kapsam = v === 'piyasa' ? 'piyasa' : 'liste';
-            setKapsam(yeni);
-            tercihYaz(KAPSAM_ANAHTARI, yeni);
-          }}
+          onChange={(v) => kapsamYaz(v === 'piyasa' ? 'piyasa' : 'liste')}
           options={[
             { value: 'liste', label: 'İzleme listem' },
             { value: 'piyasa', label: 'Tüm piyasa' },
@@ -966,13 +979,35 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
             onRowClick={(r) => onSelect(r.symbol)}
             empty={
               kapsam === 'liste' && liste.length === 0 ? (
+                /*
+                  Boş durumun ÇIKIŞI olmalı. Eski hâli yalnızca "kapsamı Tüm
+                  piyasa yapın" diye anlatıyordu; kullanıcı açılır listeyi
+                  bulmak zorundaydı. Aynı işi tek tıkla yapan düğme duruyor.
+                */
                 <p className="radar__bos desk__muted">
-                  Liste boş. Sağdaki kutudan sembol ekleyin ya da kapsamı "Tüm piyasa" yapın;
-                  seçtikleriniz bu tarayıcıda saklanır.
+                  Listeniz boş. Sağdaki kutudan sembol ekleyebilirsiniz; seçtikleriniz bu tarayıcıda
+                  saklanır.{' '}
+                  <button
+                    type="button"
+                    className="radar__bos-eylem"
+                    onClick={() => kapsamYaz('piyasa')}
+                  >
+                    Tüm piyasayı göster
+                  </button>
                 </p>
-              ) : etkin.length > 0 ? (
+              ) : etkinSayi > 0 ? (
                 <p className="radar__bos desk__muted">
-                  Filtrelere uyan sembol yok. Çiplerden birini kaldırmayı deneyin.
+                  Filtrelere uyan sembol yok.{' '}
+                  <button
+                    type="button"
+                    className="radar__bos-eylem"
+                    onClick={() => {
+                      araliklarYaz({});
+                      sektorYaz([]);
+                    }}
+                  >
+                    Filtreleri temizle
+                  </button>
                 </p>
               ) : (
                 <p className="radar__bos desk__muted">Bu piyasanın paketinde sembol yok.</p>
