@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ModalShell } from './ModalShell';
 import { fetchScreener, fetchBistStatic, ScreenerItem, isIndexSymbol } from '../data/bistStatic';
 import { Candles } from '../data/types';
 import { useEscClose } from '../useEscClose';
@@ -244,8 +245,7 @@ export function HeatMap({ onClose, onSelect }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal wide hm-modal" onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onClose} className="modal wide hm-modal" label="Piyasa ısı haritası">
         <div className="modal-head">
           <b>🗺️ Piyasa Isı Haritası{items ? ` · ${mode === 'stocks' ? `${tiles.length} hisse` : `${sectors.length} sektör`}` : ''}</b>
           <button className="row-x" onClick={onClose} title="Kapat" aria-label="Kapat">
@@ -359,8 +359,7 @@ export function HeatMap({ onClose, onSelect }: Props) {
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 

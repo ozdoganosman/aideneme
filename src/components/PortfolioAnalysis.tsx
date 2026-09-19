@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { clickable } from './clickable';
+import { ModalShell } from './ModalShell';
 import { Candles } from '../data/types';
 import { fetchBistStatic, Quotes } from '../data/bistStatic';
 import { analyzeHolding, HoldingAnalysis } from '../indicators/analysis';
@@ -85,8 +87,7 @@ export function PortfolioAnalysis({ holdings, quotes, strats, params, onClose, o
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onClose} className="modal" label="Portföy analizi">
         <div className="modal-head">
           <b>Portföy Analizi · Risk & Teknik</b>
           <button className="row-x" onClick={onClose} title="Kapat">×</button>
@@ -114,8 +115,7 @@ export function PortfolioAnalysis({ holdings, quotes, strats, params, onClose, o
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -287,7 +287,13 @@ function TechCard({ rows, pick }: { rows: Row[]; pick: (s: string) => void }) {
       {rows.map((r) => (
         <div key={r.sym} className="pa-tech2">
           <div className="pa-tech2-row">
-            <b className="pa-tech2-sym" onClick={() => pick(r.sym)} title="Grafikte aç">{r.sym}</b>
+            <b
+              className="pa-tech2-sym"
+              title="Grafikte aç"
+              {...clickable(() => pick(r.sym), `${r.sym} grafiğini aç`)}
+            >
+              {r.sym}
+            </b>
             {r.a ? (
               <>
                 <span className={'pa-lean ' + (r.a.lean === 'Olumlu' ? 'up' : r.a.lean === 'Zayıf' ? 'down' : 'warn')}>{r.a.lean}</span>
@@ -545,7 +551,12 @@ function StrategyBacktestCard({
           {res.curve && <CombinedCurve cv={res.curve} />}
           <div className="pa-risk-list">
             {res.out.map((o) => (
-              <div key={o.sym} className="pa-risk-row pa-bt-row" onClick={() => onSelect(o.sym)} title="Grafikte aç">
+              <div
+                key={o.sym}
+                className="pa-risk-row pa-bt-row"
+                title="Grafikte aç"
+                {...clickable(() => onSelect(o.sym), `${o.sym} grafiğini aç`)}
+              >
                 <span className="pa-risk-sym">{o.sym}</span>
                 <span className="lg-muted">%{o.weight.toFixed(0)}</span>
                 <span className={o.ann >= o.hold ? 'up' : 'down'}>strat {fmtP(o.ann)}</span>

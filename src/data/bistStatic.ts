@@ -1,4 +1,5 @@
 import { Candles, emptyCandles } from './types';
+import { dataBase, MARKETS, MARKET_LABEL, type Market } from '../data-client/markets';
 
 // Reads pre-built BIST OHLCV from same-origin static JSON (generated in CI by
 // scripts/build_bist.py). No proxy, no key, no CORS — the data ships with the
@@ -13,17 +14,19 @@ interface Rec {
   v: number;
 }
 
-const base = import.meta.env.BASE_URL; // './' (works under /aideneme/ on Pages)
-
 // Markets share one static-JSON layout: public/data/<market>/{<sym>.json,
 // symbols.json, quotes.json, names.json, spark.json, screener.json}.
-export type Market = 'bist' | 'us' | 'crypto';
-export const MARKETS: Market[] = ['bist', 'us', 'crypto'];
-export const MARKET_LABEL: Record<Market, string> = { bist: 'BIST', us: 'ABD (NYSE/NASDAQ)', crypto: 'Kripto' };
+//
+// Piyasa listesi ve veri kökü TEK KAYNAKTAN (`data-client/markets`) geliyor;
+// burada yeniden tanımlamak iki ayrı `Market` tipi ve iki ayrı etiket demekti.
+// Veri kökü `dataBase()` çünkü dal önizlemesi `/onizleme/` altında yayımlanıp
+// veriyi KÖKTEKİ tek kopyadan okuyor (yoksa ~29 MB ikinci kez yayımlanırdı).
+export { MARKETS, MARKET_LABEL };
+export type { Market };
 
 // Per-symbol OHLCV for any market.
 export async function fetchStatic(market: Market, symbol: string, signal?: AbortSignal): Promise<Candles> {
-  const res = await fetch(`${base}data/${market}/${symbol}.json`, { signal });
+  const res = await fetch(`${dataBase()}${market}/${symbol}.json`, { signal });
   if (!res.ok) {
     throw new Error(`"${symbol}" için statik veri yok (CI henüz üretmemiş olabilir)`);
   }
@@ -46,7 +49,7 @@ export const fetchBistStatic = (symbol: string, signal?: AbortSignal) => fetchSt
 
 export async function fetchSymbolsFor(market: Market, signal?: AbortSignal): Promise<string[]> {
   try {
-    const res = await fetch(`${base}data/${market}/symbols.json`, { signal });
+    const res = await fetch(`${dataBase()}${market}/symbols.json`, { signal });
     if (!res.ok) return [];
     return ((await res.json()) as { symbols: string[] }).symbols ?? [];
   } catch {
@@ -56,7 +59,7 @@ export async function fetchSymbolsFor(market: Market, signal?: AbortSignal): Pro
 
 export async function fetchQuotesFor(market: Market, signal?: AbortSignal): Promise<Quotes> {
   try {
-    const res = await fetch(`${base}data/${market}/quotes.json`, { signal });
+    const res = await fetch(`${dataBase()}${market}/quotes.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Quotes;
   } catch {
@@ -66,7 +69,7 @@ export async function fetchQuotesFor(market: Market, signal?: AbortSignal): Prom
 
 export async function fetchNamesFor(market: Market, signal?: AbortSignal): Promise<Record<string, string>> {
   try {
-    const res = await fetch(`${base}data/${market}/names.json`, { signal });
+    const res = await fetch(`${dataBase()}${market}/names.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Record<string, string>;
   } catch {
@@ -76,7 +79,7 @@ export async function fetchNamesFor(market: Market, signal?: AbortSignal): Promi
 
 export async function fetchSparkFor(market: Market, signal?: AbortSignal): Promise<Record<string, number[]>> {
   try {
-    const res = await fetch(`${base}data/${market}/spark.json`, { signal });
+    const res = await fetch(`${dataBase()}${market}/spark.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Record<string, number[]>;
   } catch {
@@ -86,7 +89,7 @@ export async function fetchSparkFor(market: Market, signal?: AbortSignal): Promi
 
 export async function fetchBistSymbols(signal?: AbortSignal): Promise<string[]> {
   try {
-    const res = await fetch(`${base}data/bist/symbols.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/symbols.json`, { signal });
     if (!res.ok) return [];
     const j = (await res.json()) as { symbols: string[] };
     return j.symbols ?? [];
@@ -101,7 +104,7 @@ export type Quotes = Record<string, { c: number; pc: number }>;
 
 export async function fetchBistQuotes(signal?: AbortSignal): Promise<Quotes> {
   try {
-    const res = await fetch(`${base}data/bist/quotes.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/quotes.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Quotes;
   } catch {
@@ -109,54 +112,26 @@ export async function fetchBistQuotes(signal?: AbortSignal): Promise<Quotes> {
   }
 }
 
-// Market-wide strategy backtest aggregate (built in CI by scripts/strategies.py).
-export interface StrategyAgg {
-  name: string;
-  avgRet: number;
-  medRet: number;
-  avgAnn?: number; // average annualized (per-day-normalized) return %
-  medAnn?: number; // median annualized return %
-  beatPct: number;
-  avgWin: number;
-  avgDD: number;
-  avgHold?: number; // average holding period in bars
-  avgTrades?: number;
-  n: number;
-}
-// One (stock × strategy) combo for the overall Top-20 view.
-export interface TopCombo {
-  sym: string;
-  name: string;
-  ann: number; // annualized %
-  ret: number; // total %
-  trades: number;
-  win: number;
-  dd: number;
-  hold: number;
-}
-export interface StrategiesFile {
-  generated: number;
-  nSymbols: number;
-  holdAvg: number;
-  holdAnnAvg?: number; // average annualized buy & hold %
-  results: StrategyAgg[];
-  top?: TopCombo[];
-  topMinYears?: number; // Top-20 only includes firms with >= this many years of history
-}
+/*
+  `strategies.json` OKUNMUYOR — tipleri ve `fetchStrategies` buradan kaldırıldı.
 
-export async function fetchStrategies(signal?: AbortSignal): Promise<StrategiesFile | null> {
-  try {
-    const res = await fetch(`${base}data/bist/strategies.json`, { signal });
-    if (!res.ok) return null;
-    return (await res.json()) as StrategiesFile;
-  } catch {
-    return null;
-  }
-}
+  Dosya her dağıtımda `scripts/strategies.py` ile üretilip yayımlanıyor ama
+  hiçbir uygulama onu okumuyordu: `fetchStrategies`in bütün depoda tek geçtiği
+  yer kendi tanımıydı, `StrategyAgg`/`TopCombo`/`StrategiesFile` yalnızca
+  birbirine bakıyordu ve derlenmiş paketlerin hiçbirinde `strategies.json`
+  geçmiyordu (üç ayrı kontrol).
+
+  Yeni kabuk zaten kendi sıralamasını TS çekirdeğiyle yapıyor. Üstelik iki
+  motor aynı soruya cevap vermiyor: TS tarafı `DEFAULT_COSTS` uygularken
+  Python tarafı maliyetsiz — ayrıntısı `docs/plan/faz-7-durum.md`'de.
+
+  Üretim adımının kendisi (deploy.yml + scripts/strategies.py) BİLEREK
+  bırakıldı: bir veri varlığını silmek ürün kararı ve dosya hâlâ yayında.
+*/
 
 export async function fetchBistNames(signal?: AbortSignal): Promise<Record<string, string>> {
   try {
-    const res = await fetch(`${base}data/bist/names.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/names.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Record<string, string>;
   } catch {
@@ -214,7 +189,7 @@ export async function fetchScreener(signal?: AbortSignal): Promise<ScreenerFile 
 
 export async function fetchScreenerFor(market: Market, signal?: AbortSignal): Promise<ScreenerFile | null> {
   try {
-    const res = await fetch(`${base}data/${market}/screener.json`, { signal });
+    const res = await fetch(`${dataBase()}${market}/screener.json`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as ScreenerFile;
   } catch {
@@ -224,7 +199,7 @@ export async function fetchScreenerFor(market: Market, signal?: AbortSignal): Pr
 
 export async function fetchBistSpark(signal?: AbortSignal): Promise<Record<string, number[]>> {
   try {
-    const res = await fetch(`${base}data/bist/spark.json`, { signal });
+    const res = await fetch(`${dataBase()}bist/spark.json`, { signal });
     if (!res.ok) return {};
     return (await res.json()) as Record<string, number[]>;
   } catch {

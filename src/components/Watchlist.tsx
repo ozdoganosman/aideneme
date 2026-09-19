@@ -1,4 +1,5 @@
 import { Quotes } from '../data/bistStatic';
+import { clickable } from './clickable';
 
 interface Props {
   items: string[];
@@ -32,7 +33,7 @@ export function Watchlist({ items, quotes, spark, added, active, onSelect, onRem
           <div
             key={sym}
             className={'row wl-row' + (sym === active ? ' active' : '')}
-            onClick={() => onSelect(sym)}
+            {...clickable(() => onSelect(sym), `${sym} grafiğini aç`)}
           >
             <span className="row-sym">
               {sym}

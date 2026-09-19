@@ -2,11 +2,16 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
-    />
+    <!-- maximum-scale / user-scalable=no KALDIRILDI: yakınlaştırmayı engellemek
+         WCAG 1.4.4'e aykırı ve az gören kullanıcıyı uygulamanın dışında bırakır.
+         Grafiğin kendi dokunma hareketleri bundan etkilenmiyor. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Borsa — Yüksek Performanslı Grafik</title>
+    <!-- Satır içi SVG ikon: ayrı istek yok, /favicon.ico 404'ü de yok. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6df5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 12h3.5l2.5-7 4 14 2.5-7H21'/%3E%3C/svg%3E"
+    />
   </head>
   <body>
     <div id="root"></div>

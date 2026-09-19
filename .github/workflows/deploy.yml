@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22'
           cache: npm
       - uses: actions/setup-python@v5
         with:
@@ -39,6 +39,10 @@ jobs:
           for m in bist us crypto; do
             if [ -d "_site/data/$m" ]; then cp -r "_site/data/$m" public/data/; fi
           done
+          # Dal önizlemesi (onizleme.yml) gh-pages'te ayrı bir klasörde duruyor.
+          # Buradaki yayın gh-pages'i BAŞTAN yazdığı için önce kenara alınır,
+          # yoksa her kök dağıtımı önizlemeyi sessizce siler.
+          if [ -d _site/onizleme ]; then mv _site/onizleme /tmp/onizleme; fi
           rm -rf _site
 
       - name: BIST data (incremental on push; full refresh on schedule / manual run)
@@ -86,12 +90,44 @@ jobs:
           MARKET=us python scripts/screener.py || true
           MARKET=crypto python scripts/screener.py || true
 
+      # Süre betiğin kendi işi: adım zaman sınırı bu süreci öldürmüyor, öksüz
+      # bırakıyor ve sonraki adımlarla yarıştırıyor (bkz. onizleme.yml).
+      - name: Finansal tablolar (İş Yatırım; haftada bir / manuel çalışmada tam)
+        continue-on-error: true
+        timeout-minutes: 16
+        env:
+          FUND_MAX_SECONDS: '900'
+        run: |
+          python -m pip install --quiet isyatirimhisse pandas
+          python scripts/build_fundamentals.py
+
+      # USD/TRY kuru (TCMB EVDS). Anahtar yoksa ya da kaynak erişilemezse dosya
+      # yazılmaz; portföy ekranı "kur serisi yok" der, derleme kırılmaz.
+      - name: Kur serisi (TCMB)
+        continue-on-error: true
+        env:
+          EVDS_API_KEY: ${{ secrets.EVDS_API_KEY }}
+        run: python scripts/build_fx.py
+
+      # Sektör sınıflandırması. Kaynağa erişilemezse dosya yazılmaz ve arayüz
+      # davranış kümelerine düşer; derleme kırılmaz.
+      - name: Sektör sınıflandırması (İş Yatırım)
+        continue-on-error: true
+        run: python scripts/build_sectors.py
+
+      # Verbose JSON → kolonsal .bin + manifest + latest-250 paketi.
+      # --verify yazılanı geri okuyup kaynakla bar bar karşılaştırır; uyuşmazlık
+      # derlemeyi kırar (bkz. docs/plan/veri-formati.md).
+      - name: Kolonsal veri paketi
+        run: python scripts/pack_data.py --market all --bundle-bars 250 --verify
+
       - run: npm ci
       - run: npm run build
 
       - name: Publish to gh-pages
         run: |
           touch dist/.nojekyll
+          if [ -d /tmp/onizleme ]; then cp -r /tmp/onizleme dist/onizleme; fi
           cd dist
           git init -q
           git checkout -q -b gh-pages

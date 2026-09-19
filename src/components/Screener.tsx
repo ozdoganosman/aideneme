@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { lsWrite, lsReadRaw } from '../storage';
+import { ModalShell } from './ModalShell';
 import { fetchScreenerFor, fetchSparkFor, fetchStatic, isIndexSymbol, ScreenerFile, ScreenerItem, Market } from '../data/bistStatic';
 import { Candles } from '../data/types';
 import { emaArr, adxArr, rocArr, rollingHighest, rollingLowest, IndicatorParams } from '../indicators/calc';
@@ -123,7 +125,7 @@ function readScrState(): {
   mkt?: string;
 } {
   try {
-    return JSON.parse(localStorage.getItem('borsaScrState') || '{}');
+    return JSON.parse(lsReadRaw('borsaScrState') || '{}');
   } catch {
     return {};
   }
@@ -220,7 +222,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   const [q, setQ] = useState<string>(() => readScrState().q ?? '');
   const [saved, setSaved] = useState<{ name: string; view: number; filters: Filter[] }[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('borsaScreens') || '[]');
+      return JSON.parse(lsReadRaw('borsaScreens') || '[]');
     } catch {
       return [];
     }
@@ -269,15 +271,27 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
     fetchSparkFor(market).then(setSpark).catch(() => {});
   }, [market]);
   useEffect(() => {
-    localStorage.setItem('borsaScreens', JSON.stringify(saved));
+    lsWrite('borsaScreens', saved);
   }, [saved]);
   // Remember the last screen state (incl. live filters + results) so leaving to
   // view a stock — or closing the screener — doesn't reset it.
   useEffect(() => {
-    localStorage.setItem(
-      'borsaScrState',
-      JSON.stringify({ view, filters, sort, q, liveFs, liveSet: liveSet ? [...liveSet] : null, liveVals, stratF: stratFilter, psig, mkt: market }),
-    );
+    // Yazma SARMALAYICIDAN geçiyor: Safari özel sekmesinde `localStorage`
+    // yazmak istisna atıyor ve korumasız çağrı uygulamayı hiç açılmaz
+    // hâle getiriyordu. Piyasa anahtarı (`mkt`) de kayda giriyor — kayıtlı
+    // canlı sonuçlar başka bir piyasanın sembollerine aitse geçersiz.
+    lsWrite('borsaScrState', {
+      view,
+      filters,
+      sort,
+      q,
+      liveFs,
+      liveSet: liveSet ? [...liveSet] : null,
+      liveVals,
+      stratF: stratFilter,
+      psig,
+      mkt: market,
+    });
   }, [view, filters, sort, q, liveFs, liveSet, liveVals, stratFilter, psig, market]);
   // Chart params changed → live results are stale: drop them (keep the filters),
   // so the next "Canlı uygula" recomputes with the new parameters.
@@ -472,8 +486,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+    <ModalShell onClose={onClose} className="modal wide" label="Hisse tarama">
         <div className="modal-head">
           <span className="scr-head-title">
             <b>🔍 {market === 'crypto' ? 'Kripto' : market === 'us' ? 'ABD' : 'Hisse'} Tarama{data ? ` · ${data.items.length} ${market === 'crypto' ? 'coin' : 'hisse'}` : ''}</b>
@@ -781,8 +794,7 @@ export function Screener({ onClose, onSelect, onAddToWatch, params, strats, acti
             </>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
