@@ -73,11 +73,25 @@ test.describe('Sembol Masası — grafik yüksekliği', () => {
       'iki panel de kapalıyken fiyat alanı grafiğin tamamına yakın olmalı',
     ).toBeGreaterThan(0.85);
 
+    /*
+      Kapalı panel KURULMUYOR da.
+
+      Eskiden paneller ve serileri her zaman yaratılıyor, kapalıyken yalnızca
+      esneme katsayısı 0'a çekiliyordu: grafik 15 tuvalle açılıyordu. Ölçüldü
+      (6× yavaşlatma, gerçek veri): ilk karenin bloku 409 ms'den 294 ms'ye,
+      toplam blok 649 ms'den 418 ms'ye indi. Bu maliyet her SEMBOL
+      DEĞİŞİMİNDE ödeniyor, yani sık yol.
+    */
+    const tuval = async () => page.locator('.chart-host canvas').count();
+    expect(await tuval(), 'kapalı panellerin tuvalleri de kurulmamalı').toBeLessThan(9);
+
     await page.getByText('Williams %R', { exact: true }).click();
     await page.waitForTimeout(1500);
     const acik = await fiyatPayi();
     expect(acik, 'panel açılınca fiyat payı düşmeli').toBeLessThan(kapali);
     expect(acik, 'açık panel fiyatı ezmemeli').toBeGreaterThan(0.6);
+    // Panel açılınca gerçekten KURULUYOR (tembellik sessiz bir kayıp olmasın).
+    expect(await tuval(), 'panel açıldı ama tuvalleri kurulmadı').toBeGreaterThan(9);
   });
 });
 

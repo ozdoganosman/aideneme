@@ -87,7 +87,23 @@ export function PriceChart({
 
   // Grafik bir kez kurulur; overlay serileri sabit kalır, görünürlük değişir.
   // (LOD denetleyicisi seri listesini kuruluşta alır.)
-  const overlayKeys = overlays.map((o) => o.key).join(',');
+  /**
+   * KAPALI indikatör paneli hiç KURULMUYOR.
+   *
+   * Paneller ve serileri eskiden her zaman yaratılıyordu; kapalıyken yalnızca
+   * esneme katsayısı 0'a çekiliyordu. Ölçüldü (6× yavaşlatma, gerçek veri):
+   * grafiğin ilk karesi 409 ms'lik tek bir blok, kapalı paneller
+   * kurulmadığında 349 ms. Bu blok her SEMBOL DEĞİŞİMİNDE ödeniyor (bileşen
+   * söküldüğü için), yani sık yol burası.
+   *
+   * Bir kez açılan panel LİSTEDE KALIYOR: kapatıp açmak grafiği yeniden
+   * kurmuyor, yalnızca görünürlük değişiyor. Yeniden kurulum tek seferlik ve
+   * görünüm zaten korunuyor (bkz. gorunumRef).
+   */
+  const gorulenPane = useRef<Set<number>>(new Set([0]));
+  for (const o of overlays) if (o.visible) gorulenPane.current.add(o.pane ?? 0);
+  const gosterilen = overlays.filter((o) => gorulenPane.current.has(o.pane ?? 0));
+  const overlayKeys = gosterilen.map((o) => o.key).join(',');
 
   useEffect(() => {
     const host = hostRef.current;
@@ -149,7 +165,7 @@ export function PriceChart({
 
     const specs: ExtraSpec[] = [];
     const map = new Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>();
-    for (const overlay of overlays) {
+    for (const overlay of gosterilen) {
       const pane = overlay.pane ?? 0;
       const hist = overlay.kind === 'hist';
       const series = hist
@@ -200,7 +216,7 @@ export function PriceChart({
     // Panel yükseklikleri. Varsayılan dağıtımda indikatör panelleri fiyatla
     // neredeyse eşit pay alıyor ve mumlar eziliyordu; fiyat bu grafiğin asıl
     // işi. Esneme katsayısı: fiyat 3, her indikatör 1.
-    const paneCount = 1 + Math.max(0, ...overlays.map((o) => o.pane ?? 0));
+    const paneCount = 1 + Math.max(0, ...gosterilen.map((o) => o.pane ?? 0));
     if (paneCount > 1) {
       const panes = chart.panes();
       panes[0]?.setStretchFactor(3);
@@ -307,13 +323,13 @@ export function PriceChart({
     lastFitKey.current = fitKey;
     lod.setData(
       candles,
-      overlays.map((o) => o.values),
+      gosterilen.map((o) => o.values),
       fit,
     );
     ozetYazRef.current?.();
     // overlays her render'da yeni dizi; değer kimliği yeterli.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, fitKey, overlayKeys, overlays.map((o) => o.values.length).join(',')]);
+  }, [candles, fitKey, overlayKeys, gosterilen.map((o) => o.values.length).join(',')]);
 
   /**
    * KAPALI panel yer kaplamamalı.
@@ -332,13 +348,13 @@ export function PriceChart({
     const panes = chart.panes();
     if (panes.length < 2) return;
     const acik = new Set(
-      overlays.filter((o) => (o.pane ?? 0) > 0 && o.visible).map((o) => o.pane as number),
+      gosterilen.filter((o) => (o.pane ?? 0) > 0 && o.visible).map((o) => o.pane as number),
     );
     panes[0]?.setStretchFactor(3);
     for (let i = 1; i < panes.length; i++) panes[i]?.setStretchFactor(acik.has(i) ? 1 : 0.0001);
     // Görünürlük imzası yeterli: seri kimlikleri kurulumda sabitlendi.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [overlays.map((o) => `${o.pane ?? 0}:${o.visible ? 1 : 0}`).join(',')]);
+  }, [gosterilen.map((o) => `${o.pane ?? 0}:${o.visible ? 1 : 0}`).join(',')]);
 
   // Tema değişimi: yeniden kurmadan renkleri uygula.
   useEffect(() => {
@@ -359,13 +375,13 @@ export function PriceChart({
 
   // Overlay görünürlüğü.
   useEffect(() => {
-    for (const overlay of overlays) {
+    for (const overlay of gosterilen) {
       overlayRef.current.get(overlay.key)?.applyOptions({ visible: overlay.visible });
     }
     // Görünürlüğü açılan seriye veri YAZILMALI: gizliyken seyreltme atlandığı
     // için elinde çizilecek bir şey yok (bkz. lod.refreshExtras).
     lodRef.current?.refreshExtras();
-  }, [overlays]);
+  }, [gosterilen]);
 
   return (
     <>

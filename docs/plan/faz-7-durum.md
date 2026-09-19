@@ -1948,6 +1948,58 @@ gerçek tema değişiminde yeni nesne döndüğünü de doğruluyor.
 
 Ölçmeden düzeltmeye kalksaydım ikisi de "iyileştirme" diye yazılacaktı.
 
+## Sembol masası: kapalı indikatör paneli kuruluyordu
+
+Nabız düzeltildikten sonra uygulamanın en büyük TEK bloku sembol masasında
+kaldı. İz kaydı onu ikiye ayırdı:
+
+```
+=== 414 ms'lik görev içindekiler ===
+   292,4 ms  FireAnimationFrame
+   292,3 ms  FunctionCall (anon) lod-*.js
+    97,0 ms  Commit
+```
+
+Yani grafik kütüphanesinin ilk karesi. Tuvalleri saydım: grafik **15 tuvalle**
+açılıyordu. Sebep: indikatör panelleri (Williams %R ve MACD) KAPALI olsa da
+kuruluyor, yalnızca esneme katsayıları 0'a çekiliyordu — yedi seri, iki fazla
+panel, sekiz fazla tuval, hiçbiri görünmüyor.
+
+Artık kapalı panel hiç kurulmuyor. Bir kez açılan panel ise listede KALIYOR:
+kapatıp açmak grafiği yeniden kurmuyor, yalnızca görünürlük değişiyor. Yeniden
+kurulum tek seferlik ve görünüm zaten korunuyor (bkz. görünüm ref'i).
+
+Ölçüm (6× yavaşlatma, gerçek BIST verisi, 3 tekrarın medyanı):
+
+|                         | önce    | sonra       |
+| ----------------------- | ------- | ----------- |
+| açılıştaki tuval sayısı | 15      | **7**       |
+| en kötü tek görev       | 409 ms  | **294 ms**  |
+| ana iş parçacığı bloku  | 649 ms  | **418 ms**  |
+| hazır                   | 1822 ms | **1540 ms** |
+
+Bu maliyet her SEMBOL DEĞİŞİMİNDE ödeniyor (yükleme ekranı grafiği söküyor),
+yani sık yol. Kazanç masayla başlayan üç ölçümde de göründü:
+
+| ekran            | en kötü görev    | toplam blok      |
+| ---------------- | ---------------- | ---------------- |
+| sembol masası    | 373 → **308 ms** | 563 → **456 ms** |
+| sektör akranları | 382 → **308 ms** | 562 → **463 ms** |
+| radar            | 395 → **261 ms** | 571 → **387 ms** |
+
+Uygulamanın en büyük tek bloku böylece 409 → 308 ms'ye indi.
+
+Davranış e2e'de bağlandı, iki yönlü: kapalıyken tuvaller KURULMUYOR
+(< 9 tuval) ve panel açılınca gerçekten kuruluyor (> 9) — tembellik sessiz bir
+kayıp olmasın. Elle de doğrulandı: yakınlaştırma panel açılıp kapanırken
+korunuyor, sayfa hatası yok.
+
+### Geriye kalan
+
+Kalan 292 ms'lik kare kütüphanenin kendi çizimi (`useBitmapCoordinateSpace`,
+`_invalidateBitmapSize`). Bunu küçültmenin küçük bir yolu görünmüyor; asıl
+karar kütüphanenin kendisi.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.
