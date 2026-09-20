@@ -74,13 +74,13 @@ export const EKRANLAR: Ekran[] = [
     },
   },
   { id: 'tarayici', ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
-  { id: 'sembol', ad: 'Sembol Masası', url: 'v=sembol&s=X001', hazir: '.desk__chart' },
+  { id: 'sembol', ad: 'Sembol Masası', url: 'v=sembol&s={SEMBOL}', hazir: '.desk__chart' },
   {
     // Radar üç etkileşim getiriyor: sürüklenebilir ayırıcı (ok tuşlarıyla da
     // çalışmalı), filtre ve sütun panelleri. Kapalıyken denetlenmiş sayılmaz.
     id: 'sembol:radar',
     ad: 'Sembol Masası — radar',
-    url: 'v=sembol&s=X001',
+    url: 'v=sembol&s={SEMBOL}',
     hazir: '.radar__tablo',
     ac: async (page) => {
       await page.getByText('Radar', { exact: true }).first().click();
@@ -104,7 +104,7 @@ export const EKRANLAR: Ekran[] = [
     */
     id: 'sembol:radar-filtre',
     ad: 'Sembol Masası — radar filtre paneli',
-    url: 'v=sembol&s=X001',
+    url: 'v=sembol&s={SEMBOL}',
     hazir: '.radar__sektor',
     ac: async (page) => {
       await page.getByText('Radar', { exact: true }).first().click();
@@ -116,7 +116,7 @@ export const EKRANLAR: Ekran[] = [
   {
     id: 'sembol:finansallar',
     ad: 'Sembol Masası — finansallar',
-    url: 'v=sembol&s=X001',
+    url: 'v=sembol&s={SEMBOL}',
     hazir: '.fin__karne',
     ac: async (page) => {
       await page.getByRole('tab', { name: 'Finansallar' }).click();
@@ -125,7 +125,7 @@ export const EKRANLAR: Ekran[] = [
   {
     id: 'sembol:sektor',
     ad: 'Sembol Masası — sektör',
-    url: 'v=sembol&s=X001',
+    url: 'v=sembol&s={SEMBOL}',
     hazir: '.desk__sector-table',
     ac: async (page) => {
       await page.getByRole('tab', { name: 'Sektör' }).click();
@@ -135,11 +135,11 @@ export const EKRANLAR: Ekran[] = [
   {
     id: 'karsilastir',
     ad: 'Karşılaştır',
-    url: 'v=karsilastir&cmp=X001,X002,X003',
+    url: 'v=karsilastir&cmp={SEMBOL},{SEMBOL2},{SEMBOL3}',
     hazir: '.compare__matrix',
   },
   { id: 'portfoy', ad: 'Portföy', url: 'v=portfoy', hazir: '.ui-field' },
-  { id: 'rapor', ad: 'Rapor', url: 'v=rapor&s=X001', hazir: '.report__sheet' },
+  { id: 'rapor', ad: 'Rapor', url: 'v=rapor&s={SEMBOL}', hazir: '.report__sheet' },
   {
     // UI kitaplığının tablo sekmesi: fiyat sütunu burada çiziliyor.
     id: 'kitaplik',
@@ -162,7 +162,31 @@ export const EKRANLAR: Ekran[] = [
   },
 ];
 
+/**
+ * ÖLÇÜLECEK SEMBOLLER — ortam değişkeniyle değiştirilebilir.
+ *
+ * Sembol sabit yazılıyken denetimler yalnızca ÖRNEK veriyle koşabiliyordu
+ * (X001 yayındaki veride yok). Oysa bu oturumda gerçek verinin örnek verinin
+ * gizlediği kusurları ortaya çıkardığı birkaç kez ölçüldü: bar sayıları
+ * örnekte hep aynı, gerçekte 18–3650; dönem etiketleri örnekte kısa,
+ * gerçekte taşıyor. Ölçüm aracı (scripts/measure-perf.mjs) aynı dersi daha
+ * önce öğrenmişti; denetimler de aynı kapıyı kullansın:
+ *
+ *   E2E_SEMBOL=THYAO,GARAN,ASELS npx playwright test
+ */
+const SEMBOLLER = (process.env.E2E_SEMBOL ?? 'X001,X002,X003').split(',');
+
+function coz(url: string): string {
+  return url
+    .replaceAll('{SEMBOL2}', SEMBOLLER[1] ?? SEMBOLLER[0])
+    .replaceAll('{SEMBOL3}', SEMBOLLER[2] ?? SEMBOLLER[0])
+    .replaceAll('{SEMBOL}', SEMBOLLER[0]);
+}
+
 /** Bir denetimin gezeceği ekranlar — hariç tutulanlar düşülmüş hâliyle. */
 export function denetimEkranlari(denetim: DenetimAdi): Ekran[] {
-  return EKRANLAR.filter((e) => !e.haric?.some((h) => h.denetim === denetim));
+  return EKRANLAR.filter((e) => !e.haric?.some((h) => h.denetim === denetim)).map((e) => ({
+    ...e,
+    url: coz(e.url),
+  }));
 }
