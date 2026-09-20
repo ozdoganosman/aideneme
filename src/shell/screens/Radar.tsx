@@ -1235,6 +1235,14 @@ export function Radar({
                 <Button
                   size="sm"
                   variant="primary"
+                  /*
+                    Açık ad: yalnızca "Ekle" yazan bir düğme, tablodaki
+                    "<SEMBOL> radara ekle" düğmeleriyle aynı ekranda neyi
+                    eklediğini söylemiyor. Ekran okuyucuyla gezen kullanıcı
+                    bağlamı göremez; görsel etiket kısa kalıyor ama
+                    erişilebilir ad tam oluyor.
+                  */
+                  aria-label="Kıyas kuralını ekle"
                   disabled={!kiyasA || !kiyasB}
                   onClick={() => {
                     // Aynı kural iki kez eklenmesin: liste şişer, sonuç

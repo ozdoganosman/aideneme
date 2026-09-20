@@ -495,7 +495,7 @@ describe('Radar — ölçüt kıyası', () => {
     await user.selectOptions(await screen.findByLabelText('Kıyas sol ölçüt'), 'last');
     await user.selectOptions(screen.getByLabelText('Kıyas sağ ölçüt'), emaId);
     await user.selectOptions(screen.getByLabelText('Kıyas yönü'), 'gt');
-    await user.click(screen.getByRole('button', { name: 'Ekle' }));
+    await user.click(screen.getByRole('button', { name: 'Kıyas kuralını ekle' }));
 
     // THYAO son barda +%4, GARAN −%2: biri EMA'sının üstünde, öteki altında.
     await vi.waitFor(async () => {
@@ -514,7 +514,7 @@ describe('Radar — ölçüt kıyası', () => {
     const emaId = gostergeOlcutId('ema', { uzunluk: 10 }, 'ema');
     await user.selectOptions(await screen.findByLabelText('Kıyas sol ölçüt'), 'last');
     await user.selectOptions(screen.getByLabelText('Kıyas sağ ölçüt'), emaId);
-    await user.click(screen.getByRole('button', { name: 'Ekle' }));
+    await user.click(screen.getByRole('button', { name: 'Kıyas kuralını ekle' }));
     await vi.waitFor(async () => expect((await satirlar()).length).toBe(1));
 
     await user.click(screen.getByRole('button', { name: 'Filtreyi kaldır: Fiyat > EMA 10' }));

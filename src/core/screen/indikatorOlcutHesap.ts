@@ -13,6 +13,24 @@ import type { OlcutIstegi } from './indikatorOlcut';
  *
  * Alınan değer SON BARINKİ: radar "bugün bu hisse nerede" sorusunu soruyor.
  *
+ * ÖLÇÜLDÜ VE KABUL EDİLDİ: üstel göstergeler penceresinden KISA geçmişte de
+ * sayı üretir. `emaArr` ilk sonlu değerde tohumlanıyor, yani 33 barlık bir
+ * sembol de "EMA 200" etiketli bir sayı veriyor — ama o sayı 200 günlük bir
+ * eğilim değil, ağırlıklı bir kısa ortalama.
+ *
+ * Yayındaki veride sayıldı: 582 sembolün 10'u 200 bardan az işlem görmüş
+ * (ISKUR 33, GENKM 133, AKHAN 153 … ZERGY 188). Yani evrenin %1,7'si.
+ *
+ * DEĞİŞTİRİLMEDİ, üç sebeple: (1) üstel filtrenin baştan değer vermesi
+ * doğru davranış ve grafikte de böyle çiziliyor; (2) eski taramanın EMA
+ * uzaklık ölçütleri de aynı davranışa dayanıyor, ayrıştırmak iki ekranda
+ * farklı sayı üretirdi; (3) etkilenen paydanın küçüklüğü, üçüncü bir uyarı
+ * satırının maliyetini karşılamıyor — gereksiz uyarı da bir kusurdur ve
+ * okunmaz hâle geldiğinde asıl uyarıları da götürür.
+ *
+ * Pencere ortalamaları (SMA, stdev, %R, Stokastik) BÖYLE DEĞİL: onlar
+ * pencere dolmadan NaN veriyor ve radar bunu "ölçülemedi" diye sayıyor.
+ *
  * Isınma NaN kalıyor ve bilerek öyle bırakılıyor. 60 barlık bir sembolde
  * "EMA 200" ölçülemez; sıfır ya da son geçerli değer yazmak o sembolü
  * ölçülmüş gibi gösterirdi. NaN hiçbir kuralı geçmediği için sembol elenir ve
