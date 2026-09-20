@@ -382,6 +382,27 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
   const settled = analysis.status === 'ready' && !busy && timing !== null;
 
   /**
+   * Evrenden HİÇ satır üretmeyen semboller.
+   *
+   * "582 sembol" yazarken piyasada 584 hisse olması kullanıcının çözemeyeceği
+   * bir fark: hangi ikisi, neden yok? Paket 584 sembolü de taşıyor, ama
+   * `metricsFor` iki bardan az veriyle ölçüm yapmayı reddediyor ve o semboller
+   * satır üretmeden düşüyordu — sessizce.
+   *
+   * Gerçek BIST verisinde ölçüldü: UMPAS son 250 günde HİÇ işlem görmemiş,
+   * ISATR yalnızca bir gün. Yani eleme doğru; söylenmemesi yanlıştı.
+   *
+   * Bu, ekranda zaten uygulanan ilkenin aynısı ("ölçülemedi ≠ uymadı",
+   * "payda küçülünce bunu söyle"). Fark şu: o not KURALLARIN elediklerini
+   * sayıyor, bu not EVRENE hiç giremeyenleri.
+   */
+  const taranamayan = useMemo(() => {
+    if (!settled || analysis.symbols.length === 0) return [];
+    const uretilen = new Set(rows.map((r) => r.symbol));
+    return analysis.symbols.filter((s) => !uretilen.has(s));
+  }, [analysis.symbols, rows, settled]);
+
+  /**
    * Her KAYITLI taramanın bugünkü sonucu ve işaretli halinden farkı.
    *
    * Fark, ekranda düzenlenen kurallara değil KAYDIN TANIMINA bakar: "Tarama
@@ -883,6 +904,16 @@ export default function ScreenerScreen({ state, push, replace }: Props) {
                   )
                   .join(', ')}
                 ) — kuralı geçemedikleri için değil, o ölçü onlarda olmadığı için elendiler.
+              </span>
+            ) : null}
+            {taranamayan.length > 0 ? (
+              <span
+                className="screener__taranamayan desk__muted"
+                title={`Taranamayan: ${taranamayan.join(', ')}`}
+              >
+                {taranamayan.length} sembol taranamadı ({taranamayan.slice(0, 3).join(', ')}
+                {taranamayan.length > 3 ? '…' : ''}) — son {analysis.bars} günde ölçüm yapacak kadar
+                işlem görmemişler.
               </span>
             ) : null}
             {timing ? (

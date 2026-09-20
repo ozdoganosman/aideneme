@@ -67,7 +67,20 @@ test('nabız → tarayıcı: sektör satırı o sektör seçili taramayı açıy
   // bir sektörde bu testi kıran gerçek bir tuzaktı; URLSearchParams doğru
   // çözüyor.
   const f = new URL(page.url()).searchParams.get('f') ?? '';
-  expect(f.split('|')[3]).toBe(sector);
+  /*
+    SEKTÖR PARÇASI KODLUDUR — ham adla karşılaştırılamaz.
+
+    Bağlantı biçimi `|` ile alan, `,` ile sektör ayırıyor; bu yüzden sektör
+    adındaki `%`, `|` ve `,` kaçırılıyor (bkz. core/screen/share.ts). Burada
+    önce ham adla karşılaştırılıyordu ve örnek veride bu hiç fark etmiyordu:
+    oradaki sektör adlarında virgül yok, yani kaçış birim işlemdi.
+
+    Gerçek BIST verisinde düştü: "Kimya, Petrol, Plastik" bağlantıda
+    "Kimya%2C Petrol%2C Plastik" olarak duruyor. Ürün DOĞRU çalışıyor —
+    yukarıdaki rozet iddiası bunu zaten gösteriyor; yanlış olan testin
+    çözmeyi atlamasıydı. Kaçışın var olma sebebi tam da bu ad sınıfıydı.
+  */
+  expect(decodeURIComponent(f.split('|')[3])).toBe(sector);
 });
 
 test('eski arayüz ile yeni kabuk birbirine bağlı', async ({ page }) => {
@@ -373,8 +386,37 @@ test('endeks ve fonlar taramada yok ama grafikte açılabiliyor', async ({ page 
 
   const durum = await page.locator('.screener__status').first().innerText();
   const hisse = sayilar.toplam - sayilar.endeks;
-  expect(durum).toContain(`${hisse} sembol`);
+  // Endeks/fon elemesinin ASIL iddiası: evren manifest TOPLAMI değil.
   expect(durum).not.toContain(`${sayilar.toplam} sembol`);
+
+  /*
+    EVREN, HİSSE SAYISINDAN DAHA KÜÇÜK OLABİLİR — ama sessizce değil.
+
+    Önce burada `toContain(`${hisse} sembol`)` yazıyordu; yani "taranan sayı
+    tam olarak hisse sayısıdır" iddiası. Gerçek BIST verisinde düştü: 584
+    hisse var, tarama 582 diyor. Sebep gerçek ve doğru — UMPAS son 250 günde
+    HİÇ işlem görmemiş, ISATR yalnızca bir gün; iki bardan az veriyle ölçüm
+    yapılamıyor.
+
+    Yani kusur elemede değil, SUSMAKTAYDI: kullanıcı 584 ile 582 arasındaki
+    farkı çözemezdi. Test artık eşitlik değil, HESABIN KAPANMASINI sınıyor:
+    taranan + taranamayan = hisse sayısı ve taranamayanların sebebi yazılı.
+  */
+  const taranamayanMetni = await page
+    .locator('.screener__taranamayan')
+    .innerText()
+    .catch(() => '');
+  const taranamayan = Number(taranamayanMetni.match(/^(\d+) sembol taranamadı/)?.[1] ?? 0);
+  const taranan = Number(durum.match(/\d+ \/ (\d+) sembol/)?.[1] ?? 0);
+  expect(taranan, 'tarama evreni okunamadı').toBeGreaterThan(0);
+  expect(taranan + taranamayan, 'hesap kapanmıyor: taranan + taranamayan ≠ hisse sayısı').toBe(
+    hisse,
+  );
+  if (taranamayan > 0) {
+    expect(taranamayanMetni, 'taranamayan sembollerin sebebi yazılmamış').toMatch(
+      /işlem görmemişler/,
+    );
+  }
 
   // NABIZ en çok zarar gören ekrandı. Gerçek veride ölçüldü: endeksler
   // içerideyken ısı haritasının TAMAMI üç kutuydu (XU100, XU030, XBANK) ve
