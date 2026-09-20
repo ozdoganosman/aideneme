@@ -59,6 +59,27 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
           if (r.width < 2 || r.height < 2) continue;
           if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
           if (el.hasAttribute('disabled')) continue;
+          /*
+            GÖRÜNMEYEN ÖĞE ATLANIYOR — tarayıcının kendi kararıyla.
+
+            Kapalı bir `<details>`in içeriği Chromium'da
+            `content-visibility: hidden` ile gizleniyor: öğe BOYANMIYOR ama
+            `getBoundingClientRect()` hâlâ sıfırdan farklı bir dikdörtgen
+            veriyor. Ölçüldü — kapalı "Ölçüt kıyası" bölümündeki `select`
+            32 px yüksekliğinde görünüyor, `elementFromPoint` ise oraya
+            boyanmış olan bir sonraki bölümün `h4`ünü döndürüyordu. Yani
+            denetim üç yanlış alarm üretiyordu.
+
+            Bu, dosyanın en başında yazılı olan ilkenin aynısı: görünmeyen
+            bir denetimin tıklanamaması kusur değil. Elle ölçüt türetmek
+            yerine `checkVisibility()` soruluyor — `display: none`,
+            `content-visibility` ve boş `<details>` durumlarını tarayıcı
+            zaten doğru biliyor.
+
+            Sektör rozetleri bu kusuru göstermiyordu çünkü onların girdisi
+            `opacity: 0; width: 0`; genişlik elemesine takılıyorlardı.
+          */
+          if (typeof el.checkVisibility === 'function' && !el.checkVisibility()) continue;
           const x = Math.min(Math.max(r.left + r.width / 2, 1), innerWidth - 1);
           const y = Math.min(Math.max(r.top + r.height / 2, 1), innerHeight - 1);
           /*
