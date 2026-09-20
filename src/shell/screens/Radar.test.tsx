@@ -581,3 +581,27 @@ describe('Radar — taranamayan semboller', () => {
     expect(await screen.findByText(/1 sembol taranamadı \(UMPAS\)/)).toBeTruthy();
   });
 });
+
+describe('Radar — gösterge ölçülemediğinde', () => {
+  it('"ölçülemedi" kırılımı göstergeyi İNSAN ADIYLA yazıyor', async () => {
+    /*
+      Zincirin en kırılgan yeri burası: gösterge ölçütleri çalışma zamanında
+      ekleniyor, hazır ölçüt sözlüğünde yoklar. Kırılım modül sabitinden
+      okunsaydı kullanıcı "SMA 200: 10" yerine "gos:sma:200:sma: 10" görürdü
+      — yani iç kimlik. Gerçek veride doğrulandı (582 sembolün 10'unda SMA
+      200 ölçülemiyor); bu test aynı iddiayı ucuzca kilitliyor.
+
+      Seriler 40 barlık: SMA 200 hiçbirinde ölçülemez, yani NaN. NaN hiçbir
+      kuralı geçmediği için eşik koyunca hepsi elenir ve sebebi yazılmalıdır.
+    */
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: [{ id: 'sma', parametreler: { uzunluk: 200 } }] });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /SMA 200 ölçütlerini radardan ekle/ }));
+    await user.type(await screen.findByLabelText('SMA 200 en az'), '0');
+
+    const not = await screen.findByText(/sembol ölçülemedi/);
+    expect(not.getAttribute('title')).toContain('SMA 200');
+    expect(not.getAttribute('title')).not.toContain('gos:');
+  });
+});
