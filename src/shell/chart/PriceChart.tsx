@@ -372,6 +372,24 @@ export function PriceChart({
     lodRef.current?.refreshExtras();
   }, [gosterilen]);
 
+  /**
+   * Seri ETİKETİ parametre değişince güncellenmeli.
+   *
+   * Başlık yalnızca kurulumda yazılıyordu ve kurulum seri KİMLİKLERİNE bağlı;
+   * parametre değişince kimlik değişmiyor. Ölçüldü (ekran görüntüsüyle):
+   * RSI uzunluğu 14'ten 7'ye çekildiğinde çizgi doğru güncellendi ama panel
+   * etiketi "RSI 14" olarak kaldı — kullanıcıya YANLIŞ sayı söylüyordu.
+   *
+   * Grafik yeniden kurulmuyor: yalnızca başlık uygulanıyor.
+   */
+  useEffect(() => {
+    for (const overlay of gosterilen) {
+      overlayRef.current.get(overlay.key)?.applyOptions({ title: overlay.label });
+    }
+    // Etiket imzası yeterli: seriler kuruluşta sabitlendi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gosterilen.map((o) => `${o.key}=${o.label}`).join('|')]);
+
   return (
     <>
       <div className="chart-host" ref={hostRef} style={{ height }} aria-describedby={ozetId} />

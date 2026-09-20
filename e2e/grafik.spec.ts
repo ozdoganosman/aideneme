@@ -85,7 +85,9 @@ test.describe('Sembol Masası — grafik yüksekliği', () => {
     const tuval = async () => page.locator('.chart-host canvas').count();
     expect(await tuval(), 'kapalı panellerin tuvalleri de kurulmamalı').toBeLessThan(9);
 
-    await page.getByText('Williams %R', { exact: true }).click();
+    // Anahtarın adı artık PARAMETREYİ de taşıyor (göstergeler kayıt
+    // defterinden geliyor ve aynı gösterge birden çok kez eklenebiliyor).
+    await page.getByText('%R 260 · 260 · 120', { exact: true }).click();
     await page.waitForTimeout(1500);
     const acik = await fiyatPayi();
     expect(acik, 'panel açılınca fiyat payı düşmeli').toBeLessThan(kapali);

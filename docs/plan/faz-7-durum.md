@@ -2142,6 +2142,68 @@ makinede ~50 ms) bir kez ödeniyor.
 ÖNERİ: kütüphane şimdilik değişmesin. Gerçek kazanç ~150–200 ms (6×) ve
 ~47 KB gzip; bedeli yukarıdaki listeyi yeniden yazmak. Karar kullanıcının.
 
+## İndikatör sistemi: sabit yapıdan kayıt defterine (Faz A)
+
+Kullanıcı isteği: "indikatör sistemini trading view gibi yapabilir miyiz,
+arama butonu orada indikatörler; indikatörün ayar kısmında parametrelerin
+değiştirilebilmesi; pinescript yerine javascript ile yeni indikatör yükleme;
+temel indikatörlerin barındırılması".
+
+Faz A (kayıt defteri + arama + ayarlar) tamamlandı; Faz B (kullanıcı
+göstergesi yükleme) sırada.
+
+Eskiden sistem sabitti: iki fiyat EMA'sı ve iki panel, parametreler düz bir
+yapıda on üç sayı. Yeni gösterge eklemek DÖRT dosyaya dokunmaktı — tip,
+varsayılanlar, worker, arayüz. Artık her gösterge kendi parametre şemasını,
+çıktılarını ve hesabını taşıyor; arayüz ayar kutusunu ŞEMADAN üretiyor,
+worker aynı defteri okuyor.
+
+Barındırılan 15 gösterge: EMA, SMA, WMA, VWAP (pencereli), Bollinger,
+Supertrend, RSI, Williams %R, Stokastik, MACD, MACD (NizamiCedid), ADX, ATR,
+ROC, OBV. Arama Türkçe karakterden bağımsız ("oynaklik" → ATR + Bollinger).
+
+Aynı gösterge birden çok kez eklenebiliyor — sistemin varlık sebebi bu; göç
+edilmiş varsayılan zaten iki EMA taşıyor.
+
+### Eski düzen kaybolmadı
+
+Kullanıcının kayıtlı ayarları (`enabled`, `panels`, `indParams`) bir kez
+göstergelere ÇEVRİLİYOR: açık olan açık, kapalı kapalı, parametre neyse o.
+260 günlük paradigma değerleri birebir korundu ve denklik testiyle bağlandı
+(900 barda bar bar; ayrıntısı yukarıdaki bölümde).
+
+### Ekran görüntüsü iki kusur yakaladı
+
+Birim testleri yeşilken ekran görüntüsü iki gerçek kusur gösterdi:
+
+1. **Gizli gösterge panel numarası ayırıyordu.** İki kapalı gösterge varken
+   üçüncüsü panel 3'ü istiyor, grafik de araya boş panel açıyordu; RSI
+   eklendiği hâlde görünmüyordu. Numara artık yalnızca GÖRÜNÜR örneklere
+   dağıtılıyor.
+2. **Parametre değişince ETİKET güncellenmiyordu.** Çizgi doğru yenileniyor
+   ama panel "RSI 14" yazmaya devam ediyordu — kullanıcıya yanlış sayı.
+   Başlık yalnızca kurulumda yazılıyordu ve kurulum seri kimliklerine bağlı;
+   parametre kimliği değiştirmiyor. Ayrı bir efekt artık başlığı uyguluyor.
+
+Parametrenin çizgiyi gerçekten değiştirdiği de kanıtlandı: RSI 7 ve RSI 50
+panel görüntülerinin karmaları farklı, 7'ye dönünce ilk karma birebir geri
+geliyor (etiket doğru olup çizginin eski kalması mümkündü).
+
+### Erişilebilirlik denetimi bir kusur daha yakaladı
+
+EMA 50 ve EMA 200 aynı tanımın iki örneği olduğu için düğme adları aynıydı
+("Üstel Hareketli Ortalama ayarları ×2") — ekran okuyucu kullanıcısı
+hangisini açtığını bilemezdi. Ad artık parametreyi de taşıyor.
+
+### Faz B için dil kararı
+
+JavaScript. Gerekçe: çekirdek zaten TypeScript, ayrı bir ayrıştırıcı/yorumlayıcı
+yazmak gerekmiyor ve gösterge kodu mevcut worker havuzunda koşuyor. Ama
+SINIRLI bir ortamda: DOM'suz worker, `fetch`/`importScripts`/`WebSocket`/
+`indexedDB` gibi küresel nesneler sökülmüş kapsam. Paylaşılan (URL'den gelen)
+bir gösterge asla sorulmadan çalıştırılmayacak — kod gösterilip onay
+istenecek. Bu olmadan "gösterge paylaş" doğrudan XSS kapısıdır.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

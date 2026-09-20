@@ -1,5 +1,6 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
+import type { Parametreler } from '../core/indicators/kayit';
 import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
 import type { SektorEslesmesi } from '../core/screen/sectorIndices';
 import type { Candles } from '../core/data/types';
@@ -75,6 +76,14 @@ export interface SectorMatchRequest {
   esik?: number;
 }
 
+export interface IndikatorIstegi {
+  /** Örneğin kimliği — sonuçlar bununla eşleniyor. */
+  ornekId: string;
+  /** Kayıt defterindeki tanımın kimliği. */
+  id: string;
+  parametreler: Parametreler;
+}
+
 export interface SymbolRequest {
   id: number;
   type: 'symbol';
@@ -93,6 +102,15 @@ export interface SymbolRequest {
    * arayüzle ikinci bir gerçek kaynağı olurdu.
    */
   indicators?: IndicatorParams;
+  /**
+   * KAYIT DEFTERİNDEN gelen göstergeler.
+   *
+   * Sabit `indicators` alanı iki panelin on üç sayısını taşıyordu; bu alan
+   * kullanıcının EKLEDİĞİ örnekleri taşıyor — aynı gösterge farklı
+   * parametrelerle birden çok kez olabilir, bu yüzden `ornekId` var.
+   * Boşsa hiçbiri hesaplanmıyor.
+   */
+  indikatorler?: IndikatorIstegi[];
   /** Bugün (epoch gün) — sağlık raporu saf kalsın diye dışarıdan gelir. */
   todayDay: number;
   /** TL bazlı piyasada reel getiri metriği eklensin mi. */
@@ -165,6 +183,14 @@ export interface SymbolResponse {
   overlayValues: Float64Array[];
   /** İstenmişse: Williams %R ve NizamiCedid MACD serileri. */
   indicators?: IndBundle;
+  /**
+   * Örnek kimliği → çıktı dizileri (tanımın `ciktilar` sırasıyla).
+   *
+   * Tanımı bilinmeyen bir kimlik istenirse o örnek sonuçta YOKTUR; arayüz
+   * "hesaplanmadı" ile "sıfır çıktı"yı ayırt edebilsin diye sessizce boş
+   * dizi konmuyor.
+   */
+  indikatorDegerleri?: Record<string, Float64Array[]>;
   ms: number;
 }
 

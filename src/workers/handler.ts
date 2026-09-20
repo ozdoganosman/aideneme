@@ -15,6 +15,7 @@ import { inspect } from '../core/data/health';
 import { resample } from '../core/data/resample';
 import { emaArr } from '../core/indicators/calc';
 import { summarize } from '../core/stats/summary';
+import { INDIKATOR_ILE, parametreSinirla } from '../core/indicators/kayit';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 /**
@@ -124,6 +125,9 @@ export function createHandler() {
             overlayValues: req.overlays.map((o) => emaArr(resampled.close, o.length)),
             // Panel kapalıyken hesaplanmıyor: 3650 barlık iki indikatör boşa iş.
             indicators: req.indicators ? computeIndicators(resampled, req.indicators) : undefined,
+            indikatorDegerleri: req.indikatorler?.length
+              ? indikatorlariHesapla(resampled, req.indikatorler)
+              : undefined,
             ms: now() - started,
           };
         }
@@ -165,6 +169,29 @@ export function createHandler() {
       return { id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   };
+}
+
+/**
+ * Kayıt defterindeki göstergeleri örnek örnek hesapla.
+ *
+ * Tanımı bilinmeyen kimlik ATLANIYOR: eski bir bağlantıdan ya da silinmiş bir
+ * kullanıcı göstergesinden gelen kimlik yüzünden tüm sembol isteği düşmesin.
+ * Arayüz sonuçta olmayan örneği "hesaplanmadı" diye gösterebilir.
+ *
+ * Parametreler burada da sınırlanıyor: worker'a ne geldiğine güvenmek, tek
+ * bozuk sayının sessizce boş bir çizgiye dönüşmesi demekti.
+ */
+function indikatorlariHesapla(
+  c: Candles,
+  istekler: { ornekId: string; id: string; parametreler: Record<string, number> }[],
+): Record<string, Float64Array[]> {
+  const out: Record<string, Float64Array[]> = {};
+  for (const istek of istekler) {
+    const tanim = INDIKATOR_ILE.get(istek.id);
+    if (!tanim) continue;
+    out[istek.ornekId] = tanim.hesapla(c, parametreSinirla(tanim, istek.parametreler));
+  }
+  return out;
 }
 
 function need(bundles: Map<string, Bundle>, market: string): Bundle {

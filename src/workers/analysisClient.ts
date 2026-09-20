@@ -153,6 +153,8 @@ export class AnalysisClient {
       overlays: { key: string; length: number }[];
       /** Verilmezse indikatörler hesaplanmıyor (panel kapalı). */
       indicators?: import('../core/indicators/calc').IndicatorParams;
+      /** Kayıt defterinden eklenen gösterge örnekleri. */
+      indikatorler?: import('./protocol').IndikatorIstegi[];
       todayDay: number;
       realReturn: boolean;
     },

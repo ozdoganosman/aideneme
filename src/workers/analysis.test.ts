@@ -5,6 +5,7 @@ import { createPool, type WorkerLike } from './pool';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 import { DEFAULT_SCREEN_PARAMS } from '../core/screen/metrics';
 import { encodeBundle } from '../core/data/pack';
+import { emptyCandles } from '../core/data/types';
 
 /** Deterministik sentetik paket: n sembol × bars bar. */
 function buildBundle(n: number, bars: number, seed = 3): ArrayBuffer {
@@ -126,6 +127,85 @@ describe('handler', () => {
       to: 999,
     });
     expect(response.ok && response.type === 'screen' && response.rows).toHaveLength(2);
+  });
+});
+
+/**
+ * Kayıt defterindeki göstergeler worker'da hesaplanıyor.
+ *
+ * Sözleşmenin iki yönü de sınanıyor: istenen örnekler sonuçta VAR, tanımı
+ * bilinmeyen kimlik tüm isteği düşürmüyor ve sonuçta YOK (arayüz "hesaplandı"
+ * ile "hesaplanmadı"yı ayırt edebilsin).
+ */
+describe('handler — kayıt defteri göstergeleri', () => {
+  const mumlar = () => {
+    const n = 400;
+    const c = emptyCandles(n);
+    let t = 100;
+    let s = 11;
+    const rnd = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648 - 0.5) * 2;
+    for (let i = 0; i < n; i++) {
+      t *= 1 + 0.0005 + rnd() * 0.01;
+      c.time[i] = 86_400 * (i + 1);
+      c.open[i] = t;
+      c.high[i] = t * 1.01;
+      c.low[i] = t * 0.99;
+      c.close[i] = t;
+      c.volume[i] = 1000;
+    }
+    return c;
+  };
+
+  const istek = (indikatorler: WorkerRequest extends never ? never : unknown) => ({
+    id: 1,
+    type: 'symbol' as const,
+    candles: mumlar(),
+    tf: 'D' as const,
+    overlays: [],
+    todayDay: 20_500,
+    realReturn: false,
+    indikatorler,
+  });
+
+  it('istenen örnekleri hesaplıyor', () => {
+    const handle = createHandler();
+    const r = handle(
+      istek([
+        { ornekId: 'a', id: 'rsi', parametreler: { uzunluk: 14 } },
+        { ornekId: 'b', id: 'bollinger', parametreler: { uzunluk: 20, kat: 2 } },
+      ]) as WorkerRequest,
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.type !== 'symbol') throw new Error('beklenmeyen yanıt');
+    expect(Object.keys(r.indikatorDegerleri ?? {}).sort()).toEqual(['a', 'b']);
+    expect(r.indikatorDegerleri!.a).toHaveLength(1);
+    expect(r.indikatorDegerleri!.b).toHaveLength(3); // üst / orta / alt
+    expect(r.indikatorDegerleri!.a[0].length).toBe(400);
+  });
+
+  it('bilinmeyen kimlik isteği düşürmüyor, sonuçta da yok', () => {
+    const handle = createHandler();
+    const r = handle(
+      istek([
+        { ornekId: 'a', id: 'yok-boyle-bir-sey', parametreler: {} },
+        { ornekId: 'b', id: 'ema', parametreler: { uzunluk: 50 } },
+      ]) as WorkerRequest,
+    );
+    expect(r.ok, 'bilinmeyen kimlik tüm isteği düşürdü').toBe(true);
+    if (!r.ok || r.type !== 'symbol') throw new Error('beklenmeyen yanıt');
+    expect(Object.keys(r.indikatorDegerleri ?? {})).toEqual(['b']);
+  });
+
+  it('bozuk parametre sessizce boş çizgiye dönüşmüyor', () => {
+    const handle = createHandler();
+    // uzunluk 0: sınırlanmazsa EMA boş/NaN dizi döndürürdü.
+    const r = handle(
+      istek([{ ornekId: 'a', id: 'ema', parametreler: { uzunluk: 0 } }]) as WorkerRequest,
+    );
+    if (!r.ok || r.type !== 'symbol') throw new Error('beklenmeyen yanıt');
+    const seri = r.indikatorDegerleri!.a[0];
+    expect(seri.length).toBe(400);
+    expect(Number.isFinite(seri[399]), 'sınırlama uygulanmamış').toBe(true);
   });
 });
 

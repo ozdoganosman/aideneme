@@ -384,6 +384,81 @@
 .desk__grafikalan[hidden] {
   display: none;
 }
+/* ── İndikatör yönetimi ───────────────────────────────────────────────── */
+.ind {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.ind__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+/* Eklenen göstergeler TEK ŞERİT: sekiz gösterge ekleyen kullanıcı grafiğin
+   yerini yemesin. Şerit yatay kayıyor, satırlar küçülmüyor. */
+.ind__liste {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0 0 var(--sp-1);
+  list-style: none;
+  overflow-x: auto;
+}
+.ind__satir {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--surface-0);
+}
+.ind__satir--bilinmeyen {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.ind__eylem {
+  display: flex;
+  gap: 2px;
+}
+.ind__ara {
+  margin-bottom: var(--sp-3);
+}
+.ind__kategori h3 {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.ind__kategori ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ind__ekle {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  align-items: baseline;
+  width: 100%;
+  padding: var(--sp-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ind__ekle:hover,
+.ind__ekle:focus-visible {
+  background: var(--surface-2);
+}
+
 .desk__bar {
   display: flex;
   align-items: flex-end;

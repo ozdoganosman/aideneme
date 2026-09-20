@@ -8,6 +8,7 @@ import { resample, type TF } from '../../core/data/resample';
 import { summarize } from '../../core/stats/summary';
 import { inspect } from '../../core/data/health';
 import { emaArr } from '../../core/indicators/calc';
+import { INDIKATOR_ILE, parametreSinirla } from '../../core/indicators/kayit';
 
 // Grafik ayrı chunk ve canvas gerektiriyor; ekran testinde yerine sahte kondu.
 vi.mock('../chart/PriceChart', () => ({
@@ -40,7 +41,10 @@ vi.mock('../chart/PriceChart', () => ({
 // Sembol analizi artık worker'da; sahte istemci aynı çekirdek fonksiyonları
 // çağırır, böylece ekranın gösterdiği sayılar gerçek hesapla aynı kalır.
 /** Son `symbol()` isteğinin seçenekleri — indikatör isteği sınanacak. */
-const sonIstek: { indicators?: IndicatorParams } = {};
+const sonIstek: {
+  indicators?: IndicatorParams;
+  indikatorler?: { ornekId: string; id: string; parametreler: Record<string, number> }[];
+} = {};
 
 const FAKE_ANALYSIS = {
   client: {
@@ -51,11 +55,13 @@ const FAKE_ANALYSIS = {
         tf: TF;
         overlays: { key: string; length: number }[];
         indicators?: IndicatorParams;
+        indikatorler?: { ornekId: string; id: string; parametreler: Record<string, number> }[];
         todayDay: number;
         realReturn: boolean;
       },
     ) => {
       sonIstek.indicators = options.indicators;
+      sonIstek.indikatorler = options.indikatorler;
       const resampled = resample(candles, options.tf);
       return {
         candles: resampled,
@@ -65,6 +71,14 @@ const FAKE_ANALYSIS = {
         indicators: options.indicators
           ? computeIndicators(resampled, options.indicators)
           : undefined,
+        // Kayıt defteri göstergeleri GERÇEK hesapla dönüyor: ekranın
+        // "açık ama boş" durumuna düşüp düşmediği ancak böyle görülür.
+        indikatorDegerleri: Object.fromEntries(
+          (options.indikatorler ?? []).map((i) => {
+            const t = INDIKATOR_ILE.get(i.id)!;
+            return [i.ornekId, t.hesapla(resampled, parametreSinirla(t, i.parametreler))];
+          }),
+        ),
         ms: 3,
       };
     },
@@ -136,39 +150,71 @@ describe('SymbolDesk', () => {
   // sırasında ölçülüyor ve `core/data/health.ts` testleri yerinde duruyor.
   // Eski arayüzün iki indikatörü. Panel KAPALIYKEN worker'a istek gitmemeli:
   // 3650 barlık iki indikatörü kimse bakmıyorken hesaplamak boşa iş.
-  it('panel kapalıyken indikatör hesaplanmıyor', async () => {
+  it('kapalı gösterge hesaplanmıyor', async () => {
     render(<SymbolDesk state={STATE} push={push} />);
     await screen.findByTestId('chart');
-    expect(sonIstek.indicators).toBeUndefined();
+    // Göç edilmiş varsayılan: EMA 50 açık, ötekiler kapalı. İstek yalnızca
+    // GÖRÜNÜR örnekleri taşımalı — kimse bakmıyorken 3650 barlık hesap boşa iş.
+    await waitFor(() => expect(sonIstek.indikatorler?.map((i) => i.id)).toEqual(['ema']));
     expect(screen.getByTestId('chart')).toHaveAttribute('data-panes', '');
   });
 
-  it('panel açılınca indikatör isteniyor ve seriler VERİYLE geliyor', async () => {
+  it('gösterge açılınca isteniyor ve seriler VERİYLE geliyor', async () => {
     const user = userEvent.setup();
     render(<SymbolDesk state={STATE} push={push} />);
     await screen.findByTestId('chart');
 
-    await user.click(screen.getByText('Williams %R'));
+    await user.click(screen.getByText('%R 260 · 260 · 120'));
 
     // "Açık ama boş" olmamalı — EMA 200 kusuru tam olarak buydu.
-    await waitFor(() =>
-      expect(screen.getByTestId('chart')).toHaveAttribute('data-panes', 'wr:r,wr:a,wr:b'),
-    );
-    expect(sonIstek.indicators?.wr).toBe(260);
+    await waitFor(() => {
+      const panes = screen.getByTestId('chart').getAttribute('data-panes') ?? '';
+      expect(panes.split(',').filter(Boolean)).toHaveLength(3); // %R + iki EMA
+    });
+    expect(sonIstek.indikatorler?.find((i) => i.id === 'wr')?.parametreler.uzunluk).toBe(260);
   });
 
   it('parametre değişince yeni değerle yeniden hesaplanıyor', async () => {
     const user = userEvent.setup();
     render(<SymbolDesk state={STATE} push={push} />);
     await screen.findByTestId('chart');
-    await user.click(screen.getByText('MACD (NizamiCedid)'));
-    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(120));
+    await user.click(screen.getByText('nMACD 120 · 260 · 50 · 185'));
+    await waitFor(() =>
+      expect(sonIstek.indikatorler?.find((i) => i.id === 'macdNizami')?.parametreler.hizli).toBe(
+        120,
+      ),
+    );
 
-    const alan = screen.getByLabelText('hızlı');
+    // Ayar kutusu ŞEMADAN üretiliyor: alan adı da tanımdan geliyor.
+    await user.click(screen.getByRole('button', { name: /^nMACD .* ayarları/ }));
+    const alan = screen.getByLabelText('Hızlı');
     await user.clear(alan);
     await user.type(alan, '90');
 
-    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(90));
+    await waitFor(() =>
+      expect(sonIstek.indikatorler?.find((i) => i.id === 'macdNizami')?.parametreler.hizli).toBe(
+        90,
+      ),
+    );
+  });
+
+  /**
+   * Aynı gösterge BİRDEN ÇOK kez eklenebilmeli.
+   *
+   * Sabit sistemde ikinci bir EMA istemek kod değişikliği demekti; kayıt
+   * defterinin varlık sebebi bu. Göç edilmiş varsayılan zaten iki EMA
+   * taşıyor — ikisi de ayrı örnek ve ayrı parametre.
+   */
+  it('aynı gösterge iki farklı parametreyle duruyor', async () => {
+    const user = userEvent.setup();
+    render(<SymbolDesk state={STATE} push={push} />);
+    await screen.findByTestId('chart');
+    await user.click(screen.getByText('EMA 200'));
+
+    await waitFor(() => {
+      const emalar = (sonIstek.indikatorler ?? []).filter((i) => i.id === 'ema');
+      expect(emalar.map((e) => e.parametreler.uzunluk).sort((a, b) => a - b)).toEqual([50, 200]);
+    });
   });
 
   it('veri sağlığı paneli artık ekranda değil', async () => {
@@ -243,7 +289,8 @@ describe('Sembol Masası — sekmeler', () => {
     render(<SymbolDesk state={STATE} push={push} />);
     await waitFor(() => expect(screen.getByTestId('chart')).toBeInTheDocument());
 
-    const toggles = screen.getByLabelText('EMA 50').closest('.desk__toggles');
+    // EMA anahtarları indikatör paneline taşındı; üst çubukta Hacim kaldı.
+    const toggles = screen.getByLabelText('Hacim').closest('.desk__toggles');
     expect(toggles).not.toHaveAttribute('hidden');
 
     await user.click(screen.getByRole('tab', { name: 'Sektör' }));
@@ -273,22 +320,26 @@ describe('Sembol Masası — analiz çalışmazsa', () => {
 describe('Sembol Masası — kalıcı tercihler', () => {
   // Kullanıcı isteği: "son pozisyonumuz grafikte ve indikatör tercihlerimiz
   // kayıtlı kalsın".
-  it('indikatör paneli ve parametresi sonraki açılışta geri geliyor', async () => {
+  it('gösterge ve parametresi sonraki açılışta geri geliyor', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<SymbolDesk state={STATE} push={push} />);
     await screen.findByTestId('chart');
-    await user.click(screen.getByText('MACD (NizamiCedid)'));
-    const alan = await screen.findByLabelText('hızlı');
+    await user.click(screen.getByText('nMACD 120 · 260 · 50 · 185'));
+    await user.click(screen.getByRole('button', { name: /^nMACD .* ayarları/ }));
+    const alan = await screen.findByLabelText('Hızlı');
     await user.clear(alan);
     await user.type(alan, '90');
-    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(90));
+    const hizli = () =>
+      sonIstek.indikatorler?.find((i) => i.id === 'macdNizami')?.parametreler.hizli;
+    await waitFor(() => expect(hizli()).toBe(90));
     unmount();
 
     render(<SymbolDesk state={STATE} push={push} />);
     await screen.findByTestId('chart');
-    // Panel açık VE parametre korunmuş olarak dönüyor.
-    expect(await screen.findByLabelText('hızlı')).toHaveValue(90);
-    await waitFor(() => expect(sonIstek.indicators?.macdFast).toBe(90));
+    // Gösterge AÇIK ve parametre korunmuş olarak dönüyor: çip etiketi yeni
+    // değeri gösteriyor ve worker isteği de onu taşıyor.
+    expect(await screen.findByText('nMACD 90 · 260 · 50 · 185')).toBeInTheDocument();
+    await waitFor(() => expect(hizli()).toBe(90));
   });
 
   // Adres paylaşıldığında o adres kazanmalı: başkasının bağlantısı kullanıcının

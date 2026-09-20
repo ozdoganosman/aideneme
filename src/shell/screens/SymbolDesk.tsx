@@ -13,7 +13,6 @@ import {
   Skeleton,
   Stat,
   Tabs,
-  NumberField,
   Toggle,
   trPct,
   trNum,
@@ -28,6 +27,8 @@ import { dataClient } from '../../data-client/client';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import type { UrlState } from '../urlState';
 import { tercihOku, tercihYaz } from '../tercih';
+import { IndikatorPaneli, yeniOrnekId, type IndikatorOrnegi } from '../chart/IndikatorPaneli';
+import { INDIKATOR_ILE, parametreSinirla } from '../../core/indicators/kayit';
 
 /*
   Görünüm deposu BİLEŞEN AĞACININ DIŞINDA.
@@ -76,6 +77,41 @@ interface MasaTercihi {
   indParams?: IndicatorParams;
   showVolume?: boolean;
   radar?: boolean;
+  /** Kayıt defterinden eklenen gösterge örnekleri. */
+  indikatorler?: IndikatorOrnegi[];
+}
+
+/**
+ * ESKİ DURUMU TAŞI.
+ *
+ * Sabit sistemde iki fiyat EMA'sı anahtarla açılıp kapanıyor, iki panel de
+ * ayrı anahtarla geliyordu; parametreler ortak bir yapıdaydı. Kayıtlı bir
+ * kullanıcı için bunlar KAYIT DEFTERİ örneklerine çevriliyor — açık olan açık,
+ * kapalı olan kapalı, parametreler neyse o.
+ *
+ * Kaydı olmayan kullanıcı da aynı yoldan geçiyor: varsayılanlar eski
+ * varsayılanlarla birebir aynı (EMA 50 açık, EMA 200 kapalı, paneller kapalı).
+ */
+function eskidenTasi(kayit: MasaTercihi): IndikatorOrnegi[] {
+  const p = { ...DEFAULT_PARAMS, ...(kayit.indParams ?? {}) };
+  const acik = kayit.enabled ?? { ema50: true, ema200: false };
+  const panel = kayit.panels ?? { wr: false, macd: false };
+  const yap = (
+    id: string,
+    parametreler: Record<string, number>,
+    gorunur: boolean,
+  ): IndikatorOrnegi => ({ ornekId: yeniOrnekId(), id, parametreler, gorunur });
+
+  return [
+    yap('ema', { uzunluk: 50 }, !!acik.ema50),
+    yap('ema', { uzunluk: 200 }, !!acik.ema200),
+    yap('wr', { uzunluk: p.wr, emaYavas: p.wrEmaA, emaHizli: p.wrEmaB }, !!panel.wr),
+    yap(
+      'macdNizami',
+      { hizli: p.macdFast, yavas: p.macdSlow, sinyal: p.macdSig, vwma: p.macdVwma },
+      !!panel.macd,
+    ),
+  ];
 }
 
 const RADAR_MIN = 220;
@@ -92,50 +128,6 @@ const TF_ITEMS = [
   { id: 'W', label: 'Haftalık' },
   { id: 'M', label: 'Aylık' },
 ];
-
-// Renk TOKEN ADI olarak duruyor, `var(--x)` olarak değil.
-//
-// Kusur buydu: renk grafiğe düz metin `'var(--accent)'` olarak gidiyordu ve
-// grafik canvas'a çiziyor — canvas CSS değişkeni ÇÖZEMEZ. Kütüphane geçersiz
-// rengi yutup varsayılana (siyah) düşüyordu; yani EMA 50 yanlış renkte
-// çiziliyor, EMA 200 de mumların üstünde ayırt edilemiyordu. Token artık
-// `useChartColors` üzerinden GERÇEK değere çevriliyor.
-const OVERLAY_DEFS = [
-  { key: 'ema50', label: 'EMA 50', length: 50, token: 'accent' as const },
-  { key: 'ema200', label: 'EMA 200', length: 200, token: 'warn' as const },
-];
-
-/**
- * Fiyatın ALTINDAKİ paneller. Eski arayüzün iki indikatörü taşındı; ikisi de
- * "260 günlük paradigma" parametreleriyle geliyor.
- *
- * Ayrı panel şart: %R 0–100 aralığında, MACD ise fiyata bölünmüş küçük bir
- * sayı. Fiyatla aynı eksende çizilseler ikisi de düz çizgiye iner.
- */
-const PANELLER = [
-  {
-    key: 'wr',
-    label: 'Williams %R',
-    pane: 1,
-    // Parametre ADI → etiket. Değerler `indParams` içinde tutuluyor.
-    params: [
-      ['wr', '%R'],
-      ['wrEmaA', 'EMA yavaş'],
-      ['wrEmaB', 'EMA hızlı'],
-    ] as const,
-  },
-  {
-    key: 'macd',
-    label: 'MACD (NizamiCedid)',
-    pane: 2,
-    params: [
-      ['macdFast', 'hızlı'],
-      ['macdSlow', 'yavaş'],
-      ['macdSig', 'sinyal'],
-      ['macdVwma', 'eMACD'],
-    ] as const,
-  },
-] as const;
 
 type LoadState =
   | { status: 'idle' }
@@ -178,20 +170,19 @@ export default function SymbolDesk({ state, push }: Props) {
   const [chartReady, setChartReady] = useState(false);
   const kayit = useRef<MasaTercihi>(tercihOku<MasaTercihi>(MASA_ANAHTARI, {}));
   const [showVolume, setShowVolume] = useState(() => kayit.current.showVolume ?? true);
-  const [enabled, setEnabled] = useState<Record<string, boolean>>(
-    () => kayit.current.enabled ?? { ema50: true, ema200: false },
-  );
-  // Panel kapalıyken indikatör HİÇ hesaplanmıyor (worker isteğinde yok).
-  const [panels, setPanels] = useState<Record<string, boolean>>(
-    () => kayit.current.panels ?? { wr: false, macd: false },
-  );
-  const [indParams, setIndParams] = useState<IndicatorParams>(() => ({
-    ...DEFAULT_PARAMS,
-    // Eski bir sürümden kalan kayıt eksik alan taşıyabilir: varsayılanın
-    // üstüne yazılıyor, böylece yeni bir parametre eklendiğinde kayıt
-    // yüzünden `undefined` gelmiyor.
-    ...(kayit.current.indParams ?? {}),
-  }));
+  /**
+   * KAYIT DEFTERİNDEN eklenen göstergeler.
+   *
+   * Eski sabit sistemin durumu (`enabled`, `panels`, `indParams`) hâlâ
+   * okunuyor ve kaydı olmayan kullanıcı için buradan TAŞINIYOR: ekranda ne
+   * görüyorsa o kalıyor. Yeniden yapılandırma kullanıcının kurduğu düzeni
+   * sessizce silmemeli.
+   */
+  const [indikatorler, setIndikatorler] = useState<IndikatorOrnegi[]>(() => {
+    const kayitli = kayit.current.indikatorler;
+    if (kayitli?.length) return kayitli;
+    return eskidenTasi(kayit.current);
+  });
   const [radarAcik, setRadarAcik] = useState(() => kayit.current.radar ?? false);
   const [radarGenislik, setRadarGenislik] = useState(() =>
     // VARSAYILAN 300 DEĞİL 420. 300 px'te radar tablosunun görünen alanı 272
@@ -273,18 +264,22 @@ export default function SymbolDesk({ state, push }: Props) {
   // adres çıplakken buradan devam edilecek.
   useEffect(() => {
     if (!symbol) return;
+    /*
+      Eski alanlar (`enabled`, `panels`, `indParams`) ARTIK YAZILMIYOR ama
+      okunan kayıtta durmaya devam edebilir: `eskidenTasi` onları bir kez
+      göstergelere çeviriyor. Yazmayı sürdürmek iki ayrı gerçek kaynak
+      üretirdi.
+    */
     kayit.current = {
       m: market,
       s: symbol,
       tf,
-      enabled,
-      panels,
-      indParams,
       showVolume,
       radar: radarAcik,
+      indikatorler,
     };
     tercihYaz(MASA_ANAHTARI, kayit.current);
-  }, [market, symbol, tf, enabled, panels, indParams, showVolume, radarAcik]);
+  }, [market, symbol, tf, showVolume, radarAcik, indikatorler]);
 
   // Seri yükleme.
   useEffect(() => {
@@ -333,6 +328,8 @@ export default function SymbolDesk({ state, push }: Props) {
     overlayValues: Float64Array[];
     /** Panel açıksa: Williams %R ve NizamiCedid MACD serileri. */
     indicators?: IndBundle;
+    /** Kayıt defteri göstergeleri: örnek kimliği → çıktı dizileri. */
+    indikatorDegerleri?: Record<string, Float64Array[]>;
     /**
      * Sonucun HANGİ piyasa ve periyot için hesaplandığı.
      *
@@ -349,6 +346,25 @@ export default function SymbolDesk({ state, push }: Props) {
   /** Analiz (worker) hatası — seri indi ama hesap yapılamadı. */
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  /**
+   * Worker'a gidecek gösterge listesi — YALNIZCA görünür olanlar.
+   *
+   * Kimlik, istek nesnesinin KENDİSİ değil içeriği üzerinden kuruluyor
+   * (JSON): her render'da yeni bir dizi üretmek sembol isteğini sonsuz
+   * yeniden tetiklerdi.
+   */
+  const istenenIndikatorler = useMemo(() => {
+    const liste = indikatorler
+      .filter((o) => o.gorunur && INDIKATOR_ILE.has(o.id))
+      .map((o) => ({
+        ornekId: o.ornekId,
+        id: o.id,
+        parametreler: parametreSinirla(INDIKATOR_ILE.get(o.id)!, o.parametreler),
+      }));
+    return liste;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(indikatorler.filter((o) => o.gorunur))]);
+
   const clientRef = useRef(analysis.client);
   clientRef.current = analysis.client;
 
@@ -360,9 +376,14 @@ export default function SymbolDesk({ state, push }: Props) {
     client
       .symbol(daily, {
         tf,
-        overlays: OVERLAY_DEFS.map((d) => ({ key: d.key, length: d.length })),
+        // Eski sabit fiyat örtüleri ARTIK YOK: EMA'lar da kayıt defterinden
+        // geliyor ve `indikatorler` üzerinden hesaplanıyor.
+        overlays: [],
         // Hiçbir panel açık değilse indikatör hesaplanmıyor.
-        indicators: panels.wr || panels.macd ? indParams : undefined,
+        // Sabit alan ARTIK GÖNDERİLMİYOR: paneller kayıt defterine taşındı.
+        // Görünmeyen gösterge hesaplanmıyor — kapalı panelin 3650 barlık
+        // hesabı boşa işti ve o kural korunuyor.
+        indikatorler: istenenIndikatorler,
         todayDay: Math.floor(Date.now() / 1000 / DAY_SECONDS),
         realReturn: market === 'bist',
       })
@@ -379,68 +400,82 @@ export default function SymbolDesk({ state, push }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [daily, tf, market, panels.wr, panels.macd, indParams]);
+    // `istenenIndikatorler` kimliği parametrelere bağlı (useMemo): ayar
+    // değişince yeniden hesaplanıyor, görünürlük değişince de.
+  }, [daily, tf, market, istenenIndikatorler]);
 
   const candles = analysisResult?.candles ?? null;
   const metrics = analysisResult?.metrics ?? [];
 
   const chartColors = useChartColors();
 
+  /**
+   * Gösterge örnekleri → grafik serileri.
+   *
+   * Panel numarası burada dağıtılıyor: fiyat üstündekiler 0, "ayrı panel"
+   * isteyen HER ÖRNEK kendi panelini alıyor. Aynı göstergeyi iki farklı
+   * parametreyle eklemek bu yüzden iki ayrı panel veriyor — TradingView'daki
+   * davranış da bu.
+   *
+   * Değeri gelmemiş örnek BOŞ dizi ile çiziliyor, atlanmıyor: seri listesi
+   * ile çıktı listesi aynı sırada kalmalı (grafik serileri kuruluşta
+   * eşleniyor).
+   */
   const overlays = useMemo(() => {
     const bos = new Float64Array(0);
-    const ind = analysisResult?.indicators;
-    const fiyat = OVERLAY_DEFS.map((def, i) => ({
-      key: def.key,
-      label: def.label,
-      color: chartColors[def.token],
-      values: analysisResult?.overlayValues[i] ?? bos,
-      visible: !!enabled[def.key],
-    }));
+    const degerler = analysisResult?.indikatorDegerleri ?? {};
+    const out: {
+      key: string;
+      label: string;
+      color: string;
+      values: Float64Array;
+      visible: boolean;
+      pane?: number;
+      kind?: 'line' | 'hist';
+      momentumColor?: boolean;
+      baseline?: number;
+    }[] = [];
+    let sonrakiPanel = 1;
+    /*
+      GİZLİ gösterge panel numarası AYIRMIYOR.
 
-    // Williams %R paneli. 50 çizgisi eşiğin kendisi: yayındaki stratejilerin
-    // çoğu "%R 50'yi yukarı kesince al" diyor, çizgi olmadan okunmuyor.
-    const wr = [
-      {
-        key: 'wr:r',
-        label: '%R',
-        color: chartColors.accent,
-        values: ind?.percentR ?? bos,
-        baseline: 50,
-      },
-      {
-        key: 'wr:a',
-        label: `EMA ${indParams.wrEmaA}`,
-        color: chartColors.warn,
-        values: ind?.emawil ?? bos,
-      },
-      {
-        key: 'wr:b',
-        label: `EMA ${indParams.wrEmaB}`,
-        color: chartColors.muted,
-        values: ind?.emawil120 ?? bos,
-      },
-    ].map((o) => ({ ...o, pane: 1, visible: !!panels.wr }));
+      İlk yazımda numara görünürlükten bağımsız dağıtılıyordu: iki gösterge
+      kapalıyken üçüncüsü panel 3'ü istiyor, grafik de 1 ve 2'yi BOŞ açıyordu.
+      Ekran görüntüsünde yakalandı — RSI eklenmişti ama görünmüyordu, çünkü
+      kendi paneli iki boş panelin altına sıkışmıştı.
 
-    // NizamiCedid MACD paneli. Seriler hızlı EMA'ya bölünmüş (ölçekten
-    // arındırılmış), yani farklı fiyat seviyelerindeki semboller arasında
-    // karşılaştırılabilir. Sıfır çizgisi yön eşiği.
-    const macd = [
-      {
-        key: 'macd:h',
-        label: 'Histogram',
-        color: chartColors.muted,
-        values: ind?.histN ?? bos,
-        kind: 'hist' as const,
-        momentumColor: true,
-        baseline: 0,
-      },
-      { key: 'macd:m', label: 'MACD', color: chartColors.accent, values: ind?.macdN ?? bos },
-      { key: 'macd:s', label: 'Sinyal', color: chartColors.warn, values: ind?.signalN ?? bos },
-      { key: 'macd:e', label: 'eMACD', color: chartColors.down, values: ind?.eMacDN ?? bos },
-    ].map((o) => ({ ...o, pane: 2, visible: !!panels.macd }));
+      Gizli örneğe erişilemez bir numara veriliyor; grafik zaten yalnızca
+      görünür panelleri kuruyor (bkz. PriceChart'taki `gorulenPane`), yani
+      bu numara hiçbir zaman panele dönüşmüyor. Görünür yapılınca memo
+      yeniden hesaplanıp sıradaki gerçek yuvayı alıyor.
+    */
+    const ERISILMEZ_PANEL = 1000;
+    let gizliSayac = 0;
 
-    return [...fiyat, ...wr, ...macd];
-  }, [analysisResult, enabled, panels, indParams, chartColors]);
+    for (const o of indikatorler) {
+      const t = INDIKATOR_ILE.get(o.id);
+      if (!t) continue;
+      const p = parametreSinirla(t, o.parametreler);
+      const panel =
+        t.panel === 'fiyat' ? 0 : o.gorunur ? sonrakiPanel++ : ERISILMEZ_PANEL + gizliSayac++;
+      const ciktilar = t.ciktilar(p);
+      const seriler = degerler[o.ornekId];
+      ciktilar.forEach((c, i) => {
+        out.push({
+          key: `${o.ornekId}:${c.ad}`,
+          label: c.etiket,
+          color: chartColors[c.token],
+          values: seriler?.[i] ?? bos,
+          visible: o.gorunur,
+          pane: panel,
+          kind: c.tur === 'sutun' ? 'hist' : 'line',
+          momentumColor: c.yonRengi,
+          baseline: c.taban,
+        });
+      });
+    }
+    return out;
+  }, [analysisResult, indikatorler, chartColors]);
 
   return (
     <div className="desk">
@@ -474,15 +509,12 @@ export default function SymbolDesk({ state, push }: Props) {
             <Tabs label="Periyot" items={TF_ITEMS} value={tf} onChange={(id) => push({ tf: id })} />
           </div>
         ) : null}
+        {/*
+          EMA anahtarları buradan KALKTI: göstergeler artık kayıt defterinden
+          ekleniyor ve aşağıdaki panelde yönetiliyor. Hacim ve radar burada
+          kaldı — ikisi de gösterge değil, ekranın kendi düğmeleri.
+        */}
         <div className="desk__toggles" hidden={tab !== 'grafik'}>
-          {OVERLAY_DEFS.map((def) => (
-            <Toggle
-              key={def.key}
-              label={def.label}
-              checked={!!enabled[def.key]}
-              onChange={(v) => setEnabled((prev) => ({ ...prev, [def.key]: v }))}
-            />
-          ))}
           <Toggle label="Hacim" checked={showVolume} onChange={setShowVolume} />
           {/* Radar piyasa paketini indiriyor; kapalıyken o bedel ödenmiyor. */}
           <Toggle label="Radar" checked={radarAcik} onChange={setRadarAcik} />
@@ -490,46 +522,12 @@ export default function SymbolDesk({ state, push }: Props) {
       </div>
 
       {/*
-        İndikatör panelleri ayrı bir satırda: parametre alanlarıyla birlikte
-        üst çubuğa sığmıyorlar ve üst çubuk zaten piyasa/sembol/periyot
-        taşıyor. Parametreler yalnızca panel AÇIKKEN görünüyor — kapalı bir
-        indikatörün dört sayı kutusu ekranda yer kaplamamalı.
+        İNDİKATÖR YÖNETİMİ ayrı bir satırda: arama, eklenenler ve her örneğin
+        kendi ayar kutusu. Eskiden burada iki sabit panelin anahtarları ve
+        dört sayı kutusu vardı; artık liste kayıt defterinden geliyor.
       */}
       {tab === 'grafik' ? (
-        <div className="desk__panels">
-          {PANELLER.map((panel) => (
-            <div key={panel.key} className="desk__panel">
-              <Toggle
-                label={panel.label}
-                checked={!!panels[panel.key]}
-                onChange={(v) => setPanels((prev) => ({ ...prev, [panel.key]: v }))}
-              />
-              {panels[panel.key] ? (
-                <div className="desk__panelparams">
-                  {panel.params.map(([alan, etiket]) => (
-                    <NumberField
-                      key={alan}
-                      label={etiket}
-                      value={indParams[alan]}
-                      min={2}
-                      max={1000}
-                      onChange={(v) =>
-                        setIndParams((prev) => ({ ...prev, [alan]: Math.max(2, Math.round(v)) }))
-                      }
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    className="desk__reset"
-                    onClick={() => setIndParams(DEFAULT_PARAMS)}
-                  >
-                    Varsayılan
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
+        <IndikatorPaneli ornekler={indikatorler} onDegis={setIndikatorler} />
       ) : null}
 
       {load.status !== 'error' && (analysisError || analysis.status === 'error') ? (
