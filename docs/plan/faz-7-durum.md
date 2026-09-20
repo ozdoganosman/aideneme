@@ -2259,6 +2259,45 @@ söylüyor ("Ortalama Farkı (OF) · ayrı panel · 2 parametre"); listeye
 eklenince kendi panelinde sıfır çizgisiyle çiziliyor; sayfa yenilenince
 kayıtlı kalıyor.
 
+## Yeni sistemin maliyeti ölçüldü ve geri alındı
+
+İndikatör sistemi bittikten sonra zayıf makine ölçümü tekrarlandı ve GERİLEME
+çıktı (6× yavaşlatma, gerçek BIST verisi, 3 tekrarın medyanı):
+
+|                        | taban   | indikatör sistemiyle |
+| ---------------------- | ------- | -------------------- |
+| sembol masası hazır    | 1501 ms | 1731 ms              |
+| en kötü tek görev      | 280 ms  | 320 ms               |
+| ana iş parçacığı bloku | 421 ms  | 478 ms               |
+
+Sebep paket boyutundaydı: `SymbolDesk` yığını **11,2 → 30,1 kB**. Kabuk, hiç
+çağırmayacağı gösterge MATEMATİĞİNİ (calc, rsi, trend, temel) taşıyordu —
+hesaplar tanımlarla aynı dosyadaydı ve tanımlar arayüzde lazım (çip etiketi,
+ayar kutusu, arama).
+
+İki ayrım:
+
+1. **Hesaplar ayrı dosyaya** (`kayitHesap.ts`): yalnızca worker import ediyor.
+   30,1 → 26,0 kB.
+2. **Kod düzenleyici tembel**: kip kapalıyken hiç indirilmiyor.
+   26,0 → 24,4 kB (düzenleyici kendi 2,4 kB'lik parçasına çıktı).
+
+Sonuç:
+
+|                        | taban   | şimdi       |
+| ---------------------- | ------- | ----------- |
+| en kötü tek görev      | 280 ms  | **282 ms**  |
+| ana iş parçacığı bloku | 421 ms  | **425 ms**  |
+| hazır                  | 1501 ms | **1607 ms** |
+
+Donma ölçüleri tabana döndü. Hazır olma süresindeki +106 ms özelliğin KENDİ
+maliyeti (15 tanımın üstverisi + çip şeridi) ve olduğu gibi bırakıldı;
+kovalanacak bir kusur değil, ödenmiş bir bedel.
+
+Ayrım sessiz bir boşluk üretmesin diye bütünlük testi eklendi: her tanımın bir
+hesabı, her hesabın bir tanımı olmalı. Hesabı olmayan tanım ekranda boş bir
+çizgi, tanımı olmayan hesap ölü koddur.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

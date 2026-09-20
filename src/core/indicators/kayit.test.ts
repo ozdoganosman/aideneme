@@ -8,6 +8,7 @@ import {
   varsayilanParametreler,
 } from './kayit';
 import { DEFAULT_PARAMS, computeIndicators } from './calc';
+import { HESAPLAR } from './kayitHesap';
 
 /** Gerçekçi bir seri: yükselen trend + gürültü, sabit tohumla. */
 function seri(n: number): Candles {
@@ -33,12 +34,25 @@ describe('indikatör kayıt defteri', () => {
     for (const t of INDIKATORLER) {
       const p = varsayilanParametreler(t);
       const ciktilar = t.ciktilar(p);
-      const degerler = t.hesapla(c, p);
+      const degerler = HESAPLAR[t.id](c, p);
       expect(degerler.length, `${t.id}: çıktı sayısı`).toBe(ciktilar.length);
       for (const d of degerler) {
         expect(d.length, `${t.id}: dizi uzunluğu bar sayısına eşit olmalı`).toBe(c.length);
       }
     }
+  });
+
+  /**
+   * TANIM ile HESAP eşleşmeli.
+   *
+   * İkisi ayrı dosyada (hesaplar yalnızca worker'da lazım, tanımlar arayüzde
+   * de). Ayrım sessiz bir boşluk üretmemeli: hesabı olmayan bir tanım
+   * ekranda boş bir çizgi, tanımı olmayan bir hesap ise ölü koddur.
+   */
+  it('her tanımın bir hesabı, her hesabın bir tanımı var', () => {
+    const tanimlar = INDIKATORLER.map((t) => t.id).sort();
+    const hesaplar = Object.keys(HESAPLAR).sort();
+    expect(hesaplar, 'tanım ve hesap listeleri ayrışmış').toEqual(tanimlar);
   });
 
   it('kimlikler benzersiz ve haritada', () => {
@@ -52,7 +66,7 @@ describe('indikatör kayıt defteri', () => {
     const c = seri(5);
     for (const t of INDIKATORLER) {
       const p = varsayilanParametreler(t);
-      for (const d of t.hesapla(c, p)) {
+      for (const d of HESAPLAR[t.id](c, p)) {
         expect(d.length, `${t.id}`).toBe(5);
       }
     }
@@ -113,7 +127,7 @@ describe('indikatör kayıt defteri', () => {
     };
 
     const wr = INDIKATOR_ILE.get('wr')!;
-    const [r, emaYavas, emaHizli] = wr.hesapla(c, varsayilanParametreler(wr));
+    const [r, emaYavas, emaHizli] = HESAPLAR.wr(c, varsayilanParametreler(wr));
     for (let i = 0; i < c.length; i++) {
       yakin(r[i], eski.percentR[i], `%R[${i}]`);
       yakin(emaYavas[i], eski.emawil[i], `EMA yavaş[${i}]`);
@@ -121,7 +135,7 @@ describe('indikatör kayıt defteri', () => {
     }
 
     const nm = INDIKATOR_ILE.get('macdNizami')!;
-    const [hist, macd, sinyal, emacd] = nm.hesapla(c, varsayilanParametreler(nm));
+    const [hist, macd, sinyal, emacd] = HESAPLAR.macdNizami(c, varsayilanParametreler(nm));
     for (let i = 0; i < c.length; i++) {
       yakin(macd[i], eski.macdN[i], `MACD[${i}]`);
       yakin(sinyal[i], eski.signalN[i], `Sinyal[${i}]`);

@@ -9,6 +9,7 @@ import { summarize } from '../../core/stats/summary';
 import { inspect } from '../../core/data/health';
 import { emaArr } from '../../core/indicators/calc';
 import { INDIKATOR_ILE, parametreSinirla } from '../../core/indicators/kayit';
+import { HESAPLAR } from '../../core/indicators/kayitHesap';
 
 // Grafik ayrı chunk ve canvas gerektiriyor; ekran testinde yerine sahte kondu.
 vi.mock('../chart/PriceChart', () => ({
@@ -76,7 +77,7 @@ const FAKE_ANALYSIS = {
         indikatorDegerleri: Object.fromEntries(
           (options.indikatorler ?? []).map((i) => {
             const t = INDIKATOR_ILE.get(i.id)!;
-            return [i.ornekId, t.hesapla(resampled, parametreSinirla(t, i.parametreler))];
+            return [i.ornekId, HESAPLAR[i.id](resampled, parametreSinirla(t, i.parametreler))];
           }),
         ),
         ms: 3,

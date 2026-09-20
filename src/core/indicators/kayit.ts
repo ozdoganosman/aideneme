@@ -1,9 +1,3 @@
-import type { Candles } from '../data/types';
-import { adxArr, emaArr, rocArr, rollingVWMA } from './calc';
-import { atrArr, rsiArr } from './rsi';
-import { macdArr, supertrendArr, willrArr } from './trend';
-import { bantArr, farkArr, obvArr, smaArr, stdevArr, stochKArr, vwapArr, wmaArr } from './temel';
-
 /**
  * İNDİKATÖR KAYIT DEFTERİ.
  *
@@ -66,9 +60,14 @@ export interface IndikatorTanimi {
   /** Aramada eşleşecek ek kelimeler (kısaltmalar, İngilizce adlar). */
   arama: string[];
   parametreler: SayiParametresi[];
-  /** Çıktı tanımları — `hesapla` ile AYNI sırada. */
+  /**
+   * Çıktı tanımları — `HESAPLAR` içindeki hesabın döndürdüğü diziler ile
+   * AYNI sırada.
+   *
+   * Hesabın kendisi bu dosyada DEĞİL (bkz. kayitHesap.ts): yalnızca worker'da
+   * lazım, arayüz ise tanımları çip etiketi ve ayar kutusu için okuyor.
+   */
   ciktilar: (p: Parametreler) => CikisTanimi[];
-  hesapla: (c: Candles, p: Parametreler) => Float64Array[];
 }
 
 /** Bir tanımın varsayılan parametreleri. */
@@ -131,7 +130,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['ema', 'exponential moving average', 'ortalama', 'hareketli'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 50)],
     ciktilar: (p) => [{ ad: 'ema', etiket: `EMA ${p.uzunluk}`, tur: 'cizgi', token: 'accent' }],
-    hesapla: (c, p) => [emaArr(c.close, p.uzunluk)],
   },
   {
     id: 'sma',
@@ -142,7 +140,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['sma', 'simple moving average', 'ortalama'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 50)],
     ciktilar: (p) => [{ ad: 'sma', etiket: `SMA ${p.uzunluk}`, tur: 'cizgi', token: 'warn' }],
-    hesapla: (c, p) => [smaArr(c.close, p.uzunluk)],
   },
   {
     id: 'wma',
@@ -153,7 +150,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['wma', 'weighted moving average', 'ağırlıklı'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 50)],
     ciktilar: (p) => [{ ad: 'wma', etiket: `WMA ${p.uzunluk}`, tur: 'cizgi', token: 'up' }],
-    hesapla: (c, p) => [wmaArr(c.close, p.uzunluk)],
   },
   {
     id: 'vwap',
@@ -164,7 +160,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['vwap', 'volume weighted', 'hacim ağırlıklı'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 20)],
     ciktilar: (p) => [{ ad: 'vwap', etiket: `VWAP ${p.uzunluk}`, tur: 'cizgi', token: 'accent' }],
-    hesapla: (c, p) => [vwapArr(c, p.uzunluk)],
   },
   {
     id: 'bollinger',
@@ -179,11 +174,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       { ad: 'orta', etiket: `BB orta ${p.uzunluk}`, tur: 'cizgi', token: 'accent' },
       { ad: 'alt', etiket: `BB alt ${p.uzunluk}`, tur: 'cizgi', token: 'muted' },
     ],
-    hesapla: (c, p) => {
-      const orta = smaArr(c.close, p.uzunluk);
-      const sap = stdevArr(c.close, p.uzunluk);
-      return [bantArr(orta, sap, p.kat), orta, bantArr(orta, sap, -p.kat)];
-    },
   },
   {
     id: 'supertrend',
@@ -196,7 +186,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     ciktilar: (p) => [
       { ad: 'st', etiket: `Supertrend ${p.uzunluk}×${p.kat}`, tur: 'cizgi', token: 'up' },
     ],
-    hesapla: (c, p) => [supertrendArr(c, p.uzunluk, p.kat)],
   },
   {
     id: 'rsi',
@@ -209,7 +198,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     ciktilar: (p) => [
       { ad: 'rsi', etiket: `RSI ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 50 },
     ],
-    hesapla: (c, p) => [rsiArr(c.close, p.uzunluk)],
   },
   {
     id: 'wr',
@@ -228,10 +216,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       { ad: 'emaYavas', etiket: `EMA ${p.emaYavas}`, tur: 'cizgi', token: 'warn' },
       { ad: 'emaHizli', etiket: `EMA ${p.emaHizli}`, tur: 'cizgi', token: 'muted' },
     ],
-    hesapla: (c, p) => {
-      const r = willrArr(c, p.uzunluk);
-      return [r, emaArr(r, p.emaYavas), emaArr(r, p.emaHizli)];
-    },
   },
   {
     id: 'stoch',
@@ -245,10 +229,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       { ad: 'k', etiket: `%K ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 50 },
       { ad: 'd', etiket: `%D ${p.d}`, tur: 'cizgi', token: 'warn' },
     ],
-    hesapla: (c, p) => {
-      const k = stochKArr(c, p.uzunluk);
-      return [k, smaArr(k, p.d)];
-    },
   },
   {
     id: 'macd',
@@ -267,11 +247,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       { ad: 'macd', etiket: 'MACD', tur: 'cizgi', token: 'accent' },
       { ad: 'sinyal', etiket: 'Sinyal', tur: 'cizgi', token: 'warn' },
     ],
-    hesapla: (c, p) => {
-      const m = macdArr(c.close, p.hizli, p.yavas);
-      const s = emaArr(m, p.sinyal);
-      return [farkArr(m, s), m, s];
-    },
   },
   {
     id: 'macdNizami',
@@ -297,20 +272,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       birimindedir; 3 TL'lik hisseyle 300 TL'lik hisse aynı eksende
       karşılaştırılamaz. Eski sabit sistemde de böyleydi, korunuyor.
     */
-    hesapla: (c, p) => {
-      const hizli = emaArr(c.close, p.hizli);
-      const m = macdArr(c.close, p.hizli, p.yavas);
-      const s = emaArr(m, p.sinyal);
-      const e = rollingVWMA(m, c.volume, p.vwma);
-      const bol = (a: Float64Array): Float64Array => {
-        const out = new Float64Array(a.length);
-        for (let i = 0; i < a.length; i++) out[i] = hizli[i] !== 0 ? a[i] / hizli[i] : NaN;
-        return out;
-      };
-      const mN = bol(m);
-      const sN = bol(s);
-      return [farkArr(mN, sN), mN, sN, bol(e)];
-    },
   },
   {
     id: 'adx',
@@ -324,10 +285,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       { ad: 'adx', etiket: `ADX ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 25 },
       { ad: 'ema', etiket: `EMA ${p.ema}`, tur: 'cizgi', token: 'warn' },
     ],
-    hesapla: (c, p) => {
-      const a = adxArr(c, p.uzunluk);
-      return [a, emaArr(a, p.ema)];
-    },
   },
   {
     id: 'atr',
@@ -338,7 +295,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['atr', 'average true range', 'oynaklık', 'volatilite'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 14)],
     ciktilar: (p) => [{ ad: 'atr', etiket: `ATR ${p.uzunluk}`, tur: 'cizgi', token: 'down' }],
-    hesapla: (c, p) => [atrArr(c.high, c.low, c.close, p.uzunluk)],
   },
   {
     id: 'roc',
@@ -352,10 +308,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       { ad: 'roc', etiket: `ROC ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 0 },
       { ad: 'ema', etiket: `EMA ${p.ema}`, tur: 'cizgi', token: 'warn' },
     ],
-    hesapla: (c, p) => {
-      const r = rocArr(c.close, p.uzunluk);
-      return [r, emaArr(r, p.ema)];
-    },
   },
   {
     id: 'obv',
@@ -369,10 +321,6 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       { ad: 'obv', etiket: 'OBV', tur: 'cizgi', token: 'accent' },
       { ad: 'ema', etiket: `EMA ${p.ema}`, tur: 'cizgi', token: 'warn' },
     ],
-    hesapla: (c, p) => {
-      const o = obvArr(c);
-      return [o, emaArr(o, p.ema)];
-    },
   },
 ];
 

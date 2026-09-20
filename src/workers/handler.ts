@@ -16,6 +16,7 @@ import { resample } from '../core/data/resample';
 import { emaArr } from '../core/indicators/calc';
 import { summarize } from '../core/stats/summary';
 import { INDIKATOR_ILE, parametreSinirla } from '../core/indicators/kayit';
+import { HESAPLAR } from '../core/indicators/kayitHesap';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 
 /**
@@ -188,8 +189,9 @@ function indikatorlariHesapla(
   const out: Record<string, Float64Array[]> = {};
   for (const istek of istekler) {
     const tanim = INDIKATOR_ILE.get(istek.id);
-    if (!tanim) continue;
-    out[istek.ornekId] = tanim.hesapla(c, parametreSinirla(tanim, istek.parametreler));
+    const hesap = HESAPLAR[istek.id];
+    if (!tanim || !hesap) continue;
+    out[istek.ornekId] = hesap(c, parametreSinirla(tanim, istek.parametreler));
   }
   return out;
 }

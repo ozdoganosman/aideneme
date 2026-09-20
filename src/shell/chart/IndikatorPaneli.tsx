@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog, IconButton, NumberField, Toggle } from '../../ui';
 import { Icon } from '../../ui/icons';
 import {
@@ -11,7 +11,15 @@ import {
   type SayiParametresi,
 } from '../../core/indicators/kayit';
 import type { Candles } from '../../core/data/types';
-import { GostergeDuzenleyici } from './GostergeDuzenleyici';
+/*
+  Düzenleyici TEMBEL: kod yazmak isteyen kullanıcı azınlık, ama kip her
+  sembol masası yüklemesinde paketin içinde taşınıyordu. Ölçüldü: masa yığını
+  indikatör sistemiyle 11,2 kB'den 30,1 kB'ye çıkmıştı; hesapları ayırmak
+  26,0'a indirdi, düzenleyiciyi ayırmak kalanı alıyor.
+*/
+const GostergeDuzenleyici = lazy(() =>
+  import('./GostergeDuzenleyici').then((m) => ({ default: m.GostergeDuzenleyici })),
+);
 import { kullaniciGostergeleriYaz, type KullaniciGostergesi } from './kullaniciGosterge';
 
 /**
@@ -410,19 +418,24 @@ export function IndikatorPaneli({
           : null}
       </Dialog>
 
-      <GostergeDuzenleyici
-        acik={duzenleyiciAcik}
-        duzenlenen={duzenlenen}
-        mumlar={mumlar}
-        onKapat={() => setDuzenleyiciAcik(false)}
-        onKaydet={(g) => {
-          const kalan = kullanici.filter((x) => x.id !== g.id);
-          const liste = [...kalan, g];
-          kullaniciGostergeleriYaz(liste);
-          onKullaniciDegis(liste);
-          setDuzenleyiciAcik(false);
-        }}
-      />
+      {/* Kip kapalıyken hiç indirilmiyor; açılışta kısa bir bekleme kabul. */}
+      <Suspense fallback={null}>
+        {duzenleyiciAcik ? (
+          <GostergeDuzenleyici
+            acik={duzenleyiciAcik}
+            duzenlenen={duzenlenen}
+            mumlar={mumlar}
+            onKapat={() => setDuzenleyiciAcik(false)}
+            onKaydet={(g) => {
+              const kalan = kullanici.filter((x) => x.id !== g.id);
+              const liste = [...kalan, g];
+              kullaniciGostergeleriYaz(liste);
+              onKullaniciDegis(liste);
+              setDuzenleyiciAcik(false);
+            }}
+          />
+        ) : null}
+      </Suspense>
     </div>
   );
 }
