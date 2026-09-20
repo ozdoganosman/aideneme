@@ -24,9 +24,36 @@ describe('willrArr', () => {
       [10, 0, 10], // pencere tepesi
       [10, 0, 0], // pencere dibi
     ]);
-    const w = willrArr(c, 3);
+    // Pencere 2: ilk sayı 1. barda çıkıyor. Önceden burada 3 yazıyordu ve
+    // test 1. barda sayı bekliyordu — yani ısınma kusurunu SINAYAN değil
+    // ONAYLAYAN bir testti. Ölçek iddiası (0..100) aynen duruyor.
+    const w = willrArr(c, 2);
     expect(w[1]).toBeCloseTo(100, 6);
     expect(w[2]).toBeCloseTo(0, 6);
+  });
+
+  it('pencere dolmadan sayı üretmiyor', () => {
+    const c = candles([
+      [10, 0, 5],
+      [10, 0, 10],
+      [10, 0, 0],
+      [10, 0, 7],
+    ]);
+    const w = willrArr(c, 3);
+    expect(Number.isNaN(w[0])).toBe(true);
+    expect(Number.isNaN(w[1])).toBe(true);
+    expect(Number.isFinite(w[2])).toBe(true);
+  });
+
+  it('pencere seriden uzunsa HİÇ sayı üretmiyor', () => {
+    // GENKM'de ölçülen kusur: 133 barlık seride "%R 260" 133 barın hepsinde
+    // sayı veriyordu, SMA 260 ise hiçbirinde. Aynı grafikte biri
+    // "ölçemiyorum" derken öteki uyduruyordu.
+    const c = candles([
+      [10, 0, 5],
+      [10, 0, 8],
+    ]);
+    expect(Array.from(willrArr(c, 260)).every(Number.isNaN)).toBe(true);
   });
 
   it('ortada 50 verir — eşiklerin dayandığı ölçek bu', () => {

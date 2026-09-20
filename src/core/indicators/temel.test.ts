@@ -84,3 +84,26 @@ describe('temel göstergeler', () => {
     expect(vwapArr(c, 2)[1]).toBeCloseTo(beklenen, 10);
   });
 });
+
+/**
+ * ISINMA: pencere dolmadan sayı üretilmemeli.
+ *
+ * Ölçüldü (133 barlık gerçek sembol, GENKM): SMA 260 hiç çizilmezken
+ * "%R 260" 133 barın hepsinde sayı üretiyordu — aynı grafikte biri
+ * "ölçemiyorum" derken öteki uyduruyordu. `rollingHighest` ellerindeki
+ * kadarıyla çalışıyor (eski arayüzün taraması buna dayanıyor, dokunulmadı);
+ * düzeltme GÖSTERGE katmanında.
+ */
+describe('ısınma dürüstlüğü', () => {
+  it('stokastik pencere dolmadan sayı üretmiyor', () => {
+    const c = mumlar([10, 11, 12, 13, 14, 15]);
+    const k = stochKArr(c, 4);
+    expect([...k.slice(0, 3)].every(Number.isNaN), 'ilk 3 bar dolu').toBe(true);
+    expect(Number.isFinite(k[3]), '4. barda pencere doldu').toBe(true);
+  });
+
+  it('pencere seriden uzunsa HİÇ sayı üretmiyor', () => {
+    const c = mumlar([10, 11, 12]);
+    expect([...stochKArr(c, 10)].every(Number.isNaN)).toBe(true);
+  });
+});

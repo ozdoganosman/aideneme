@@ -72,7 +72,8 @@ export function stochKArr(c: Candles, length: number): Float64Array {
   const hh = rollingHighest(c.high, length);
   const ll = rollingLowest(c.low, length);
   const out = new Float64Array(n).fill(NaN);
-  for (let i = 0; i < n; i++) {
+  // Pencere dolmadan sayı üretilmiyor (bkz. willrArr'daki ölçüm).
+  for (let i = length - 1; i < n; i++) {
     const den = hh[i] - ll[i];
     // Aralık sıfırsa oran tanımsız: NaN, sıfır DEĞİL.
     out[i] = den !== 0 ? (100 * (c.close[i] - ll[i])) / den : NaN;

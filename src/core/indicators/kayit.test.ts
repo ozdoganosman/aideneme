@@ -7,7 +7,7 @@ import {
   parametreSinirla,
   varsayilanParametreler,
 } from './kayit';
-import { DEFAULT_PARAMS, computeIndicators } from './calc';
+import { DEFAULT_PARAMS, computeIndicators, emaArr } from './calc';
 import { HESAPLAR } from './kayitHesap';
 
 /** Gerçekçi bir seri: yükselen trend + gürültü, sabit tohumla. */
@@ -127,11 +127,48 @@ describe('indikatör kayıt defteri', () => {
     };
 
     const wr = INDIKATOR_ILE.get('wr')!;
-    const [r, emaYavas, emaHizli] = HESAPLAR.wr(c, varsayilanParametreler(wr));
+    const wrP = varsayilanParametreler(wr);
+    const [r, emaYavas, emaHizli] = HESAPLAR.wr(c, wrP);
+    const isinma = wrP.uzunluk - 1;
+
+    /*
+      TEK BİLEREK YAPILAN SAPMA: ısınma barları.
+
+      Kayıt defterinin %R'si pencere dolmadan sayı üretmiyor (bkz. willrArr).
+      Eski hesapta bu blokaj yok — `rollingHighest` elindeki kadarıyla
+      çalıştığı için 260 barlık "%R 260" daha ilk bardan çiziliyordu. Ekranda
+      "%R 260" yazan çizginin 260 barlık olması gerektiği için yeni davranış
+      DOĞRU olan; sapma burada tek tek çivileniyor ki sessizce yayılmasın.
+    */
+    for (let i = 0; i < isinma; i++) {
+      expect(Number.isNaN(r[i]), `%R[${i}] ısınmada sayı üretmemeli`).toBe(true);
+      expect(Number.isFinite(eski.percentR[i]), `eski %R[${i}] sayı olmalı`).toBe(true);
+    }
+    for (let i = isinma; i < c.length; i++) yakin(r[i], eski.percentR[i], `%R[${i}]`);
+
+    /*
+      EMA DALLARI: fark ısınmayla SINIRLI DEĞİL, çünkü `emaArr` ilk sonlu
+      değerde tohumlanıyor. %R'nin ısınması boşaltılınca tohum 0. bardan
+      259. bara kayıyor ve üstel filtrenin hafızası sonsuz olduğu için iki
+      çizgi bir daha tam olarak çakışmıyor.
+
+      Ölçüldü (900 bar): tohum barında bağıl fark 6,5e-1; 640 bar sonra hâlâ
+      3,2e-3 (yavaş dal). Yani bu bir yuvarlama değil, GERÇEK bir çizgi
+      farkı — ve doğru yönde: eski EMA, kısmi pencereden üretilmiş 259 barlık
+      çöpün üzerine tohumlanıyordu.
+
+      Bu yüzden EMA'lar eski çizgiyle değil, "aynı ısınma boşluğu uygulanmış
+      eski %R'nin EMA'sı" ile karşılaştırılıyor. Böylece sınanan şey şu olur:
+      tek değişiklik GİRDİNİN boşaltılması; EMA dalında başka hiçbir sapma
+      yok. Gevşetilmiş bir tolerans bunu söyleyemezdi.
+    */
+    const eskiBosluklu = Float64Array.from(eski.percentR);
+    eskiBosluklu.fill(NaN, 0, isinma);
+    const beklenenYavas = emaArr(eskiBosluklu, wrP.emaYavas);
+    const beklenenHizli = emaArr(eskiBosluklu, wrP.emaHizli);
     for (let i = 0; i < c.length; i++) {
-      yakin(r[i], eski.percentR[i], `%R[${i}]`);
-      yakin(emaYavas[i], eski.emawil[i], `EMA yavaş[${i}]`);
-      yakin(emaHizli[i], eski.emawil120[i], `EMA hızlı[${i}]`);
+      yakin(emaYavas[i], beklenenYavas[i], `EMA yavaş[${i}]`);
+      yakin(emaHizli[i], beklenenHizli[i], `EMA hızlı[${i}]`);
     }
 
     const nm = INDIKATOR_ILE.get('macdNizami')!;

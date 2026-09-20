@@ -28,7 +28,20 @@ export function willrArr(c: Candles, length: number): Float64Array {
   const hh = rollingHighest(c.high, length);
   const ll = rollingLowest(c.low, length);
   const out = new Float64Array(n).fill(NaN);
-  for (let i = 0; i < n; i++) {
+  /*
+    PENCERE DOLMADAN sayı üretilmiyor.
+
+    `rollingHighest`/`rollingLowest` ellerindeki kadarıyla çalışıyor ve ilk
+    bardan itibaren değer veriyor — bu bir kusur değil, o ilkellerin
+    sözleşmesi (eski arayüzün taraması buna dayanıyor). Ama GÖSTERGE olarak
+    "%R 260" etiketiyle çizilen çizginin 260 barlık bir %R olması gerekir.
+
+    Ölçüldü: 133 barlık bir sembolde (GENKM) SMA 260 hiç çizilmezken
+    "%R 260" 133 barın HEPSİNDE sayı üretiyordu. Aynı grafikte biri
+    "ölçemiyorum" derken öteki uyduruyordu; kullanıcı ikisini karşılaştırınca
+    yanılırdı.
+  */
+  for (let i = length - 1; i < n; i++) {
     const den = hh[i] - ll[i];
     // Aralık sıfırsa (tamamen yatay pencere) oran tanımsız: sayı uydurmuyoruz.
     out[i] = den !== 0 ? (100 * (c.close[i] - ll[i])) / den : NaN;
