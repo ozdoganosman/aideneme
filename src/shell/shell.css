@@ -2330,6 +2330,15 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Kapsamda olup ölçülemeyen semboller — "neden listemdeki hisse yok?"
+   sorusunun cevabı. `radar__olculemedi` ile aynı yerleşim: ikisi de dar
+   panelde tek satırlık açıklama. */
+.radar__taranamadi {
+  margin: 0 var(--sp-2) var(--sp-1);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
 /* GRAFİKTEKİ GÖSTERGELER — tek düğmeyle radara eklenen ölçütler.
    Satır iki sütun: ad esner, düğme sabit kalır. Düğme esneseydi uzun
    etiketlerde ("BB üst 20 · BB orta 20 · BB alt 20") "Ekle" yazısı

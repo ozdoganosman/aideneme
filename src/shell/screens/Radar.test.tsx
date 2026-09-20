@@ -537,3 +537,47 @@ describe('Radar — ölçüt kıyası', () => {
     expect(await screen.findByText(/Fiyat > EMA 10 \(kapalı\)/)).toBeTruthy();
   });
 });
+
+describe('Radar — taranamayan semboller', () => {
+  /**
+   * Gerçek veride ölçülen kusur: izleme listesine dört sembol eklenmiş
+   * kullanıcıya radar "2 sembol" diyor, ipucunda da "Radardaki 2 sembolden 2
+   * tanesi görünüyor" yazıyordu — eksik olduğunu söylemek bir yana TAM
+   * olduğunu iddia ediyordu. Kaybolan ikisi (UMPAS, ISATR) son 250 günde
+   * ölçüm yapacak kadar işlem görmemişti.
+   */
+  beforeEach(() => {
+    // Paket UMPAS'ı da taşıyor ama tarama onun için satır ÜRETMİYOR:
+    // `metricsFor` iki bardan az veriyle ölçüm yapmayı reddediyor.
+    loadFn.mockResolvedValue({ symbols: ['GARAN', 'THYAO', 'UMPAS'], bars: 40 });
+  });
+
+  it('kapsamda olup satır üretmeyen sembolü SÖYLÜYOR', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    expect(await screen.findByText(/1 sembol taranamadı \(UMPAS\)/)).toBeTruthy();
+  });
+
+  it('sebebini de yazıyor — sadece sayı değil', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    expect(await screen.findByText(/ölçüm yapacak kadar işlem görmemişler/)).toBeTruthy();
+  });
+
+  it('hepsi ölçülebiliyorsa not HİÇ çıkmıyor', async () => {
+    // Gereksiz uyarı da bir kusurdur: her açılışta görünen bir not okunmaz olur.
+    loadFn.mockResolvedValue({ symbols: ['GARAN', 'THYAO'], bars: 40 });
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    expect(screen.queryByText(/sembol taranamadı/)).toBeNull();
+  });
+
+  it('izleme listesi kapsamında da söylüyor', async () => {
+    // En can yakıcı hâli: kullanıcının KENDİ eklediği sembol sessizce düşüyordu.
+    localStorage.setItem('radar.liste.v1', JSON.stringify({ bist: ['THYAO', 'UMPAS'] }));
+    localStorage.setItem('radar.kapsam.v1', JSON.stringify('liste'));
+    render(<Radar market="bist" symbol="" client={FAKE_CLIENT} onSelect={noop} onClose={noop} />);
+    expect(await screen.findByText(/1 sembol taranamadı \(UMPAS\)/)).toBeTruthy();
+  });
+});

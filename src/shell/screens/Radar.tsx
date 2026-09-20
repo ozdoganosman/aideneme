@@ -487,6 +487,30 @@ export function Radar({
     });
   }, [ham, kapsamSemboller, snapshot, sektorler, tablolar, gostergeDeger]);
 
+  /**
+   * KAPSAMDA OLUP SATIR ÜRETMEYEN SEMBOLLER.
+   *
+   * Gerçek veride ölçüldü ve kusur şuydu: izleme listesine dört sembol
+   * eklenmiş bir kullanıcıya radar "2 sembol" diyordu, üstelik ipucunda
+   * "Radardaki 2 sembolden 2 tanesi görünüyor" yazıyordu — yani eksik
+   * olduğunu söylemek bir yana, TAM olduğunu iddia ediyordu. Kaybolan ikisi
+   * (UMPAS, ISATR) son 250 günde ölçüm yapacak kadar işlem görmemiş.
+   *
+   * Eleme doğru: ölçülemeyen sembolü ölçülmüş gibi göstermek daha kötü
+   * olurdu. Yanlış olan susmaktı — hele kullanıcının KENDİ eklediği bir
+   * sembol sessizce düşerken.
+   *
+   * Tarayıcı ekranında aynı kusur aynı gerekçeyle kapatıldı; radar aynı
+   * veri yolunu kullandığı için aynı boşluğu taşıyordu.
+   */
+  const taranamayan = useMemo(() => {
+    if (!ham) return [];
+    const uretilen = new Set(ham.map((r) => r.symbol));
+    // Kapsam listeyse kullanıcının seçtikleri, piyasaysa paketteki her sembol.
+    const beklenen = kapsamSemboller ? [...kapsamSemboller] : isimler;
+    return beklenen.filter((s) => !uretilen.has(s));
+  }, [ham, kapsamSemboller, isimler]);
+
   /** Grafikteki göstergelerin radar ölçütü karşılıkları. */
   const gostergeOlcutListesi = useMemo(() => gostergeOlcutleri(gostergeler ?? []), [gostergeler]);
 
@@ -873,7 +897,12 @@ export function Radar({
         */}
         <span
           className="radar__sayac"
-          title={`Radardaki ${satirlar.length} sembolden ${sirali.length} tanesi görünüyor`}
+          title={
+            `Radardaki ${satirlar.length} sembolden ${sirali.length} tanesi görünüyor` +
+            (taranamayan.length > 0
+              ? ` · ${taranamayan.length} sembol taranamadı: ${taranamayan.join(', ')}`
+              : '')
+          }
         >
           {sirali.length === satirlar.length ? (
             <>{satirlar.length} sembol</>
@@ -887,6 +916,21 @@ export function Radar({
           <Icon name="close" size={16} />
         </IconButton>
       </header>
+
+      {/*
+        Kapsamda olup hiç satır üretmeyenler: kuralların elediği değil,
+        ÖLÇÜLEMEYEN semboller. Kullanıcının kendi listesine eklediği bir
+        sembol sessizce kaybolmamalı.
+      */}
+      {taranamayan.length > 0 ? (
+        <p
+          className="radar__taranamadi desk__muted"
+          title={`Taranamayan: ${taranamayan.join(', ')}`}
+        >
+          {taranamayan.length} sembol taranamadı ({taranamayan.slice(0, 3).join(', ')}
+          {taranamayan.length > 3 ? '…' : ''}) — ölçüm yapacak kadar işlem görmemişler.
+        </p>
+      ) : null}
 
       {olculemedi.count > 0
         ? (() => {
