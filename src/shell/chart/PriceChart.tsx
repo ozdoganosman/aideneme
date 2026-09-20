@@ -9,7 +9,9 @@ import {
   type IChartApi,
   type ISeriesApi,
 } from 'lightweight-charts';
-import { LodController, type ExtraSpec, type KorunanGorunum } from '../../chart/lod';
+import { LodController, type ExtraSpec } from '../../chart/lod';
+export type { GrafikGorunumu } from './gorunumDeposu';
+import type { GrafikGorunumu } from './gorunumDeposu';
 import type { Candles } from '../../core/data/types';
 import { trDay } from '../../core/format/date';
 import { useChartColors } from './useThemeColors';
@@ -34,19 +36,6 @@ export interface Overlay {
   momentumColor?: boolean;
   /** Bu panelde çizilecek sabit yatay çizgi (%R'de 50, MACD'de 0). */
   baseline?: number;
-}
-
-/**
- * Bileşen SÖKÜLÜNCE de yaşayan görünüm.
- *
- * Sembol değişince yükleme ekranı grafiğin yerini alıyor, yani bileşen
- * gerçekten sökülüyor ve grafik nesnesi yok ediliyor. Görünümü denetleyicinin
- * içinde saklamak bu yüzden yetmiyordu: onu bileşenin DIŞINDAKİ bir ref'te
- * tutup yeniden kurulumda geri veriyoruz. `anahtar` da taşınmalı — yoksa
- * yeniden kurulan bileşen `fitKey`i "yeni" sanıp görünümü sığdırır.
- */
-export interface GrafikGorunumu extends KorunanGorunum {
-  anahtar?: string;
 }
 
 export interface PriceChartProps {

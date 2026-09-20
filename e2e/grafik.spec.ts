@@ -309,3 +309,53 @@ test.describe('Sembol Masası — sekme değişimi', () => {
     ).toBe(once);
   });
 });
+
+/**
+ * BAŞKA EKRANA gidip dönünce de görünüm korunmalı.
+ *
+ * Kullanıcı bildirdi: "başka sayfalara geçip geri gelince de grafik konum ve
+ * aralığını korusun". Görünüm sembol masasının içindeki bir ref'te
+ * taşınıyordu; masa ekran değişiminde söküldüğü için ref de gidiyordu.
+ * Ölçüldü (gerçek BIST verisi): 45 barlık görünüm Nabız, Tarayıcı ve
+ * Portföy'den dönüşte 119 bara (sığdırma varsayılanı) düşüyordu — üçünde de.
+ */
+test.describe('Sembol Masası — ekran değişimi', () => {
+  test.use({ viewport: { width: 1500, height: 950 } });
+
+  test('başka ekrana gidip dönünce görünüm duruyor', async ({ page }) => {
+    const ozet = async () => (await page.locator('.chart-ozet').first().textContent()) ?? '';
+
+    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+    await page.waitForTimeout(1500);
+
+    const kutu = (await page.locator('.chart-host').boundingBox())!;
+    await page.mouse.move(kutu.x + kutu.width * 0.7, kutu.y + kutu.height / 2);
+    for (let i = 0; i < 10; i++) {
+      await page.mouse.wheel(0, -120);
+      await page.waitForTimeout(40);
+    }
+    // Sağ kenardan da uzaklaş: hem genişlik hem KONUM sınanıyor.
+    await page.mouse.down();
+    await page.mouse.move(kutu.x + kutu.width * 0.7 + 300, kutu.y + kutu.height / 2, { steps: 15 });
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+
+    const once = await ozet();
+    expect(once).toMatch(/Görünen aralık:/);
+
+    // Her ekran ayrı sınanıyor: biri korurken öteki kaybedebilir.
+    for (const [ad, hazir] of [
+      ['Nabız', '.pulse__flows'],
+      ['Tarayıcı', '.ui-vtable'],
+      ['Portföy', '.ui-field'],
+    ] as const) {
+      await page.getByRole('button', { name: ad, exact: true }).first().click();
+      await page.waitForSelector(hazir, { timeout: 120_000 });
+      await page.getByRole('button', { name: 'Sembol Masası', exact: true }).first().click();
+      await page.waitForSelector('.chart-host canvas', { timeout: 120_000 });
+      await page.waitForTimeout(1200);
+      expect(await ozet(), `${ad} ekranından dönüşte görünüm sıfırlandı`).toBe(once);
+    }
+  });
+});

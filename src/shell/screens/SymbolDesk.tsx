@@ -29,8 +29,15 @@ import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import type { UrlState } from '../urlState';
 import { tercihOku, tercihYaz } from '../tercih';
 
-// Yalnızca TİP: `import type` derlemede silinir, grafik chunk'ını çekmez.
-import type { GrafikGorunumu } from '../chart/PriceChart';
+/*
+  Görünüm deposu BİLEŞEN AĞACININ DIŞINDA.
+
+  Masa başka bir ekrana geçince söküldüğü için ref'te tutulan görünüm de
+  gidiyordu (ölçüldü: Nabız/Tarayıcı/Portföy'e gidip dönünce 45 barlık
+  görünüm 119 bara düşüyordu). Depo küçük bir modülde: grafik chunk'ını
+  çekmiyor, uygulama içi her gezinmede yaşıyor.
+*/
+import { grafikGorunumDeposu } from '../chart/gorunumDeposu';
 
 /** Grafik ayrı chunk'ta: lightweight-charts ilk yük bütçesine girmesin. */
 const LazyPriceChart = lazy(() =>
@@ -195,10 +202,6 @@ export default function SymbolDesk({ state, push }: Props) {
     Math.min(RADAR_MAX, Math.max(RADAR_MIN, tercihOku<number>(RADAR_ANAHTARI, 420))),
   );
   const requestId = useRef(0);
-  // Grafik görünümü (tarih aralığı + yakınlaştırma). Sembol değişiminde grafik
-  // bileşeni sökülüp yeniden kurulduğu için görünüm burada, bileşenin dışında
-  // yaşıyor; yoksa her hisse geçişinde son 120 bara sığdırılıyordu.
-  const grafikGorunum = useRef<GrafikGorunumu | null>(null);
   const surukleme = useRef<{ x: number; w: number } | null>(null);
 
   const radarAyarla = (px: number) => {
@@ -620,7 +623,7 @@ export default function SymbolDesk({ state, push }: Props) {
                     yüzden bileşenin dışında, `grafikGorunum` ref'inde taşınıyor.
                   */
                   fitKey={`${analysisResult?.market}:${analysisResult?.tf}`}
-                  gorunumRef={grafikGorunum}
+                  gorunumRef={grafikGorunumDeposu}
                 />
               ) : (
                 <Skeleton height="320px" />

@@ -2086,6 +2086,62 @@ kancasında sabit bir `waitForTimeout(1500)` vardı, yani sayının 1,5 saniyesi
 benim beklememdi. Kanca tuvalin GERÇEKTEN görünür olmasını bekleyecek şekilde
 yeniden yazıldı; gerçek sayılar yukarıdaki tabloda.
 
+## Ekran değişiminde de görünüm korunuyor
+
+Kullanıcı bildirdi: "başka sayfalara geçip geri gelince de grafik konum ve
+aralığını korusun". Sembol ve sekme geçişleri korunuyordu ama EKRAN geçişi
+korunmuyordu; sebebi basit: görünüm `SymbolDesk` içindeki bir ref'teydi ve
+masa ekran değişiminde söküldüğü için ref de gidiyordu.
+
+Ölçüldü (gerçek BIST verisi, 45 barlık görünümle):
+
+| gidilen ekran   | önce               | sonra      |
+| --------------- | ------------------ | ---------- |
+| Nabız → geri    | 119 bar (sığdırma) | **45 bar** |
+| Tarayıcı → geri | 119 bar            | **45 bar** |
+| Portföy → geri  | 119 bar            | **45 bar** |
+
+Depo artık bileşen ağacının dışında, küçük bir modülde
+(`src/shell/chart/gorunumDeposu.ts`). Grafik chunk'ını çekmiyor — yalnızca bir
+tip ve bir nesne. Sayfa yeniden yüklendiğinde sıfırlanıyor ve bu bilerek
+böyle: yeni bir oturum yeni bir sayfadır.
+
+Üç ekran da e2e'de AYRI AYRI sınanıyor (biri korurken öteki kaybedebilir);
+eski davranışa dönülünce test düşüyor (doğrulandı).
+
+## Grafik kütüphanesini değiştirsek ne olurdu
+
+Kullanıcı sordu: "grafik kütüphanesini değiştirince yine aynı kalitede
+grafikleri görebilecek miyiz". Ölçülen durum:
+
+|                                   | değer          |
+| --------------------------------- | -------------- |
+| lightweight-charts (ham)          | 183 KB         |
+| grafik chunk'ı (ham / gzip)       | 189 KB / 61 KB |
+| bizim LOD katmanımız              | 24 KB kaynak   |
+| ilk karede kütüphanenin payı (6×) | ~292 ms        |
+| aynı karede derleyici Commit'i    | ~97 ms         |
+
+Commit hangi çizim motoru olursa olsun ödenir (tuval katmanının
+birleştirilmesi). Yani mükemmel bir kendi motorumuz bile ~390 ms'lik kareyi
+sıfırlamaz; 400 mumu + dört çizgiyi çizmek yine bir maliyet.
+
+Kütüphaneden gerçekten KULLANDIĞIMIZ yüzey dar (13 zaman ekseni çağrısı,
+4 seri türü, panel yönetimi, fiyat çizgisi). Ama ekranda görünen kalitenin
+büyük kısmı o dar yüzeyin ALTINDA: artı imleci ve fiyat/zaman etiketleri,
+fiyat ekseninin otomatik ölçeklenmesi ve biçimi, zaman ekseninde yerelleştirilmiş
+tick yerleşimi, logaritmik ölçek, panel ayırıcıları, dokunmatik jestler.
+Bunların hepsini aynı kalitede yeniden yazmak küçük bir iş değil ve ilk
+sürüm kaçınılmaz olarak daha kötü olur.
+
+Bu oturumda grafiğin KURULMA SIKLIĞI zaten düşürüldü: kapalı paneller hiç
+kurulmuyor, sekme değişiminde grafik sökülmüyor, görünüm her geçişte
+korunuyor. Kalan tek kare maliyeti (6× yavaşlatmada ~290 ms ≈ normal
+makinede ~50 ms) bir kez ödeniyor.
+
+ÖNERİ: kütüphane şimdilik değişmesin. Gerçek kazanç ~150–200 ms (6×) ve
+~47 KB gzip; bedeli yukarıdaki listeyi yeniden yazmak. Karar kullanıcının.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.
