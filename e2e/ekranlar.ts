@@ -147,7 +147,21 @@ export const EKRANLAR: Ekran[] = [
     id: 'sembol:finansallar',
     ad: 'Sembol Masası — finansallar',
     url: 'v=sembol&s={SEMBOL}',
-    hazir: '.fin__karne',
+    /*
+      VERİ OLMAYAN HÂL DE BİR YÜZEYDİR.
+
+      Burada yalnızca `.fin__karne` bekleniyordu. Gerçek BIST verisiyle
+      ölçüldü: ISKUR'un finansal tablosu kaynakta yok ve ekran doğru olanı
+      yapıyor — "Bu şirketin tablosu kaynakta bulunamadı ... 'tablo yok'
+      değil, 'bizde yok'" diyen bir boş durum çiziyor. Ama denetim karneyi
+      beklediği için 90 saniye bekleyip düşüyordu: kullanıcının GERÇEKTEN
+      gördüğü o yüzey hiç denetlenmiyordu (kontrast, mobil, klavye, katman).
+
+      İkisinden HANGİSİ çizilirse o denetleniyor. Maskeleme değil: bu
+      denetimler SUNUMU ölçüyor, içeriğin doğruluğunu değil — onu
+      FinancialsPanel'in 22 birim testi ve akış testleri koruyor.
+    */
+    hazir: '.fin__karne, .ui-empty',
     ac: async (page) => {
       await page.getByRole('tab', { name: 'Finansallar' }).click();
     },
@@ -156,10 +170,30 @@ export const EKRANLAR: Ekran[] = [
     id: 'sembol:sektor',
     ad: 'Sembol Masası — sektör',
     url: 'v=sembol&s={SEMBOL}',
-    hazir: '.desk__sector-table',
+    // Finansallardaki ile aynı gerekçe: sektörü sınıflandırılmamış bir
+    // sembolde ekran "Kaynakta bu sembolün sektörü yok. Rastgele bir grup
+    // göstermek yerine boş bırakıldı." diyor ve akran yükleme düğmesi HİÇ
+    // çizilmiyor. Gerçek veride ölçüldü (ISKUR).
+    hazir: '.desk__sector-table, .ui-empty',
     ac: async (page) => {
       await page.getByRole('tab', { name: 'Sektör' }).click();
-      await page.getByRole('button', { name: 'Akranları yükle' }).click();
+      /*
+        ÖNCE İKİSİNDEN BİRİ BELİRSİN, SONRA KARAR VER.
+
+        Doğrudan `count()` sormak YANLIŞTI ve ölçüldü: düğme asenkron
+        geliyor, `count()` ise beklemiyor. Yavaş yüklemede sayı 0 çıkıyor,
+        tıklama atlanıyor, tablo hiç gelmiyor ve denetim 90 saniye sonra
+        düşüyordu — üstelik sağlıklı sembolde. `click()`in kendi beklemesini
+        `count()` ile değiştirirken o beklemeyi de silmiş oldum.
+
+        Doğrusu: düğme YA DA boş durum belirene kadar bekle; ancak ondan
+        sonra "düğme var mı" sorusunun cevabı anlamlı.
+      */
+      await page.waitForSelector('button:has-text("Akranları yükle"), .ui-empty', {
+        timeout: 90_000,
+      });
+      const yukle = page.getByRole('button', { name: 'Akranları yükle' });
+      if (await yukle.count()) await yukle.click();
     },
   },
   {

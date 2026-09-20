@@ -24,6 +24,24 @@
  *
  *   E2E_SEMBOL=THYAO,GARAN,ASELS npx playwright test
  */
+/*
+  ZOR SEMBOLLERLE KOŞMAK — ve bilinen tek sınırı.
+
+  Kapı açıldıktan sonra suite kısa geçmişli GERÇEK sembollerle de koşturuldu
+  (ISKUR, GENKM, AKHAN). Sonuç ürün adına iyi: ISKUR'un finansal tablosu
+  kaynakta yok ve sektörü sınıflandırılmamış; ekran ikisinde de doğru olanı
+  yapıyor — "'tablo yok' değil, 'bizde yok'" ve "Rastgele bir grup göstermek
+  yerine boş bırakıldı" diyen boş durumlar çiziyor. Denetimler o yüzeyleri
+  görmüyordu; artık görüyor (bkz. ekranlar.ts, `.ui-empty`).
+
+  BİLİNEN SINIR: `klavye` denetimi böyle bir sembolde finansallar ve sektör
+  sekmelerinde düşüyor. Sebebi kusur değil — bilgilendirme amaçlı boş durumun
+  odaklanabilir öğesi yok, sekme düğmesinden sonraki Tab sayfadan çıkıyor ve
+  denetimin ">5 durak" beklentisi karşılanmıyor. Odak TUZAĞA düşmüyor, ki
+  denetimin asıl koruduğu şey o. Denetimi bu uç hâl için gevşetmek, normal
+  ekranlardaki gerçek bir "odaklanacak şey yok" gerilemesini de yutardı;
+  bu yüzden gevşetilmedi, yazıldı.
+*/
 export const SEMBOLLER: string[] = (process.env.E2E_SEMBOL ?? 'X001,X002,X003').split(',');
 
 /** Birinci sembol — tek sembollü ekranlar bunu kullanıyor. */
