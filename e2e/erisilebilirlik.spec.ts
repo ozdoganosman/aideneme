@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { denetimEkranlari, type Ekran } from './ekranlar';
+import { SEMBOL, SEMBOL2, SEMBOL3 } from './semboller';
 
 /**
  * Ekran genelinde erişilebilirlik denetimi.
@@ -99,9 +100,24 @@ for (const { ad: name, url: query, hazir: ready, sekme: tab, ac } of SCREENS) {
 const DUYURU: [string, string, string, RegExp][] = [
   ['Nabız', 'v=nabiz', '.pulse__flows', /Piyasa nabzı hazır: \d+ sembol/],
   ['Tarayıcı', 'v=tarayici', '.ui-vtable', /Tarama tamamlandı: \d+ sembolden \d+/],
-  ['Sembol Masası', 'v=sembol&s=X001', '.desk__chart', /X001 hazır: \d+ bar/],
-  ['Karşılaştır', 'v=karsilastir&cmp=X001,X002,X003', '.compare__matrix', /Korelasyon hazır/],
-  ['Rapor', 'v=rapor&s=X001', '.report__sheet', /X001 raporu hazır: \d+ bar/],
+  [
+    'Sembol Masası',
+    `v=sembol&s=${SEMBOL}`,
+    '.desk__chart',
+    new RegExp(`${SEMBOL} hazır: \\d+ bar`),
+  ],
+  [
+    'Karşılaştır',
+    `v=karsilastir&cmp=${SEMBOL},${SEMBOL2},${SEMBOL3}`,
+    '.compare__matrix',
+    /Korelasyon hazır/,
+  ],
+  [
+    'Rapor',
+    `v=rapor&s=${SEMBOL}`,
+    '.report__sheet',
+    new RegExp(`${SEMBOL} raporu hazır: \\d+ bar`),
+  ],
 ];
 
 for (const [name, query, ready, pattern] of DUYURU) {

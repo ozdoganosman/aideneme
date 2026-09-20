@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { SEMBOL, SEMBOL2 } from './semboller';
 
 /**
  * Grafik ekranının DİKEY düzeni.
@@ -21,7 +22,7 @@ test.describe('Sembol Masası — grafik yüksekliği', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('grafik görünür alana sığıyor ve ondan küçük değil', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     // 1,5 s: kusur ANINDA görünmüyor. Grafik kütüphanesi kabı gözlemleyip
     // yeniden boyutlanıyor ve şişme bir sonraki düzen turunda oluşuyor —
@@ -42,7 +43,7 @@ test.describe('Sembol Masası — grafik yüksekliği', () => {
   });
 
   test('kapalı indikatör paneli yer kaplamıyor', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1500);
 
@@ -117,7 +118,7 @@ test.describe('Finansallar — kolon grafiği etiketleri', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('etiketler panele sığıyor ve çubuklarla hizalı', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page
       .getByRole('tab', { name: /finansal/i })
@@ -198,7 +199,7 @@ test.describe('Sembol Masası — hisse değişiminde görünüm', () => {
   test('yakınlaştırma ve konum sembol değişince korunuyor', async ({ page }) => {
     const ozet = async () => (await page.locator('.chart-ozet').first().textContent()) ?? '';
 
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1500);
 
@@ -240,7 +241,7 @@ test.describe('Sembol Masası — hisse değişiminde görünüm', () => {
       undefined,
       { timeout: 60_000 },
     );
-    await page.getByPlaceholder('Sembol ara').fill('X002');
+    await page.getByPlaceholder('Sembol ara').fill(SEMBOL2);
     await page.waitForFunction(
       () => document.querySelectorAll('.radar__tablo tbody tr').length === 1,
       undefined,
@@ -250,7 +251,7 @@ test.describe('Sembol Masası — hisse değişiminde görünüm', () => {
     await page.locator('.radar__tablo tbody tr').first().locator('td').first().click();
     await page.waitForTimeout(2200);
 
-    expect(new URL(page.url()).searchParams.get('s'), 'sembol değişmemiş').toBe('X002');
+    expect(new URL(page.url()).searchParams.get('s'), 'sembol değişmemiş').toBe(SEMBOL2);
     expect(await ozet(), 'hisse değişince görünüm sıfırlandı').toBe(once);
   });
 });
@@ -269,7 +270,7 @@ test.describe('Sembol Masası — sekme değişimi', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('finansallara geçince grafik yaşıyor, dönünce görünüm duruyor', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1500);
 
@@ -327,7 +328,7 @@ test.describe('Sembol Masası — ekran değişimi', () => {
   test('başka ekrana gidip dönünce görünüm duruyor', async ({ page }) => {
     const ozet = async () => (await page.locator('.chart-ozet').first().textContent()) ?? '';
 
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1500);
 

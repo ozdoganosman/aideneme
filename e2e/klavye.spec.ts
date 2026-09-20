@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { denetimEkranlari, type Ekran } from './ekranlar';
+import { SEMBOL } from './semboller';
 
 /**
  * Klavye gezintisi.
@@ -65,7 +66,7 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
  * klavyeyle açılıp kapanmalı ve Esc ile kapanmalı.
  */
 test('Radar: genişlik ok tuşlarıyla, panel Esc ile', async ({ page }) => {
-  await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+  await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
   await page.getByText('Radar', { exact: true }).first().click();
   await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
 

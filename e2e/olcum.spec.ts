@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { SEMBOL, SEMBOL2, SEMBOL3 } from './semboller';
 
 /**
  * Ölçüm aracının HAZIR ölçütleri hâlâ geçerli mi?
@@ -29,9 +30,9 @@ const { ekranlar } = JSON.parse(
  */
 const coz = (url: string): string =>
   url
-    .replaceAll('{SEMBOL2}', 'X002')
-    .replaceAll('{SEMBOL3}', 'X003')
-    .replaceAll('{SEMBOL}', 'X001');
+    .replaceAll('{SEMBOL2}', SEMBOL2)
+    .replaceAll('{SEMBOL3}', SEMBOL3)
+    .replaceAll('{SEMBOL}', SEMBOL);
 
 for (const ekran of ekranlar) {
   test(`ölçüm aracının "${ekran.ad}" hazır ölçütü hâlâ geçerli`, async ({ page }) => {

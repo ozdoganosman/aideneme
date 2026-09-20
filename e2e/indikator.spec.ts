@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { SEMBOL } from './semboller';
 
 /**
  * İNDİKATÖR SİSTEMİ.
@@ -19,7 +20,7 @@ test.describe('Sembol Masası — indikatörler', () => {
     (await page.locator('.ind__satir').allInnerTexts()).map((t) => t.split('\n')[0].trim());
 
   test('eski sabit düzen göstergelere taşınmış geliyor', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1200);
 
@@ -37,7 +38,7 @@ test.describe('Sembol Masası — indikatörler', () => {
   });
 
   test('arama → ekleme → ayar → kaldırma', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1200);
 
@@ -93,7 +94,7 @@ test.describe('Sembol Masası — indikatörler', () => {
   });
 
   test('görünürlük kapatılınca paneli de kapanıyor', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1200);
     const onceki = await page.locator('.chart-host canvas').count();
@@ -140,7 +141,7 @@ test.describe('Sembol Masası — kendi göstergen', () => {
     const hatalar: string[] = [];
     page.on('pageerror', (e) => hatalar.push(e.message));
 
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.waitForTimeout(1200);
     const onceki = await page.locator('.chart-host canvas').count();
@@ -184,7 +185,7 @@ test.describe('Sembol Masası — kendi göstergen', () => {
   });
 
   test('kaydedilen gösterge sonraki açılışta duruyor', async ({ page }) => {
-    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
     await page.getByRole('button', { name: /İndikatörler/ }).click();
     await page.getByRole('button', { name: /Yeni gösterge yaz/ }).click();

@@ -121,9 +121,9 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
     await page.waitForTimeout(250);
 
     const olcum = await page.evaluate(async () => {
-      const panel = [
-        ...document.querySelectorAll<HTMLElement>('.ui-popover__panel'),
-      ].find((el) => el.offsetWidth > 0 && el.scrollHeight > el.clientHeight + 1);
+      const panel = [...document.querySelectorAll<HTMLElement>('.ui-popover__panel')].find(
+        (el) => el.offsetWidth > 0 && el.scrollHeight > el.clientHeight + 1,
+      );
       if (!panel) return null;
       const hedef = Math.min(120, panel.scrollHeight - panel.clientHeight);
       panel.scrollTop = hedef;

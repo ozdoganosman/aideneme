@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { coz } from './semboller';
 
 /**
  * DENETİM EKRANLARI — TEK liste.
@@ -190,27 +191,6 @@ export const EKRANLAR: Ekran[] = [
     ],
   },
 ];
-
-/**
- * ÖLÇÜLECEK SEMBOLLER — ortam değişkeniyle değiştirilebilir.
- *
- * Sembol sabit yazılıyken denetimler yalnızca ÖRNEK veriyle koşabiliyordu
- * (X001 yayındaki veride yok). Oysa bu oturumda gerçek verinin örnek verinin
- * gizlediği kusurları ortaya çıkardığı birkaç kez ölçüldü: bar sayıları
- * örnekte hep aynı, gerçekte 18–3650; dönem etiketleri örnekte kısa,
- * gerçekte taşıyor. Ölçüm aracı (scripts/measure-perf.mjs) aynı dersi daha
- * önce öğrenmişti; denetimler de aynı kapıyı kullansın:
- *
- *   E2E_SEMBOL=THYAO,GARAN,ASELS npx playwright test
- */
-const SEMBOLLER = (process.env.E2E_SEMBOL ?? 'X001,X002,X003').split(',');
-
-function coz(url: string): string {
-  return url
-    .replaceAll('{SEMBOL2}', SEMBOLLER[1] ?? SEMBOLLER[0])
-    .replaceAll('{SEMBOL3}', SEMBOLLER[2] ?? SEMBOLLER[0])
-    .replaceAll('{SEMBOL}', SEMBOLLER[0]);
-}
 
 /** Bir denetimin gezeceği ekranlar — hariç tutulanlar düşülmüş hâliyle. */
 export function denetimEkranlari(denetim: DenetimAdi): Ekran[] {

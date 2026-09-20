@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { SEMBOL } from './semboller';
 
 /**
  * Beş kritik akış. Her biri KULLANICININ yaptığı işi taklit eder, bileşen
@@ -147,7 +148,7 @@ test('rapor yazdırmada beyaz kâğıda uygun çıkıyor', async ({ page }) => {
   // Koyu tema açıkken "Yazdır / PDF" koyu zeminli, açık metinli bir rapor
   // üretiyordu: kâğıtta ya okunmaz ya da sayfa dolusu mürekkep.
   await page.emulateMedia({ colorScheme: 'dark' });
-  await open(page, 'v=rapor&s=X001');
+  await open(page, `v=rapor&s=${SEMBOL}`);
   await expect(page.locator('.report__sheet')).toBeVisible();
 
   await page.emulateMedia({ media: 'print', colorScheme: 'dark' });
@@ -219,7 +220,7 @@ test('tarama: filtre → sonuç → paylaşılan bağlantı aynı sonucu veriyor
 });
 
 test('sembol masası: grafik, finansallar ve sektör sekmeleri', async ({ page }) => {
-  await open(page, 'v=sembol&s=X001');
+  await open(page, `v=sembol&s=${SEMBOL}`);
   await expect(page.locator('.chart-host canvas').first()).toBeVisible();
 
   // Grafik ayarları yalnızca grafik sekmesinde.
@@ -263,7 +264,7 @@ test('veri tazeliği rozeti gerçek veri yaşını söylüyor', async ({ page })
 
 test('tazelik rozeti her ekranda aynı bilgiyi veriyor', async ({ page }) => {
   const seen = new Set<string>();
-  for (const query of ['v=nabiz', 'v=tarayici', 'v=sembol&s=X001', 'v=rapor&s=X001']) {
+  for (const query of ['v=nabiz', 'v=tarayici', `v=sembol&s=${SEMBOL}`, `v=rapor&s=${SEMBOL}`]) {
     await open(page, query);
     const badge = page.locator('.shell-topbar__actions .ui-badge').first();
     await expect(badge).toHaveText(/^Veri /, { timeout: 90_000 });
@@ -574,7 +575,7 @@ test('tarayıcı: ölçülemeyen sembolleri "uymadı" diye saymıyor', async ({ 
  * panele sığmaması, erişilemez kalmasının gerekçesi değil.
  */
 test('radar: ölçülemeyen sembolleri "uymadı" diye saymıyor', async ({ page }) => {
-  await open(page, 'v=sembol&s=X001');
+  await open(page, `v=sembol&s=${SEMBOL}`);
   await expect(page.locator('.chart-host canvas').first()).toBeVisible();
   await page.getByText('Radar', { exact: true }).first().click();
   await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
