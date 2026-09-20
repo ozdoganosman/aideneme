@@ -108,3 +108,27 @@ describe('inspect', () => {
     expect(report.findings.join(' ')).toMatch(/sıfır hacimli/);
   });
 });
+
+describe('bulgu metinleri Türkçe biçimde', () => {
+  it('sıfır hacim oranı VİRGÜLLE yazılıyor', () => {
+    /*
+      Gerçek veride bulundu: ISKUR'un raporunda "40 bar (%1.9) sıfır hacimli"
+      yazıyordu — aynı ekranın geri kalanı virgül kullanırken. Örnek veride
+      hiç görünmüyordu, çünkü orada sıfır hacimli bar yok. Bu cümle çekirdekte
+      hazır kuruluyor ve doğrudan ekrana yazılıyor, yani arayüzün biçim
+      düzeltmesi buraya ulaşmıyor.
+    */
+    const c = emptyCandles(200);
+    for (let i = 0; i < 200; i++) {
+      c.time[i] = (19_000 + i) * 86_400;
+      c.open[i] = 10;
+      c.high[i] = 10;
+      c.low[i] = 10;
+      c.close[i] = 10;
+      c.volume[i] = i < 3 ? 0 : 1000; // %1,5
+    }
+    const metin = inspect(c, { today: 19_200 }).findings.join(' ');
+    expect(metin).toContain('%1,5');
+    expect(metin).not.toContain('%1.5');
+  });
+});

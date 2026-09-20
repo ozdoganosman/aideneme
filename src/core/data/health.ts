@@ -1,4 +1,5 @@
 import type { Candles } from './types';
+import { trSayi } from '../format/sayi';
 import { DAY_SECONDS } from './pack';
 
 /**
@@ -189,7 +190,9 @@ export function inspect(candles: Candles, options: InspectOptions): HealthReport
   if (report.zeroVolumeBars > 0) {
     const share = (report.zeroVolumeBars / n) * 100;
     report.findings.push(
-      `${report.zeroVolumeBars} bar (%${share.toFixed(1)}) sıfır hacimli — işlem görmemiş olabilir.`,
+      // `toFixed` NOKTA üretir; bu cümle doğrudan ekrana yazılıyor ve gerçek
+      // veride "%1.9" diye görünüyordu (bkz. core/format/sayi.ts).
+      `${report.zeroVolumeBars} bar (%${trSayi(share, 1)}) sıfır hacimli — işlem görmemiş olabilir.`,
     );
   }
 
