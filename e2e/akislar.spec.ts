@@ -402,10 +402,19 @@ test('endeks ve fonlar taramada yok ama grafikte açılabiliyor', async ({ page 
     farkı çözemezdi. Test artık eşitlik değil, HESABIN KAPANMASINI sınıyor:
     taranan + taranamayan = hisse sayısı ve taranamayanların sebebi yazılı.
   */
-  const taranamayanMetni = await page
-    .locator('.screener__taranamayan')
-    .innerText()
-    .catch(() => '');
+  /*
+    `allInnerTexts()`, `innerText().catch()` DEĞİL.
+
+    Not yalnızca taranamayan sembol varken çiziliyor; örnek veride hiç yok.
+    `innerText()` ise öğeyi BEKLİYOR: bulunamayınca 30 saniyelik eylem
+    zaman aşımını doldurup sonra atıyordu. `catch` hatayı yutuyor ama
+    KAYBEDİLEN SÜREYİ geri getirmiyor — test 120 saniyelik bütçesini bu
+    yüzden aşıp ilerideki gezinmede düşüyordu (CI'da ölçüldü).
+
+    `allInnerTexts()` eşleşme yoksa BEKLEMEDEN boş dizi veriyor; "olabilir
+    de olmayabilir de" okuması için doğru olan bu.
+  */
+  const taranamayanMetni = (await page.locator('.screener__taranamayan').allInnerTexts())[0] ?? '';
   const taranamayan = Number(taranamayanMetni.match(/^(\d+) sembol taranamadı/)?.[1] ?? 0);
   const taranan = Number(durum.match(/\d+ \/ (\d+) sembol/)?.[1] ?? 0);
   expect(taranan, 'tarama evreni okunamadı').toBeGreaterThan(0);
