@@ -112,3 +112,92 @@ test.describe('Sembol Masası — indikatörler', () => {
     ).toBeGreaterThan(onceki);
   });
 });
+
+/**
+ * KENDİ GÖSTERGENİ YAZ.
+ *
+ * Kullanıcı isteği: "pinescript yerine javascript ile yeni indikatör
+ * yükleme". Korunması gereken zincir: yaz → dene → kaydet → listeye ekle →
+ * çiz. Ayrıca HATA YOLU: kaydetmeden önce deneme zorunlu ve hata mesajı
+ * kullanıcıya nerede yanlış yaptığını söylüyor.
+ */
+test.describe('Sembol Masası — kendi göstergen', () => {
+  test.use({ viewport: { width: 1500, height: 950 } });
+
+  const KOD = `({
+  ad: 'Ortalama Farkı',
+  kisa: 'OF',
+  panel: 'ayri',
+  parametreler: [
+    { ad: 'kisa', etiket: 'Kısa', varsayilan: 10, min: 2, max: 200 },
+    { ad: 'uzun', etiket: 'Uzun', varsayilan: 50, min: 3, max: 400 },
+  ],
+  ciktilar: (p) => [{ ad: 'f', etiket: 'OF ' + p.kisa, tur: 'cizgi', token: 'accent', taban: 0 }],
+  hesapla: (c, p, lib) => [lib.fark(lib.ema(c.close, p.kisa), lib.ema(c.close, p.uzun))],
+})`;
+
+  test('yaz → dene → kaydet → çiz', async ({ page }) => {
+    const hatalar: string[] = [];
+    page.on('pageerror', (e) => hatalar.push(e.message));
+
+    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+    await page.waitForTimeout(1200);
+    const onceki = await page.locator('.chart-host canvas').count();
+
+    await page.getByRole('button', { name: /İndikatörler/ }).click();
+    await page.getByRole('button', { name: /Yeni gösterge yaz/ }).click();
+    await page.waitForSelector('#gosterge-kaynak', { timeout: 20_000 });
+
+    // 1) HATALI kod: kaydet KAPALI kalmalı ve hata alanı söylenmeli.
+    await page.fill(
+      '#gosterge-kaynak',
+      `({ ad: 'Bozuk', kisa: 'BZ', parametreler: [], hesapla: () => { throw new Error('bilerek'); } })`,
+    );
+    await page.getByRole('button', { name: 'Dene' }).click();
+    await expect(page.locator('.gosterge__hata')).toContainText('hesapla()');
+    await expect(page.getByRole('button', { name: 'Kaydet' })).toBeDisabled();
+
+    // 2) ÇALIŞAN kod: üstveri KODDAN okunuyor, kullanıcıya ikinci kez sorulmuyor.
+    await page.fill('#gosterge-kaynak', KOD);
+    await page.getByRole('button', { name: 'Dene' }).click();
+    await expect(page.locator('.gosterge__tamam')).toContainText('Ortalama Farkı');
+    await expect(page.locator('.gosterge__tamam')).toContainText('ayrı panel');
+    await page.getByRole('button', { name: 'Kaydet' }).click();
+
+    // 3) Listeye ekle → kendi paneline çiz.
+    await page.getByRole('button', { name: /İndikatörler/ }).click();
+    await page.locator('.ind__kullanici .ind__ekle').first().click();
+    await page.waitForTimeout(2500);
+
+    const cipler = (await page.locator('.ind__satir').allInnerTexts()).map((t) =>
+      t.split('\n')[0].trim(),
+    );
+    expect(cipler).toContain('OF 10 · 50');
+    expect(
+      await page.locator('.chart-host canvas').count(),
+      'kullanıcı göstergesi panel açmadı',
+    ).toBeGreaterThan(onceki);
+    // Hata rozeti YOK: hesap gerçekten tamamlandı.
+    await expect(page.locator('.ind__satir--hatali')).toHaveCount(0);
+    expect(hatalar, 'sayfa hatası').toEqual([]);
+  });
+
+  test('kaydedilen gösterge sonraki açılışta duruyor', async ({ page }) => {
+    await page.goto('/next.html?m=bist&v=sembol&s=X001', { waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+    await page.getByRole('button', { name: /İndikatörler/ }).click();
+    await page.getByRole('button', { name: /Yeni gösterge yaz/ }).click();
+    await page.waitForSelector('#gosterge-kaynak', { timeout: 20_000 });
+    await page.fill('#gosterge-kaynak', KOD);
+    await page.getByRole('button', { name: 'Dene' }).click();
+    await expect(page.locator('.gosterge__tamam')).toContainText('Ortalama Farkı');
+    await page.getByRole('button', { name: 'Kaydet' }).click();
+
+    // Sayfa YENİDEN yükleniyor: kayıt tarayıcıda kalmalı.
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+    await page.getByRole('button', { name: /İndikatörler/ }).click();
+    await expect(page.locator('.ind__kullanici')).toContainText('Ortalama Farkı');
+  });
+});

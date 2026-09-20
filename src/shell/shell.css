@@ -420,6 +420,43 @@
   color: var(--warn);
   border-color: var(--warn);
 }
+.ind__satir--hatali {
+  border-color: var(--down);
+}
+.ind__hata {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--down);
+  color: #fff;
+  font-size: var(--fs-xs);
+}
+.ind__kullanici {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+/* Kod alanı: tek aralıklı ve gerçekten YAZILABİLİR yükseklikte. Kısa bir
+   kutuda kod yazmak, kodun tamamını hiç görmeden yazmak demek. */
+.gosterge__kod {
+  min-height: 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  resize: vertical;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+.gosterge__durum {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+}
+.gosterge__hata {
+  color: var(--down);
+}
+.gosterge__tamam {
+  color: var(--up);
+}
 .ind__eylem {
   display: flex;
   gap: 2px;

@@ -29,6 +29,13 @@ import type { UrlState } from '../urlState';
 import { tercihOku, tercihYaz } from '../tercih';
 import { IndikatorPaneli, yeniOrnekId, type IndikatorOrnegi } from '../chart/IndikatorPaneli';
 import { INDIKATOR_ILE, parametreSinirla } from '../../core/indicators/kayit';
+import type { CikisTanimi } from '../../core/indicators/kayit';
+import {
+  kullaniciGostergeleriOku,
+  kullaniciMi,
+  type KullaniciGostergesi,
+} from '../chart/kullaniciGosterge';
+import { gostergeCalistirUzak } from '../chart/gostergeIstemci';
 
 /*
   Görünüm deposu BİLEŞEN AĞACININ DIŞINDA.
@@ -183,6 +190,20 @@ export default function SymbolDesk({ state, push }: Props) {
     if (kayitli?.length) return kayitli;
     return eskidenTasi(kayit.current);
   });
+  const [kullaniciGostergeleri, setKullaniciGostergeleri] =
+    useState<KullaniciGostergesi[]>(kullaniciGostergeleriOku);
+  /**
+   * Kullanıcı göstergelerinin SONUÇLARI.
+   *
+   * Barındırılan göstergeler analiz worker'ında hesaplanıp `analysisResult`
+   * ile geliyor; kullanıcınınki YALITILMIŞ worker'da koşuyor ve ayrı
+   * tutuluyor. Aynı torbaya koymak, kullanıcı kodunun sonucunu uygulamanın
+   * kendi hesabıyla karıştırmak olurdu.
+   */
+  const [kullaniciDegerleri, setKullaniciDegerleri] = useState<
+    Record<string, { ciktilar: CikisTanimi[]; degerler: Float64Array[] }>
+  >({});
+  const [kullaniciHatalari, setKullaniciHatalari] = useState<Record<string, string>>({});
   const [radarAcik, setRadarAcik] = useState(() => kayit.current.radar ?? false);
   const [radarGenislik, setRadarGenislik] = useState(() =>
     // VARSAYILAN 300 DEĞİL 420. 300 px'te radar tablosunun görünen alanı 272
@@ -365,6 +386,56 @@ export default function SymbolDesk({ state, push }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(indikatorler.filter((o) => o.gorunur))]);
 
+  /**
+   * KULLANICI göstergelerini yalıtılmış worker'da hesapla.
+   *
+   * Ayrı efekt: analiz worker'ının isteğiyle aynı yere koymak, kullanıcı
+   * kodunu uygulamanın kendi hesabının yoluna sokmak olurdu. Örnekler TEK TEK
+   * koşuyor — biri çökerse ya da sonsuz döngüye girerse ötekiler etkilenmesin
+   * (her çağrı kendi worker'ını kurup kapatıyor, bkz. gostergeIstemci).
+   */
+  const gorunurKullanici = useMemo(
+    () => indikatorler.filter((o) => o.gorunur && kullaniciMi(o.id)),
+    [indikatorler],
+  );
+  const kullaniciImza = JSON.stringify(
+    gorunurKullanici.map((o) => [o.ornekId, o.id, o.parametreler]),
+  );
+
+  useEffect(() => {
+    const mumlar = analysisResult?.candles;
+    if (!mumlar || gorunurKullanici.length === 0) {
+      setKullaniciDegerleri({});
+      setKullaniciHatalari({});
+      return;
+    }
+    let iptal = false;
+    (async () => {
+      const sonuclar: Record<string, { ciktilar: CikisTanimi[]; degerler: Float64Array[] }> = {};
+      const hatalar: Record<string, string> = {};
+      for (const o of gorunurKullanici) {
+        const g = kullaniciGostergeleri.find((x) => x.id === o.id);
+        if (!g) {
+          hatalar[o.ornekId] = 'Bu gösterge silinmiş.';
+          continue;
+        }
+        const r = await gostergeCalistirUzak(g.kaynak, mumlar, o.parametreler);
+        if (iptal) return;
+        if (r.tamam)
+          sonuclar[o.ornekId] = { ciktilar: r.deger.ciktilar, degerler: r.deger.degerler };
+        else hatalar[o.ornekId] = r.hata;
+      }
+      if (iptal) return;
+      setKullaniciDegerleri(sonuclar);
+      setKullaniciHatalari(hatalar);
+    })();
+    return () => {
+      iptal = true;
+    };
+    // İmza: örnek kimliği + parametreler. Dizi kimliği her render'da değişir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisResult?.candles, kullaniciImza, kullaniciGostergeleri]);
+
   const clientRef = useRef(analysis.client);
   clientRef.current = analysis.client;
 
@@ -453,13 +524,22 @@ export default function SymbolDesk({ state, push }: Props) {
     let gizliSayac = 0;
 
     for (const o of indikatorler) {
-      const t = INDIKATOR_ILE.get(o.id);
-      if (!t) continue;
-      const p = parametreSinirla(t, o.parametreler);
-      const panel =
-        t.panel === 'fiyat' ? 0 : o.gorunur ? sonrakiPanel++ : ERISILMEZ_PANEL + gizliSayac++;
-      const ciktilar = t.ciktilar(p);
-      const seriler = degerler[o.ornekId];
+      /*
+        İki kaynak, TEK çizim yolu: barındırılan gösterge tanımdan, kullanıcı
+        göstergesi yalıtılmış worker'ın döndürdüğü çıktı tanımlarından. Çizim
+        ikisini ayırt etmiyor — ayırt etseydi kullanıcının göstergesi ikinci
+        sınıf olurdu.
+      */
+      const yerli = INDIKATOR_ILE.get(o.id);
+      const kul = kullaniciMi(o.id) ? kullaniciGostergeleri.find((g) => g.id === o.id) : undefined;
+      if (!yerli && !kul) continue;
+      const kullaniciCikti = kullaniciDegerleri[o.ornekId];
+      const fiyatPaneli = yerli ? yerli.panel === 'fiyat' : kul!.panel === 'fiyat';
+      const panel = fiyatPaneli ? 0 : o.gorunur ? sonrakiPanel++ : ERISILMEZ_PANEL + gizliSayac++;
+      const ciktilar = yerli
+        ? yerli.ciktilar(parametreSinirla(yerli, o.parametreler))
+        : (kullaniciCikti?.ciktilar ?? []);
+      const seriler = yerli ? degerler[o.ornekId] : kullaniciCikti?.degerler;
       ciktilar.forEach((c, i) => {
         out.push({
           key: `${o.ornekId}:${c.ad}`,
@@ -475,7 +555,7 @@ export default function SymbolDesk({ state, push }: Props) {
       });
     }
     return out;
-  }, [analysisResult, indikatorler, chartColors]);
+  }, [analysisResult, indikatorler, chartColors, kullaniciDegerleri, kullaniciGostergeleri]);
 
   return (
     <div className="desk">
@@ -527,7 +607,14 @@ export default function SymbolDesk({ state, push }: Props) {
         dört sayı kutusu vardı; artık liste kayıt defterinden geliyor.
       */}
       {tab === 'grafik' ? (
-        <IndikatorPaneli ornekler={indikatorler} onDegis={setIndikatorler} />
+        <IndikatorPaneli
+          ornekler={indikatorler}
+          onDegis={setIndikatorler}
+          kullanici={kullaniciGostergeleri}
+          onKullaniciDegis={setKullaniciGostergeleri}
+          mumlar={candles}
+          hatalar={kullaniciHatalari}
+        />
       ) : null}
 
       {load.status !== 'error' && (analysisError || analysis.status === 'error') ? (

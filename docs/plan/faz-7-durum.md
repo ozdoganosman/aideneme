@@ -2204,6 +2204,61 @@ SINIRLI bir ortamda: DOM'suz worker, `fetch`/`importScripts`/`WebSocket`/
 bir gösterge asla sorulmadan çalıştırılmayacak — kod gösterilip onay
 istenecek. Bu olmadan "gösterge paylaş" doğrudan XSS kapısıdır.
 
+## Kendi göstergeni JavaScript ile yaz (Faz B)
+
+Kullanıcı isteği: "pinescript yerine javascript (veya sen ne tavsiye edersen
+dil olarak) ile yeni indikatör yükleme".
+
+Dil JavaScript. Gerekçe: çekirdek zaten TypeScript, ayrı bir
+ayrıştırıcı/yorumlayıcı yazmak gerekmiyor ve kod mevcut worker altyapısında
+koşuyor. Bedeli, kullanıcı kodunun GERÇEKTEN çalıştırılması.
+
+### Yalıtım dört katman
+
+| katman | ne yapıyor                                                                                                                                      |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ortam  | Ayrı worker; `fetch`, `XMLHttpRequest`, `WebSocket`, `importScripts`, `indexedDB`, `caches`, `Worker`, `BroadcastChannel` başlangıçta sökülüyor |
+| Kapsam | Kod, tehlikeli adları gölgeleyen bir fonksiyon içinde değerlendiriliyor (`self`, `globalThis`, `postMessage`… hepsi `undefined`)                |
+| Kaynak | `import()` / `require()` metinsel olarak reddediliyor — ağa çıkabilen tek yapı                                                                  |
+| Arayüz | Başkasından gelen kod sorulmadan çalıştırılmıyor; kaydetmeden önce DENEME zorunlu                                                               |
+
+Worker analiz worker'ından AYRI: orası piyasa paketini taşıyor ve kullanıcı
+koduna uygulamanın verisiyle aynı odada yer vermek olurdu.
+
+**Kapalı olarak bildirilen boşluk:** `eval` gölgelenemiyor — katı kipte
+parametre adı olamıyor ("Unexpected eval or arguments in strict mode";
+ölçüldü, listeye konduğunda hiçbir gösterge çalışmadı). Karşılığı birinci
+katman: `eval` ile ulaşılacak küresel kapsam da sökülmüş durumda.
+
+Ek korumalar: worker her istekte yeniden kurulup kapatılıyor ve **3 saniye**
+zaman sınırı var — sonsuz döngüye giren kodu durdurmanın tek yolu worker'ı
+sonlandırmak. Kaynak her çağrıda yeniden değerlendiriliyor, çağrılar arası
+durum taşınmıyor.
+
+### Sözleşme
+
+Kullanıcı bir nesne döndürüyor: `ad`, `kisa`, `panel`, `parametreler`,
+`ciktilar(p)`, `hesapla(c, p, lib)`. Üstverisi KODUN KENDİSİNDE — ad ve
+parametre şeması ikinci kez sorulmuyor.
+
+`lib` 20 fonksiyon veriyor (ema, sma, wma, rsi, atr, adx, roc, macd, vwma,
+vwap, stdev, stoch, obv, willr, supertrend, enYuksek, enDusuk, tipikFiyat,
+fark, bant). Hepsi uygulamanın KENDİ göstergelerinin kullandığı sınanmış
+fonksiyonlar: kullanıcının göstergesi ile barındırılan gösterge aynı hesabı
+paylaşıyor.
+
+Doğrulama hata ALANINI söylüyor ("parametreler[1].varsayilan: 2–400
+aralığında olmalı"), "geçersiz gösterge" demiyor. Bar sayısıyla hizalanmayan
+çıktı reddediliyor: kayık çizgi yanlış çizgidir.
+
+### Ölçülen akış
+
+Gerçek BIST verisiyle uçtan uca denendi: hatalı kod "hesapla() hata verdi:
+bilerek" diyor ve Kaydet kapalı kalıyor; çalışan kod üstverisini kendi
+söylüyor ("Ortalama Farkı (OF) · ayrı panel · 2 parametre"); listeye
+eklenince kendi panelinde sıfır çizgisiyle çiziliyor; sayfa yenilenince
+kayıtlı kalıyor.
+
 ## Sırada
 
 - Nakit akış tablosu banka/sigorta şablonunda yok; başka bir kaynak var mı.

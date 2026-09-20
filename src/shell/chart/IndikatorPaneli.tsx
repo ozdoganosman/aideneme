@@ -5,11 +5,45 @@ import {
   INDIKATORLER,
   INDIKATOR_ILE,
   indikatorAra,
-  parametreSinirla,
   varsayilanParametreler,
   type IndikatorTanimi,
   type Parametreler,
+  type SayiParametresi,
 } from '../../core/indicators/kayit';
+import type { Candles } from '../../core/data/types';
+import { GostergeDuzenleyici } from './GostergeDuzenleyici';
+import { kullaniciGostergeleriYaz, type KullaniciGostergesi } from './kullaniciGosterge';
+
+/**
+ * Ayar kutusunun ihtiyaç duyduğu ASGARİ şema.
+ *
+ * Barındırılan gösterge ile kullanıcınınki aynı kutuyu kullanıyor; kutunun
+ * hesap fonksiyonuna ihtiyacı yok, yalnızca parametre listesine. Ortak tip
+ * bu yüzden tanımın tamamı değil.
+ */
+interface SemaGibi {
+  ad: string;
+  kisa: string;
+  parametreler: SayiParametresi[];
+}
+
+function semaVarsayilan(s: SemaGibi): Parametreler {
+  const out: Parametreler = {};
+  for (const p of s.parametreler) out[p.ad] = p.varsayilan;
+  return out;
+}
+
+/** `parametreSinirla` ile aynı kural; tanım yerine şemayla çalışıyor. */
+function semaSinirla(s: SemaGibi, p: Parametreler): Parametreler {
+  const out: Parametreler = {};
+  for (const alan of s.parametreler) {
+    const ham = p[alan.ad];
+    const v = Number.isFinite(ham) ? ham : alan.varsayilan;
+    const sinirli = Math.min(alan.max, Math.max(alan.min, v));
+    out[alan.ad] = alan.ondalik ? sinirli : Math.round(sinirli);
+  }
+  return out;
+}
 
 /**
  * Grafiğe EKLENMİŞ bir gösterge.
@@ -37,13 +71,20 @@ export function ornekOlustur(id: string): IndikatorOrnegi | null {
 }
 
 /** Ayarların tek satırlık özeti: "20 · 2" gibi. */
-function ozet(t: IndikatorTanimi, p: Parametreler): string {
+function ozet(t: SemaGibi, p: Parametreler): string {
   return t.parametreler.map((s) => p[s.ad]).join(' · ');
 }
 
 interface Props {
   ornekler: IndikatorOrnegi[];
   onDegis: (ornekler: IndikatorOrnegi[]) => void;
+  /** Kullanıcının kendi yazdığı göstergeler. */
+  kullanici: KullaniciGostergesi[];
+  onKullaniciDegis: (liste: KullaniciGostergesi[]) => void;
+  /** Denemenin koşacağı seri — açık sembolün mumları. */
+  mumlar: Candles | null;
+  /** Örnek kimliği → kullanıcı göstergesinin hata mesajı. */
+  hatalar?: Record<string, string>;
 }
 
 /**
@@ -57,7 +98,16 @@ interface Props {
  * yazılsaydı yeni bir gösterge eklemek yine iki yeri (hesap + arayüz) güncel
  * tutmayı gerektirirdi ve bu oturumda tam olarak bu sınıf kusur beş kez çıktı.
  */
-export function IndikatorPaneli({ ornekler, onDegis }: Props) {
+export function IndikatorPaneli({
+  ornekler,
+  onDegis,
+  kullanici,
+  onKullaniciDegis,
+  mumlar,
+  hatalar = {},
+}: Props) {
+  const [duzenleyiciAcik, setDuzenleyiciAcik] = useState(false);
+  const [duzenlenen, setDuzenlenen] = useState<KullaniciGostergesi | null>(null);
   const [aramaAcik, setAramaAcik] = useState(false);
   const [ayarOrnek, setAyarOrnek] = useState<string | null>(null);
   const [sorgu, setSorgu] = useState('');
@@ -84,8 +134,21 @@ export function IndikatorPaneli({ ornekler, onDegis }: Props) {
     return [...gruplar];
   }, [bulunan]);
 
-  const duzenlenen = ornekler.find((o) => o.ornekId === ayarOrnek) ?? null;
-  const duzenlenenTanim = duzenlenen ? (INDIKATOR_ILE.get(duzenlenen.id) ?? null) : null;
+  /**
+   * Bir örneğin ŞEMASI — barındırılan gösterge ya da kullanıcınınki.
+   *
+   * Arayüz ikisini ayırmıyor: aynı çip, aynı ayar kutusu. Fark yalnızca
+   * hesabın nerede koştuğu ve o karar kimlik önekine bakılarak veriliyor.
+   */
+  const semaBul = (id: string): SemaGibi | null => {
+    const t = INDIKATOR_ILE.get(id);
+    if (t) return { ad: t.ad, kisa: t.kisa, parametreler: t.parametreler };
+    const k = kullanici.find((g) => g.id === id);
+    return k ? { ad: k.ad, kisa: k.kisa, parametreler: k.parametreler } : null;
+  };
+
+  const ayarlanan = ornekler.find((o) => o.ornekId === ayarOrnek) ?? null;
+  const ayarlananSema = ayarlanan ? semaBul(ayarlanan.id) : null;
 
   const guncelle = (ornekId: string, yama: Partial<IndikatorOrnegi>) => {
     onDegis(ornekler.map((o) => (o.ornekId === ornekId ? { ...o, ...yama } : o)));
@@ -105,9 +168,10 @@ export function IndikatorPaneli({ ornekler, onDegis }: Props) {
       {ornekler.length > 0 ? (
         <ul className="ind__liste" aria-label="Eklenen göstergeler">
           {ornekler.map((o) => {
-            const t = INDIKATOR_ILE.get(o.id);
+            const t = semaBul(o.id);
             // Tanımı bilinmeyen örnek SESSİZCE düşmüyor: kullanıcı neyi
-            // kaybettiğini görsün ve silebilsin.
+            // kaybettiğini görsün ve silebilsin. (Silinen bir kullanıcı
+            // göstergesinin örneği de buraya düşüyor.)
             if (!t) {
               return (
                 <li key={o.ornekId} className="ind__satir ind__satir--bilinmeyen">
@@ -132,13 +196,25 @@ export function IndikatorPaneli({ ornekler, onDegis }: Props) {
               örneğe özel olmalı.
             */
             const ad = `${t.kisa} ${ozet(t, o.parametreler)}`;
+            const hata = hatalar[o.ornekId];
             return (
-              <li key={o.ornekId} className="ind__satir">
+              <li
+                key={o.ornekId}
+                className={`ind__satir ${hata ? 'ind__satir--hatali' : ''}`}
+                /* Hata SESSİZ kalmamalı: çizilmeyen bir gösterge ile
+                   "değeri yok" ayırt edilemezdi. */
+                title={hata}
+              >
                 <Toggle
                   label={ad}
                   checked={o.gorunur}
                   onChange={(v) => guncelle(o.ornekId, { gorunur: v })}
                 />
+                {hata ? (
+                  <span className="ind__hata" role="status">
+                    hata
+                  </span>
+                ) : null}
                 <span className="ind__eylem">
                   <IconButton label={`${ad} ayarları`} onClick={() => setAyarOrnek(o.ornekId)}>
                     <Icon name="swatch" size={12} />
@@ -178,6 +254,80 @@ export function IndikatorPaneli({ ornekler, onDegis }: Props) {
             onChange={(e) => setSorgu(e.target.value)}
           />
         </div>
+        {/*
+          KENDİ GÖSTERGELERİN en üstte: arayanın kendi yazdığı şey, otuz
+          barındırılan göstergenin altında kaybolmamalı.
+        */}
+        <section className="ind__kategori">
+          <h3>Kendi göstergelerim</h3>
+          <ul>
+            {kullanici
+              .filter((g) => aramaEslesiyor(g, sorgu))
+              .map((g) => (
+                <li key={g.id} className="ind__kullanici">
+                  <button
+                    type="button"
+                    className="ind__ekle"
+                    onClick={() => {
+                      onDegis([
+                        ...ornekler,
+                        {
+                          ornekId: yeniOrnekId(),
+                          id: g.id,
+                          parametreler: semaVarsayilan(g),
+                          gorunur: true,
+                        },
+                      ]);
+                      setAramaAcik(false);
+                      setSorgu('');
+                    }}
+                  >
+                    <b>{g.kisa}</b>
+                    <span>{g.ad}</span>
+                    <span className="desk__muted">
+                      {g.panel === 'fiyat' ? 'fiyat üstünde' : 'ayrı panel'}
+                    </span>
+                  </button>
+                  <span className="ind__eylem">
+                    <IconButton
+                      label={`${g.ad} kodunu düzenle`}
+                      onClick={() => {
+                        setDuzenlenen(g);
+                        setDuzenleyiciAcik(true);
+                        setAramaAcik(false);
+                      }}
+                    >
+                      <Icon name="swatch" size={12} />
+                    </IconButton>
+                    <IconButton
+                      label={`${g.ad} göstergesini sil`}
+                      onClick={() => {
+                        const kalan = kullanici.filter((x) => x.id !== g.id);
+                        kullaniciGostergeleriYaz(kalan);
+                        onKullaniciDegis(kalan);
+                      }}
+                    >
+                      <Icon name="close" size={12} />
+                    </IconButton>
+                  </span>
+                </li>
+              ))}
+            <li>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setDuzenlenen(null);
+                  setDuzenleyiciAcik(true);
+                  setAramaAcik(false);
+                }}
+              >
+                <Icon name="plus" size={14} /> Yeni gösterge yaz
+              </Button>
+            </li>
+          </ul>
+        </section>
+
         {kategoriler.length === 0 ? (
           <p className="desk__muted">
             "{sorgu}" ile eşleşen gösterge yok. {INDIKATORLER.length} gösterge barındırılıyor.
@@ -214,18 +364,18 @@ export function IndikatorPaneli({ ornekler, onDegis }: Props) {
       </Dialog>
 
       <Dialog
-        open={!!duzenlenen && !!duzenlenenTanim}
+        open={!!ayarlanan && !!ayarlananSema}
         onClose={() => setAyarOrnek(null)}
-        title={duzenlenenTanim ? `${duzenlenenTanim.ad} ayarları` : 'Ayarlar'}
+        title={ayarlananSema ? `${ayarlananSema.ad} ayarları` : 'Ayarlar'}
         size="sm"
         footer={
-          duzenlenen && duzenlenenTanim ? (
+          ayarlanan && ayarlananSema ? (
             <>
               <Button
                 variant="ghost"
                 onClick={() =>
-                  guncelle(duzenlenen.ornekId, {
-                    parametreler: varsayilanParametreler(duzenlenenTanim),
+                  guncelle(ayarlanan.ornekId, {
+                    parametreler: semaVarsayilan(ayarlananSema),
                   })
                 }
               >
@@ -236,21 +386,21 @@ export function IndikatorPaneli({ ornekler, onDegis }: Props) {
           ) : null
         }
       >
-        {duzenlenen && duzenlenenTanim
-          ? duzenlenenTanim.parametreler.map((s) => (
+        {ayarlanan && ayarlananSema
+          ? ayarlananSema.parametreler.map((s) => (
               <NumberField
                 key={s.ad}
                 label={s.etiket}
-                value={duzenlenen.parametreler[s.ad]}
+                value={ayarlanan.parametreler[s.ad]}
                 min={s.min}
                 max={s.max}
                 step={s.ondalik ? 0.1 : 1}
                 hint={`${s.min}–${s.max}`}
                 onChange={(v) =>
-                  guncelle(duzenlenen.ornekId, {
+                  guncelle(ayarlanan.ornekId, {
                     // Sınır tek yerde: aynı kural worker'da da uygulanıyor.
-                    parametreler: parametreSinirla(duzenlenenTanim, {
-                      ...duzenlenen.parametreler,
+                    parametreler: semaSinirla(ayarlananSema, {
+                      ...ayarlanan.parametreler,
                       [s.ad]: v,
                     }),
                   })
@@ -259,6 +409,27 @@ export function IndikatorPaneli({ ornekler, onDegis }: Props) {
             ))
           : null}
       </Dialog>
+
+      <GostergeDuzenleyici
+        acik={duzenleyiciAcik}
+        duzenlenen={duzenlenen}
+        mumlar={mumlar}
+        onKapat={() => setDuzenleyiciAcik(false)}
+        onKaydet={(g) => {
+          const kalan = kullanici.filter((x) => x.id !== g.id);
+          const liste = [...kalan, g];
+          kullaniciGostergeleriYaz(liste);
+          onKullaniciDegis(liste);
+          setDuzenleyiciAcik(false);
+        }}
+      />
     </div>
   );
+}
+
+/** Kullanıcı göstergesi aramada eşleşiyor mu (ada ve kısa ada bakar). */
+function aramaEslesiyor(g: KullaniciGostergesi, sorgu: string): boolean {
+  const q = sorgu.trim().toLowerCase();
+  if (!q) return true;
+  return `${g.ad} ${g.kisa}`.toLowerCase().includes(q);
 }
