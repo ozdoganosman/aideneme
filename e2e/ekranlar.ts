@@ -114,6 +114,35 @@ export const EKRANLAR: Ekran[] = [
     },
   },
   {
+    /*
+      GRAFİK GÖSTERGELERİ + ÖLÇÜT KIYASI. Ayrı giriş, çünkü ikisi de KATLI
+      açılan bölümler: `sembol:radar-filtre` panelin kendisini geziyor ama bu
+      iki bölüm kapalı duruyor, yani denetimin görmediği iki yepyeni yüzey
+      olurdu. Bu dosyanın var olma sebebi tam olarak bu kusur.
+
+      Gösterge de EKLENİYOR: eşik kutuları ve kıyas listeleri ancak ekledikten
+      sonra çiziliyor.
+    */
+    id: 'sembol:radar-gosterge',
+    ad: 'Sembol Masası — radar gösterge ve kıyas',
+    url: 'v=sembol&s={SEMBOL}',
+    hazir: '.radar__kiyas-kur',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
+      // `details` başlığına tıklamak bölümü açıyor.
+      await page.getByText('Grafikteki göstergeler').click();
+      await page
+        .getByRole('button', { name: /ölçütlerini radardan ekle/ })
+        .first()
+        .click();
+      await page.getByText('Ölçüt kıyası').click();
+      await page.waitForSelector('.radar__kiyas-kur', { timeout: 30_000 });
+    },
+  },
+  {
     id: 'sembol:finansallar',
     ad: 'Sembol Masası — finansallar',
     url: 'v=sembol&s={SEMBOL}',

@@ -55,7 +55,24 @@ const AUDIT = () => {
   };
 
   const bad: string[] = [];
-  for (const el of document.querySelectorAll('.shell-content *, .shell-topbar *, .shell-rail *')) {
+  /*
+    KÖK: `body`, kabuk bölgeleri DEĞİL.
+
+    Önceki kök `.shell-content, .shell-topbar, .shell-rail` idi ve açılır
+    panellerin HİÇBİRİNİ görmüyordu: `Popover`, `Dialog` ve `Sheet`
+    içeriklerini `createPortal` ile doğrudan `body`ye asıyor. Yani radarın
+    filtre paneli, sektör rozetleri, hazır filtreler ve sütun seçici bu
+    denetimden bugüne kadar hiç geçmemiş — üstelik `sembol:radar-filtre`
+    girdisi TAM OLARAK o paneli denetlemek için eklenmişti ve boşuna geçiyordu.
+
+    Ölçülerek bulundu: `.radar__gosterge-ad` rengi bilerek #b9b9b9 yapıldı
+    (açık temada 1,9:1), denetim yine "geçti" dedi.
+
+    `body` kökü güvenli, çünkü eleme zaten aşağıda yapılıyor: kendi metni
+    olmayan, görünmeyen ve saydam öğeler atlanıyor.
+  */
+  for (const el of document.querySelectorAll('body *')) {
+    if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
     const own = [...el.childNodes]
       .filter((n) => n.nodeType === 3)
       .map((n) => (n.textContent ?? '').trim())

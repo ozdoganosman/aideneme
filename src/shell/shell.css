@@ -12,7 +12,11 @@
   z-index: var(--z-toast);
   padding: var(--sp-2) var(--sp-3);
   background: var(--accent);
-  color: #fff;
+  /* `#fff` YAZILIYDI ve koyu temada 3,13:1 kalıyordu (gerek 4,5). Koyu temada
+     `--accent` açılıyor, üstüne beyaz metin okunmuyor; `--accent-on` tam bu iş
+     için var ve birincil düğme zaten onu kullanıyor. Sabit renk, temayı
+     izlemeyen tek yerdi. Klavyeyle gezen kullanıcının GÖRDÜĞÜ İLK öğe. */
+  color: var(--accent-on);
   border-radius: var(--radius-sm);
 }
 .shell-skip:focus {
@@ -2326,6 +2330,51 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* GRAFİKTEKİ GÖSTERGELER — tek düğmeyle radara eklenen ölçütler.
+   Satır iki sütun: ad esner, düğme sabit kalır. Düğme esneseydi uzun
+   etiketlerde ("BB üst 20 · BB orta 20 · BB alt 20") "Ekle" yazısı
+   daralıp okunmaz hâle gelirdi. */
+.radar__gosterge-satir {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 0;
+}
+.radar__gosterge-ad {
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Neden bir şeyin YAPILAMADIĞINI anlatan not. Soluk ama okunur: kontrast
+   denetimi bu sınıfı da geziyor. */
+.radar__gosterge-not {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+/* ÖLÇÜT KIYASI: [sol ölçüt] [yön] [sağ ölçüt] [Ekle].
+   Yön ve düğme içeriklerince dar, ölçüt listeleri paylaşılan alana yayılıyor;
+   panel 300 px'e kadar daralabildiği için sabit genişlik taşma demekti. */
+.radar__kiyas-kur {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 0;
+}
+.radar__kiyas-op {
+  width: 3.25rem;
+  text-align: center;
+}
+.radar__kiyas-kur .ui-input {
+  padding: 4px var(--sp-2);
+  font-size: var(--fs-sm);
+  min-width: 0;
+}
+
 /* Hazır filtreler: bir tıkla kurulan soru. */
 .radar__hazirlar {
   display: flex;
@@ -2403,6 +2452,15 @@
   background: var(--surface-0);
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
+}
+/* UYGULANMAYAN KIYAS ÇİPİ. Ölçütü grafikte kapatılan kural süzmüyor; çip
+   bunu hem yazıyla ("kapalı") hem görünüşle söylüyor. YALNIZCA renkle
+   söylenseydi, renk ayırt edemeyen kullanıcı etkin bir filtre sanırdı —
+   kesikli kenarlık ikinci bir işaret. Metin rengi soluk değil: "kapalı"
+   sözcüğünün okunması gerekiyor. */
+.radar__cipler li.is-pasif {
+  border-style: dashed;
+  background: transparent;
 }
 .radar__cip-temizle {
   border: none !important;

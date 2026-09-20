@@ -27,6 +27,14 @@ import {
 } from '../../core/screen/metrics';
 import { FUNDAMENTAL_METRIC_DEFS, withFundamentals } from '../../core/screen/fundamentalMetrics';
 import { sectorNames, UNCLASSIFIED, withSectors, type SectorMap } from '../../core/screen/sectors';
+import {
+  gostergeOlcutleri,
+  olcutIstekleri,
+  olcutTanimi,
+  type GostergeOlcutu,
+} from '../../core/screen/indikatorOlcut';
+import { OLCEK_ADI, birimdenOlcek, type Olcek } from '../../core/screen/olcek';
+import type { Parametreler } from '../../core/indicators/kayit';
 import type { Financials, FundamentalsSnapshot } from '../../core/fundamentals/types';
 import type { Market } from '../../data-client/markets';
 import type { AnalysisClient } from '../../workers/analysisClient';
@@ -45,8 +53,31 @@ interface Props {
    * yükleniyor — kapalıyken bu bedel ödenmiyor.
    */
   client: AnalysisClient | null;
+  /**
+   * Grafikte AÇIK duran gösterge örnekleri — parametreleriyle.
+   *
+   * Radar bunları kendiliğinden ölçmüyor; yalnızca LİSTELİYOR. Ölçüm,
+   * kullanıcı bir göstergeyi tek düğmeyle radara eklediğinde başlıyor. Açık
+   * olan her göstergeyi 600 sembolde peşin hesaplamak, kullanıcının hiç
+   * istemediği bir işi her radar açılışına ödetmek olurdu.
+   */
+  gostergeler?: GostergeOrnegi[];
+  /**
+   * Kullanıcının kendi yazdığı göstergelerden açık olan var mı?
+   *
+   * Radara eklenemiyorlar (korumalı worker'da sembol başına ayrı çağrı
+   * koşuyor; 600 sembol için pratik değil). Bu bayrak, panelde SESSİZ
+   * KALMAMAK için: listede görünmeyen göstergenin neden görünmediği yazılıyor.
+   */
+  kullaniciGostergesiVar?: boolean;
   onSelect: (symbol: string) => void;
   onClose: () => void;
+}
+
+/** Grafikten gelen gösterge örneği — radarın ihtiyaç duyduğu kadarı. */
+export interface GostergeOrnegi {
+  id: string;
+  parametreler: Parametreler;
 }
 
 const LISTE_ANAHTARI = 'radar.liste.v1';
@@ -55,6 +86,8 @@ const SIRA_ANAHTARI = 'radar.sira.v1';
 const FILTRE_ANAHTARI = 'radar.filtre.v2';
 const SUTUN_ANAHTARI = 'radar.sutun.v1';
 const SEKTOR_ANAHTARI = 'radar.sektor.v1';
+const GOSTERGE_ANAHTARI = 'radar.gosterge.v1';
+const KIYAS_ANAHTARI = 'radar.kiyas.v1';
 
 /**
  * Varsayılan sütunlar.
@@ -71,6 +104,29 @@ type Kapsam = 'liste' | 'piyasa';
 
 /** Ölçüt → {en az, en çok}. Boş alan sınır KOYMUYOR. */
 type Araliklar = Record<string, { min?: number; max?: number }>;
+
+/**
+ * Ölçüt–ölçüt kıyası.
+ *
+ * Sabit eşikle kurulan filtreden ayrı tutuluyor çünkü YAPISI farklı: eşik
+ * filtresinin sağında bir sayı, kıyasın sağında bir ölçüt var. `Araliklar`
+ * içine sıkıştırmak, "en az" kutusuna metrik kimliği yazmak demek olurdu.
+ */
+interface Kiyas {
+  a: string;
+  op: 'gt' | 'lt';
+  b: string;
+  /**
+   * Kural kurulurken görünen adlar, kuralla BİRLİKTE saklanıyor.
+   *
+   * Gerekli, çünkü ölçüt kaybolabiliyor: kullanıcı göstergeyi grafikte
+   * kapattığında ölçüt sözlükten düşüyor ve çip "Fiyat > gos:ema:10:ema"
+   * diye okunuyordu — kullanıcıya iç kimlik göstermek, kuralın ne olduğunu
+   * SÖYLEMEMEKTİR. Ad kuralın yanında durunca çip kapalıyken de okunuyor.
+   */
+  adA?: string;
+  adB?: string;
+}
 
 /**
  * Ölçüt sözlüğü TARAMA EKRANIYLA aynı.
@@ -162,9 +218,19 @@ export function araliklarKurallara(araliklar: Araliklar): Rule[] {
   return out;
 }
 
-function fmtOlcut(id: string, v: number): string {
+/**
+ * Ölçüt sözlüğü artık ÇALIŞMA ZAMANINDA büyüyor.
+ *
+ * Grafikte açık göstergeler radara eklenebildiği için ölçüt listesi sabit
+ * değil: "EMA 50" ile "EMA 200" ayrı iki ölçüt ve ikisi de kullanıcının o
+ * anki grafiğinden geliyor. Bu yüzden biçimleyiciler modül sabiti yerine
+ * kendilerine VERİLEN sözlüğe bakıyor; verilmezse hazır ölçütlere düşüyor.
+ */
+type OlcutSozlugu = Map<string, MetricDef>;
+
+function fmtOlcut(id: string, v: number, sozluk: OlcutSozlugu = OLCUT_BY_ID): string {
   if (!Number.isFinite(v)) return '—';
-  const def = OLCUT_BY_ID.get(id);
+  const def = sozluk.get(id);
   if (def?.unit === 'pct') return trPct(v, 2, true);
   if (def?.unit === 'ratio') return `${trNum(v, 2)}×`;
   if (def?.unit === 'price') {
@@ -206,8 +272,12 @@ function birimEki(def: MetricDef): string {
 }
 
 /** Çip metni: "F/K ≤ 10" ya da "Değ % 2 – 5". */
-function cipMetni(id: string, sinir: { min?: number; max?: number }): string {
-  const ad = OLCUT_BY_ID.get(id)?.label ?? id;
+function cipMetni(
+  id: string,
+  sinir: { min?: number; max?: number },
+  sozluk: OlcutSozlugu = OLCUT_BY_ID,
+): string {
+  const ad = sozluk.get(id)?.label ?? id;
   const alt = Number.isFinite(sinir.min as number);
   const ust = Number.isFinite(sinir.max as number);
   if (alt && ust) return `${ad} ${trNum(sinir.min!, 2)} – ${trNum(sinir.max!, 2)}`;
@@ -223,7 +293,15 @@ function cipMetni(id: string, sinir: { min?: number; max?: number }): string {
  * YALNIZCA radar açıldığında iniyor — Sembol Masası'nın kendi yükü bilerek
  * hafif tutuldu, radarı açmayan kullanıcı bu bedeli ödemiyor.
  */
-export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
+export function Radar({
+  market,
+  symbol,
+  client,
+  gostergeler,
+  kullaniciGostergesiVar,
+  onSelect,
+  onClose,
+}: Props) {
   /** Worker'dan gelen ham ölçüt satırları (tüm piyasa). */
   const [ham, setHam] = useState<ScreenRow[] | null>(null);
   const [isimler, setIsimler] = useState<string[]>([]);
@@ -254,6 +332,10 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
   );
   const [ara, setAra] = useState('');
   const [olcutArama, setOlcutArama] = useState('');
+  /** Kıyas kutusunun yarım kalmış seçimi — kural ancak "Ekle" ile kuruluyor. */
+  const [kiyasA, setKiyasA] = useState('');
+  const [kiyasOp, setKiyasOp] = useState<'gt' | 'lt'>('gt');
+  const [kiyasB, setKiyasB] = useState('');
   const [sutunlar, setSutunlar] = useState<string[]>(() =>
     tercihOku<string[]>(SUTUN_ANAHTARI, VARSAYILAN_SUTUNLAR),
   );
@@ -262,6 +344,23 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
    * sayısal değil: "en az / en çok" ile ifade edilemez, `applyScreen`
    * kurallarına da girmez.
    */
+  /**
+   * Radara EKLENMİŞ göstergelerin anahtarları (`gos:ema:50`).
+   *
+   * Grafikte açık olmak yetmiyor, kullanıcı düğmeye basmış olmalı: ölçüm 600
+   * sembolü dolaşıyor ve kimsenin istemediği bir hesabı her radar açılışına
+   * ödetmenin anlamı yok.
+   */
+  const [gostergeSecim, setGostergeSecim] = useState<string[]>(() =>
+    tercihOku<string[]>(GOSTERGE_ANAHTARI, []),
+  );
+  /** Ölçüt–ölçüt kıyas kuralları: "Fiyat > EMA 200" gibi. */
+  const [kiyaslar, setKiyaslar] = useState<Kiyas[]>(() => tercihOku<Kiyas[]>(KIYAS_ANAHTARI, []));
+  /** Worker'dan gelen gösterge değerleri: sembol → ölçüt → sayı. */
+  const [gostergeDeger, setGostergeDeger] = useState<Map<string, Record<string, number>>>(
+    () => new Map(),
+  );
+  const [gostergeOlculuyor, setGostergeOlculuyor] = useState(false);
   const [sektorSecim, setSektorSecim] = useState<string[]>(() =>
     tercihOku<string[]>(SEKTOR_ANAHTARI, []),
   );
@@ -376,10 +475,100 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           financialsOf: tablolar ? (sembol) => tablolar.get(sembol) : undefined,
         })
       : kapsamli;
-    return withSectors(temelli, sektorler);
-  }, [ham, kapsamSemboller, snapshot, sektorler, tablolar]);
+    const sektorlu = withSectors(temelli, sektorler);
+    if (gostergeDeger.size === 0) return sektorlu;
+    // Gösterge değerleri AYRI bir worker çağrısından geliyor ve satırlara
+    // burada katılıyor. `ham` doğrudan değiştirilmiyor: tarama sonucu ile
+    // gösterge ölçümü ayrı yaşam döngüleri: biri piyasa değişince, öteki
+    // kullanıcı gösterge ekleyince yenileniyor.
+    return sektorlu.map((r) => {
+      const ek = gostergeDeger.get(r.symbol);
+      return ek ? { ...r, values: { ...r.values, ...ek } } : r;
+    });
+  }, [ham, kapsamSemboller, snapshot, sektorler, tablolar, gostergeDeger]);
 
-  const kurallar = useMemo(() => araliklarKurallara(araliklar), [araliklar]);
+  /** Grafikteki göstergelerin radar ölçütü karşılıkları. */
+  const gostergeOlcutListesi = useMemo(() => gostergeOlcutleri(gostergeler ?? []), [gostergeler]);
+
+  /**
+   * Hem grafikte açık hem de radara EKLENMİŞ göstergelerin ölçütleri.
+   *
+   * Kullanıcı grafikte bir göstergeyi kapattığında ölçütü de listeden
+   * düşüyor; ama SEÇİMİ silinmiyor (tercihte duruyor), göstergeyi geri
+   * açınca filtresi geri geliyor.
+   */
+  const etkinGostergeOlcutleri = useMemo(
+    () => gostergeOlcutListesi.filter((m) => gostergeSecim.includes(m.istek.anahtar)),
+    [gostergeOlcutListesi, gostergeSecim],
+  );
+
+  /**
+   * Ölçüt sözlüğü: hazır ölçütler + radara eklenmiş göstergeler.
+   *
+   * Sütun başlığı, çip metni ve biçimleme hep buradan okuyor; gösterge
+   * ölçütü bu noktadan sonra hazır ölçütten AYIRT EDİLMİYOR.
+   */
+  const tumOlcutSozlugu = useMemo(() => {
+    const m: OlcutSozlugu = new Map(OLCUT_BY_ID);
+    for (const g of etkinGostergeOlcutleri) m.set(g.id, olcutTanimi(g));
+    return m;
+  }, [etkinGostergeOlcutleri]);
+
+  /**
+   * Gösterge ölçümü — yalnızca eklenmiş göstergeler için.
+   *
+   * Taramadan ayrı bir worker isteği: radara gösterge eklemek, zaten
+   * hesaplanmış on üç temel metriği 600 sembolde yeniden hesaplatmamalı.
+   */
+  const istenenGostergeler = useMemo(
+    () => olcutIstekleri(etkinGostergeOlcutleri),
+    [etkinGostergeOlcutleri],
+  );
+  // Kimlik: istek listesi değişmedikçe efekt yeniden koşmasın.
+  const gostergeAnahtarlari = istenenGostergeler.map((i) => i.anahtar).join('|');
+
+  useEffect(() => {
+    if (!client || !ham) return;
+    if (istenenGostergeler.length === 0) {
+      setGostergeDeger((onceki) => (onceki.size === 0 ? onceki : new Map()));
+      return;
+    }
+    let iptal = false;
+    setGostergeOlculuyor(true);
+    client
+      .gostergeOlcut(market, istenenGostergeler)
+      .then(({ degerler }) => {
+        if (!iptal) setGostergeDeger(degerler);
+      })
+      .catch(() => {
+        // Ölçüm başarısızsa değerler NaN kalır; kural da geçmez. Sessiz
+        // kalmıyoruz: "ölçülemedi" özeti sembolleri zaten sayıyor.
+        if (!iptal) setGostergeDeger(new Map());
+      })
+      .finally(() => {
+        if (!iptal) setGostergeOlculuyor(false);
+      });
+    return () => {
+      iptal = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, ham, market, gostergeAnahtarlari]);
+
+  /**
+   * Eşik filtreleri + ölçüt–ölçüt kıyasları.
+   *
+   * Kıyaslar yalnızca İKİ TARAFI DA ölçülebilir durumdayken kurala
+   * çevriliyor: kullanıcı grafikten göstergeyi kapatmış olabilir, o zaman
+   * kural sessizce her sembolü eleyen bir tuzağa dönüşürdü.
+   */
+  const kurallar = useMemo(() => {
+    const out = araliklarKurallara(araliklar);
+    for (const k of kiyaslar) {
+      if (!tumOlcutSozlugu.has(k.a) || !tumOlcutSozlugu.has(k.b)) continue;
+      out.push({ metric: k.a, op: k.op, a: 0, karsiMetrik: k.b });
+    }
+    return out;
+  }, [araliklar, kiyaslar, tumOlcutSozlugu]);
 
   /**
    * Kurallara UYMADIĞI için değil, ÖLÇÜLEMEDİĞİ için elenenler.
@@ -448,17 +637,17 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
   const sutunSecimi = useMemo((): { cols: Column<ScreenRow>[]; gizli: number } => {
     const sayisal = (id: string, genislik: string): Column<ScreenRow> => ({
       key: id,
-      header: OLCUT_BY_ID.get(id)?.label ?? id,
+      header: tumOlcutSozlugu.get(id)?.label ?? id,
       numeric: true,
       width: genislik,
       sortValue: (r) => (Number.isFinite(r.values[id]) ? r.values[id] : Number.NEGATIVE_INFINITY),
       render: (r) => {
         const v = r.values[id];
-        const isaretli = OLCUT_BY_ID.get(id)?.signed;
+        const isaretli = tumOlcutSozlugu.get(id)?.signed;
         return isaretli && Number.isFinite(v) ? (
-          <span className={v >= 0 ? 'is-up' : 'is-down'}>{fmtOlcut(id, v)}</span>
+          <span className={v >= 0 ? 'is-up' : 'is-down'}>{fmtOlcut(id, v, tumOlcutSozlugu)}</span>
         ) : (
-          fmtOlcut(id, v)
+          fmtOlcut(id, v, tumOlcutSozlugu)
         );
       },
     });
@@ -473,8 +662,23 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
       tam o sütunu göremiyordu. Cevabı ekrana koymanın anlamı, GÖRÜNEN yere
       koymaktır.
     */
-    const filtreli = Object.keys(araliklar).filter((id) => OLCUT_BY_ID.has(id));
-    const secili = sutunlar.filter((id) => OLCUT_BY_ID.has(id) && !filtreli.includes(id));
+    /*
+      FİLTRELENEN GÖSTERGE DE SÜTUN OLUYOR.
+
+      Sözlük `tumOlcutSozlugu`: radara eklenmiş göstergeler burada hazır
+      ölçütlerden ayırt edilmiyor. Ayrı tutulsaydı kullanıcı "EMA 200 ≥ …"
+      filtresini kurar ama EMA 200 sütununu göremezdi — bu panelin daha önce
+      ölçülüp düzeltilmiş kusurunun aynısı.
+
+      Kıyasın İKİ tarafı da sütuna giriyor: "Fiyat > EMA 200" kuralında
+      yalnızca fiyatı göstermek, kullanıcının karşılaştırdığı sayıyı
+      saklamak olurdu.
+    */
+    const kiyasOlcutIdleri = kiyaslar.flatMap((k) => [k.a, k.b]);
+    const filtreli = [...Object.keys(araliklar), ...kiyasOlcutIdleri].filter(
+      (id, i, dizi) => tumOlcutSozlugu.has(id) && dizi.indexOf(id) === i,
+    );
+    const secili = sutunlar.filter((id) => tumOlcutSozlugu.has(id) && !filtreli.includes(id));
 
     // Sembol + eylem her zaman duruyor; kalan bütçe sütunlara dağıtılıyor.
     // Genişlik henüz ölçülmediyse (ilk kare) sınır uygulanmıyor.
@@ -545,7 +749,7 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
     // `liste`, `symbol`, sınıflandırma, sütunlar, etkin filtreler ve PANEL
     // GENİŞLİĞİ dışındaki her şey sabit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liste, symbol, sektorler, araliklar, sutunlar, tabloGenislik]);
+  }, [liste, symbol, sektorler, araliklar, kiyaslar, sutunlar, tabloGenislik, tumOlcutSozlugu]);
 
   const columns = sutunSecimi.cols;
   const gizliSutun = sutunSecimi.gizli;
@@ -570,6 +774,80 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
     tercihYaz(SEKTOR_ANAHTARI, yeni);
   };
 
+  /**
+   * Göstergeyi radara ekle / çıkar — istenen "tek düğmeyle indisleme".
+   *
+   * Çıkarırken o göstergeye bağlı FİLTRELER DE siliniyor. Bırakılsaydı ölçüt
+   * artık hesaplanmadığı için değeri NaN olurdu ve NaN hiçbir kuralı
+   * geçmediğinden radar sessizce boşalırdı — kullanıcı da sebebini göremezdi.
+   */
+  const gostergeSecimYaz = (anahtar: string, ekle: boolean) => {
+    const yeni = ekle ? [...gostergeSecim, anahtar] : gostergeSecim.filter((x) => x !== anahtar);
+    setGostergeSecim(yeni);
+    tercihYaz(GOSTERGE_ANAHTARI, yeni);
+    if (ekle) return;
+    const onek = `${anahtar}:`;
+    const kalanAralik = Object.fromEntries(
+      Object.entries(araliklar).filter(([id]) => !id.startsWith(onek)),
+    );
+    if (Object.keys(kalanAralik).length !== Object.keys(araliklar).length) {
+      araliklarYaz(kalanAralik);
+    }
+    const kalanKiyas = kiyaslar.filter((k) => !k.a.startsWith(onek) && !k.b.startsWith(onek));
+    if (kalanKiyas.length !== kiyaslar.length) kiyasYaz(kalanKiyas);
+  };
+
+  /** Gösterge başına tek satır: çıktılar o satırın altında. */
+  const gostergeGruplari = useMemo(() => {
+    const m = new Map<
+      string,
+      { istek: GostergeOlcutu['istek']; gosterge: string; ciktilar: GostergeOlcutu[] }
+    >();
+    for (const g of gostergeOlcutListesi) {
+      const v = m.get(g.istek.anahtar);
+      if (v) v.ciktilar.push(g);
+      else m.set(g.istek.anahtar, { istek: g.istek, gosterge: g.gosterge, ciktilar: [g] });
+    }
+    return [...m.values()];
+  }, [gostergeOlcutListesi]);
+
+  const kiyasYaz = (yeni: Kiyas[]) => {
+    setKiyaslar(yeni);
+    tercihYaz(KIYAS_ANAHTARI, yeni);
+  };
+
+  /**
+   * Kıyasa girebilecek ölçütler, ÖLÇEĞE göre kovalanmış.
+   *
+   * B tarafına yalnızca aynı kovadaki ölçütler listeleniyor. Böylece
+   * "%R 260 > EMA 200" gibi tip olarak geçerli ama anlamsız bir filtre
+   * kurulamıyor — kurulup sonra uyarılmıyor, hiç kurulamıyor.
+   */
+  const kiyasOlcutleri = useMemo(() => {
+    const kovalar = new Map<Olcek, { id: string; label: string }[]>();
+    const koy = (olcek: Olcek, id: string, label: string) => {
+      const dizi = kovalar.get(olcek) ?? [];
+      dizi.push({ id, label });
+      kovalar.set(olcek, dizi);
+    };
+    // Hazır radar ölçütleri de kıyasa giriyor: en çok istenen filtre
+    // ("Fiyat > EMA 200") ancak böyle kurulabiliyor.
+    for (const def of TUM_OLCUTLER) koy(birimdenOlcek(def.unit), def.id, def.label);
+    for (const g of etkinGostergeOlcutleri) {
+      if (!g.olcek) continue;
+      koy(g.olcek, g.id, g.etiket);
+    }
+    return kovalar;
+  }, [etkinGostergeOlcutleri]);
+
+  /** Seçili sol ölçütün ölçeği — sağ liste bununla daraltılıyor. */
+  const kiyasAOlcegi = useMemo((): Olcek => {
+    for (const [olcek, liste] of kiyasOlcutleri) {
+      if (liste.some((o) => o.id === kiyasA)) return olcek;
+    }
+    return 'fiyat';
+  }, [kiyasOlcutleri, kiyasA]);
+
   /** Panelde seçilebilecek sektörler; sınıflandırma yoksa boş. */
   const sektorAdlari = useMemo(() => sectorNames(sektorler), [sektorler]);
 
@@ -580,7 +858,7 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
 
   const etkin = Object.entries(araliklar);
   /** Düğmedeki sayı: sektör seçimi de bir filtredir, sayılmalı. */
-  const etkinSayi = etkin.length + (sektorSecim.length > 0 ? 1 : 0);
+  const etkinSayi = etkin.length + kiyaslar.length + (sektorSecim.length > 0 ? 1 : 0);
   const olcutQ = olcutArama.trim().toLocaleLowerCase('tr');
 
   return (
@@ -613,7 +891,7 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
       {olculemedi.count > 0
         ? (() => {
             const kirilim = olculemedi.byMetric
-              .map((m) => `${OLCUT_BY_ID.get(m.metric)?.label ?? m.metric}: ${m.count}`)
+              .map((m) => `${tumOlcutSozlugu.get(m.metric)?.label ?? m.metric}: ${m.count}`)
               .join(', ');
             return (
               <p className="radar__olculemedi desk__muted" title={kirilim}>
@@ -737,6 +1015,214 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
                 </div>
               </details>
             ) : null}
+            {/*
+              GRAFİKTEKİ GÖSTERGELER.
+
+              Kullanıcı isteği: "açık olan indikatörler parametreleriyle yan
+              tarama sekmesinde filtrelenmeye hazır olmalılar + içinde butonla
+              hızla indis edilebilsin".
+
+              "Hazır" ile "hesaplanmış" ayrı şeyler: liste açık göstergelerin
+              HEPSİNİ gösteriyor, ölçüm ise ancak düğmeye basılınca başlıyor.
+              Her açık göstergeyi peşin olarak 600 sembolde hesaplamak,
+              kullanıcının istemediği bir işi her radar açılışına ödetirdi.
+
+              Sektörün ALTINDA duruyor: sektör kapsamı daraltıyor, gösterge
+              ise ölçüt ekliyor — biri "nereye bakıyorum", öteki "neye
+              bakıyorum" sorusu.
+            */}
+            {gostergeGruplari.length > 0 || kullaniciGostergesiVar ? (
+              <details className="radar__grup radar__gosterge" open={gostergeSecim.length > 0}>
+                <summary>
+                  Grafikteki göstergeler{' '}
+                  <span className="desk__muted">
+                    {gostergeSecim.length === 0
+                      ? `${gostergeGruplari.length} açık · eklenmedi`
+                      : `${etkinGostergeOlcutleri.length} ölçüt eklendi`}
+                    {gostergeOlculuyor ? ' · ölçülüyor…' : ''}
+                  </span>
+                </summary>
+                {gostergeGruplari.length === 0 ? (
+                  <p className="radar__gosterge-not">Grafikte açık hazır gösterge yok.</p>
+                ) : null}
+                {gostergeGruplari.map((grup) => {
+                  const ekli = gostergeSecim.includes(grup.istek.anahtar);
+                  const adlar = grup.ciktilar.map((c) => c.etiket).join(' · ');
+                  return (
+                    <div key={grup.istek.anahtar} className="radar__gosterge-satir">
+                      <span className="radar__gosterge-ad">
+                        {adlar}
+                        <span className="desk__muted"> {grup.gosterge}</span>
+                      </span>
+                      <Button
+                        size="sm"
+                        variant={ekli ? 'primary' : 'secondary'}
+                        // Açık ad: panelde birden çok "Ekle" düğmesi var,
+                        // ekran okuyucu hangisi olduğunu söyleyebilmeli.
+                        aria-label={`${adlar} ölçütlerini radardan ${ekli ? 'çıkar' : 'ekle'}`}
+                        onClick={() => gostergeSecimYaz(grup.istek.anahtar, !ekli)}
+                      >
+                        {ekli ? 'Çıkar' : 'Ekle'}
+                      </Button>
+                    </div>
+                  );
+                })}
+                {/*
+                  Eklenmiş göstergelerin çıktıları BURADA eşik kutusu alıyor —
+                  hazır ölçütlerle aynı biçimde, çünkü bu noktadan sonra
+                  aralarında fark yok.
+                */}
+                {etkinGostergeOlcutleri.map((g) => (
+                  <div key={g.id} className="radar__olcut">
+                    <span className="radar__olcut-ad">{g.etiket}</span>
+                    <input
+                      className="ui-input"
+                      type="number"
+                      inputMode="decimal"
+                      value={araliklar[g.id]?.min ?? ''}
+                      aria-label={`${g.etiket} en az`}
+                      placeholder="en az"
+                      onChange={(e) =>
+                        araliklarYaz({
+                          ...araliklar,
+                          [g.id]: {
+                            ...araliklar[g.id],
+                            min: e.target.value === '' ? undefined : Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                    <input
+                      className="ui-input"
+                      type="number"
+                      inputMode="decimal"
+                      value={araliklar[g.id]?.max ?? ''}
+                      aria-label={`${g.etiket} en çok`}
+                      placeholder="en çok"
+                      onChange={(e) =>
+                        araliklarYaz({
+                          ...araliklar,
+                          [g.id]: {
+                            ...araliklar[g.id],
+                            max: e.target.value === '' ? undefined : Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+                {/*
+                  Kullanıcının kendi yazdığı göstergeler radara EKLENEMİYOR:
+                  korumalı worker'da sembol başına ayrı çağrı koşuyorlar, 600
+                  sembol için bu yol pratik değil. Listede yoklar diye sessiz
+                  kalmıyoruz — eksikliğin nedeni yazılı, yoksa kullanıcı kendi
+                  göstergesini boşuna arardı.
+                */}
+                {kullaniciGostergesiVar ? (
+                  <p className="radar__gosterge-not">
+                    Kendi yazdığın göstergeler radarda ölçülemiyor: her sembol için ayrı ayrı
+                    korumalı alanda koşuyorlar.
+                  </p>
+                ) : null}
+              </details>
+            ) : null}
+            {/*
+              ÖLÇÜT–ÖLÇÜT KIYASI.
+
+              "birbirleriyle kıyaslanıp da filtrelenebilsin" isteğinin
+              karşılığı. B listesi A'nın ÖLÇEĞİNE göre daraltılıyor: "%R 260 >
+              EMA 200" tip olarak geçerli ama anlamsız bir filtredir ve hata
+              vermez — sessizce ya hep ya hiç sonuç döndürür. Bu yüzden
+              kurulduktan sonra uyarmak yerine hiç kurdurmuyoruz.
+            */}
+            <details className="radar__grup radar__kiyas" open={kiyaslar.length > 0}>
+              <summary>
+                Ölçüt kıyası{' '}
+                <span className="desk__muted">
+                  {kiyaslar.length === 0 ? 'örn. Fiyat > EMA 200' : `${kiyaslar.length} kural`}
+                </span>
+              </summary>
+              <div className="radar__kiyas-kur">
+                <select
+                  className="ui-input"
+                  aria-label="Kıyas sol ölçüt"
+                  value={kiyasA}
+                  onChange={(e) => {
+                    setKiyasA(e.target.value);
+                    setKiyasB('');
+                  }}
+                >
+                  <option value="">Ölçüt seç…</option>
+                  {[...kiyasOlcutleri.entries()].map(([olcek, liste]) => (
+                    <optgroup key={olcek} label={OLCEK_ADI[olcek]}>
+                      {liste.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <select
+                  className="ui-input radar__kiyas-op"
+                  aria-label="Kıyas yönü"
+                  value={kiyasOp}
+                  onChange={(e) => setKiyasOp(e.target.value as 'gt' | 'lt')}
+                >
+                  <option value="gt">&gt;</option>
+                  <option value="lt">&lt;</option>
+                </select>
+                <select
+                  className="ui-input"
+                  aria-label="Kıyas sağ ölçüt"
+                  value={kiyasB}
+                  disabled={!kiyasA}
+                  onChange={(e) => setKiyasB(e.target.value)}
+                >
+                  <option value="">{kiyasA ? 'Ölçüt seç…' : 'Önce sol ölçüt'}</option>
+                  {(kiyasOlcutleri.get(kiyasAOlcegi) ?? [])
+                    .filter((o) => o.id !== kiyasA)
+                    .map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                </select>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={!kiyasA || !kiyasB}
+                  onClick={() => {
+                    // Aynı kural iki kez eklenmesin: liste şişer, sonuç
+                    // değişmez.
+                    const varMi = kiyaslar.some(
+                      (k) => k.a === kiyasA && k.op === kiyasOp && k.b === kiyasB,
+                    );
+                    if (!varMi) {
+                      kiyasYaz([
+                        ...kiyaslar,
+                        {
+                          a: kiyasA,
+                          op: kiyasOp,
+                          b: kiyasB,
+                          adA: tumOlcutSozlugu.get(kiyasA)?.label,
+                          adB: tumOlcutSozlugu.get(kiyasB)?.label,
+                        },
+                      ]);
+                    }
+                    setKiyasA('');
+                    setKiyasB('');
+                  }}
+                >
+                  Ekle
+                </Button>
+              </div>
+              {kiyasA && (kiyasOlcutleri.get(kiyasAOlcegi) ?? []).length <= 1 ? (
+                <p className="radar__gosterge-not">
+                  Bu ölçüt ({OLCEK_ADI[kiyasAOlcegi]}) ile kıyaslanabilecek başka ölçüt yok.
+                </p>
+              ) : null}
+            </details>
             {GRUPLAR.map((grup) => {
               const gorunen = grup.idler
                 .map((id) => OLCUT_BY_ID.get(id))
@@ -923,9 +1409,9 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
           ) : null}
           {etkin.map(([id, sinir]) => (
             <li key={id}>
-              <span>{cipMetni(id, sinir)}</span>
+              <span>{cipMetni(id, sinir, tumOlcutSozlugu)}</span>
               <IconButton
-                label={`Filtreyi kaldır: ${OLCUT_BY_ID.get(id)?.label ?? id}`}
+                label={`Filtreyi kaldır: ${tumOlcutSozlugu.get(id)?.label ?? id}`}
                 size="sm"
                 onClick={() => {
                   const { [id]: _cikan, ...kalan } = araliklar;
@@ -936,12 +1422,38 @@ export function Radar({ market, symbol, client, onSelect, onClose }: Props) {
               </IconButton>
             </li>
           ))}
+          {kiyaslar.map((k, i) => {
+            const adA = tumOlcutSozlugu.get(k.a)?.label ?? k.adA ?? k.a;
+            const adB = tumOlcutSozlugu.get(k.b)?.label ?? k.adB ?? k.b;
+            const metin = `${adA} ${k.op === 'gt' ? '>' : '<'} ${adB}`;
+            // Ölçütlerden biri artık yoksa (gösterge grafikten kapatıldı)
+            // kural UYGULANMIYOR; çip bunu söylüyor. Sessizce durmuş bir
+            // filtreyi etkinmiş gibi göstermek, boşalan radarın sebebini
+            // gizlemek olurdu.
+            const calisiyor = tumOlcutSozlugu.has(k.a) && tumOlcutSozlugu.has(k.b);
+            return (
+              <li key={`kiyas-${i}`} className={calisiyor ? undefined : 'is-pasif'}>
+                <span title={calisiyor ? undefined : 'Ölçütü grafikte kapalı — kural uygulanmıyor'}>
+                  {metin}
+                  {calisiyor ? '' : ' (kapalı)'}
+                </span>
+                <IconButton
+                  label={`Filtreyi kaldır: ${metin}`}
+                  size="sm"
+                  onClick={() => kiyasYaz(kiyaslar.filter((_, j) => j !== i))}
+                >
+                  <Icon name="close" size={12} />
+                </IconButton>
+              </li>
+            );
+          })}
           <li className="radar__cip-temizle">
             <button
               type="button"
               onClick={() => {
                 araliklarYaz({});
                 sektorYaz([]);
+                kiyasYaz([]);
               }}
             >
               Tümünü temizle

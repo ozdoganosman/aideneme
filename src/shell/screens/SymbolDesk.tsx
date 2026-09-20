@@ -762,6 +762,17 @@ export default function SymbolDesk({ state, push }: Props) {
                       // Havuz paylaşılıyor: radar açıldığında paketi bu
                       // havuza yüklüyor ve taramayı worker'da yapıyor.
                       client={analysis.client}
+                      /*
+                        Grafikte AÇIK göstergeler radara parametreleriyle
+                        geçiyor. `istenenIndikatorler` zaten yalnızca görünür
+                        olanları taşıyor ve kimliği parametrelere bağlı; ayrı
+                        bir liste türetmek aynı şeyi iki yerde tutmak olurdu.
+
+                        Radar bunları kendiliğinden ÖLÇMÜYOR, listeliyor:
+                        ölçüm kullanıcı düğmeye basınca başlıyor.
+                      */
+                      gostergeler={istenenIndikatorler}
+                      kullaniciGostergesiVar={gorunurKullanici.length > 0}
                       onSelect={(next) => push({ s: next })}
                       onClose={() => setRadarAcik(false)}
                     />

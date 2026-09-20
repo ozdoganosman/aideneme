@@ -35,10 +35,26 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
     await page.waitForTimeout(400);
 
     const bulgular = await page.evaluate(() => {
-      const text = (document.querySelector('.shell-content') as HTMLElement).innerText.replace(
-        /\s+/g,
-        ' ',
-      );
+      /*
+        AÇILIR PANELLER DE OKUNUYOR.
+
+        Eskiden yalnızca `.shell-content` taranıyordu; oysa `Popover`,
+        `Dialog` ve `Sheet` içeriklerini `createPortal` ile doğrudan `body`ye
+        asıyor. Yani radarın filtre paneli, hazır filtreler ve sütun seçici
+        biçim denetiminden hiç geçmemişti — aynı kör nokta kontrast
+        denetiminde de vardı ve orada ölçülerek bulundu.
+
+        `body.innerText` yerine kök listesi: `innerText` gizli öğeleri zaten
+        atlıyor ama kabuk dışındaki portal katmanlarını da toplamak gerekiyor.
+      */
+      const kokler = [
+        document.querySelector('.shell-content'),
+        ...document.querySelectorAll('.ui-popover__panel, .ui-dialog, .ui-sheet'),
+      ].filter((el): el is HTMLElement => !!el);
+      const text = kokler
+        .map((el) => el.innerText)
+        .join(' ')
+        .replace(/\s+/g, ' ');
       // Ondalık nokta: önünde/ardında başka rakam ya da nokta OLMAYAN
       // `12.3` / `12.34` kalıpları. Böylece binlik ayırıcı (12.345) ve
       // tarih (14.09.2026) elenir.

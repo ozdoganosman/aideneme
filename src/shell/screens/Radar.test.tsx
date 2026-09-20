@@ -23,6 +23,8 @@ vi.mock('../../data-client/sectors', () => ({
 
 import { metricsFor, DEFAULT_SCREEN_PARAMS } from '../../core/screen/metrics';
 import { Radar, araliklarKurallara } from './Radar';
+import { gostergeDegerleri } from '../../core/screen/indikatorOlcutHesap';
+import { gostergeOlcutId, type OlcutIstegi } from '../../core/screen/indikatorOlcut';
 
 /** n barlık seri; son bar hacmi `sonHacim` ile ayrılabiliyor. */
 function seri(kapanislar: number[], sonHacim = 1000): Candles {
@@ -60,9 +62,22 @@ const SERILER: Record<string, Candles> = {
  */
 const loadFn = vi.fn();
 const screenFn = vi.fn();
+/**
+ * Gösterge ölçümü de GERÇEK hesapla yapılıyor (`gostergeDegerleri`), yani
+ * test ekranın gösterdiği sayının doğruluğunu da sınıyor. Sahte sayılarla
+ * kurulsaydı "EMA 200 sütunu doğru mu" sorusu hiç sorulmamış olurdu.
+ */
+const gostergeOlcutFn = vi.fn(async (_market: unknown, istekler: OlcutIstegi[]) => {
+  const degerler = new Map<string, Record<string, number>>();
+  for (const [ad, c] of Object.entries(SERILER)) {
+    degerler.set(ad, gostergeDegerleri(c, istekler));
+  }
+  return { degerler, ms: 1 };
+});
 const FAKE_CLIENT = {
   load: (...a: unknown[]) => loadFn(...a),
   screen: (...a: unknown[]) => screenFn(...a),
+  gostergeOlcut: (m: unknown, i: OlcutIstegi[]) => gostergeOlcutFn(m, i),
 } as unknown as Parameters<typeof Radar>[0]['client'];
 
 beforeEach(() => {
@@ -89,9 +104,26 @@ async function satirlar(): Promise<string[]> {
     .map((r) => r.textContent!.trim());
 }
 
-async function tumPiyasa(user: ReturnType<typeof userEvent.setup>) {
-  render(<Radar market="bist" symbol="" client={FAKE_CLIENT} onSelect={noop} onClose={noop} />);
+async function tumPiyasa(
+  user: ReturnType<typeof userEvent.setup>,
+  ekstra: Partial<Parameters<typeof Radar>[0]> = {},
+) {
+  render(
+    <Radar
+      market="bist"
+      symbol=""
+      client={FAKE_CLIENT}
+      onSelect={noop}
+      onClose={noop}
+      {...ekstra}
+    />,
+  );
   await user.selectOptions(await screen.findByLabelText('Kapsam'), 'piyasa');
+}
+
+/** Filtre panelini açar. */
+async function filtrePaneli(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: /^Filtre paneli/ }));
 }
 
 /**
@@ -350,5 +382,158 @@ describe('Radar — sütunlar', () => {
     await user.click(screen.getByRole('checkbox', { name: 'RSI' }));
     expect(basliklar()).toContain('RSI');
     expect(JSON.parse(localStorage.getItem('radar.sutun.v1')!)).toContain('rsi');
+  });
+});
+
+describe('Radar — grafikteki göstergeler', () => {
+  const EMA10 = [{ id: 'ema', parametreler: { uzunluk: 10 } }];
+
+  it('grafikte açık gösterge panelde listeleniyor ama ÖLÇÜLMÜYOR', async () => {
+    // "Hazır" ile "hesaplanmış" ayrı şeyler: açık olan her göstergeyi 600
+    // sembolde peşin hesaplamak, kullanıcının istemediği bir işi her radar
+    // açılışına ödetmek olurdu.
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: EMA10 });
+    await filtrePaneli(user);
+    expect(await screen.findByText(/Grafikteki göstergeler/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ })).toBeTruthy();
+    expect(gostergeOlcutFn).not.toHaveBeenCalled();
+  });
+
+  it('tek düğmeyle eklenince ölçülüyor ve sütun olarak geliyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: EMA10 });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ }));
+
+    await vi.waitFor(() => expect(gostergeOlcutFn).toHaveBeenCalled());
+    const istekler = gostergeOlcutFn.mock.calls[0][1];
+    expect(istekler).toHaveLength(1);
+    expect(istekler[0].id).toBe('ema');
+    // Eşik kutusu açılıyor: artık hazır bir ölçütten farkı yok.
+    expect(await screen.findByLabelText('EMA 10 en az')).toBeTruthy();
+  });
+
+  it('eklenen göstergenin eşiği GERÇEK sayıyla süzüyor', async () => {
+    // THYAO 100'den, GARAN 50'den başlıyor; EMA 10 eşiği ikisini ayırıyor.
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: EMA10 });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ }));
+    await user.type(await screen.findByLabelText('EMA 10 en az'), '90');
+
+    await vi.waitFor(async () => {
+      const s = await satirlar();
+      expect(s.some((r) => r.startsWith('THYAO'))).toBe(true);
+      expect(s.some((r) => r.startsWith('GARAN'))).toBe(false);
+    });
+  });
+
+  it('gösterge çıkarılınca ona bağlı filtre de siliniyor', async () => {
+    // Bırakılsaydı ölçüt artık hesaplanmayacağı için NaN olurdu; NaN hiçbir
+    // kuralı geçmediğinden radar sessizce boşalır, kullanıcı da sebebini
+    // göremezdi.
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: EMA10 });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ }));
+    await user.type(await screen.findByLabelText('EMA 10 en az'), '90');
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(1));
+
+    await user.click(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan çıkar/ }));
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(2));
+  });
+
+  it('kullanıcı göstergesi ölçülemiyorsa SEBEBİ yazılıyor', async () => {
+    // Listede görünmüyor diye sessiz kalmak, kullanıcının kendi göstergesini
+    // boşuna aramasına yol açardı.
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: EMA10, kullaniciGostergesiVar: true });
+    await filtrePaneli(user);
+    expect(await screen.findByText(/Kendi yazdığın göstergeler radarda ölçülemiyor/)).toBeTruthy();
+  });
+
+  it('aynı gösterge iki farklı parametreyle AYRI ölçüt', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, {
+      gostergeler: [
+        { id: 'ema', parametreler: { uzunluk: 10 } },
+        { id: 'ema', parametreler: { uzunluk: 20 } },
+      ],
+    });
+    await filtrePaneli(user);
+    expect(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /EMA 20 ölçütlerini radardan ekle/ })).toBeTruthy();
+  });
+});
+
+describe('Radar — ölçüt kıyası', () => {
+  it('sağ liste yalnızca AYNI ÖLÇEKTEKİ ölçütleri veriyor', async () => {
+    // "%R 260 > EMA 200" tip olarak geçerli ama anlamsız bir filtre; hata
+    // vermez, sessizce ya hep ya hiç sonuç döndürür. Kurulduktan sonra
+    // uyarmak yerine hiç kurdurmuyoruz.
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: [{ id: 'ema', parametreler: { uzunluk: 10 } }] });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ }));
+
+    await user.selectOptions(await screen.findByLabelText('Kıyas sol ölçüt'), 'last');
+    const sag = screen.getByLabelText('Kıyas sağ ölçüt') as HTMLSelectElement;
+    const secenekler = [...sag.options].map((o) => o.textContent);
+    expect(secenekler).toContain('EMA 10');
+    // RSI 0..100 salınımı; fiyat seviyesiyle kıyaslanamaz.
+    expect(secenekler).not.toContain('RSI');
+  });
+
+  it('"Fiyat > EMA" kuralı gerçek sayılarla süzüyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: [{ id: 'ema', parametreler: { uzunluk: 10 } }] });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ }));
+
+    const emaId = gostergeOlcutId('ema', { uzunluk: 10 }, 'ema');
+    await user.selectOptions(await screen.findByLabelText('Kıyas sol ölçüt'), 'last');
+    await user.selectOptions(screen.getByLabelText('Kıyas sağ ölçüt'), emaId);
+    await user.selectOptions(screen.getByLabelText('Kıyas yönü'), 'gt');
+    await user.click(screen.getByRole('button', { name: 'Ekle' }));
+
+    // THYAO son barda +%4, GARAN −%2: biri EMA'sının üstünde, öteki altında.
+    await vi.waitFor(async () => {
+      const s = await satirlar();
+      expect(s.some((r) => r.startsWith('THYAO'))).toBe(true);
+      expect(s.some((r) => r.startsWith('GARAN'))).toBe(false);
+    });
+    expect(await screen.findByText('Fiyat > EMA 10')).toBeTruthy();
+  });
+
+  it('kıyas kuralı çip olarak silinebiliyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, { gostergeler: [{ id: 'ema', parametreler: { uzunluk: 10 } }] });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /EMA 10 ölçütlerini radardan ekle/ }));
+    const emaId = gostergeOlcutId('ema', { uzunluk: 10 }, 'ema');
+    await user.selectOptions(await screen.findByLabelText('Kıyas sol ölçüt'), 'last');
+    await user.selectOptions(screen.getByLabelText('Kıyas sağ ölçüt'), emaId);
+    await user.click(screen.getByRole('button', { name: 'Ekle' }));
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(1));
+
+    await user.click(screen.getByRole('button', { name: 'Filtreyi kaldır: Fiyat > EMA 10' }));
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(2));
+  });
+
+  it('ölçütü grafikte kapatılan kıyas UYGULANMIYOR ve çip bunu söylüyor', async () => {
+    // Sessizce durmuş bir filtreyi etkinmiş gibi göstermek, boşalan (ya da
+    // dolan) radarın sebebini gizlemek olurdu.
+    const user = userEvent.setup();
+    const emaId = gostergeOlcutId('ema', { uzunluk: 10 }, 'ema');
+    localStorage.setItem('radar.gosterge.v1', JSON.stringify([`gos:ema:10`]));
+    localStorage.setItem(
+      'radar.kiyas.v1',
+      JSON.stringify([{ a: 'last', op: 'gt', b: emaId, adA: 'Fiyat', adB: 'EMA 10' }]),
+    );
+    // Grafikte HİÇ gösterge açık değil: kural iki taraflı kurulamıyor.
+    await tumPiyasa(user, { gostergeler: [] });
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(2));
+    expect(await screen.findByText(/Fiyat > EMA 10 \(kapalı\)/)).toBeTruthy();
   });
 });
