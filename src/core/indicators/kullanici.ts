@@ -13,6 +13,7 @@ import {
   wmaArr,
 } from './temel';
 import type { CikisTanimi, CizimTuru, RenkToken, SayiParametresi } from './kayit';
+import type { Olcek } from '../screen/olcek';
 
 /**
  * KULLANICI GÖSTERGELERİ — sözleşme ve doğrulama.
@@ -74,6 +75,7 @@ export type Dogrulama<T> = { tamam: true; deger: T } | { tamam: false; hata: str
 
 const TOKENLAR: RenkToken[] = ['accent', 'warn', 'up', 'down', 'muted', 'text'];
 const TURLER: CizimTuru[] = ['cizgi', 'sutun'];
+const OLCEKLER: Olcek[] = ['fiyat', 'fiyatFarki', 'yuzde', 'yuzde0100', 'oran', 'para', 'hacim'];
 
 function metin(v: unknown, alan: string, enCok = 60): Dogrulama<string> {
   if (typeof v !== 'string' || v.trim() === '')
@@ -226,12 +228,19 @@ export function cikisDogrula(ham: unknown, kisa: string): Dogrulama<CikisTanimi[
     if (taban !== undefined && !Number.isFinite(taban)) {
       return { tamam: false, hata: `ciktilar[${i}].taban: sayı olmalı` };
     }
+    // Ölçek: yazan kişi bildiriyorsa kıyasa girer, bildirmiyorsa GİRMEZ.
+    // Uydurulmuş bir varsayılan, "%R > EMA" saçmalığını sessizce geri getirirdi.
+    const olcek = c?.olcek;
+    if (olcek !== undefined && !OLCEKLER.includes(olcek as Olcek)) {
+      return { tamam: false, hata: `ciktilar[${i}].olcek: ${OLCEKLER.join(', ')} olmalı` };
+    }
     out.push({
       ad: ad.deger,
       etiket: etiket.deger,
       tur,
       token,
       taban: taban as number | undefined,
+      olcek: olcek as Olcek | undefined,
       yonRengi: c?.yonRengi === true,
     });
   }

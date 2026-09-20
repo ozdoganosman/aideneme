@@ -2,6 +2,7 @@ import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { SektorEslesmesi } from '../core/screen/sectorIndices';
 import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
+import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
 import type { SymbolResponse, CorrelateResponse, PulseResponse, WorkerResponse } from './protocol';
 
 /**
@@ -143,6 +144,52 @@ export class AnalysisClient {
       ms = Math.max(ms, ok.ms);
     }
     return { rows, ms };
+  }
+
+  /**
+   * Grafikteki göstergeleri TÜM piyasada ölçer (sembol → ölçüt değerleri).
+   *
+   * Taramadan ayrı: kullanıcı radara bir gösterge eklediğinde on üç temel
+   * metriği 600 sembolde yeniden hesaplamanın anlamı yok — o iş zaten
+   * yapılmış durumda ve sonucu ekranda duruyor.
+   *
+   * Tarama ile aynı bölme kuralı: iş sembol aralıklarına bölünüp worker'lara
+   * dağıtılıyor, dönen parçalar tek haritada birleşiyor.
+   */
+  async gostergeOlcut(
+    market: Market,
+    istekler: OlcutIstegi[],
+  ): Promise<{ degerler: Map<string, Record<string, number>>; ms: number }> {
+    const info = this.loaded.get(market);
+    if (!info) throw new Error(`${market}: paket yüklenmedi`);
+    const degerler = new Map<string, Record<string, number>>();
+    if (istekler.length === 0) return { degerler, ms: 0 };
+
+    const total = info.symbols.length;
+    const chunks = Math.min(this.pool.size, Math.max(1, Math.ceil(total / 25)));
+    const per = Math.ceil(total / chunks);
+
+    const responses = await Promise.all(
+      Array.from({ length: chunks }, (_, i) =>
+        this.pool.run((id) => ({
+          id,
+          type: 'gostergeOlcut',
+          market,
+          istekler,
+          from: i * per,
+          to: Math.min(total, (i + 1) * per),
+        })),
+      ),
+    );
+
+    let ms = 0;
+    for (const response of responses) {
+      const ok = unwrap(response);
+      if (ok.type !== 'gostergeOlcut') continue;
+      for (const r of ok.rows) degerler.set(r.symbol, r.values);
+      ms = Math.max(ms, ok.ms);
+    }
+    return { degerler, ms };
   }
 
   /** Sembol analizi: periyot dönüşümü + indikatör + özet + veri sağlığı. */

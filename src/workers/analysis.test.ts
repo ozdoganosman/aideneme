@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AnalysisClient } from './analysisClient';
 import { createHandler } from './handler';
+import { gostergeOlcutleri, olcutIstekleri } from '../core/screen/indikatorOlcut';
 import { createPool, type WorkerLike } from './pool';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 import { DEFAULT_SCREEN_PARAMS } from '../core/screen/metrics';
@@ -99,6 +100,65 @@ describe('handler', () => {
       expect(Number.isFinite(response.summary.flowPct)).toBe(true);
       expect(response.summary.totalValue).toBeGreaterThan(0);
     }
+  });
+
+  it('gostergeOlcut: grafikteki göstergeyi tüm sembollerde ölçüyor', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(12, 400) });
+
+    const olcutler = gostergeOlcutleri([{ id: 'ema', parametreler: { uzunluk: 50 } }]);
+    const response = handle({
+      id: 2,
+      type: 'gostergeOlcut',
+      market: 'bist',
+      istekler: olcutIstekleri(olcutler),
+      from: 0,
+      to: 12,
+    });
+
+    expect(response.ok).toBe(true);
+    if (response.ok && response.type === 'gostergeOlcut') {
+      expect(response.rows).toHaveLength(12);
+      for (const r of response.rows) {
+        expect(Number.isFinite(r.values[olcutler[0].id]), `${r.symbol} ölçülemedi`).toBe(true);
+      }
+    }
+  });
+
+  it('gostergeOlcut: penceresi sığmayan sembolde sayı UYDURMUYOR', () => {
+    // 40 barlık seride "EMA 200" ölçülemez. Radar bunu NaN olarak almalı ki
+    // sembol kurala uymuş sayılmasın ve "ölçülemedi" özetinde görünsün.
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(4, 40) });
+
+    const olcutler = gostergeOlcutleri([{ id: 'sma', parametreler: { uzunluk: 200 } }]);
+    const response = handle({
+      id: 2,
+      type: 'gostergeOlcut',
+      market: 'bist',
+      istekler: olcutIstekleri(olcutler),
+      from: 0,
+      to: 4,
+    });
+
+    if (response.ok && response.type === 'gostergeOlcut') {
+      for (const r of response.rows) {
+        expect(Number.isNaN(r.values[olcutler[0].id]), `${r.symbol} sayı uydurdu`).toBe(true);
+      }
+    }
+  });
+
+  it('gostergeOlcut: paket yüklenmeden anlaşılır hata döner', () => {
+    const handle = createHandler();
+    const response = handle({
+      id: 1,
+      type: 'gostergeOlcut',
+      market: 'bist',
+      istekler: [{ anahtar: 'gos:ema:50', id: 'ema', parametreler: { uzunluk: 50 } }],
+      from: 0,
+      to: 1,
+    });
+    expect(response.ok).toBe(false);
   });
 
   it('paket yüklenmeden tarama isteği anlaşılır hata döner', () => {

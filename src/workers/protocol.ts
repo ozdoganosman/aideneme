@@ -1,4 +1,5 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
+import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
 import type { Parametreler } from '../core/indicators/kayit';
 import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
@@ -117,8 +118,35 @@ export interface SymbolRequest {
   realReturn: boolean;
 }
 
+/**
+ * Grafikteki göstergelerin piyasa genelinde ölçülmesi.
+ *
+ * Taramadan AYRI bir istek. Kullanıcı bir göstergeyi radara eklediğinde tüm
+ * taramayı yeniden koşturmak, zaten hesaplanmış on üç temel metriği 600
+ * sembolde boşuna yeniden hesaplamak olurdu; bu istek yalnızca istenen
+ * göstergeleri ölçüp sembol başına birkaç sayı döndürüyor.
+ */
+export interface GostergeOlcutRequest {
+  id: number;
+  type: 'gostergeOlcut';
+  market: string;
+  istekler: OlcutIstegi[];
+  /** Bu worker'ın hesaplayacağı sembol aralığı [from, to). */
+  from: number;
+  to: number;
+}
+
+export interface GostergeOlcutResponse {
+  id: number;
+  ok: true;
+  type: 'gostergeOlcut';
+  rows: { symbol: string; values: Record<string, number> }[];
+  ms: number;
+}
+
 export type WorkerRequest =
   | InitRequest
+  | GostergeOlcutRequest
   | ScreenRequest
   | CorrelateRequest
   | PulseRequest
@@ -206,6 +234,7 @@ export interface SectorMatchResponse {
 
 export type WorkerResponse =
   | InitResponse
+  | GostergeOlcutResponse
   | SectorMatchResponse
   | SymbolResponse
   | ScreenResponse

@@ -19,6 +19,8 @@
  * koşuyor ve ileride kullanıcı göstergeleri de aynı sözleşmeye oturacak.
  */
 
+import type { Olcek } from '../screen/olcek';
+
 /** Tema renk tokenı — gerçek renge arayüz katmanında çevriliyor. */
 export type RenkToken = 'accent' | 'warn' | 'up' | 'down' | 'muted' | 'text';
 
@@ -36,6 +38,19 @@ export interface SayiParametresi {
 
 export interface CikisTanimi {
   ad: string;
+  /**
+   * Kıyas ölçeği — bu çıktı hangi ölçütlerle KARŞILAŞTIRILABİLİR.
+   *
+   * Radarda "gösterge > gösterge" filtresi kurulurken B tarafına yalnızca
+   * aynı ölçekteki ölçütler listeleniyor; yoksa "%R 260 > EMA 200" gibi tip
+   * olarak geçerli, anlamca saçma bir filtre sessizce kurulabilirdi.
+   *
+   * İSTEĞE BAĞLI: kullanıcının kendi yazdığı göstergenin ölçeğini bilemeyiz.
+   * Bir varsayılan uydurmak tam da engellemeye çalıştığımız sessiz saçmalığı
+   * üretirdi; bu yüzden ölçeği olmayan çıktı kıyas kutusunda HİÇ listelenmiyor
+   * (sabit eşikle filtrelenmesine bir engel yok).
+   */
+  olcek?: Olcek;
   /** Çizgi etiketi; parametreye bağlı olabilir (örn. "EMA 50"). */
   etiket: string;
   tur: CizimTuru;
@@ -129,7 +144,9 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     panel: 'fiyat',
     arama: ['ema', 'exponential moving average', 'ortalama', 'hareketli'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 50)],
-    ciktilar: (p) => [{ ad: 'ema', etiket: `EMA ${p.uzunluk}`, tur: 'cizgi', token: 'accent' }],
+    ciktilar: (p) => [
+      { ad: 'ema', etiket: `EMA ${p.uzunluk}`, tur: 'cizgi', token: 'accent', olcek: 'fiyat' },
+    ],
   },
   {
     id: 'sma',
@@ -139,7 +156,9 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     panel: 'fiyat',
     arama: ['sma', 'simple moving average', 'ortalama'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 50)],
-    ciktilar: (p) => [{ ad: 'sma', etiket: `SMA ${p.uzunluk}`, tur: 'cizgi', token: 'warn' }],
+    ciktilar: (p) => [
+      { ad: 'sma', etiket: `SMA ${p.uzunluk}`, tur: 'cizgi', token: 'warn', olcek: 'fiyat' },
+    ],
   },
   {
     id: 'wma',
@@ -149,7 +168,9 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     panel: 'fiyat',
     arama: ['wma', 'weighted moving average', 'ağırlıklı'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 50)],
-    ciktilar: (p) => [{ ad: 'wma', etiket: `WMA ${p.uzunluk}`, tur: 'cizgi', token: 'up' }],
+    ciktilar: (p) => [
+      { ad: 'wma', etiket: `WMA ${p.uzunluk}`, tur: 'cizgi', token: 'up', olcek: 'fiyat' },
+    ],
   },
   {
     id: 'vwap',
@@ -159,7 +180,9 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     panel: 'fiyat',
     arama: ['vwap', 'volume weighted', 'hacim ağırlıklı'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 20)],
-    ciktilar: (p) => [{ ad: 'vwap', etiket: `VWAP ${p.uzunluk}`, tur: 'cizgi', token: 'accent' }],
+    ciktilar: (p) => [
+      { ad: 'vwap', etiket: `VWAP ${p.uzunluk}`, tur: 'cizgi', token: 'accent', olcek: 'fiyat' },
+    ],
   },
   {
     id: 'bollinger',
@@ -170,9 +193,9 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['bollinger', 'bb', 'bant', 'band', 'volatilite'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 20), carpan('kat', 'Sapma katsayısı', 2)],
     ciktilar: (p) => [
-      { ad: 'ust', etiket: `BB üst ${p.uzunluk}`, tur: 'cizgi', token: 'muted' },
-      { ad: 'orta', etiket: `BB orta ${p.uzunluk}`, tur: 'cizgi', token: 'accent' },
-      { ad: 'alt', etiket: `BB alt ${p.uzunluk}`, tur: 'cizgi', token: 'muted' },
+      { ad: 'ust', etiket: `BB üst ${p.uzunluk}`, tur: 'cizgi', token: 'muted', olcek: 'fiyat' },
+      { ad: 'orta', etiket: `BB orta ${p.uzunluk}`, tur: 'cizgi', token: 'accent', olcek: 'fiyat' },
+      { ad: 'alt', etiket: `BB alt ${p.uzunluk}`, tur: 'cizgi', token: 'muted', olcek: 'fiyat' },
     ],
   },
   {
@@ -184,7 +207,13 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['supertrend', 'süpertrend', 'atr trend'],
     parametreler: [uzunluk('uzunluk', 'ATR uzunluğu', 10), carpan('kat', 'Çarpan', 3)],
     ciktilar: (p) => [
-      { ad: 'st', etiket: `Supertrend ${p.uzunluk}×${p.kat}`, tur: 'cizgi', token: 'up' },
+      {
+        ad: 'st',
+        etiket: `Supertrend ${p.uzunluk}×${p.kat}`,
+        tur: 'cizgi',
+        token: 'up',
+        olcek: 'fiyat',
+      },
     ],
   },
   {
@@ -196,7 +225,14 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['rsi', 'relative strength', 'göreli güç'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 14)],
     ciktilar: (p) => [
-      { ad: 'rsi', etiket: `RSI ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 50 },
+      {
+        ad: 'rsi',
+        etiket: `RSI ${p.uzunluk}`,
+        tur: 'cizgi',
+        token: 'accent',
+        taban: 50,
+        olcek: 'yuzde0100',
+      },
     ],
   },
   {
@@ -212,9 +248,28 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       uzunluk('emaHizli', 'EMA hızlı', 120),
     ],
     ciktilar: (p) => [
-      { ad: 'r', etiket: `%R ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 50 },
-      { ad: 'emaYavas', etiket: `EMA ${p.emaYavas}`, tur: 'cizgi', token: 'warn' },
-      { ad: 'emaHizli', etiket: `EMA ${p.emaHizli}`, tur: 'cizgi', token: 'muted' },
+      {
+        ad: 'r',
+        etiket: `%R ${p.uzunluk}`,
+        tur: 'cizgi',
+        token: 'accent',
+        taban: 50,
+        olcek: 'yuzde0100',
+      },
+      {
+        ad: 'emaYavas',
+        etiket: `%R EMA ${p.emaYavas}`,
+        tur: 'cizgi',
+        token: 'warn',
+        olcek: 'yuzde0100',
+      },
+      {
+        ad: 'emaHizli',
+        etiket: `%R EMA ${p.emaHizli}`,
+        tur: 'cizgi',
+        token: 'muted',
+        olcek: 'yuzde0100',
+      },
     ],
   },
   {
@@ -226,8 +281,15 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['stokastik', 'stochastic', 'stoch', 'k d'],
     parametreler: [uzunluk('uzunluk', '%K uzunluğu', 14), uzunluk('d', '%D yumuşatma', 3)],
     ciktilar: (p) => [
-      { ad: 'k', etiket: `%K ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 50 },
-      { ad: 'd', etiket: `%D ${p.d}`, tur: 'cizgi', token: 'warn' },
+      {
+        ad: 'k',
+        etiket: `%K ${p.uzunluk}`,
+        tur: 'cizgi',
+        token: 'accent',
+        taban: 50,
+        olcek: 'yuzde0100',
+      },
+      { ad: 'd', etiket: `%D ${p.d}`, tur: 'cizgi', token: 'warn', olcek: 'yuzde0100' },
     ],
   },
   {
@@ -243,9 +305,17 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       uzunluk('sinyal', 'Sinyal', 9),
     ],
     ciktilar: () => [
-      { ad: 'hist', etiket: 'Histogram', tur: 'sutun', token: 'muted', taban: 0, yonRengi: true },
-      { ad: 'macd', etiket: 'MACD', tur: 'cizgi', token: 'accent' },
-      { ad: 'sinyal', etiket: 'Sinyal', tur: 'cizgi', token: 'warn' },
+      {
+        ad: 'hist',
+        etiket: 'Histogram',
+        tur: 'sutun',
+        token: 'muted',
+        taban: 0,
+        yonRengi: true,
+        olcek: 'fiyatFarki',
+      },
+      { ad: 'macd', etiket: 'MACD', tur: 'cizgi', token: 'accent', olcek: 'fiyatFarki' },
+      { ad: 'sinyal', etiket: 'Sinyal', tur: 'cizgi', token: 'warn', olcek: 'fiyatFarki' },
     ],
   },
   {
@@ -262,10 +332,18 @@ export const INDIKATORLER: IndikatorTanimi[] = [
       uzunluk('vwma', 'eMACD VWMA', 185),
     ],
     ciktilar: () => [
-      { ad: 'hist', etiket: 'Histogram', tur: 'sutun', token: 'muted', taban: 0, yonRengi: true },
-      { ad: 'macd', etiket: 'MACD', tur: 'cizgi', token: 'accent' },
-      { ad: 'sinyal', etiket: 'Sinyal', tur: 'cizgi', token: 'warn' },
-      { ad: 'emacd', etiket: 'eMACD', tur: 'cizgi', token: 'down' },
+      {
+        ad: 'hist',
+        etiket: 'Histogram',
+        tur: 'sutun',
+        token: 'muted',
+        taban: 0,
+        yonRengi: true,
+        olcek: 'fiyatFarki',
+      },
+      { ad: 'macd', etiket: 'MACD', tur: 'cizgi', token: 'accent', olcek: 'fiyatFarki' },
+      { ad: 'sinyal', etiket: 'Sinyal', tur: 'cizgi', token: 'warn', olcek: 'fiyatFarki' },
+      { ad: 'emacd', etiket: 'eMACD', tur: 'cizgi', token: 'down', olcek: 'fiyatFarki' },
     ],
     /*
       ÖLÇEKTEN ARINDIRILMIŞ: seriler hızlı EMA'ya bölünüyor. Ham MACD fiyat
@@ -282,8 +360,15 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['adx', 'average directional', 'yön endeksi', 'trend gücü'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 14), uzunluk('ema', 'EMA yumuşatma', 14)],
     ciktilar: (p) => [
-      { ad: 'adx', etiket: `ADX ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 25 },
-      { ad: 'ema', etiket: `EMA ${p.ema}`, tur: 'cizgi', token: 'warn' },
+      {
+        ad: 'adx',
+        etiket: `ADX ${p.uzunluk}`,
+        tur: 'cizgi',
+        token: 'accent',
+        taban: 25,
+        olcek: 'yuzde0100',
+      },
+      { ad: 'ema', etiket: `ADX EMA ${p.ema}`, tur: 'cizgi', token: 'warn', olcek: 'yuzde0100' },
     ],
   },
   {
@@ -294,7 +379,9 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     panel: 'ayri',
     arama: ['atr', 'average true range', 'oynaklık', 'volatilite'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 14)],
-    ciktilar: (p) => [{ ad: 'atr', etiket: `ATR ${p.uzunluk}`, tur: 'cizgi', token: 'down' }],
+    ciktilar: (p) => [
+      { ad: 'atr', etiket: `ATR ${p.uzunluk}`, tur: 'cizgi', token: 'down', olcek: 'fiyatFarki' },
+    ],
   },
   {
     id: 'roc',
@@ -305,8 +392,15 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['roc', 'rate of change', 'momentum', 'değişim'],
     parametreler: [uzunluk('uzunluk', 'Uzunluk', 260), uzunluk('ema', 'EMA yumuşatma', 120)],
     ciktilar: (p) => [
-      { ad: 'roc', etiket: `ROC ${p.uzunluk}`, tur: 'cizgi', token: 'accent', taban: 0 },
-      { ad: 'ema', etiket: `EMA ${p.ema}`, tur: 'cizgi', token: 'warn' },
+      {
+        ad: 'roc',
+        etiket: `ROC ${p.uzunluk}`,
+        tur: 'cizgi',
+        token: 'accent',
+        taban: 0,
+        olcek: 'yuzde',
+      },
+      { ad: 'ema', etiket: `ROC EMA ${p.ema}`, tur: 'cizgi', token: 'warn', olcek: 'yuzde' },
     ],
   },
   {
@@ -318,8 +412,8 @@ export const INDIKATORLER: IndikatorTanimi[] = [
     arama: ['obv', 'on balance volume', 'denge hacmi'],
     parametreler: [uzunluk('ema', 'EMA yumuşatma', 20)],
     ciktilar: (p) => [
-      { ad: 'obv', etiket: 'OBV', tur: 'cizgi', token: 'accent' },
-      { ad: 'ema', etiket: `EMA ${p.ema}`, tur: 'cizgi', token: 'warn' },
+      { ad: 'obv', etiket: 'OBV', tur: 'cizgi', token: 'accent', olcek: 'hacim' },
+      { ad: 'ema', etiket: `OBV EMA ${p.ema}`, tur: 'cizgi', token: 'warn', olcek: 'hacim' },
     ],
   },
 ];

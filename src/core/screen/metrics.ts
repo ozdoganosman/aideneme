@@ -269,6 +269,36 @@ export interface Rule {
   op: Operator;
   a: number;
   b?: number;
+  /**
+   * Sabit eşik yerine İKİNCİ BİR METRİKLE karşılaştır.
+   *
+   * Verilirse `a`/`b` yok sayılır ve kural `values[metric] op
+   * values[karsiMetrik]` olarak okunur — "Fiyat > EMA 200", "%K > %D",
+   * "5 günlük getiri > 21 günlük getiri" gibi.
+   *
+   * Yeni bir operatör (`gtMetric` vb.) eklemek yerine mevcut operatörlerin
+   * SAĞ TARAFI değiştirildi: böylece `gt`/`lt` anlamı tek yerde kalıyor ve
+   * kuralı okuyan her yer (eleme, sıralama, "ölçülemedi" özeti) iki biçimi de
+   * kendiliğinden doğru işliyor.
+   *
+   * `between` ile anlamı yok: iki metrik arasında "arasında" diye bir şey
+   * kurulmuyor, o yüzden `between` kuralında bu alan görmezden geliniyor.
+   */
+  karsiMetrik?: string;
+}
+
+/**
+ * Bir kuralın OKUDUĞU bütün metrikler.
+ *
+ * Kıyas kuralı iki metriğe birden bakıyor. "Ölçülemedi" sayımı ve "hiç verisi
+ * yok" uyarısı bunu bilmek zorunda: yoksa kullanıcı "%K > %D" filtresinde
+ * sembollerin neden elendiğini soracak, arayüz de yalnızca %K'yı sayıp
+ * asıl eksik olanı (%D) hiç söylemeyecekti.
+ */
+export function kuralMetrikleri(rule: Rule): string[] {
+  return rule.karsiMetrik && rule.op !== 'between'
+    ? [rule.metric, rule.karsiMetrik]
+    : [rule.metric];
 }
 
 export interface ScreenSpec {
@@ -291,6 +321,15 @@ export function passes(row: ScreenRow, rules: Rule[]): boolean {
   for (const rule of rules) {
     const v = row.values[rule.metric];
     if (!Number.isFinite(v)) return false;
+    if (rule.karsiMetrik && rule.op !== 'between') {
+      // İKİ TARAF DA ölçülmüş olmalı: biri bilinmiyorsa "büyüktür" sorusunun
+      // cevabı yoktur. NaN'ın hiçbir kuralı geçmemesiyle aynı ilke.
+      const k = row.values[rule.karsiMetrik];
+      if (!Number.isFinite(k)) return false;
+      if (rule.op === 'gt' && !(v > k)) return false;
+      if (rule.op === 'lt' && !(v < k)) return false;
+      continue;
+    }
     if (rule.op === 'gt' && !(v > rule.a)) return false;
     if (rule.op === 'lt' && !(v < rule.a)) return false;
     if (rule.op === 'between') {
@@ -348,8 +387,10 @@ export function metricsWithoutData(rows: ScreenRow[], rules: Rule[]): string[] {
   if (rows.length === 0) return [];
   const out: string[] = [];
   for (const rule of rules) {
-    if (out.includes(rule.metric)) continue;
-    if (!rows.some((r) => Number.isFinite(r.values[rule.metric]))) out.push(rule.metric);
+    for (const metric of kuralMetrikleri(rule)) {
+      if (out.includes(metric)) continue;
+      if (!rows.some((r) => Number.isFinite(r.values[metric]))) out.push(metric);
+    }
   }
   return out;
 }
@@ -383,9 +424,11 @@ export function olculemeyen(rows: ScreenRow[], rules: Rule[]): OlculemeyenOzet {
   for (const row of rows) {
     let eksikVar = false;
     for (const rule of rules) {
-      if (Number.isFinite(row.values[rule.metric])) continue;
-      eksikVar = true;
-      sayac.set(rule.metric, (sayac.get(rule.metric) ?? 0) + 1);
+      for (const metric of kuralMetrikleri(rule)) {
+        if (Number.isFinite(row.values[metric])) continue;
+        eksikVar = true;
+        sayac.set(metric, (sayac.get(metric) ?? 0) + 1);
+      }
     }
     if (eksikVar) count++;
   }

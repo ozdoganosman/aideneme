@@ -5,6 +5,7 @@ import {
   METRIC_DEFS,
   applyScreen,
   metricsFor,
+  kuralMetrikleri,
   metricsWithoutData,
   passes,
   type Rule,
@@ -365,5 +366,72 @@ describe('olculemeyen', () => {
   it('kuralı geçemeyen ölçülebilir sembolü saymaz', () => {
     const r = olculemeyen([satir('AAA', { pe: 99 })], [{ metric: 'pe', op: 'lt', a: 10 }]);
     expect(r.count).toBe(0);
+  });
+});
+
+describe('metrik–metrik kıyası', () => {
+  const satir = (symbol: string, values: Record<string, number>): ScreenRow => ({
+    symbol,
+    values,
+    bars: 500,
+  });
+
+  it('sabit eşik yerine ikinci metriğe bakar', () => {
+    const rows = [
+      satir('UST', { last: 120, ema200: 100 }),
+      satir('ALT', { last: 80, ema200: 100 }),
+    ];
+    const kural: Rule[] = [{ metric: 'last', op: 'gt', a: 0, karsiMetrik: 'ema200' }];
+    expect(rows.filter((r) => passes(r, kural)).map((r) => r.symbol)).toEqual(['UST']);
+  });
+
+  it('`a` alanı kıyasta YOK SAYILIYOR', () => {
+    // Kıyas kuralında `a` anlamsız; oraya kalmış bir sayının sonucu
+    // değiştirmesi, kuralı okuyan iki yerin farklı davranması demek olurdu.
+    const r = satir('X', { last: 120, ema200: 100 });
+    expect(passes(r, [{ metric: 'last', op: 'gt', a: 1e9, karsiMetrik: 'ema200' }])).toBe(true);
+  });
+
+  it('iki taraftan biri ölçülemediyse kural GEÇMİYOR', () => {
+    // "Bilinmeyen ≠ uygun" ilkesi kıyasın her iki tarafı için de geçerli.
+    const kural: Rule[] = [{ metric: 'k', op: 'gt', a: 0, karsiMetrik: 'd' }];
+    expect(passes(satir('A', { k: 80, d: NaN }), kural)).toBe(false);
+    expect(passes(satir('B', { k: NaN, d: 20 }), kural)).toBe(false);
+    expect(passes(satir('C', { k: 80 }), kural)).toBe(false);
+  });
+
+  it('eşitlik "büyüktür"ü geçmiyor', () => {
+    expect(
+      passes(satir('E', { a: 5, b: 5 }), [{ metric: 'a', op: 'gt', a: 0, karsiMetrik: 'b' }]),
+    ).toBe(false);
+  });
+
+  it('küçüktür yönü de çalışıyor', () => {
+    const kural: Rule[] = [{ metric: 'k', op: 'lt', a: 0, karsiMetrik: 'd' }];
+    expect(passes(satir('A', { k: 10, d: 20 }), kural)).toBe(true);
+    expect(passes(satir('B', { k: 30, d: 20 }), kural)).toBe(false);
+  });
+
+  it('`between` kıyası yok sayıyor, sabit aralık olarak kalıyor', () => {
+    const kural: Rule[] = [{ metric: 'k', op: 'between', a: 10, b: 20, karsiMetrik: 'd' }];
+    expect(passes(satir('A', { k: 15, d: 1000 }), kural)).toBe(true);
+    expect(passes(satir('B', { k: 50, d: 1000 }), kural)).toBe(false);
+    expect(kuralMetrikleri(kural[0])).toEqual(['k']);
+  });
+
+  it('"ölçülemedi" sayımı kıyasın İKİ tarafını da sayıyor', () => {
+    // Eksik olan sağ taraftayken önceden hiç raporlanmıyordu: kullanıcı
+    // sembollerin neden elendiğini gösteren tek yerde asıl nedeni göremezdi.
+    const rows = [satir('A', { k: 80, d: NaN }), satir('B', { k: 70, d: 30 })];
+    const ozet = olculemeyen(rows, [{ metric: 'k', op: 'gt', a: 0, karsiMetrik: 'd' }]);
+    expect(ozet.count).toBe(1);
+    expect(ozet.byMetric).toEqual([{ metric: 'd', count: 1 }]);
+  });
+
+  it('hiç verisi olmayan taraf kıyasta da bildiriliyor', () => {
+    const rows = [satir('A', { k: 80, d: NaN }), satir('B', { k: 70, d: NaN })];
+    expect(metricsWithoutData(rows, [{ metric: 'k', op: 'gt', a: 0, karsiMetrik: 'd' }])).toEqual([
+      'd',
+    ]);
   });
 });

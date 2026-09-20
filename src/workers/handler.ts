@@ -2,6 +2,7 @@ import { computeIndicators } from '../core/indicators/calc';
 import { decodeBundle, type Bundle } from '../core/data/pack';
 import type { Candles } from '../core/data/types';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
+import { gostergeDegerleri } from '../core/screen/indikatorOlcutHesap';
 import {
   pulseRow,
   summarizePulse,
@@ -48,6 +49,20 @@ export function createHandler() {
             if (row) rows.push(row);
           }
           return { id: req.id, ok: true, type: 'screen', rows, ms: now() - started };
+        }
+
+        case 'gostergeOlcut': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const rows: { symbol: string; values: Record<string, number> }[] = [];
+          const to = Math.min(req.to, bundle.names.length);
+          for (let i = req.from; i < to; i++) {
+            const symbol = bundle.names[i];
+            const candles = bundle.seriesOf(symbol);
+            if (!candles) continue;
+            rows.push({ symbol, values: gostergeDegerleri(candles, req.istekler) });
+          }
+          return { id: req.id, ok: true, type: 'gostergeOlcut', rows, ms: now() - started };
         }
 
         case 'sectorMatch': {
