@@ -154,6 +154,8 @@ export default tseslint.config(
         // Node genel nesnesi: ölçüm aracı kendi yanındaki JSON'u okurken
         // `new URL(..., import.meta.url)` kullanıyor.
         URL: 'readonly',
+        // Node 18+ yerleşik: site bekçisi canlı siteyi yoklarken kullanıyor.
+        fetch: 'readonly',
       },
     },
     rules: { 'no-console': 'off' },

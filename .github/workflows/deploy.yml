@@ -122,6 +122,9 @@ jobs:
         run: |
           touch dist/.nojekyll
           if [ -d /tmp/onizleme ]; then cp -r /tmp/onizleme dist/onizleme; fi
+          # Yayımlamadan ÖNCE ağaç sağlam mı: bozuk bir derleme gh-pages'i
+          # ezmesin (bkz. scripts/site-bekcisi.mjs).
+          node scripts/site-bekcisi.mjs --dizin dist
           cd dist
           git init -q
           git checkout -q -b gh-pages
@@ -130,3 +133,9 @@ jobs:
           git add -A
           git commit -q -m "deploy ${GITHUB_SHA}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+
+      # "Dağıtım yeşil" ile "site açılıyor" aynı iddia değil — 22 Eylül'de iş
+      # akışı yeşilken site 404 veriyordu. Pages yayını push'tan 1–2 dk sonra
+      # oturuyor; 5 dk içinde oturmazsa bu adım kırmızı yanar.
+      - name: Canlı site doğrulaması
+        run: node scripts/site-bekcisi.mjs --url "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" --bekle 300

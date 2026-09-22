@@ -1,0 +1,65 @@
+name: bekci
+
+# CANLI SİTE BEKÇİSİ.
+#
+# 22 Eyl 2026 akşamı site 404 verdi ve kimse fark etmedi: deponun varsayılan
+# dalı eski bir daldı, GitHub zamanlanmış iş akışlarını yalnızca varsayılan
+# daldan çalıştırdığı için o dalın eski `deploy`'u gh-pages'i eski uygulamayla
+# ezdi. İş akışı YEŞİLDİ. Bu iş, gh-pages her yeniden yayımlandığında (ve
+# ayrıca düzenli aralıkla) yayının sağlam olduğunu sınıyor; değilse main'den
+# yeniden dağıtımı tetikliyor ve kırmızı yanıyor.
+#
+# ÖNEMLİ SINIR: `page_build` ve `schedule` olayları yalnızca VARSAYILAN DALDAKİ
+# iş akışı dosyasını çalıştırır. Bu dosya main'de; varsayılan dal main
+# olmadıkça bu iş kendiliğinden hiç çalışmaz (elle tetiklenebilir).
+on:
+  page_build:
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write # deploy.yml'yi yeniden tetiklemek için
+
+concurrency:
+  group: bekci
+  cancel-in-progress: true
+
+jobs:
+  bekci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Betik main'de; varsayılan dal ne olursa olsun onu kullan.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Yayın ağacını denetle (gh-pages)
+        id: agac
+        continue-on-error: true
+        run: |
+          git clone --depth 1 -b gh-pages "https://github.com/${GITHUB_REPOSITORY}.git" _site
+          echo "commit: $(git -C _site log -1 --format=%s)"
+          node scripts/site-bekcisi.mjs --dizin _site
+
+      # Ağaç bozuksa beklemenin anlamı yok: main'den yeniden yayımla. Döngü
+      # yok — deploy.yml yayımlamadan önce kendi ağacını aynı betikle
+      # denetliyor, bozuk ağaç hiç yayımlanmıyor.
+      - name: Bozuksa main'den yeniden dağıt
+        if: steps.agac.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run deploy.yml --ref main --repo "$GITHUB_REPOSITORY"
+          echo "### ✗ Yayın bozuktu — main'den yeniden dağıtım tetiklendi" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # Ağaç sağlamsa canlı site de açılmalı. Pages oturması 1–2 dk.
+      - name: Canlı siteyi denetle
+        run: node scripts/site-bekcisi.mjs --url "https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/" --bekle 240
