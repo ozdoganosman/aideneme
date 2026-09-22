@@ -2384,6 +2384,20 @@
   line-height: 1.4;
 }
 
+/* Kendi göstergenin piyasadaki dağılımı: beş sayı tek satırda, tablo
+   sayıları gibi hizalı. */
+.radar__dagilim {
+  margin: 2px 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.radar__dagilim b {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 /* GRAFİKTEKİ GÖSTERGELER — tek düğmeyle radara eklenen ölçütler.
    Satır iki sütun: ad esner, düğme sabit kalır. Düğme esneseydi uzun
    etiketlerde ("BB üst 20 · BB orta 20 · BB alt 20") "Ekle" yazısı

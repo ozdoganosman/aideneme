@@ -72,18 +72,29 @@ export interface CalismaSonucu {
 
 export type Sonuc = { tamam: true; deger: CalismaSonucu } | { tamam: false; hata: string };
 
+/** Bir kez derlenmiş gösterge: kaynak değerlendirildi, üstverisi doğrulandı. */
+export interface DerliGosterge {
+  ustveri: KullaniciUstverisi;
+  nesne: {
+    hesapla: (c: Candles, p: Record<string, number>, lib: typeof KITAPLIK) => unknown;
+    ciktilar?: (p: Record<string, number>) => unknown;
+  };
+}
+
+export type DerlemeSonucu = { tamam: true; deger: DerliGosterge } | { tamam: false; hata: string };
+
 /**
- * Kaynağı değerlendirip göstergeyi hesapla.
+ * Kaynağı DEĞERLENDİR — bir kez.
  *
- * Kaynak HER ÇAĞRIDA yeniden değerlendiriliyor: çağrılar arasında durum
- * taşınmıyor, yani bir hesap ötekini kirletemiyor. Maliyeti hesabın yanında
- * önemsiz.
+ * Tek sembol yolunda kaynak her çağrıda yeniden değerlendiriliyordu ve bu
+ * doğruydu: çağrılar arasında durum taşınmıyor. Toplu yolda aynı kaynağı 582
+ * kez değerlendirmek anlamsız; değerlendirme bir, koşturma çok. Durum sızıntısı
+ * kaygısı yine karşılanıyor: `hesapla` saf olmak zorunda değil ama her sembol
+ * için AYNI parametre nesnesi ve AYNI kitaplık geçiliyor; sembolden sembole
+ * taşınabilecek tek şey kullanıcının kendi kapanışındaki değişkenler — bu da
+ * tek sembol yolunda `ciktilar`/`hesapla` arasında zaten mümkündü.
  */
-export function gostergeCalistir(
-  kaynak: string,
-  c: Candles,
-  parametreler: Record<string, number>,
-): Sonuc {
+export function gostergeDerle(kaynak: string): DerlemeSonucu {
   const tarama = kaynakTara(kaynak);
   if (!tarama.tamam) return { tamam: false, hata: tarama.hata };
 
@@ -99,43 +110,145 @@ export function gostergeCalistir(
 
   const ustveri = ustveriDogrula(nesne);
   if (!ustveri.tamam) return { tamam: false, hata: ustveri.hata };
-
-  const o = nesne as {
-    hesapla: (c: Candles, p: Record<string, number>, lib: typeof KITAPLIK) => unknown;
-    ciktilar?: (p: Record<string, number>) => unknown;
+  return {
+    tamam: true,
+    deger: { ustveri: ustveri.deger, nesne: nesne as DerliGosterge['nesne'] },
   };
+}
 
-  // Parametreler ŞEMAYA göre sınırlanıyor: kullanıcı kodunun bozuk bir sayı
-  // görmesi gerekmiyor ve sınır tek yerde kalıyor.
+/** Parametreleri ŞEMAYA göre sınırla — sınır tek yerde. */
+export function parametreSinirla(
+  ustveri: KullaniciUstverisi,
+  parametreler: Record<string, number>,
+): Record<string, number> {
   const p: Record<string, number> = {};
-  for (const s of ustveri.deger.parametreler) {
+  for (const s of ustveri.parametreler) {
     const ham = parametreler[s.ad];
     const v = Number.isFinite(ham) ? ham : s.varsayilan;
     const sinirli = Math.min(s.max, Math.max(s.min, v));
     p[s.ad] = s.ondalik ? sinirli : Math.round(sinirli);
   }
+  return p;
+}
 
-  let hamCikis: unknown;
+/** Çıktı tanımlarını al ve doğrula (yalnızca parametreye bağlı, sembole değil). */
+export function gostergeCiktilari(
+  d: DerliGosterge,
+  p: Record<string, number>,
+): { tamam: true; deger: CikisTanimi[] } | { tamam: false; hata: string } {
+  let ham: unknown;
   try {
-    hamCikis = o.ciktilar ? o.ciktilar(p) : undefined;
+    ham = d.nesne.ciktilar ? d.nesne.ciktilar(p) : undefined;
   } catch (err) {
     return { tamam: false, hata: `ciktilar() hata verdi: ${mesaj(err)}` };
   }
-  const ciktilar = cikisDogrula(hamCikis, ustveri.deger.kisa);
-  if (!ciktilar.tamam) return { tamam: false, hata: ciktilar.hata };
+  return cikisDogrula(ham, d.ustveri.kisa);
+}
 
-  let hamDeger: unknown;
+/** Derli göstergeyi TEK seride koştur ve çıktıyı doğrula. */
+export function gostergeHesapla(
+  d: DerliGosterge,
+  c: Candles,
+  p: Record<string, number>,
+  ciktiSayisi: number,
+): { tamam: true; deger: Float64Array[] } | { tamam: false; hata: string } {
+  let ham: unknown;
   try {
-    hamDeger = o.hesapla(c, p, KITAPLIK);
+    ham = d.nesne.hesapla(c, p, KITAPLIK);
   } catch (err) {
     return { tamam: false, hata: `hesapla() hata verdi: ${mesaj(err)}` };
   }
-  const degerler = ciktiDogrula(hamDeger, c.length, ciktilar.deger.length);
-  if (!degerler.tamam) return { tamam: false, hata: degerler.hata };
+  return ciktiDogrula(ham, c.length, ciktiSayisi);
+}
 
+/**
+ * Kaynağı değerlendirip göstergeyi hesapla — tek sembol yolu.
+ *
+ * Derle + çıktılar + koştur bileşimi; davranışı önceki tek parça sürümle
+ * aynı (testleri değişmedi).
+ */
+export function gostergeCalistir(
+  kaynak: string,
+  c: Candles,
+  parametreler: Record<string, number>,
+): Sonuc {
+  const derli = gostergeDerle(kaynak);
+  if (!derli.tamam) return derli;
+  const p = parametreSinirla(derli.deger.ustveri, parametreler);
+  const ciktilar = gostergeCiktilari(derli.deger, p);
+  if (!ciktilar.tamam) return ciktilar;
+  const degerler = gostergeHesapla(derli.deger, c, p, ciktilar.deger.length);
+  if (!degerler.tamam) return degerler;
   return {
     tamam: true,
-    deger: { ustveri: ustveri.deger, ciktilar: ciktilar.deger, degerler: degerler.deger },
+    deger: { ustveri: derli.deger.ustveri, ciktilar: ciktilar.deger, degerler: degerler.deger },
+  };
+}
+
+/** Toplu koşturmanın sonucu: sembol başına SON BAR değerleri. */
+export interface TopluSonuc {
+  ustveri: KullaniciUstverisi;
+  ciktilar: CikisTanimi[];
+  /** sembol → çıktı sırasıyla son bar değeri (NaN olabilir). */
+  degerler: Record<string, number[]>;
+  /** sembol → o sembolde hesap neden düştü. Derleme hatası buraya girmez. */
+  hatalar: Record<string, string>;
+  /** Denenen sembol sayısı. */
+  sayi: number;
+}
+
+export type TopluSonucu = { tamam: true; deger: TopluSonuc } | { tamam: false; hata: string };
+
+/**
+ * GÖSTERGEYİ PİYASADA KOŞTUR — bir derleme, çok sembol.
+ *
+ * Radar için: her sembolün yalnızca SON BAR değeri lazım (bugün nerede?).
+ * Tam serileri geri taşımak 582 × 250 × çıktı sayısı kadar sayı olurdu;
+ * burada sembol başına birkaç sayı dönüyor.
+ *
+ * SEMBOL BAŞINA HATA TOPLU İŞİ DÜŞÜRMÜYOR. Kullanıcının kodu bir sembolde
+ * (örn. 33 barlık ISKUR'da dizi sınırı) patlayabilir; geri kalan 581 sembol
+ * için sonucu atmak yanlış olurdu. O sembol `hatalar`a yazılıyor, değeri NaN
+ * kalıyor — radar da NaN'ı "ölçülemedi" diye sayıyor. Derleme hatası ise
+ * TÜMÜNÜ düşürüyor: kod çalışmıyorsa hiçbir sembol için sonuç yok.
+ *
+ * `kesici` verilirse her seri önce ondan geçiyor (zaman makinesi: seriyi o
+ * güne kadar kes). Buraya bir tarih değil fonksiyon geliyor ki bu dosya
+ * paketten ve günlerden habersiz kalsın.
+ */
+export function gostergeTopluCalistir(
+  kaynak: string,
+  seriler: Iterable<readonly [string, Candles]>,
+  parametreler: Record<string, number>,
+  kesici?: (c: Candles) => Candles,
+): TopluSonucu {
+  const derli = gostergeDerle(kaynak);
+  if (!derli.tamam) return derli;
+  const p = parametreSinirla(derli.deger.ustveri, parametreler);
+  const ciktilar = gostergeCiktilari(derli.deger, p);
+  if (!ciktilar.tamam) return ciktilar;
+
+  const degerler: Record<string, number[]> = {};
+  const hatalar: Record<string, string> = {};
+  let sayi = 0;
+  for (const [sembol, ham] of seriler) {
+    sayi++;
+    const c = kesici ? kesici(ham) : ham;
+    if (c.length === 0) {
+      degerler[sembol] = ciktilar.deger.map(() => Number.NaN);
+      continue;
+    }
+    const r = gostergeHesapla(derli.deger, c, p, ciktilar.deger.length);
+    if (!r.tamam) {
+      hatalar[sembol] = r.hata;
+      degerler[sembol] = ciktilar.deger.map(() => Number.NaN);
+      continue;
+    }
+    degerler[sembol] = r.deger.map((dizi) => dizi[dizi.length - 1]);
+  }
+  return {
+    tamam: true,
+    deger: { ustveri: derli.deger.ustveri, ciktilar: ciktilar.deger, degerler, hatalar, sayi },
   };
 }
 

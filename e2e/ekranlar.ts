@@ -145,6 +145,71 @@ export const EKRANLAR: Ekran[] = [
   },
   {
     /*
+      KENDİ GÖSTERGEN PİYASADA. Ayrı giriş: varsayılan grafikte kullanıcı
+      göstergesi yok, yani dağılım satırı ve kullanıcı satırı hiçbir başka
+      denetimde çizilmiyor. Tam bu yüzeyde gerçek bir biçim kusuru bulundu
+      (ölçeği bilinmeyen sayıya "×" ekleniyordu); denetimsiz kalmamalı.
+
+      Kaynak `localStorage`a yazılıp sayfa yenileniyor — kullanıcının
+      göstergeyi kaydetmiş olduğu durum.
+    */
+    id: 'sembol:radar-kullanici',
+    ad: 'Sembol Masası — radar kendi göstergen',
+    url: 'v=sembol&s={SEMBOL}',
+    hazir: '.radar__dagilim',
+    ac: async (page) => {
+      await page.evaluate(() => {
+        const kaynak = `({
+  ad: 'Ortalama Farkı', kisa: 'OF', panel: 'ayri',
+  parametreler: [
+    { ad: 'kisa', etiket: 'Kısa', varsayilan: 10, min: 2, max: 200 },
+    { ad: 'uzun', etiket: 'Uzun', varsayilan: 50, min: 3, max: 400 },
+  ],
+  ciktilar: (p) => [{ ad: 'f', etiket: 'OF ' + p.kisa, tur: 'cizgi', token: 'accent', taban: 0 }],
+  hesapla: (c, p, lib) => [lib.fark(lib.ema(c.close, p.kisa), lib.ema(c.close, p.uzun))],
+})`;
+        localStorage.setItem(
+          'gosterge.kullanici.v1',
+          JSON.stringify([
+            {
+              id: 'kul:denetim1',
+              ad: 'Ortalama Farkı',
+              kisa: 'OF',
+              panel: 'ayri',
+              parametreler: [
+                { ad: 'kisa', etiket: 'Kısa', varsayilan: 10, min: 2, max: 200 },
+                { ad: 'uzun', etiket: 'Uzun', varsayilan: 50, min: 3, max: 400 },
+              ],
+              kaynak,
+            },
+          ]),
+        );
+        localStorage.setItem(
+          'masa.v1',
+          JSON.stringify({
+            indikatorler: [
+              {
+                ornekId: 'd1',
+                id: 'kul:denetim1',
+                parametreler: { kisa: 10, uzun: 50 },
+                gorunur: true,
+              },
+            ],
+          }),
+        );
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
+      await page.getByText('Grafikteki göstergeler').click();
+      await page.getByRole('button', { name: /OF ölçütlerini radardan ekle/ }).click();
+      await page.waitForSelector('.radar__dagilim', { timeout: 60_000 });
+    },
+  },
+  {
+    /*
       ZAMAN MAKİNESİ. Ayrı giriş: varsayılan hâli "bugün" ve katlı kapalı;
       kaydırıcı geçmişe alınmadan özet cümlesi ve ileri getiri sütunu hiç
       çizilmiyor. Bu dosyanın var olma sebebi tam da bu tür yüzeyler.

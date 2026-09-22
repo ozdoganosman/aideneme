@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyCandles, type Candles } from '../core/data/types';
-import { gostergeCalistir } from './gostergeCalistir';
+import { gostergeCalistir, gostergeDerle, gostergeTopluCalistir } from './gostergeCalistir';
 
 function seri(n: number): Candles {
   const c = emptyCandles(n);
@@ -126,5 +126,97 @@ describe('kullanıcı göstergesi çalıştırma', () => {
       (gostergeCalistir(kaynak, c, {}) as { deger: { ciktilar: { etiket: string }[] } }).deger
         .ciktilar[0].etiket,
     ).toBe('sayac 1');
+  });
+});
+
+describe('toplu koşturma — bir derleme, çok sembol', () => {
+  const seriler = (): Array<readonly [string, Candles]> => [
+    ['A', seri(60)],
+    ['B', seri(120)],
+    ['C', seri(30)],
+  ];
+
+  it('her sembol için SON BAR değerini veriyor, tek sembol yoluyla aynı', () => {
+    const toplu = gostergeTopluCalistir(BASIT, seriler(), {});
+    expect(toplu.tamam).toBe(true);
+    if (!toplu.tamam) return;
+    expect(toplu.deger.sayi).toBe(3);
+    for (const [ad, c] of seriler()) {
+      const tek = gostergeCalistir(BASIT, c, {});
+      expect(tek.tamam).toBe(true);
+      if (!tek.tamam) return;
+      const beklenen = tek.deger.degerler.map((d) => d[d.length - 1]);
+      expect(toplu.deger.degerler[ad]).toEqual(beklenen);
+    }
+  });
+
+  it('bir sembolde patlayan kod ötekileri DÜŞÜRMÜYOR; hata sembole yazılıyor', () => {
+    // Kullanıcı kodu kısa seride dizi sınırını aşabilir; geri kalan sonuçları
+    // atmak yanlış olurdu. O sembol NaN + hata, ötekiler sayı.
+    const PATLAK = `({
+      ad: 'Patlak', kisa: 'PT', parametreler: [],
+      hesapla(c) {
+        if (c.length < 50) throw new Error('kısa seri');
+        const out = new Float64Array(c.length).fill(1);
+        return [out];
+      },
+    })`;
+    const r = gostergeTopluCalistir(PATLAK, seriler(), {});
+    expect(r.tamam).toBe(true);
+    if (!r.tamam) return;
+    expect(r.deger.degerler.A).toEqual([1]);
+    expect(r.deger.degerler.B).toEqual([1]);
+    expect(Number.isNaN(r.deger.degerler.C[0])).toBe(true);
+    expect(r.deger.hatalar.C).toMatch(/kısa seri/);
+    expect(Object.keys(r.deger.hatalar)).toEqual(['C']);
+  });
+
+  it('DERLEME hatası tümünü düşürüyor — kod çalışmıyorsa hiçbir sembol için sonuç yok', () => {
+    const r = gostergeTopluCalistir('({ bu bir nesne değil', seriler(), {});
+    expect(r.tamam).toBe(false);
+  });
+
+  it('kesici verilirse her seri önce kesiliyor (zaman makinesi)', () => {
+    // Kesim: ilk 10 bar. Son bar değeri kesik serinin son barından gelmeli.
+    const kes = (c: Candles): Candles => ({
+      time: c.time.subarray(0, 10),
+      open: c.open.subarray(0, 10),
+      high: c.high.subarray(0, 10),
+      low: c.low.subarray(0, 10),
+      close: c.close.subarray(0, 10),
+      volume: c.volume.subarray(0, 10),
+      length: 10,
+    });
+    const KAPANIS = `({ ad: 'K', kisa: 'K', parametreler: [], hesapla(c) { return [c.close]; } })`;
+    const r = gostergeTopluCalistir(KAPANIS, seriler(), {}, kes);
+    expect(r.tamam).toBe(true);
+    if (!r.tamam) return;
+    const a = seri(60);
+    expect(r.deger.degerler.A[0]).toBe(a.close[9]);
+  });
+
+  it('kesim sonrası boş kalan seri NaN — sayı uydurmuyor', () => {
+    const bos = (): Candles => ({
+      time: new Float64Array(0),
+      open: new Float64Array(0),
+      high: new Float64Array(0),
+      low: new Float64Array(0),
+      close: new Float64Array(0),
+      volume: new Float64Array(0),
+      length: 0,
+    });
+    const r = gostergeTopluCalistir(BASIT, seriler(), {}, () => bos());
+    expect(r.tamam).toBe(true);
+    if (!r.tamam) return;
+    for (const ad of ['A', 'B', 'C']) expect(r.deger.degerler[ad].every(Number.isNaN)).toBe(true);
+    expect(Object.keys(r.deger.hatalar)).toEqual([]);
+  });
+
+  it('derleme bir kez: derli nesne yeniden kullanılabiliyor', () => {
+    const d = gostergeDerle(BASIT);
+    expect(d.tamam).toBe(true);
+    if (!d.tamam) return;
+    expect(d.deger.ustveri.kisa).toBeTruthy();
+    expect(typeof d.deger.nesne.hesapla).toBe('function');
   });
 });
