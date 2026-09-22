@@ -36,7 +36,17 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
     // Kimlik METİNDEN değil ÖĞEDEN türetiliyor: iki farklı onay kutusu aynı
     // metni taşıyabilir (adları sarmalayan <label>'dan gelir) ve metne bakan
     // bir ölçüt bunu "odak sıkıştı" sanır — ilk yazımda tam bu oldu.
+    //
+    // Sayfanın sonuna varınca odak BİR KEZ başa sarabilir; bu tuzak değil,
+    // tarayıcının olağan davranışı. Önce ilk `body`de duruluyordu: sayfanın
+    // dibindeki bir yüzey tıklanarak açılınca (anomalinin karnesi) Tab o
+    // noktadan başlıyor ve altında az öğe kalıyordu — sentetik veride 5 durak,
+    // ölçüt "odaklanabilir öğe yok" diye düşüyordu (CI'da görüldü). İkinci
+    // `body` = bütün sayfa dolaşıldı.
     const stops: number[] = [];
+    /** Tur başına duraklar: ilerleme ölçütü her tur için ayrı. */
+    const turlar: number[][] = [[]];
+    let sarma = 0;
     for (let i = 0; i < 40; i++) {
       await page.keyboard.press('Tab');
       const id = await page.evaluate(() => {
@@ -45,16 +55,25 @@ for (const { ad: name, url: query, hazir: ready, ac } of SCREENS) {
         const all = Array.from(document.querySelectorAll<HTMLElement>('*'));
         return all.indexOf(el);
       });
-      if (id < 0) break;
+      if (id < 0) {
+        if (++sarma > 1) break;
+        turlar.push([]);
+        continue;
+      }
       stops.push(id);
+      turlar[turlar.length - 1].push(id);
     }
 
     expect(stops.length, 'odaklanabilir öğe bulunamadı').toBeGreaterThan(5);
     // Aynı ÖĞEDE sıkışma: art arda on kez aynı öğe = tuzak.
     const stuck = stops.some((s, i) => i >= 9 && stops.slice(i - 9, i + 1).every((x) => x === s));
     expect(stuck, 'odak aynı öğede sıkıştı').toBe(false);
-    // Duraklar ilerlemeli: en az yarısı birbirinden farklı olmalı.
-    expect(new Set(stops).size).toBeGreaterThan(stops.length / 2);
+    // Duraklar ilerlemeli: HER TURDA en az yarısı birbirinden farklı olmalı.
+    // Tur başına, çünkü başa saran ikinci tur ilk turun öğelerini doğal
+    // olarak yeniden geziyor (19 öğeli Portföy'de iki tur = 39 durak, 19 farklı).
+    for (const tur of turlar) {
+      if (tur.length > 0) expect(new Set(tur).size).toBeGreaterThan(tur.length / 2);
+    }
   });
 }
 
