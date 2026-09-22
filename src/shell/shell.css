@@ -2375,6 +2375,31 @@
   line-height: 1.4;
 }
 
+/* PARA AKIŞI OYNATICISI — haritanın hemen üstünde: [◀ oynat] [kaydırıcı] [tarih]
+   Kaydırıcı esner, düğme ve tarih içeriğince kalır. */
+.pulse__oynatici {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.pulse__oynatici input[type='range'] {
+  width: 100%;
+  min-width: 0;
+}
+.pulse__oynatici-tarih {
+  font-variant-numeric: tabular-nums;
+  min-width: 7.5rem;
+  text-align: right;
+}
+.pulse__oynatici-not {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
 /* Kapsamda olup ölçülemeyen semboller — "neden listemdeki hisse yok?"
    sorusunun cevabı. `radar__olculemedi` ile aynı yerleşim: ikisi de dar
    panelde tek satırlık açıklama. */

@@ -4,6 +4,7 @@ import type { Candles } from '../core/data/types';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
 import { gostergeDegerleri } from '../core/screen/indikatorOlcutHesap';
 import { zamanMakinesiSatiri } from '../core/screen/zamanMakinesi';
+import { akisGunleriHesapla } from '../core/screen/akisGunleri';
 import { kesZaman } from '../core/data/kes';
 import { DAY_SECONDS } from '../core/data/pack';
 import {
@@ -52,6 +53,13 @@ export function createHandler() {
             if (row) rows.push(row);
           }
           return { id: req.id, ok: true, type: 'screen', rows, ms: now() - started };
+        }
+
+        case 'akisGunleri': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const a = akisGunleriHesapla(bundle, req.gun);
+          return { id: req.id, ok: true, type: 'akisGunleri', ...a, ms: now() - started };
         }
 
         case 'zamanMakinesi': {

@@ -1,5 +1,6 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
+import type { AkisGunleri } from '../core/screen/akisGunleri';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
 import type { Parametreler } from '../core/indicators/kayit';
 import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
@@ -178,10 +179,29 @@ export interface ZamanMakinesiResponse {
   ms: number;
 }
 
+/**
+ * Para akışı oynatıcısı: son `gun` günün kareleri (sembol × gün, hizalı).
+ * Tek çağrı, tipli diziler — 584 × 60 × 2 × 4 bayt ≈ 280 KB.
+ */
+export interface AkisGunleriRequest {
+  id: number;
+  type: 'akisGunleri';
+  market: string;
+  gun: number;
+}
+
+export interface AkisGunleriResponse extends AkisGunleri {
+  id: number;
+  ok: true;
+  type: 'akisGunleri';
+  ms: number;
+}
+
 export type WorkerRequest =
   | InitRequest
   | GostergeOlcutRequest
   | ZamanMakinesiRequest
+  | AkisGunleriRequest
   | ScreenRequest
   | CorrelateRequest
   | PulseRequest
@@ -270,6 +290,7 @@ export interface SectorMatchResponse {
 export type WorkerResponse =
   | InitResponse
   | GostergeOlcutResponse
+  | AkisGunleriResponse
   | ZamanMakinesiResponse
   | SectorMatchResponse
   | SymbolResponse

@@ -74,6 +74,27 @@ export const EKRANLAR: Ekran[] = [
       await page.getByLabel('Dönem').selectOption('21');
     },
   },
+  {
+    /*
+      PARA AKIŞI OYNATICISI. Kaydırıcı geçmişe alınmadan tarih etiketi
+      "bugün" ve harita bugünkü kare; geçmiş kare yüzeyi ancak kaydırınca
+      çiziliyor.
+    */
+    id: 'nabiz:oynatici',
+    ad: 'Nabız — para akışı oynatıcısı',
+    url: 'v=nabiz',
+    hazir: '.pulse__oynatici-tarih',
+    ac: async (page) => {
+      await page.waitForSelector('.pulse__oynatici', { timeout: 90_000 });
+      await page.getByLabel('Para akışı günü').fill('20');
+      await page.waitForFunction(
+        () =>
+          !(document.querySelector('.pulse__oynatici-tarih')?.textContent ?? '').includes('bugün'),
+        undefined,
+        { timeout: 30_000 },
+      );
+    },
+  },
   { id: 'tarayici', ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
   { id: 'sembol', ad: 'Sembol Masası', url: 'v=sembol&s={SEMBOL}', hazir: '.desk__chart' },
   {

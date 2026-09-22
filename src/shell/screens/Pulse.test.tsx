@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { PulseRow } from '../../core/screen/pulse';
+import type { AkisGunleri } from '../../core/screen/akisGunleri';
 
 const pulseFn = vi.fn();
 const correlateFn = vi.fn();
+const akisFn = vi.fn();
 const FAKE_ANALYSIS = {
-  client: { pulse: pulseFn, correlate: correlateFn, size: 2 },
+  client: { pulse: pulseFn, correlate: correlateFn, akisGunleri: akisFn, size: 2 },
   symbols: ['AAA', 'BBB', 'CCC', 'DDD'],
   bars: 250,
   status: 'ready' as const,
@@ -54,6 +56,7 @@ const STATE = { v: 'nabiz', m: 'bist', s: '', tf: 'D', cmp: '' };
 beforeEach(() => {
   vi.clearAllMocks();
   sectorsFn.mockResolvedValue(null); // varsayılan: sınıflandırma yok
+  akisFn.mockResolvedValue(null); // varsayılan: kare yok → oynatıcı yok
   const rows = [
     row('AAA', 4, 5000),
     row('BBB', 1, 1000),
@@ -438,5 +441,182 @@ describe('Nabız — sektör rotasyonu', () => {
     // Sahte istemci `windows` döndürmüyor (varsayılan mock).
     await waitFor(() => expect(screen.getByText(/Ağırlıklı değişim/)).toBeInTheDocument());
     expect(screen.queryByText(/para en çok/i)).toBeNull();
+  });
+});
+
+/*
+ * PARA AKIŞI OYNATICISI.
+ *
+ * Sektör haritası tek kareydi: bugün. "Para hangi endüstriye göçüyor?" bir
+ * hareket sorusu; tek kare hareketi göstermez. Kareler worker'dan gün eksenine
+ * hizalı geliyor; arayüz onları kaydırıcıyla gezdiriyor ya da oynatıyor.
+ */
+describe('Nabız — para akışı oynatıcısı', () => {
+  const SEKTORLER = {
+    of: { AAA: 'Banka', BBB: 'Banka', CCC: 'Çimento' },
+    source: 'test',
+    generated: 1,
+  };
+
+  /**
+   * Üç kare (gün 20000…20002; son kare bugün). Son kare, `pulseFn`in
+   * bugünkü satırlarıyla BİREBİR aynı: AAA 5000/+4, BBB 1000/+1, CCC 9000/−2,
+   * DDD 100/−1 (sektörü yok). İlk karede para tersine: Banka 10 000,
+   * Çimento 100; DDD ilk iki gün işlem görmüyor (değer 0, değişim NaN).
+   */
+  function kareler(): AkisGunleri {
+    const N = 3;
+    const deger = new Float32Array(4 * N);
+    const degisim = new Float32Array(4 * N).fill(Number.NaN);
+    const yaz = (s: number, d: number, v: number, c: number) => {
+      deger[s * N + d] = v;
+      degisim[s * N + d] = c;
+    };
+    // AAA
+    yaz(0, 0, 9000, 5);
+    yaz(0, 1, 7000, 2);
+    yaz(0, 2, 5000, 4);
+    // BBB
+    yaz(1, 0, 1000, 1);
+    yaz(1, 1, 1000, 0);
+    yaz(1, 2, 1000, 1);
+    // CCC
+    yaz(2, 0, 100, -2);
+    yaz(2, 1, 4000, -1);
+    yaz(2, 2, 9000, -2);
+    // DDD yalnızca bugün
+    yaz(3, 2, 100, -1);
+    return {
+      gunler: Int32Array.from([20000, 20001, 20002]),
+      semboller: ['AAA', 'BBB', 'CCC', 'DDD'],
+      deger,
+      degisim,
+    };
+  }
+
+  function haritaAlani(ad: string): number {
+    const kutular = [...document.querySelectorAll<HTMLElement>('.flowmap .flowmap__cell')];
+    const kutu = kutular.find((k) => k.textContent?.includes(ad));
+    if (!kutu) throw new Error(`haritada ${ad} yok`);
+    return (parseFloat(kutu.style.width) * parseFloat(kutu.style.height)) / 10000;
+  }
+
+  beforeEach(() => {
+    sectorsFn.mockResolvedValue(SEKTORLER);
+    akisFn.mockResolvedValue(kareler());
+  });
+
+  it('kaydırıcı geçmiş güne alınca harita o kareye geçiyor, tablo bugünde kalıyor', async () => {
+    render(<Pulse state={STATE} push={push} />);
+    const kaydirici = await screen.findByLabelText('Para akışı günü');
+    expect(akisFn).toHaveBeenCalledWith('bist', expect.any(Number));
+    // Başlangıç bugün: harita bugünkü tabloyla aynı paylaşımda.
+    expect(document.querySelector('.pulse__oynatici-tarih')).toHaveTextContent('bugün');
+    // Banka 6000 / (6000 + 9000 + 100)
+    expect(haritaAlani('Banka')).toBeCloseTo(6000 / 15100, 3);
+
+    fireEvent.change(kaydirici, { target: { value: '0' } });
+    await waitFor(() =>
+      expect(document.querySelector('.pulse__oynatici-tarih')).toHaveTextContent(/2 gün önce/),
+    );
+    // İlk karede para bankada: 10 000 / 10 100.
+    expect(haritaAlani('Banka')).toBeCloseTo(10000 / 10100, 3);
+    // Harita geçmişi gösterirken TABLO bugünü göstermeye devam ediyor ve bu
+    // açıkça söyleniyor — iki farklı günü aynı ekranda sessizce koymak yanlış.
+    expect(screen.getByText(/alttaki tablo bugünü/)).toBeInTheDocument();
+    expect(within(akisTablosu()).getByText('Banka')).toBeInTheDocument();
+    // Haritanın etiketi de günü taşıyor: ekran okuyucu hangi günü duyduğunu bilsin.
+    expect(screen.getByRole('list', { name: /para akışı haritası.*gün/ })).toBeInTheDocument();
+  });
+
+  it('bugünkü kare tablodaki sayıyla birebir — iki ayrı toplama semantiği yok', async () => {
+    render(<Pulse state={STATE} push={push} />);
+    await screen.findByLabelText('Para akışı günü');
+    // Kareler yüklenmeden ÖNCEKİ harita `pulse` satırlarından; yüklenince son
+    // kareden. İkisi aynı alanı vermeli: Banka 6000/15100, Çimento 9000/15100
+    // (DDD sektörsüz ama paydada — bugünkü tabloda da öyle).
+    expect(haritaAlani('Banka')).toBeCloseTo(6000 / 15100, 3);
+    expect(haritaAlani('Çimento')).toBeCloseTo(9000 / 15100, 3);
+    // Ağırlıklı değişim de aynı: Banka (5000×4 + 1000×1)/6000 = 3,5.
+    expect(
+      screen.getByRole('button', { name: /^Banka: işlem değeri payı, ağırlıklı değişim \+%3,50/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('oynat: baştan başlıyor, kare kare ilerliyor, sonda kendi duruyor', async () => {
+    const user = userEvent.setup();
+    render(<Pulse state={STATE} push={push} />);
+    await screen.findByLabelText('Para akışı günü');
+    await user.click(screen.getByRole('button', { name: 'Para akışını oynat' }));
+    // Sondayken basıldı → baştan.
+    expect(document.querySelector('.pulse__oynatici-tarih')).toHaveTextContent(/2 gün önce/);
+    expect(screen.getByRole('button', { name: 'Oynatmayı durdur' })).toBeInTheDocument();
+    await waitFor(
+      () =>
+        expect(document.querySelector('.pulse__oynatici-tarih')).toHaveTextContent(/1 gün önce/),
+      { timeout: 2000 },
+    );
+    await waitFor(
+      () => expect(document.querySelector('.pulse__oynatici-tarih')).toHaveTextContent('bugün'),
+      { timeout: 2000 },
+    );
+    // Sonda durdu: döngü yok, düğme yine "oynat".
+    expect(screen.getByRole('button', { name: 'Para akışını oynat' })).toBeInTheDocument();
+  });
+
+  it('kaydırıcıya dokunmak oynatmayı durduruyor', async () => {
+    const user = userEvent.setup();
+    render(<Pulse state={STATE} push={push} />);
+    const kaydirici = await screen.findByLabelText('Para akışı günü');
+    await user.click(screen.getByRole('button', { name: 'Para akışını oynat' }));
+    fireEvent.change(kaydirici, { target: { value: '1' } });
+    expect(screen.getByRole('button', { name: 'Para akışını oynat' })).toBeInTheDocument();
+    expect(document.querySelector('.pulse__oynatici-tarih')).toHaveTextContent(/1 gün önce/);
+  });
+
+  it('hareket azaltma tercihi: otomatik oynatma kapalı, kaydırıcı çalışıyor', async () => {
+    const asil = window.matchMedia;
+    window.matchMedia = ((q: string) => ({
+      ...asil(q),
+      matches: q.includes('prefers-reduced-motion'),
+    })) as typeof window.matchMedia;
+    try {
+      render(<Pulse state={STATE} push={push} />);
+      const kaydirici = await screen.findByLabelText('Para akışı günü');
+      expect(screen.getByRole('button', { name: 'Para akışını oynat' })).toBeDisabled();
+      expect(screen.getByText(/Hareket azaltma tercihin açık/)).toBeInTheDocument();
+      fireEvent.change(kaydirici, { target: { value: '0' } });
+      await waitFor(() =>
+        expect(document.querySelector('.pulse__oynatici-tarih')).toHaveTextContent(/2 gün önce/),
+      );
+    } finally {
+      window.matchMedia = asil;
+    }
+  });
+
+  it('rotasyon döneminde oynatıcı yok: iki zaman ekseni üst üste binmesin', async () => {
+    const user = userEvent.setup();
+    render(<Pulse state={STATE} push={push} />);
+    await screen.findByLabelText('Para akışı günü');
+    await user.selectOptions(screen.getByLabelText('Dönem'), '21');
+    await waitFor(() => expect(screen.queryByLabelText('Para akışı günü')).toBeNull());
+  });
+
+  it('kareler gelmezse oynatıcı çizilmiyor, harita bugünle kalıyor', async () => {
+    akisFn.mockRejectedValue(new Error('yok'));
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(akisFn).toHaveBeenCalled());
+    await waitFor(() => expect(document.querySelector('.flowmap')).not.toBeNull());
+    expect(screen.queryByLabelText('Para akışı günü')).toBeNull();
+    expect(haritaAlani('Banka')).toBeCloseTo(6000 / 15100, 3);
+  });
+
+  it('sınıflandırma yokken kare istenmiyor — sektör görünümü de yok', async () => {
+    sectorsFn.mockResolvedValue(null);
+    render(<Pulse state={STATE} push={push} />);
+    await waitFor(() => expect(pulseFn).toHaveBeenCalled());
+    await waitFor(() => expect(document.querySelector('.flowmap')).not.toBeNull());
+    expect(screen.getByText(/davranış grupları/)).toBeInTheDocument();
+    expect(akisFn).not.toHaveBeenCalled();
   });
 });

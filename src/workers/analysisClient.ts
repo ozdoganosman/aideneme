@@ -3,6 +3,7 @@ import type { SektorEslesmesi } from '../core/screen/sectorIndices';
 import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
 import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
+import type { AkisGunleri } from '../core/screen/akisGunleri';
 import type { SymbolResponse, CorrelateResponse, PulseResponse, WorkerResponse } from './protocol';
 
 /**
@@ -144,6 +145,15 @@ export class AnalysisClient {
       ms = Math.max(ms, ok.ms);
     }
     return { rows, ms };
+  }
+
+  /** Para akışı oynatıcısı: son `gun` günün sembol × gün kareleri (tek worker). */
+  async akisGunleri(market: Market, gun: number): Promise<AkisGunleri & { ms: number }> {
+    if (!this.loaded.has(market)) throw new Error(`${market}: paket yüklenmedi`);
+    const res = unwrap(await this.pool.run((id) => ({ id, type: 'akisGunleri', market, gun })));
+    if (res.type !== 'akisGunleri') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = res;
+    return rest;
   }
 
   /**
