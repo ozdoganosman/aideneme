@@ -32,10 +32,19 @@ export interface SectorFlow extends Omit<GroupFlow, 'cluster'> {
 
 export const UNCLASSIFIED = 'Sınıflandırılmamış';
 
-export function flowBySector(rows: PulseRow[], map: SectorMap | null): SectorFlow[] {
+/**
+ * Parametre `Pick<PulseRow, …>`: fonksiyon yalnızca bu üç alanı okuyor. Para
+ * akışı oynatıcısı her kareyi AYNI fonksiyondan geçiriyor; tipi genişletmek
+ * ikinci bir toplama semantiği doğmasını engelliyor. `PulseRow` bu tipi
+ * sağlıyor, çağıranlar değişmedi.
+ */
+export function flowBySector(
+  rows: Pick<PulseRow, 'symbol' | 'value' | 'changePct'>[],
+  map: SectorMap | null,
+): SectorFlow[] {
   if (!map) return [];
 
-  const groups = new Map<string, PulseRow[]>();
+  const groups = new Map<string, Pick<PulseRow, 'symbol' | 'value' | 'changePct'>[]>();
   for (const row of rows) {
     // Sınıflandırması olmayan sembol GİZLENMEZ: ayrı bir grupta toplanır,
     // yoksa toplam işlem değeri sessizce küçülür ve paylar şişer.

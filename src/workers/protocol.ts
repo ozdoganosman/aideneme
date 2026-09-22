@@ -1,5 +1,7 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
+import type { AkisGunleri } from '../core/screen/akisGunleri';
+import type { AnomaliSonucu } from '../core/screen/anomali';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
 import type { Parametreler } from '../core/indicators/kayit';
 import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
@@ -144,9 +146,83 @@ export interface GostergeOlcutResponse {
   ms: number;
 }
 
+/**
+ * Filtre zaman makinesi: taramayı GEÇMİŞ bir güne kurar.
+ *
+ * `geri` ortak gün ekseninde kaç gün geriye gidileceği (0 = bugün). Kesim
+ * bar indeksiyle değil TARİHLE yapılıyor: her sembol kendi sonlu
+ * kapanışlarına sıkıştırılmış olduğu için "sondan k. bar" sembolden sembole
+ * farklı takvim gününe düşer (bkz. core/data/kes.ts).
+ *
+ * Gösterge ölçütleri de aynı kesik seriden hesaplanıyor; ileri getiri
+ * `ileriGetiri` ölçütü olarak satıra yazılıyor ki radar onu sütun ve
+ * sıralama olarak bedavaya alsın.
+ */
+export interface ZamanMakinesiRequest {
+  id: number;
+  type: 'zamanMakinesi';
+  market: string;
+  params: ScreenParams;
+  /** Ortak eksende kaç gün geri; 0 = bugün. */
+  geri: number;
+  istekler?: OlcutIstegi[];
+  from: number;
+  to: number;
+}
+
+export interface ZamanMakinesiResponse {
+  id: number;
+  ok: true;
+  type: 'zamanMakinesi';
+  rows: ScreenRow[];
+  /** Kesim gününün epoch günü — arayüz tarihi buradan yazıyor. */
+  gun: number;
+  ms: number;
+}
+
+/**
+ * Para akışı oynatıcısı: son `gun` günün kareleri (sembol × gün, hizalı).
+ * Tek çağrı, tipli diziler — 584 × 60 × 2 × 4 bayt ≈ 280 KB.
+ */
+export interface AkisGunleriRequest {
+  id: number;
+  type: 'akisGunleri';
+  market: string;
+  gun: number;
+}
+
+export interface AkisGunleriResponse extends AkisGunleri {
+  id: number;
+  ok: true;
+  type: 'akisGunleri';
+  ms: number;
+}
+
+/**
+ * Anomali radarı: bugün kendi alışkanlığının dışına çıkan semboller.
+ * Sektör haritası verilmezse kopma ve korelasyon sinyalleri ölçülemez ve
+ * öyle sayılır.
+ */
+export interface AnomaliRequest {
+  id: number;
+  type: 'anomali';
+  market: string;
+  sektorler: Record<string, string> | null;
+}
+
+export interface AnomaliResponse extends AnomaliSonucu {
+  id: number;
+  ok: true;
+  type: 'anomali';
+  ms: number;
+}
+
 export type WorkerRequest =
   | InitRequest
+  | AnomaliRequest
   | GostergeOlcutRequest
+  | ZamanMakinesiRequest
+  | AkisGunleriRequest
   | ScreenRequest
   | CorrelateRequest
   | PulseRequest
@@ -234,7 +310,10 @@ export interface SectorMatchResponse {
 
 export type WorkerResponse =
   | InitResponse
+  | AnomaliResponse
   | GostergeOlcutResponse
+  | AkisGunleriResponse
+  | ZamanMakinesiResponse
   | SectorMatchResponse
   | SymbolResponse
   | ScreenResponse

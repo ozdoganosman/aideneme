@@ -201,4 +201,78 @@ test.describe('Sembol Masası — kendi göstergen', () => {
     await page.getByRole('button', { name: /İndikatörler/ }).click();
     await expect(page.locator('.ind__kullanici')).toContainText('Ortalama Farkı');
   });
+
+  test('kendi göstergen PİYASADA koşuyor: radara ekle → dağılım → eşikle süz', async ({ page }) => {
+    /*
+      Bu yol yalnızca burada sınanabiliyor: jsdom'da Worker yok, birim
+      testleri korumalı worker'ı taklit ediyor. Burada GERÇEK worker, GERÇEK
+      paket (3 MB kopya), gerçek derleme ve 580+ sembolde gerçek koşturma var.
+
+      Ölçüldü (Node, örnek gösterge): 584 sembol 2,7 ms. Tarayıcıda buna
+      worker kurulumu ve paket aktarımı ekleniyor; sınır 10 s.
+    */
+    const hatalar: string[] = [];
+    page.on('pageerror', (e) => hatalar.push(e.message));
+
+    await page.goto(`/next.html?m=bist&v=sembol&s=${SEMBOL}`, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.chart-host canvas', { timeout: 90_000 });
+
+    // Göstergeyi yaz, kaydet, grafiğe ekle (önceki testle aynı yol).
+    await page.getByRole('button', { name: /İndikatörler/ }).click();
+    await page.getByRole('button', { name: /Yeni gösterge yaz/ }).click();
+    await page.waitForSelector('#gosterge-kaynak', { timeout: 20_000 });
+    await page.fill('#gosterge-kaynak', KOD);
+    await page.getByRole('button', { name: 'Dene' }).click();
+    await expect(page.locator('.gosterge__tamam')).toContainText('Ortalama Farkı');
+    await page.getByRole('button', { name: 'Kaydet' }).click();
+    await page.getByRole('button', { name: /İndikatörler/ }).click();
+    await page.locator('.ind__kullanici .ind__ekle').first().click();
+    await page.keyboard.press('Escape');
+
+    // Radar, tüm piyasa, filtre paneli, gösterge bölümü.
+    await page.getByText('Radar', { exact: true }).first().click();
+    await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+    await page.getByLabel('Kapsam').selectOption('piyasa');
+    await page.getByRole('button', { name: /^Filtre paneli/ }).click();
+    await page.getByText('Grafikteki göstergeler').click();
+
+    // Eski not GİTMİŞ olmalı; yerine ekle düğmesi.
+    await expect(page.getByText(/radarda ölçülemiyor/)).toHaveCount(0);
+    await page.getByRole('button', { name: /OF ölçütlerini radardan ekle/ }).click();
+
+    /*
+      Dağılım BÜTÜN evrende olmalı. Sayıyı sabit yazmak (">500") YANLIŞTI:
+      gerçek BIST 584 sembol ama CI'ın sentetik seti 200 — test orada
+      düşüyordu. Evrenin büyüklüğünü ekranın kendisinden okuyoruz ("Radardaki
+      N sembolden…") ve dağılımın en az %90'ını kapsadığını istiyoruz; %100
+      değil, çünkü kısa geçmişli birkaç sembolde gösterge ölçülemez. Evren de
+      gerçekten piyasa olmalı (≥ 100), yoksa "piyasa" kapsamı seçilmemiştir.
+    */
+    const evrenMetni = (await page.locator('.radar__sayac').getAttribute('title')) ?? '';
+    const evren = Number(evrenMetni.match(/Radardaki (\d+) sembolden/)?.[1] ?? 0);
+    expect(evren, `evren: "${evrenMetni}"`).toBeGreaterThanOrEqual(100);
+    const dagilim = page.locator('.radar__dagilim').first();
+    await expect(dagilim).toBeVisible({ timeout: 30_000 });
+    const metin = (await dagilim.innerText()).replace(/\s+/g, ' ');
+    const n = Number(metin.match(/^(\d+) sembolde/)?.[1] ?? 0);
+    expect(n, `dağılım sembol sayısı: "${metin}" / evren ${evren}`).toBeGreaterThanOrEqual(
+      Math.floor(evren * 0.9),
+    );
+    expect(metin).toMatch(/medyan/);
+    // Ondalık VİRGÜL. `\d\.\d` YANLIŞTI: Türkçede nokta BİNLİK ayırıcı ("6.425,66")
+    // ve o kalıp doğru sayıyı yakalıyordu. bicim.spec ile aynı ondalık kalıbı.
+    expect(metin).not.toMatch(/(?<![.\d])\d+\.\d{1,2}(?![.\d])/);
+    // Ölçek bildirilmedi → birim eki YOK: "fiyat farkı"na "×" yazmak yanlış bir iddia.
+    expect(metin).not.toMatch(/×/);
+
+    // Eşik: 0'dan büyük → kısa EMA uzunun üstünde olan hisseler. Tablo daralmalı.
+    const onceki = await page.locator('.radar__tablo tbody tr').count();
+    await page.getByLabel(/^OF \d+ en az$/).fill('0');
+    await page.waitForFunction(
+      (o) => document.querySelectorAll('.radar__tablo tbody tr').length < o,
+      onceki,
+      { timeout: 30_000 },
+    );
+    expect(hatalar, 'sayfa hatası').toEqual([]);
+  });
 });

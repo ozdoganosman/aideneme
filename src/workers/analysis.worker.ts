@@ -7,8 +7,14 @@ const handle = createHandler();
 
 self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const response = handle(event.data);
-  // Korelasyon matrisi büyük olabilir → kopyalamadan aktar.
-  const transfer =
-    response.ok && response.type === 'correlate' ? [response.matrix.buffer] : undefined;
+  // Büyük tipli diziler kopyalanmadan AKTARILIYOR: korelasyon matrisi ve
+  // para akışı karelerinin sembol × gün tamponları.
+  const transfer = !response.ok
+    ? undefined
+    : response.type === 'correlate'
+      ? [response.matrix.buffer]
+      : response.type === 'akisGunleri'
+        ? [response.deger.buffer, response.degisim.buffer, response.gunler.buffer]
+        : undefined;
   (self as unknown as Worker).postMessage(response, { transfer });
 };

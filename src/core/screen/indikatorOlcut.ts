@@ -72,10 +72,12 @@ export function gostergeOlcutuMu(id: string): boolean {
  * kullanıcı aynı ölçütü listede iki kez görmemeli ve worker onu iki kez
  * hesaplamamalı.
  *
- * Kullanıcının kendi yazdığı göstergeler (`kul:` önekli) BURAYA GİRMİYOR;
- * onlar korumalı bir worker'da sembol başına ayrı çağrıyla koşuyor ve 600
- * sembol için bu yol pratik değil. Arayüz bunu sessizce atlamıyor, yazıyla
- * söylüyor.
+ * Kullanıcının kendi yazdığı göstergeler (`kul:` önekli) BURAYA GİRMİYOR —
+ * ama artık radara giriyorlar, başka kapıdan: `kullaniciOlcut.ts`. Sebep
+ * yapısal: burada ölçüt kimliği tanımdan ÖNCEDEN türetiliyor, kullanıcı
+ * göstergesinde ise çıktıları kodun kendisi üretiyor, yani kimlik ancak kod
+ * koştuktan sonra biliniyor. (Bu yorumun eski hâli "600 sembol için pratik
+ * değil" diyordu; ölçüldü ve yanlış çıktı — bir derlemeyle 584 sembol 2,7 ms.)
  */
 export function gostergeOlcutleri(
   ornekler: { id: string; parametreler: Parametreler }[],

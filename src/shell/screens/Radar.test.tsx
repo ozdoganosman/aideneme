@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { emptyCandles, type Candles } from '../../core/data/types';
 import { DAY_SECONDS } from '../../core/data/pack';
@@ -20,10 +20,39 @@ const sectorsFn = vi.fn();
 vi.mock('../../data-client/sectors', () => ({
   sectorsClient: { map: (...a: unknown[]) => sectorsFn(...a) },
 }));
+/**
+ * Korumalı worker taklit; HESAP GERÇEK: `gostergeTopluCalistir` aynı
+ * serilerde koşuyor, yani test dağılım sayısının doğruluğunu da sınıyor.
+ * Worker'ın kendisi jsdom'da kurulamaz; taklit edilen yalnızca taşıma.
+ */
+const topluFn = vi.fn(
+  async (
+    kaynak: string,
+    _paket: ArrayBuffer,
+    parametreler: Record<string, number>,
+    tCut?: number,
+  ) => {
+    const kes = tCut === undefined ? undefined : (c: Candles) => kesZaman(c, tCut);
+    return gostergeTopluCalistir(kaynak, Object.entries(SERILER), parametreler, kes);
+  },
+);
+vi.mock('../chart/gostergeIstemci', () => ({
+  gostergeTopluCalistirUzak: (...a: unknown[]) =>
+    topluFn(
+      a[0] as string,
+      a[1] as ArrayBuffer,
+      a[2] as Record<string, number>,
+      a[3] as number | undefined,
+    ),
+  TOPLU_ZAMAN_SINIRI_MS: 10_000,
+}));
 
 import { metricsFor, DEFAULT_SCREEN_PARAMS } from '../../core/screen/metrics';
 import { Radar, araliklarKurallara } from './Radar';
 import { gostergeDegerleri } from '../../core/screen/indikatorOlcutHesap';
+import { zamanMakinesiSatiri } from '../../core/screen/zamanMakinesi';
+import { gostergeTopluCalistir } from '../../workers/gostergeCalistir';
+import { kesZaman } from '../../core/data/kes';
 import { gostergeOlcutId, type OlcutIstegi } from '../../core/screen/indikatorOlcut';
 
 /** n barlık seri; son bar hacmi `sonHacim` ile ayrılabiliyor. */
@@ -74,10 +103,25 @@ const gostergeOlcutFn = vi.fn(async (_market: unknown, istekler: OlcutIstegi[]) 
   }
   return { degerler, ms: 1 };
 });
+/**
+ * Zaman makinesi de GERÇEK hesapla: kesim tarihi ortak eksende (19000+39)-geri.
+ * Seriler 40 barlık; geri=10 → 30 barlık kesik seri + gerçek ileri getiri.
+ */
+const zamanMakinesiFn = vi.fn(
+  async (_m: unknown, params: Parameters<typeof zamanMakinesiSatiri>[3], geri: number) => {
+    const gun = 19_000 + 39 - geri;
+    const rows = Object.entries(SERILER)
+      .map(([ad, c]) => zamanMakinesiSatiri(ad, c, gun * DAY_SECONDS, params))
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    return { rows, gun, ms: 1 };
+  },
+);
 const FAKE_CLIENT = {
   load: (...a: unknown[]) => loadFn(...a),
   screen: (...a: unknown[]) => screenFn(...a),
   gostergeOlcut: (m: unknown, i: OlcutIstegi[]) => gostergeOlcutFn(m, i),
+  zamanMakinesi: (m: unknown, p: unknown, g: number) =>
+    zamanMakinesiFn(m, p as Parameters<typeof zamanMakinesiSatiri>[3], g),
 } as unknown as Parameters<typeof Radar>[0]['client'];
 
 beforeEach(() => {
@@ -444,15 +488,6 @@ describe('Radar — grafikteki göstergeler', () => {
     await vi.waitFor(async () => expect((await satirlar()).length).toBe(2));
   });
 
-  it('kullanıcı göstergesi ölçülemiyorsa SEBEBİ yazılıyor', async () => {
-    // Listede görünmüyor diye sessiz kalmak, kullanıcının kendi göstergesini
-    // boşuna aramasına yol açardı.
-    const user = userEvent.setup();
-    await tumPiyasa(user, { gostergeler: EMA10, kullaniciGostergesiVar: true });
-    await filtrePaneli(user);
-    expect(await screen.findByText(/Kendi yazdığın göstergeler radarda ölçülemiyor/)).toBeTruthy();
-  });
-
   it('aynı gösterge iki farklı parametreyle AYRI ölçüt', async () => {
     const user = userEvent.setup();
     await tumPiyasa(user, {
@@ -603,5 +638,202 @@ describe('Radar — gösterge ölçülemediğinde', () => {
     const not = await screen.findByText(/sembol ölçülemedi/);
     expect(not.getAttribute('title')).toContain('SMA 200');
     expect(not.getAttribute('title')).not.toContain('gos:');
+  });
+});
+
+describe('Radar — zaman makinesi', () => {
+  /** Kaydırıcıyı geçmişe alır: range input'a değer yazmak `change` tetikler. */
+  async function geriAl(gun: number) {
+    const kaydirici = await screen.findByLabelText('Kaç gün önce');
+    fireEvent.change(kaydirici, { target: { value: String(gun) } });
+  }
+
+  it('bugündeyken ileri getiri sütunu ve not YOK', async () => {
+    // Bugünden bugüne getiri tanımsız; sütunu göstermek "sıfır" okunurdu.
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    expect(screen.queryByText('İleri getiri')).toBeNull();
+    expect(screen.queryByText(/Backtest değil/)).toBeNull();
+    expect(zamanMakinesiFn).not.toHaveBeenCalled();
+  });
+
+  it('geçmişe alınca o günün tarihi, ileri getiri sütunu ve özet geliyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    await geriAl(10);
+
+    await vi.waitFor(() => expect(zamanMakinesiFn).toHaveBeenCalled());
+    expect(zamanMakinesiFn.mock.calls[0][2]).toBe(10);
+    // Başlıkta o günün tarihi (19029. gün = 6 Şub 2022) — Türkçe biçimde.
+    // `\w` Türkçe harfi (Ş) tanımıyor; ay adı `\S+` ile alınıyor.
+    expect(await screen.findByText(/10 gün önce · \d+ \S+ \d{4}/)).toBeTruthy();
+    expect(await screen.findByText('İleri getiri')).toBeTruthy();
+    expect(await screen.findByText(/medyan ileri getirisi/)).toBeTruthy();
+  });
+
+  it('sınırlar YAZILI: backtest değil, hayatta kalma yanlılığı, temel veri', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    await geriAl(10);
+    const not = await screen.findByText(/Backtest değil/);
+    expect(not.textContent).toMatch(/hayatta kalma yanlılığı/);
+    expect(not.textContent).toMatch(/Temel veri geçmişe götürülemez/);
+  });
+
+  it('temel ölçütlü kural geçmişte UYGULANMIYOR ve sayısı söyleniyor', async () => {
+    // Bugünün F/K'sını 6 ay öncesine uygulamak geleceği görmektir. Kural
+    // sessizce düşmüyor; kaç tanesinin düştüğü yazılıyor.
+    localStorage.setItem('radar.filtre.v2', JSON.stringify({ pe: { max: 10 } }));
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    // Bugünde F/K yok → kural her satırı eler → tablo hiç çizilmez. Bu
+    // yüzden tablo beklenmiyor; kaydırıcı tablodan bağımsız çiziliyor.
+    await geriAl(10);
+    expect(await screen.findByText(/1 temel kural uygulanmadı/)).toBeTruthy();
+    // Kural düştüğü için her iki sembol de görünür (F/K yokken NaN elerdi).
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(2));
+  });
+
+  it('bugüne dönünce bugünün satırları geri geliyor — geçmiş sayı kalmıyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    await geriAl(10);
+    await screen.findByText('İleri getiri');
+    await geriAl(0);
+    await vi.waitFor(() => expect(screen.queryByText('İleri getiri')).toBeNull());
+  });
+});
+
+describe('Radar — kendi göstergen piyasada', () => {
+  /** Son kapanış / ilk kapanış oranı: yükselen seride > 1. */
+  const KAYNAK = `({
+    ad: 'Oran Göstergesi', kisa: 'ORAN', parametreler: [],
+    ciktilar() { return [{ ad: 'oran', etiket: 'Oran', tur: 'cizgi', token: 'accent', olcek: 'oran' }]; },
+    hesapla(c) {
+      const out = new Float64Array(c.length);
+      for (let i = 0; i < c.length; i++) out[i] = c.close[i] / c.close[0];
+      return [out];
+    },
+  })`;
+  const GOSTERGE = {
+    id: 'kul:test1',
+    ad: 'Oran Göstergesi',
+    kisa: 'ORAN',
+    panel: 'ayri' as const,
+    parametreler: [],
+    kaynak: KAYNAK,
+  };
+  const props = {
+    kullaniciGostergeler: [GOSTERGE],
+    kullaniciOrnekler: [{ id: 'kul:test1', parametreler: {} }],
+  };
+
+  it('grafikteki kendi gösterge listeleniyor ama ÖLÇÜLMÜYOR — düğmeye kadar', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, props);
+    await filtrePaneli(user);
+    expect(screen.getByRole('button', { name: /ORAN ölçütlerini radardan ekle/ })).toBeTruthy();
+    expect(screen.queryByText(/radarda ölçülemiyor/)).toBeNull(); // eski not gitti
+    expect(topluFn).not.toHaveBeenCalled();
+  });
+
+  it('eklenince tek çağrıda piyasada koşuyor, eşik kutusu ve DAĞILIM geliyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, props);
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /ORAN ölçütlerini radardan ekle/ }));
+    await vi.waitFor(() => expect(topluFn).toHaveBeenCalledTimes(1));
+    expect(await screen.findByLabelText('Oran en az')).toBeTruthy();
+    const dag = await screen.findByText(/sembolde · en düşük/);
+    // İki seri, ikisi de yükselen: her iki oran > 1 → en düşük 1'den büyük.
+    expect(dag.textContent).toMatch(/^2 sembolde/);
+  });
+
+  it('eşik GERÇEK sayıyla süzüyor', async () => {
+    // THYAO 100→~121,6 (oran ≈1,22), GARAN 50→~60,3 (oran ≈1,21).
+    // Eşik 1,215: yalnızca THYAO kalır.
+    const user = userEvent.setup();
+    await tumPiyasa(user, props);
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /ORAN ölçütlerini radardan ekle/ }));
+    await user.type(await screen.findByLabelText('Oran en az'), '1.215');
+    await vi.waitFor(async () => {
+      const s = await satirlar();
+      expect(s.length).toBe(1);
+      expect(s[0].startsWith('THYAO')).toBe(true);
+    });
+  });
+
+  it('ölçek bildirildiği için kıyasa giriyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, props);
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /ORAN ölçütlerini radardan ekle/ }));
+    await screen.findByLabelText('Oran en az');
+    const sol = screen.getByLabelText('Kıyas sol ölçüt') as HTMLSelectElement;
+    expect([...sol.options].map((o) => o.textContent)).toContain('Oran');
+  });
+
+  it('çıkarılınca bağlı filtre de siliniyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, props);
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /ORAN ölçütlerini radardan ekle/ }));
+    await user.type(await screen.findByLabelText('Oran en az'), '5');
+    // 0 satırda tablo hiç çizilmiyor (boş durum var); "tablo yok" diye bakılıyor.
+    await vi.waitFor(() =>
+      expect(screen.queryByRole('table', { name: 'Radar tablosu' })).toBeNull(),
+    );
+    await user.click(screen.getByRole('button', { name: /ORAN ölçütlerini radardan çıkar/ }));
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(2));
+  });
+
+  it('kod bir sembolde patlarsa ötekiler kalıyor ve hata sayısı yazılıyor', async () => {
+    const PATLAK = {
+      ...GOSTERGE,
+      id: 'kul:patlak',
+      kisa: 'PT',
+      kaynak: `({
+        ad: 'Patlak', kisa: 'PT', parametreler: [],
+        hesapla(c) {
+          if (c.close[0] < 60) throw new Error('kısa');
+          return [new Float64Array(c.length).fill(1)];
+        },
+      })`,
+    };
+    const user = userEvent.setup();
+    await tumPiyasa(user, {
+      kullaniciGostergeler: [PATLAK],
+      kullaniciOrnekler: [{ id: 'kul:patlak', parametreler: {} }],
+    });
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /PT ölçütlerini radardan ekle/ }));
+    const dag = await screen.findByText(/sembolde · en düşük/);
+    // GARAN (50'den başlar) patlar: 1 sembolde sayı, 1 ölçülemedi, 1 kod hatası.
+    expect(dag.textContent).toMatch(/^1 sembolde/);
+    expect(dag.textContent).toMatch(/1 ölçülemedi/);
+    expect(dag.textContent).toMatch(/1 sembolde kod hata verdi/);
+    // Ölçek bildirilmedi → birim eki yok (bildirilen 'oran' testinde "×" var).
+    expect(dag.textContent).not.toMatch(/×/);
+  });
+
+  it('zaman makinesinde KESİK seride koşuyor — geleceği görmüyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user, props);
+    await filtrePaneli(user);
+    await user.click(screen.getByRole('button', { name: /ORAN ölçütlerini radardan ekle/ }));
+    await vi.waitFor(() => expect(topluFn).toHaveBeenCalledTimes(1));
+    expect(topluFn.mock.calls[0][3]).toBeUndefined(); // bugün: kesim yok
+
+    const kaydirici = await screen.findByLabelText('Kaç gün önce');
+    fireEvent.change(kaydirici, { target: { value: '10' } });
+    // Geçmiş gün gelince kullanıcı göstergesi O GÜNE kesilmiş seride yeniden koşar.
+    await vi.waitFor(() => expect(topluFn).toHaveBeenCalledTimes(2));
+    const tCut = topluFn.mock.calls[1][3];
+    expect(tCut).toBe((19_000 + 39 - 10) * DAY_SECONDS);
   });
 });

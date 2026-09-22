@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
-import { gostergeCalistir } from './gostergeCalistir';
+import { gostergeCalistir, gostergeTopluCalistir } from './gostergeCalistir';
+import { decodeBundle } from '../core/data/pack';
+import { kesZaman } from '../core/data/kes';
 import type { Candles } from '../core/data/types';
 
 /**
@@ -50,8 +52,55 @@ export interface GostergeIstegi {
   parametreler: Record<string, number>;
 }
 
-self.onmessage = (event: MessageEvent<GostergeIstegi>) => {
-  const { id, kaynak, candles, parametreler } = event.data;
+/**
+ * TOPLU istek: tek sembol yerine PİYASA PAKETİ.
+ *
+ * Paket buraya kopya olarak geliyor ve worker iş bitince kapatılıyor; yani
+ * kullanıcı kodu paketi görebilecek olsa bile (göremiyor — ona yalnızca tek
+ * sembolün mumları geçiliyor, küreseller gölgeli) bu paket herkese açık
+ * piyasa verisi ve worker'la birlikte yok oluyor. Tek sembol yolundaki
+ * yalıtım gerekçesi olduğu gibi duruyor: analiz worker'ına GİRMİYOR.
+ *
+ * `tCut` verilirse her seri o güne kadar kesiliyor (zaman makinesi).
+ */
+export interface TopluGostergeIstegi {
+  id: number;
+  toplu: true;
+  kaynak: string;
+  buffer: ArrayBuffer;
+  parametreler: Record<string, number>;
+  tCut?: number;
+}
+
+self.onmessage = (event: MessageEvent<GostergeIstegi | TopluGostergeIstegi>) => {
+  const d = event.data;
+  if ('toplu' in d) {
+    const { id, kaynak, buffer, parametreler, tCut } = d;
+    let yanit: unknown;
+    try {
+      const paket = decodeBundle(buffer);
+      const seriler = (function* () {
+        for (const ad of paket.names) {
+          const c = paket.seriesOf(ad);
+          if (c) yield [ad, c] as const;
+        }
+      })();
+      const kesici = tCut !== undefined ? (c: Candles) => kesZaman(c, tCut) : undefined;
+      const sonuc = gostergeTopluCalistir(kaynak, seriler, parametreler, kesici);
+      yanit = sonuc.tamam
+        ? { id, ok: true as const, ...sonuc.deger }
+        : { id, ok: false as const, hata: sonuc.hata };
+    } catch (err) {
+      yanit = {
+        id,
+        ok: false as const,
+        hata: `Paket okunamadı: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    (self as unknown as Worker).postMessage(yanit);
+    return;
+  }
+  const { id, kaynak, candles, parametreler } = d;
   const sonuc = gostergeCalistir(kaynak, candles, parametreler);
   const yanit = sonuc.tamam
     ? { id, ok: true as const, ...sonuc.deger }

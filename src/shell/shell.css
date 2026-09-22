@@ -890,24 +890,32 @@
   margin-top: var(--sp-2);
   min-height: 16px;
 }
-.pulse__flows {
+/* Anomali tablosu AYNI görünümü paylaşıyor ama sınıfı ayrı: e2e testleri
+   `.pulse__flows`'u tek öğe olarak arıyor; ikinci tablo aynı sınıfı alınca
+   katı kipte iki öğe bulup düşüyordu (CI'da ölçüldü). */
+.pulse__flows,
+.anomali__tablo {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--fs-sm);
 }
 .pulse__flows th,
-.pulse__flows td {
+.pulse__flows td,
+.anomali__tablo th,
+.anomali__tablo td {
   padding: var(--sp-1) var(--sp-2);
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
 }
-.pulse__flows th[scope='col'] {
+.pulse__flows th[scope='col'],
+.anomali__tablo th[scope='col'] {
   color: var(--text-secondary);
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-.pulse__flows .num {
+.pulse__flows .num,
+.anomali__tablo .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -2330,6 +2338,76 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ZAMAN MAKİNESİ — tablonun üstünde, çünkü tablodaki her sayının anlamını
+   değiştiriyor. Katlı: bugündeyken tek satır, geçmişteyken açık. */
+.radar__zaman {
+  margin: 0 var(--sp-2) var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  font-size: var(--fs-sm);
+}
+.radar__zaman summary {
+  cursor: pointer;
+}
+.radar__zaman-kur {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+.radar__zaman-etiket {
+  display: grid;
+  gap: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+.radar__zaman-etiket input[type='range'] {
+  width: 100%;
+  min-width: 0;
+}
+.radar__zaman-deger {
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5rem;
+  text-align: right;
+}
+.radar__zaman-ozet {
+  margin: var(--sp-1) 0 0;
+  line-height: 1.45;
+}
+.radar__zaman-not {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
+/* PARA AKIŞI OYNATICISI — haritanın hemen üstünde: [◀ oynat] [kaydırıcı] [tarih]
+   Kaydırıcı esner, düğme ve tarih içeriğince kalır. */
+.pulse__oynatici {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.pulse__oynatici input[type='range'] {
+  width: 100%;
+  min-width: 0;
+}
+.pulse__oynatici-tarih {
+  font-variant-numeric: tabular-nums;
+  min-width: 7.5rem;
+  text-align: right;
+}
+.pulse__oynatici-not {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
 /* Kapsamda olup ölçülemeyen semboller — "neden listemdeki hisse yok?"
    sorusunun cevabı. `radar__olculemedi` ile aynı yerleşim: ikisi de dar
    panelde tek satırlık açıklama. */
@@ -2337,6 +2415,20 @@
   margin: 0 var(--sp-2) var(--sp-1);
   font-size: var(--fs-xs);
   line-height: 1.4;
+}
+
+/* Kendi göstergenin piyasadaki dağılımı: beş sayı tek satırda, tablo
+   sayıları gibi hizalı. */
+.radar__dagilim {
+  margin: 2px 0 var(--sp-1);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.radar__dagilim b {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 /* GRAFİKTEKİ GÖSTERGELER — tek düğmeyle radara eklenen ölçütler.
@@ -2651,4 +2743,40 @@
   margin: 0 var(--sp-3) var(--sp-2);
   font-size: var(--fs-xs);
   line-height: 1.45;
+}
+
+/* Anomali radarı */
+.anomali__not,
+.anomali__kapsam {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm);
+}
+.anomali__kapsam {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-xs);
+}
+.anomali__yaygin {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--warn);
+  background: var(--surface-1);
+  font-size: var(--fs-sm);
+}
+.anomali__sembol {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 24px;
+}
+.anomali__sembol:hover {
+  text-decoration: underline;
+}
+.anomali__nedenler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
 }

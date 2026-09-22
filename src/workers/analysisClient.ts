@@ -3,6 +3,8 @@ import type { SektorEslesmesi } from '../core/screen/sectorIndices';
 import type { Market } from '../data-client/markets';
 import { createPool, type Pool, type WorkerLike } from './pool';
 import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
+import type { AkisGunleri } from '../core/screen/akisGunleri';
+import type { AnomaliSonucu } from '../core/screen/anomali';
 import type { SymbolResponse, CorrelateResponse, PulseResponse, WorkerResponse } from './protocol';
 
 /**
@@ -144,6 +146,74 @@ export class AnalysisClient {
       ms = Math.max(ms, ok.ms);
     }
     return { rows, ms };
+  }
+
+  /** Para akışı oynatıcısı: son `gun` günün sembol × gün kareleri (tek worker). */
+  async akisGunleri(market: Market, gun: number): Promise<AkisGunleri & { ms: number }> {
+    if (!this.loaded.has(market)) throw new Error(`${market}: paket yüklenmedi`);
+    const res = unwrap(await this.pool.run((id) => ({ id, type: 'akisGunleri', market, gun })));
+    if (res.type !== 'akisGunleri') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = res;
+    return rest;
+  }
+
+  /** Anomali radarı: bugün kendi geçmişinin dışına çıkan semboller. Tek worker; ~ms. */
+  async anomali(
+    market: Market,
+    sektorler: Record<string, string> | null,
+  ): Promise<AnomaliSonucu & { ms: number }> {
+    if (!this.loaded.has(market)) throw new Error(`${market}: paket yüklenmedi`);
+    const res = unwrap(await this.pool.run((id) => ({ id, type: 'anomali', market, sektorler })));
+    if (res.type !== 'anomali') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = res;
+    return rest;
+  }
+
+  /**
+   * Filtre zaman makinesi: taramayı `geri` gün öncesine kurar.
+   *
+   * Tarama ile aynı bölme kuralı; dönen satırlar bugünkü taramanın satırlarıyla
+   * aynı biçimde (+ `ileriGetiri` ölçütü), radar aynı kuralları uyguluyor.
+   */
+  async zamanMakinesi(
+    market: Market,
+    params: ScreenParams,
+    geri: number,
+    istekler: OlcutIstegi[] = [],
+  ): Promise<{ rows: ScreenRow[]; gun: number; ms: number }> {
+    const info = this.loaded.get(market);
+    if (!info) throw new Error(`${market}: paket yüklenmedi`);
+
+    const total = info.symbols.length;
+    const chunks = Math.min(this.pool.size, Math.max(1, Math.ceil(total / 25)));
+    const per = Math.ceil(total / chunks);
+
+    const responses = await Promise.all(
+      Array.from({ length: chunks }, (_, i) =>
+        this.pool.run((id) => ({
+          id,
+          type: 'zamanMakinesi',
+          market,
+          params,
+          geri,
+          istekler,
+          from: i * per,
+          to: Math.min(total, (i + 1) * per),
+        })),
+      ),
+    );
+
+    const rows: ScreenRow[] = [];
+    let gun = 0;
+    let ms = 0;
+    for (const response of responses) {
+      const ok = unwrap(response);
+      if (ok.type !== 'zamanMakinesi') continue;
+      rows.push(...ok.rows);
+      gun = ok.gun;
+      ms = Math.max(ms, ok.ms);
+    }
+    return { rows, gun, ms };
   }
 
   /**

@@ -1,4 +1,5 @@
 import { SektorEndeksleri } from './SektorEndeksleri';
+import { AnomaliRadari } from './AnomaliRadari';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct, trCompact } from '../../ui';
 import {
@@ -20,6 +21,15 @@ import { sectorsClient } from '../../data-client/sectors';
 import { MARKETS, MARKET_LABEL, type Market } from '../../data-client/markets';
 import { HeatMap } from '../chart/HeatMap';
 import { FlowMap } from '../chart/FlowMap';
+import { gunSatirlari, type AkisGunleri } from '../../core/screen/akisGunleri';
+import { trDayIndex } from '../../core/format/date';
+
+/**
+ * Oynatıcının penceresi (gün). 60: bir çeyrek dönem. Daha uzunu paketin 250
+ * günlük sınırına yaklaşıyor ve kaydırıcıyı okunmaz yapıyor; daha kısası
+ * rotasyonu göstermeye yetmiyor.
+ */
+const OYNATICI_GUN = 60;
 import { useAnalysis } from '../useAnalysis';
 import { DataError } from '../DataError';
 import { LoadNote } from '../LoadNote';
@@ -81,6 +91,8 @@ export default function Pulse({ state, push }: Props) {
   // sırası daha özel bir analiz görünümü ve isteyenin açacağı bir seçenek.
   const [clusterOrder, setClusterOrder] = useState(false);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
+  /** Sektör dosyasına bakıldı mı — anomali paneli bakılmadan koşmasın. */
+  const [sektorlerBakildi, setSektorlerBakildi] = useState(false);
   const [grouping, setGrouping] = useState<'cluster' | 'sector'>('cluster');
   /**
    * Akış PENCERESİ (bar).
@@ -153,9 +165,11 @@ export default function Pulse({ state, push }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    setSektorlerBakildi(false);
     sectorsClient.map(market).then((map) => {
       if (cancelled) return;
       setSectors(map);
+      setSektorlerBakildi(true);
       // Sınıflandırma varsa varsayılan görünüm sektör olur: "endüstriden para
       // akışı" sorusunun doğru cevabı odur. Yoksa kümelerde kalınır.
       setGrouping(map ? 'sector' : 'cluster');
@@ -164,6 +178,88 @@ export default function Pulse({ state, push }: Props) {
       cancelled = true;
     };
   }, [market]);
+
+  /*
+    PARA AKIŞI OYNATICISI.
+
+    Sektör haritası tek kareydi: bugün. Soru ("para hangi endüstriye göçüyor?")
+    bir HAREKET sorusu; tek kare hareketi göstermez. Kareler worker'dan gün
+    eksenine hizalı geliyor (bkz. core/screen/akisGunleri.ts) ve her kare
+    Nabız'ın bugünkü tablosuyla AYNI toplama fonksiyonundan geçiyor —
+    oynatıcının son karesi tabloyla birebir aynı sayıyı verir.
+
+    `kare === null` → bugün (son kare). Tercihe yazılmıyor: bir sonraki
+    açılış bugünü göstermeli.
+
+    Ölçüldü (6× CPU kısıtlaması, gerçek BIST, 584 sembol × 60 gün): kareler
+    tablodan 23 ms sonra hazır; kaydırıcıyla kare adımı 50–91 ms'lik tek uzun
+    görev; oynatmada kare başına 51–71 ms. Kare başına maliyetin çoğu
+    ekranın yeniden çizimi, toplama değil.
+  */
+  const [akis, setAkis] = useState<AkisGunleri | null>(null);
+  const [kare, setKare] = useState<number | null>(null);
+  const [oynuyor, setOynuyor] = useState(false);
+  /**
+   * Hareket azaltma tercihi açıksa OTOMATİK oynatma yok; kaydırıcı çalışır.
+   * Kareler ayrık (CSS geçişi yok) ama kendi kendine değişen içerik de
+   * "hareket"tir ve kullanıcı bunu istememiş.
+   */
+  const azHareket =
+    typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  useEffect(() => {
+    // Yalnızca sektör görünümü ve tek bar döneminde: rotasyon görünümünün
+    // kendi pencere mantığı var, üstüne bir de oynatıcı iki zaman ekseni
+    // demek olurdu.
+    if (!analysis.client || !pulse || grouping !== 'sector' || donem !== 1) return;
+    let iptal = false;
+    analysis.client
+      .akisGunleri(market, OYNATICI_GUN)
+      .then((a) => {
+        if (!iptal) setAkis(a);
+      })
+      .catch(() => {
+        // Kareler gelmezse oynatıcı hiç çizilmez; harita bugünkü kareyle kalır.
+        if (!iptal) setAkis(null);
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [analysis.client, pulse, grouping, donem, market]);
+
+  // Oynatma: kare başına bir zamanlayıcı; son karede durur.
+  useEffect(() => {
+    if (!oynuyor || !akis) return;
+    const N = akis.gunler.length;
+    const su = kare ?? N - 1;
+    if (su >= N - 1) {
+      setOynuyor(false);
+      return;
+    }
+    const t = setTimeout(() => setKare(su + 1), 700);
+    return () => clearTimeout(t);
+  }, [oynuyor, akis, kare]);
+
+  /**
+   * Seçili karenin sektör akışı — bugünkü tabloyla aynı toplama.
+   *
+   * Dönem 1'den ayrılınca kareler durumda kalıyor (geri dönüşte yeniden
+   * istenmesin) ama oynatıcı ÇİZİLMİYOR: rotasyon penceresi henüz gelmemişken
+   * tek bar görünümü geçici gösteriliyor ve orada ikinci bir zaman ekseni
+   * yanıltırdı.
+   */
+  const kareAkis = useMemo(() => {
+    if (!akis || !sectors || donem !== 1) return null;
+    const N = akis.gunler.length;
+    const d = Math.max(0, Math.min(N - 1, kare ?? N - 1));
+    return {
+      d,
+      N,
+      gun: akis.gunler[d],
+      bugun: d === N - 1,
+      akis: flowBySector(gunSatirlari(akis, d), sectors),
+    };
+  }, [akis, kare, sectors, donem]);
 
   const flows = useMemo(() => {
     if (!pulse || !clusters) return [];
@@ -539,10 +635,73 @@ export default function Pulse({ state, push }: Props) {
               </>
             ) : (
               <>
+                {bySector && kareAkis ? (
+                  <>
+                    <div className="pulse__oynatici">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        aria-label={oynuyor ? 'Oynatmayı durdur' : 'Para akışını oynat'}
+                        disabled={azHareket}
+                        onClick={() => {
+                          if (oynuyor) {
+                            setOynuyor(false);
+                            return;
+                          }
+                          // Sondaysa baştan başla; ortadaysa kaldığı yerden.
+                          if (kareAkis.bugun) setKare(0);
+                          setOynuyor(true);
+                        }}
+                      >
+                        {oynuyor ? 'Durdur' : 'Oynat'}
+                      </Button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={kareAkis.N - 1}
+                        value={kareAkis.d}
+                        aria-label="Para akışı günü"
+                        aria-valuetext={
+                          kareAkis.bugun
+                            ? 'bugün'
+                            : `${kareAkis.N - 1 - kareAkis.d} gün önce, ${trDayIndex(kareAkis.gun)}`
+                        }
+                        onChange={(e) => {
+                          setOynuyor(false);
+                          setKare(Number(e.target.value));
+                        }}
+                      />
+                      <span className="pulse__oynatici-tarih" aria-live="polite">
+                        {kareAkis.bugun
+                          ? 'bugün'
+                          : `${kareAkis.N - 1 - kareAkis.d} gün önce · ${trDayIndex(kareAkis.gun)}`}
+                      </span>
+                    </div>
+                    {!kareAkis.bugun ? (
+                      <p className="pulse__oynatici-not desk__muted">
+                        Harita {trDayIndex(kareAkis.gun)} gününü gösteriyor; alttaki tablo bugünü.
+                        Her kare bugünkü tabloyla aynı toplama kuralından geçiyor.
+                      </p>
+                    ) : null}
+                    {azHareket ? (
+                      <p className="pulse__oynatici-not desk__muted">
+                        Hareket azaltma tercihin açık: otomatik oynatma kapalı, kaydırıcı çalışıyor.
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
                 <FlowMap
-                  label={`${bySector ? 'Sektör' : 'Grup'} para akışı haritası — kutu alanı işlem değeri, rengi ağırlıklı değişim`}
+                  label={`${bySector ? 'Sektör' : 'Grup'} para akışı haritası — kutu alanı işlem değeri, rengi ağırlıklı değişim${
+                    bySector && kareAkis && !kareAkis.bugun
+                      ? `, gün ${trDayIndex(kareAkis.gun)}`
+                      : ''
+                  }`}
                   items={(bySector
-                    ? sectorFlows.map((f) => ({ key: f.sector, target: f.leader, ...f }))
+                    ? (kareAkis ? kareAkis.akis : sectorFlows).map((f) => ({
+                        key: f.sector,
+                        target: f.leader,
+                        ...f,
+                      }))
                     : flows.map((f) => ({ key: `${f.label} grubu`, target: f.label, ...f }))
                   ).map((f) => ({
                     key: f.key,
@@ -675,6 +834,18 @@ export default function Pulse({ state, push }: Props) {
         kaynak erişilemezken de "hangi sektör kazandırdı" sorusu cevaplanıyor.
         Ayrı panel, çünkü ölçtüğü şey farklı: getiri, akış değil.
       */}
+      {/*
+        ANOMALİ RADARI — tekil hisse, tarayıcının tersinden: koşulu kullanıcı
+        yazmıyor, hisse kendi alışkanlığının dışına çıkınca listeye giriyor.
+        Sektör dosyası yüklenmeden koşmuyor (iki sinyal sektör ister).
+      */}
+      <AnomaliRadari
+        market={market}
+        client={analysis.status === 'ready' ? analysis.client : null}
+        sectors={sektorlerBakildi ? sectors : undefined}
+        onSelect={(symbol) => push({ v: 'sembol', s: symbol })}
+      />
+
       <SektorEndeksleri
         market={market}
         client={analysis.status === 'ready' ? analysis.client : null}

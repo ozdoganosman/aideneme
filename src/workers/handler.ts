@@ -3,6 +3,11 @@ import { decodeBundle, type Bundle } from '../core/data/pack';
 import type { Candles } from '../core/data/types';
 import { metricsFor, type ScreenRow } from '../core/screen/metrics';
 import { gostergeDegerleri } from '../core/screen/indikatorOlcutHesap';
+import { zamanMakinesiSatiri } from '../core/screen/zamanMakinesi';
+import { akisGunleriHesapla } from '../core/screen/akisGunleri';
+import { anomaliHesapla } from '../core/screen/anomali';
+import { kesZaman } from '../core/data/kes';
+import { DAY_SECONDS } from '../core/data/pack';
 import {
   pulseRow,
   summarizePulse,
@@ -49,6 +54,51 @@ export function createHandler() {
             if (row) rows.push(row);
           }
           return { id: req.id, ok: true, type: 'screen', rows, ms: now() - started };
+        }
+
+        case 'akisGunleri': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          const a = akisGunleriHesapla(bundle, req.gun);
+          return { id: req.id, ok: true, type: 'akisGunleri', ...a, ms: now() - started };
+        }
+
+        case 'anomali': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          return {
+            id: req.id,
+            ok: true,
+            type: 'anomali',
+            ...anomaliHesapla(bundle, req.sektorler),
+            ms: now() - started,
+          };
+        }
+
+        case 'zamanMakinesi': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          // Kesim tarihi ORTAK EKSENDEN: "geri" tüm sembollerde aynı takvim
+          // günü olsun. Eksenin dışına düşen istek son mümkün güne kırpılıyor;
+          // eksenin başından öncesi yok, o yüzden 0'a değil 1'e (en az bir bar).
+          const di = Math.max(0, Math.min(bundle.bars - 1, bundle.bars - 1 - req.geri));
+          const gun = bundle.days[di];
+          const tCut = gun * DAY_SECONDS;
+          const rows: ScreenRow[] = [];
+          const to = Math.min(req.to, bundle.names.length);
+          for (let i = req.from; i < to; i++) {
+            const symbol = bundle.names[i];
+            const candles = bundle.seriesOf(symbol);
+            if (!candles) continue;
+            const row = zamanMakinesiSatiri(symbol, candles, tCut, req.params);
+            if (!row) continue;
+            if (req.istekler?.length) {
+              // Göstergeler de KESİK seriden: geleceği görmeden.
+              Object.assign(row.values, gostergeDegerleri(kesZaman(candles, tCut), req.istekler));
+            }
+            rows.push(row);
+          }
+          return { id: req.id, ok: true, type: 'zamanMakinesi', rows, gun, ms: now() - started };
         }
 
         case 'gostergeOlcut': {

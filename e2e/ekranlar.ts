@@ -74,6 +74,37 @@ export const EKRANLAR: Ekran[] = [
       await page.getByLabel('Dönem').selectOption('21');
     },
   },
+  {
+    /*
+      Anomali radarı: gerçek veride kaç satır çıkacağı güne bağlı; boş durum da
+      bir yüzeydir ve denetleniyor. Hazır işareti panelin kendi durumu.
+    */
+    id: 'nabiz:anomali',
+    ad: 'Nabız — anomali radarı',
+    url: 'v=nabiz',
+    hazir: '.anomali[data-durum="hazir"]',
+  },
+  {
+    /*
+      PARA AKIŞI OYNATICISI. Kaydırıcı geçmişe alınmadan tarih etiketi
+      "bugün" ve harita bugünkü kare; geçmiş kare yüzeyi ancak kaydırınca
+      çiziliyor.
+    */
+    id: 'nabiz:oynatici',
+    ad: 'Nabız — para akışı oynatıcısı',
+    url: 'v=nabiz',
+    hazir: '.pulse__oynatici-tarih',
+    ac: async (page) => {
+      await page.waitForSelector('.pulse__oynatici', { timeout: 90_000 });
+      await page.getByLabel('Para akışı günü').fill('20');
+      await page.waitForFunction(
+        () =>
+          !(document.querySelector('.pulse__oynatici-tarih')?.textContent ?? '').includes('bugün'),
+        undefined,
+        { timeout: 30_000 },
+      );
+    },
+  },
   { id: 'tarayici', ad: 'Tarayıcı', url: 'v=tarayici', hazir: '.ui-vtable' },
   { id: 'sembol', ad: 'Sembol Masası', url: 'v=sembol&s={SEMBOL}', hazir: '.desk__chart' },
   {
@@ -141,6 +172,90 @@ export const EKRANLAR: Ekran[] = [
         .click();
       await page.getByText('Ölçüt kıyası').click();
       await page.waitForSelector('.radar__kiyas-kur', { timeout: 30_000 });
+    },
+  },
+  {
+    /*
+      KENDİ GÖSTERGEN PİYASADA. Ayrı giriş: varsayılan grafikte kullanıcı
+      göstergesi yok, yani dağılım satırı ve kullanıcı satırı hiçbir başka
+      denetimde çizilmiyor. Tam bu yüzeyde gerçek bir biçim kusuru bulundu
+      (ölçeği bilinmeyen sayıya "×" ekleniyordu); denetimsiz kalmamalı.
+
+      Kaynak `localStorage`a yazılıp sayfa yenileniyor — kullanıcının
+      göstergeyi kaydetmiş olduğu durum.
+    */
+    id: 'sembol:radar-kullanici',
+    ad: 'Sembol Masası — radar kendi göstergen',
+    url: 'v=sembol&s={SEMBOL}',
+    hazir: '.radar__dagilim',
+    ac: async (page) => {
+      await page.evaluate(() => {
+        const kaynak = `({
+  ad: 'Ortalama Farkı', kisa: 'OF', panel: 'ayri',
+  parametreler: [
+    { ad: 'kisa', etiket: 'Kısa', varsayilan: 10, min: 2, max: 200 },
+    { ad: 'uzun', etiket: 'Uzun', varsayilan: 50, min: 3, max: 400 },
+  ],
+  ciktilar: (p) => [{ ad: 'f', etiket: 'OF ' + p.kisa, tur: 'cizgi', token: 'accent', taban: 0 }],
+  hesapla: (c, p, lib) => [lib.fark(lib.ema(c.close, p.kisa), lib.ema(c.close, p.uzun))],
+})`;
+        localStorage.setItem(
+          'gosterge.kullanici.v1',
+          JSON.stringify([
+            {
+              id: 'kul:denetim1',
+              ad: 'Ortalama Farkı',
+              kisa: 'OF',
+              panel: 'ayri',
+              parametreler: [
+                { ad: 'kisa', etiket: 'Kısa', varsayilan: 10, min: 2, max: 200 },
+                { ad: 'uzun', etiket: 'Uzun', varsayilan: 50, min: 3, max: 400 },
+              ],
+              kaynak,
+            },
+          ]),
+        );
+        localStorage.setItem(
+          'masa.v1',
+          JSON.stringify({
+            indikatorler: [
+              {
+                ornekId: 'd1',
+                id: 'kul:denetim1',
+                parametreler: { kisa: 10, uzun: 50 },
+                gorunur: true,
+              },
+            ],
+          }),
+        );
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByRole('button', { name: /^Filtre paneli/ }).click();
+      await page.getByText('Grafikteki göstergeler').click();
+      await page.getByRole('button', { name: /OF ölçütlerini radardan ekle/ }).click();
+      await page.waitForSelector('.radar__dagilim', { timeout: 60_000 });
+    },
+  },
+  {
+    /*
+      ZAMAN MAKİNESİ. Ayrı giriş: varsayılan hâli "bugün" ve katlı kapalı;
+      kaydırıcı geçmişe alınmadan özet cümlesi ve ileri getiri sütunu hiç
+      çizilmiyor. Bu dosyanın var olma sebebi tam da bu tür yüzeyler.
+    */
+    id: 'sembol:radar-zaman',
+    ad: 'Sembol Masası — radar zaman makinesi',
+    url: 'v=sembol&s={SEMBOL}',
+    hazir: '.radar__zaman-ozet',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByText('Zaman makinesi').click();
+      await page.getByLabel('Kaç gün önce').fill('30');
+      await page.waitForSelector('.radar__zaman-ozet', { timeout: 60_000 });
     },
   },
   {

@@ -78,6 +78,10 @@ export interface Bundle {
   bars: number;
   /** Sembolün o gündeki kapanışı; veri yoksa NaN. */
   closeAt: (symbolIndex: number, dayIndex: number) => number;
+  /** Sembolün o gündeki hacmi; veri yoksa NaN. Gün eksenine hizalı akış için. */
+  volumeAt: (symbolIndex: number, dayIndex: number) => number;
+  /** Sembolün o gündeki açılışı; veri yoksa NaN. Açılış boşluğu için. */
+  openAt: (symbolIndex: number, dayIndex: number) => number;
   /**
    * Sembolü Candles'a çevirir. Veri olmayan günler ATILIR (doldurulmaz) —
    * seri dosyasıyla aynı anlam: takvim boşluğu boşluk olarak kalır.
@@ -135,6 +139,8 @@ export function decodeBundle(buf: ArrayBuffer): Bundle {
     days,
     bars,
     closeAt: (si, di) => close[si * bars + di],
+    volumeAt: (si, di) => volume[si * bars + di],
+    openAt: (si, di) => open[si * bars + di],
     seriesOf(symbol) {
       const si = indexOf.get(symbol);
       if (si === undefined) return null;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AnalysisClient } from './analysisClient';
 import { createHandler } from './handler';
 import { gostergeOlcutleri, olcutIstekleri } from '../core/screen/indikatorOlcut';
+import { ILERI_GETIRI_ID } from '../core/screen/zamanMakinesi';
 import { createPool, type WorkerLike } from './pool';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 import { DEFAULT_SCREEN_PARAMS } from '../core/screen/metrics';
@@ -146,6 +147,110 @@ describe('handler', () => {
         expect(Number.isNaN(r.values[olcutler[0].id]), `${r.symbol} sayı uydurdu`).toBe(true);
       }
     }
+  });
+
+  it('anomali: sektör haritası yokken kopma/korelasyon herkes için ölçülemez', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(6, 300) });
+    const r = handle({ id: 2, type: 'anomali', market: 'bist', sektorler: null });
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.type !== 'anomali') throw new Error('anomali yanıtı bekleniyordu');
+    expect(r.denenen).toBe(6);
+    expect(r.olculemeyen.kopma).toBe(6);
+    expect(r.olculemeyen.korelasyon).toBe(6);
+    // Hacim ve boşluk için 300 günlük geçmiş yeterli: ölçülemeyen yok.
+    expect(r.olculemeyen.hacim).toBe(0);
+    expect(r.olculemeyen.bosluk).toBe(0);
+    expect(r.gun).toBe(20000 + 299);
+  });
+
+  it('anomali: sektör haritası verilince kopma ölçülüyor', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(6, 300) });
+    const sektorler = Object.fromEntries(
+      Array.from({ length: 6 }, (_, i) => [`S${String(i).padStart(3, '0')}`, 'X']),
+    );
+    const r = handle({ id: 2, type: 'anomali', market: 'bist', sektorler });
+    if (!r.ok || r.type !== 'anomali') throw new Error('anomali yanıtı bekleniyordu');
+    expect(r.olculemeyen.kopma).toBe(0);
+    expect(r.olculemeyen.korelasyon).toBe(0);
+    for (const s of r.satirlar) expect(s.sektor).toBe('X');
+  });
+
+  it('zamanMakinesi: geri=0 bugünkü taramayla aynı satırları veriyor (ileri getiri hariç)', () => {
+    // Zaman makinesinin "bugün" ayarı taramadan SAPMAMALI; saparsa iki ekran
+    // aynı sembol için farklı sayı gösterir. İleri getiri bugün için
+    // tanımsız — "bugünden bugüne" bir getiri yok.
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(6, 300) });
+    const screen = handle({
+      id: 2,
+      type: 'screen',
+      market: 'bist',
+      params: DEFAULT_SCREEN_PARAMS,
+      from: 0,
+      to: 6,
+    });
+    const zm = handle({
+      id: 3,
+      type: 'zamanMakinesi',
+      market: 'bist',
+      params: DEFAULT_SCREEN_PARAMS,
+      geri: 0,
+      from: 0,
+      to: 6,
+    });
+    expect(screen.ok && zm.ok).toBe(true);
+    if (screen.ok && screen.type === 'screen' && zm.ok && zm.type === 'zamanMakinesi') {
+      expect(zm.rows.map((r) => r.symbol)).toEqual(screen.rows.map((r) => r.symbol));
+      for (let i = 0; i < zm.rows.length; i++) {
+        for (const [k, v] of Object.entries(screen.rows[i].values)) {
+          expect(zm.rows[i].values[k], `${zm.rows[i].symbol}.${k}`).toBe(v);
+        }
+        expect(Number.isNaN(zm.rows[i].values[ILERI_GETIRI_ID])).toBe(true);
+      }
+    }
+  });
+
+  it('zamanMakinesi: geçmiş gün için ölçütler KESİK seriden, ileri getiri gerçek', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(4, 300) });
+    const zm = handle({
+      id: 2,
+      type: 'zamanMakinesi',
+      market: 'bist',
+      params: DEFAULT_SCREEN_PARAMS,
+      geri: 30,
+      from: 0,
+      to: 4,
+    });
+    expect(zm.ok).toBe(true);
+    if (zm.ok && zm.type === 'zamanMakinesi') {
+      expect(zm.rows.length).toBeGreaterThan(0);
+      for (const r of zm.rows) {
+        // 30 gün öncesinden bugüne getiri ölçülebilir olmalı.
+        expect(Number.isFinite(r.values[ILERI_GETIRI_ID]), `${r.symbol} ileri getiri`).toBe(true);
+        // Kesik seride bar sayısı bugünkünden AZ — geleceği görmediğinin kanıtı.
+        expect(r.bars).toBeLessThan(300);
+      }
+    }
+  });
+
+  it('zamanMakinesi: eksenin dışına düşen geri en son mümkün güne kırpılıyor, çökmüyor', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(3, 100) });
+    const zm = handle({
+      id: 2,
+      type: 'zamanMakinesi',
+      market: 'bist',
+      params: DEFAULT_SCREEN_PARAMS,
+      geri: 9999,
+      from: 0,
+      to: 3,
+    });
+    expect(zm.ok).toBe(true);
+    // En erken güne kırpılınca iki bardan az veri kalır → satır üretilmez; bu doğru.
+    if (zm.ok && zm.type === 'zamanMakinesi') expect(zm.rows).toEqual([]);
   });
 
   it('gostergeOlcut: paket yüklenmeden anlaşılır hata döner', () => {

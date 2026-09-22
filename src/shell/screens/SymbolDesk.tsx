@@ -772,7 +772,17 @@ export default function SymbolDesk({ state, push }: Props) {
                         ölçüm kullanıcı düğmeye basınca başlıyor.
                       */
                       gostergeler={istenenIndikatorler}
-                      kullaniciGostergesiVar={gorunurKullanici.length > 0}
+                      /*
+                        Kullanıcının kendi göstergeleri de radara gidiyor —
+                        artık ÖLÇÜLEBİLİYORLAR: tek çağrıda tüm paket, bir
+                        derleme. Kaynak kodu da geçiyor çünkü koşturacak olan
+                        radar; ölçüt kimliği ise ancak kod koşunca biliniyor.
+                      */
+                      kullaniciGostergeler={kullaniciGostergeleri}
+                      kullaniciOrnekler={gorunurKullanici.map((o) => ({
+                        id: o.id,
+                        parametreler: o.parametreler,
+                      }))}
                       onSelect={(next) => push({ s: next })}
                       onClose={() => setRadarAcik(false)}
                     />
