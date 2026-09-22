@@ -205,26 +205,35 @@ function siddet(s: AnomaliSatiri, ayar: AnomaliAyar, yaygin: Record<AnomaliTuru,
   return sayilan.length * 1000 + Math.max(...adaylar);
 }
 
-export function anomaliHesapla(
+/**
+ * Sinyallerin okuduğu ızgara: sembol × gün değişim, boşluk, işlem değeri ve
+ * sektör medyanları. BİR KEZ kuruluyor; bir gün (`anomaliGunu`) ya da çok gün
+ * (anomalinin karnesi) aynı ızgaradan değerlendiriliyor.
+ *
+ * `enErken`: sektör medyanlarının hesaplanacağı ilk gün. Tek gün için yalnızca
+ * gereken pencere; karne için 0.
+ */
+export interface AnomaliIzgarasi {
+  paket: Bundle;
+  bars: number;
+  S: number;
+  degisim: Float64Array;
+  bosluk: Float64Array;
+  deger: Float64Array;
+  /** Sembol indeksi → sektör adı (dosya yoksa ya da eşleşme yoksa null). */
+  sektorOf: (string | null)[];
+  sektorMedyani: Map<string, Float64Array>;
+}
+
+export function anomaliIzgarasi(
   paket: Bundle,
   sektorler: Record<string, string> | null,
   ayarUst: Partial<AnomaliAyar> = {},
-): AnomaliSonucu {
+  enErken = 0,
+): AnomaliIzgarasi {
   const ayar = { ...ANOMALI_VARSAYILAN, ...ayarUst };
   const bars = paket.bars;
   const S = paket.names.length;
-  const son = bars - 1;
-  const bos: AnomaliSonucu = {
-    gun: bars > 0 ? paket.days[son] : Number.NaN,
-    denenen: 0,
-    islemGormeyen: S,
-    satirlar: [],
-    yaygin: bayrak(),
-    yayginSatir: 0,
-    olculemeyen: sayac(),
-    tetiklenen: sayac(),
-  };
-  if (bars < 2) return bos;
 
   /*
     İLK GEÇİŞ — sembol × gün ızgarasında değişim, boşluk ve işlem değeri.
@@ -251,26 +260,19 @@ export function anomaliHesapla(
     }
   }
 
-  /*
-    SEKTÖR MEDYANLARI — gün başına, yalnızca gereken aralıkta
-    (korelasyonun uzun penceresinin başından bugüne).
-  */
-  const sektorAdi = (s: string): string | null => (sektorler ? (sektorler[s] ?? null) : null);
+  // SEKTÖR MEDYANLARI — gün başına, `enErken`den son güne.
+  const sektorOf = paket.names.map((ad) => (sektorler ? (sektorler[ad] ?? null) : null));
   const sektorUyeleri = new Map<string, number[]>();
-  if (sektorler) {
-    paket.names.forEach((ad, si) => {
-      const sk = sektorler[ad];
-      if (!sk) return;
-      const liste = sektorUyeleri.get(sk);
-      if (liste) liste.push(si);
-      else sektorUyeleri.set(sk, [si]);
-    });
-  }
-  const gerekenBas = Math.max(0, son - ayar.korUzun - ayar.korKisa - ayar.pencere);
+  sektorOf.forEach((sk, si) => {
+    if (!sk) return;
+    const liste = sektorUyeleri.get(sk);
+    if (liste) liste.push(si);
+    else sektorUyeleri.set(sk, [si]);
+  });
   const sektorMedyani = new Map<string, Float64Array>();
   for (const [sk, uyeler] of sektorUyeleri) {
     const m = new Float64Array(bars).fill(Number.NaN);
-    for (let di = gerekenBas; di <= son; di++) {
+    for (let di = Math.max(0, enErken); di < bars; di++) {
       const d: number[] = [];
       for (const si of uyeler) {
         const v = degisim[si * bars + di];
@@ -280,6 +282,45 @@ export function anomaliHesapla(
     }
     sektorMedyani.set(sk, m);
   }
+
+  return { paket, bars, S, degisim, bosluk, deger, sektorOf, sektorMedyani };
+}
+
+/** Bugünün (son günün) anomalileri. */
+export function anomaliHesapla(
+  paket: Bundle,
+  sektorler: Record<string, string> | null,
+  ayarUst: Partial<AnomaliAyar> = {},
+): AnomaliSonucu {
+  const ayar = { ...ANOMALI_VARSAYILAN, ...ayarUst };
+  const son = paket.bars - 1;
+  const enErken = Math.max(0, son - ayar.korUzun - ayar.korKisa - ayar.pencere);
+  return anomaliGunu(anomaliIzgarasi(paket, sektorler, ayar, enErken), son, ayar);
+}
+
+/**
+ * `son` gününün anomalileri — o güne kadarki veriyle, sonrasına bakmadan.
+ * Karne bunu geçmiş her gün için çağırıyor; ileriye bakma olmaması bu yüzden
+ * önemli: her pencere `son`da bitiyor.
+ */
+export function anomaliGunu(
+  iz: AnomaliIzgarasi,
+  son: number,
+  ayarUst: Partial<AnomaliAyar> = {},
+): AnomaliSonucu {
+  const ayar = { ...ANOMALI_VARSAYILAN, ...ayarUst };
+  const { paket, bars, S, degisim, bosluk, deger, sektorOf, sektorMedyani } = iz;
+  const bos: AnomaliSonucu = {
+    gun: son >= 0 && son < bars ? paket.days[son] : Number.NaN,
+    denenen: 0,
+    islemGormeyen: S,
+    satirlar: [],
+    yaygin: bayrak(),
+    yayginSatir: 0,
+    olculemeyen: sayac(),
+    tetiklenen: sayac(),
+  };
+  if (son < 1 || son >= bars) return bos;
 
   const out = bos;
   out.islemGormeyen = 0;
@@ -298,7 +339,7 @@ export function anomaliHesapla(
     }
     out.denenen++;
     const ad = paket.names[si];
-    const sk = sektorAdi(ad);
+    const sk = sektorOf[si];
     const med = sk ? sektorMedyani.get(sk) : undefined;
 
     // hacim — log uzayında: işlem değeri çarpımsal dağılır, ham z bir günlük

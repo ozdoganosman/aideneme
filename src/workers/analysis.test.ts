@@ -164,6 +164,26 @@ describe('handler', () => {
     expect(r.gun).toBe(20000 + 299);
   });
 
+  it('anomaliKarne: worker yolundan karne dönüyor, altı kova, iki ufuk', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(6, 300) });
+    const r = handle({ id: 2, type: 'anomaliKarne', market: 'bist', sektorler: null });
+    if (!r.ok || r.type !== 'anomaliKarne') throw new Error('karne yanıtı bekleniyordu');
+    expect(r.ufuklar).toEqual([5, 20]);
+    expect(r.satirlar.map((s) => s.kova)).toEqual([
+      'hacim',
+      'boslukYukari',
+      'boslukAsagi',
+      'kopmaYukari',
+      'kopmaAsagi',
+      'korelasyon',
+    ]);
+    // 300 bar, pencere 60, en kısa ufuk 5: 60..294 → 235 gün.
+    expect(r.degerlendirilenGun).toBe(235);
+    // Sektör yok: kopma kovaları boş.
+    expect(r.satirlar.find((s) => s.kova === 'kopmaYukari')!.olay).toBe(0);
+  });
+
   it('anomali: sektör haritası verilince kopma ölçülüyor', () => {
     const handle = createHandler();
     handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(6, 300) });

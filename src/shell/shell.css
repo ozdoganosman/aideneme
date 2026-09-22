@@ -2780,3 +2780,36 @@
   flex-wrap: wrap;
   gap: var(--sp-1);
 }
+
+/* Anomalinin karnesi */
+.anomali__karne {
+  margin-top: var(--sp-4);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--sp-3);
+}
+.anomali__karne > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 24px;
+}
+.anomali__karne-ozet {
+  margin: var(--sp-3) 0;
+  font-size: var(--fs-sm);
+}
+/* Dar ekranda tablo kendi içinde kayar; sayfa yatay taşmaz. */
+.anomali__karne-kaydir {
+  overflow-x: auto;
+}
+.anomali__karne-deger,
+.anomali__karne-alt {
+  display: block;
+  white-space: nowrap;
+}
+.anomali__karne-alt {
+  font-size: var(--fs-xs);
+}
+.anomali__karne-notlar {
+  margin: var(--sp-3) 0 0;
+  padding-left: var(--sp-4);
+  font-size: var(--fs-xs);
+}

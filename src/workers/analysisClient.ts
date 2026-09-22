@@ -5,6 +5,7 @@ import { createPool, type Pool, type WorkerLike } from './pool';
 import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
 import type { AkisGunleri } from '../core/screen/akisGunleri';
 import type { AnomaliSonucu } from '../core/screen/anomali';
+import type { AnomaliKarnesi } from '../core/screen/anomaliKarnesi';
 import type { SymbolResponse, CorrelateResponse, PulseResponse, WorkerResponse } from './protocol';
 
 /**
@@ -153,6 +154,20 @@ export class AnalysisClient {
     if (!this.loaded.has(market)) throw new Error(`${market}: paket yüklenmedi`);
     const res = unwrap(await this.pool.run((id) => ({ id, type: 'akisGunleri', market, gun })));
     if (res.type !== 'akisGunleri') throw new Error('beklenmeyen yanıt');
+    const { id: _id, ok: _ok, type: _type, ...rest } = res;
+    return rest;
+  }
+
+  /** Anomalinin karnesi: geçmişte listeye düşenler sonra ne yaptı? Tek worker; ağır. */
+  async anomaliKarne(
+    market: Market,
+    sektorler: Record<string, string> | null,
+  ): Promise<AnomaliKarnesi & { ms: number }> {
+    if (!this.loaded.has(market)) throw new Error(`${market}: paket yüklenmedi`);
+    const res = unwrap(
+      await this.pool.run((id) => ({ id, type: 'anomaliKarne', market, sektorler })),
+    );
+    if (res.type !== 'anomaliKarne') throw new Error('beklenmeyen yanıt');
     const { id: _id, ok: _ok, type: _type, ...rest } = res;
     return rest;
   }

@@ -12,6 +12,7 @@ import type { Market } from '../../data-client/markets';
 import type { AnalysisClient } from '../../workers/analysisClient';
 import { trDayIndex } from '../../core/format/date';
 import { Prov } from '../Prov';
+import { AnomaliKarnesi } from './AnomaliKarnesi';
 
 interface Props {
   market: Market;
@@ -251,6 +252,7 @@ export function AnomaliRadari({ market, client, sectors, onSelect }: Props) {
           </p>
         </>
       ) : null}
+      <AnomaliKarnesi market={market} client={client} sectors={sectors} />
     </section>
   );
 }
