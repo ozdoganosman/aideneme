@@ -86,6 +86,21 @@ export const EKRANLAR: Ekran[] = [
   },
   {
     /*
+      Anomalinin karnesi: varsayılan KAPALI ve açılınca GERÇEK worker'da ağır
+      bir hesap koşuyor. Kapalı yüzey denetlenmiyordu (bkz. kör nokta notu);
+      burada açılıp tablo gelene kadar bekleniyor.
+    */
+    id: 'nabiz:anomali-karne',
+    ad: 'Nabız — anomalinin karnesi',
+    url: 'v=nabiz',
+    hazir: '.anomali[data-durum="hazir"]',
+    ac: async (page) => {
+      await page.locator('.anomali__karne > summary').click();
+      await page.waitForSelector('.anomali__karne[data-durum="hazir"]', { timeout: 90_000 });
+    },
+  },
+  {
+    /*
       PARA AKIŞI OYNATICISI. Kaydırıcı geçmişe alınmadan tarih etiketi
       "bugün" ve harita bugünkü kare; geçmiş kare yüzeyi ancak kaydırınca
       çiziliyor.

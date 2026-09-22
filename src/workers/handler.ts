@@ -6,6 +6,7 @@ import { gostergeDegerleri } from '../core/screen/indikatorOlcutHesap';
 import { zamanMakinesiSatiri } from '../core/screen/zamanMakinesi';
 import { akisGunleriHesapla } from '../core/screen/akisGunleri';
 import { anomaliHesapla } from '../core/screen/anomali';
+import { anomaliKarnesi } from '../core/screen/anomaliKarnesi';
 import { kesZaman } from '../core/data/kes';
 import { DAY_SECONDS } from '../core/data/pack';
 import {
@@ -61,6 +62,18 @@ export function createHandler() {
           const bundle = need(bundles, req.market);
           const a = akisGunleriHesapla(bundle, req.gun);
           return { id: req.id, ok: true, type: 'akisGunleri', ...a, ms: now() - started };
+        }
+
+        case 'anomaliKarne': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          return {
+            id: req.id,
+            ok: true,
+            type: 'anomaliKarne',
+            ...anomaliKarnesi(bundle, req.sektorler),
+            ms: now() - started,
+          };
         }
 
         case 'anomali': {

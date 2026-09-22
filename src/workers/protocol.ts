@@ -2,6 +2,7 @@ import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
 import type { AkisGunleri } from '../core/screen/akisGunleri';
 import type { AnomaliSonucu } from '../core/screen/anomali';
+import type { AnomaliKarnesi } from '../core/screen/anomaliKarnesi';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
 import type { Parametreler } from '../core/indicators/kayit';
 import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
@@ -217,9 +218,29 @@ export interface AnomaliResponse extends AnomaliSonucu {
   ms: number;
 }
 
+/**
+ * Anomalinin karnesi: geçmiş her gün için radar o güne kurulur, listeye
+ * düşenlerin ileri getirisi piyasa medyanıyla kıyaslanır. Ağır (gerçek
+ * veride ~0,6 sn, Node) — yalnızca kullanıcı açınca isteniyor.
+ */
+export interface AnomaliKarneRequest {
+  id: number;
+  type: 'anomaliKarne';
+  market: string;
+  sektorler: Record<string, string> | null;
+}
+
+export interface AnomaliKarneResponse extends AnomaliKarnesi {
+  id: number;
+  ok: true;
+  type: 'anomaliKarne';
+  ms: number;
+}
+
 export type WorkerRequest =
   | InitRequest
   | AnomaliRequest
+  | AnomaliKarneRequest
   | GostergeOlcutRequest
   | ZamanMakinesiRequest
   | AkisGunleriRequest
@@ -311,6 +332,7 @@ export interface SectorMatchResponse {
 export type WorkerResponse =
   | InitResponse
   | AnomaliResponse
+  | AnomaliKarneResponse
   | GostergeOlcutResponse
   | AkisGunleriResponse
   | ZamanMakinesiResponse
