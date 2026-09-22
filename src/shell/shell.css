@@ -890,24 +890,32 @@
   margin-top: var(--sp-2);
   min-height: 16px;
 }
-.pulse__flows {
+/* Anomali tablosu AYNI görünümü paylaşıyor ama sınıfı ayrı: e2e testleri
+   `.pulse__flows`'u tek öğe olarak arıyor; ikinci tablo aynı sınıfı alınca
+   katı kipte iki öğe bulup düşüyordu (CI'da ölçüldü). */
+.pulse__flows,
+.anomali__tablo {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--fs-sm);
 }
 .pulse__flows th,
-.pulse__flows td {
+.pulse__flows td,
+.anomali__tablo th,
+.anomali__tablo td {
   padding: var(--sp-1) var(--sp-2);
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
 }
-.pulse__flows th[scope='col'] {
+.pulse__flows th[scope='col'],
+.anomali__tablo th[scope='col'] {
   color: var(--text-secondary);
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-.pulse__flows .num {
+.pulse__flows .num,
+.anomali__tablo .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

@@ -185,7 +185,7 @@ export function AnomaliRadari({ market, client, sectors, onSelect }: Props) {
               }
             />
           ) : (
-            <table className="pulse__flows anomali__tablo" aria-label="Olağandışı semboller">
+            <table className="anomali__tablo" aria-label="Olağandışı semboller">
               <thead>
                 <tr>
                   <th scope="col">Sembol</th>
