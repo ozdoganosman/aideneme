@@ -147,6 +147,53 @@ export class AnalysisClient {
   }
 
   /**
+   * Filtre zaman makinesi: taramayı `geri` gün öncesine kurar.
+   *
+   * Tarama ile aynı bölme kuralı; dönen satırlar bugünkü taramanın satırlarıyla
+   * aynı biçimde (+ `ileriGetiri` ölçütü), radar aynı kuralları uyguluyor.
+   */
+  async zamanMakinesi(
+    market: Market,
+    params: ScreenParams,
+    geri: number,
+    istekler: OlcutIstegi[] = [],
+  ): Promise<{ rows: ScreenRow[]; gun: number; ms: number }> {
+    const info = this.loaded.get(market);
+    if (!info) throw new Error(`${market}: paket yüklenmedi`);
+
+    const total = info.symbols.length;
+    const chunks = Math.min(this.pool.size, Math.max(1, Math.ceil(total / 25)));
+    const per = Math.ceil(total / chunks);
+
+    const responses = await Promise.all(
+      Array.from({ length: chunks }, (_, i) =>
+        this.pool.run((id) => ({
+          id,
+          type: 'zamanMakinesi',
+          market,
+          params,
+          geri,
+          istekler,
+          from: i * per,
+          to: Math.min(total, (i + 1) * per),
+        })),
+      ),
+    );
+
+    const rows: ScreenRow[] = [];
+    let gun = 0;
+    let ms = 0;
+    for (const response of responses) {
+      const ok = unwrap(response);
+      if (ok.type !== 'zamanMakinesi') continue;
+      rows.push(...ok.rows);
+      gun = ok.gun;
+      ms = Math.max(ms, ok.ms);
+    }
+    return { rows, gun, ms };
+  }
+
+  /**
    * Grafikteki göstergeleri TÜM piyasada ölçer (sembol → ölçüt değerleri).
    *
    * Taramadan ayrı: kullanıcı radara bir gösterge eklediğinde on üç temel

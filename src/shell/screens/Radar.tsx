@@ -34,6 +34,8 @@ import {
   type GostergeOlcutu,
 } from '../../core/screen/indikatorOlcut';
 import { OLCEK_ADI, birimdenOlcek, type Olcek } from '../../core/screen/olcek';
+import { ILERI_GETIRI_ID, ILERI_GETIRI_TANIMI, ileriOzet } from '../../core/screen/zamanMakinesi';
+import { trDayIndex } from '../../core/format/date';
 import type { Parametreler } from '../../core/indicators/kayit';
 import type { Financials, FundamentalsSnapshot } from '../../core/fundamentals/types';
 import type { Market } from '../../data-client/markets';
@@ -137,6 +139,14 @@ interface Kiyas {
  * aynı birimler.
  */
 const TUM_OLCUTLER: MetricDef[] = [...METRIC_DEFS, ...FUNDAMENTAL_METRIC_DEFS];
+/**
+ * Zaman makinesinde UYGULANAMAYAN ölçütler: temel veri.
+ *
+ * Elimizdeki F/K bugünün F/K'sı; onu altı ay öncesine uygulamak geleceği
+ * görmektir. Bu kurallar geçmiş görünümde sessizce düşürülmüyor, SAYILIP
+ * söyleniyor.
+ */
+const TEMEL_IDLER = new Set(FUNDAMENTAL_METRIC_DEFS.map((d) => d.id));
 const OLCUT_BY_ID = new Map(TUM_OLCUTLER.map((d) => [d.id, d]));
 
 /** Panelde gruplanmış gösterim — 30 ölçütlük düz liste okunmuyor. */
@@ -361,6 +371,20 @@ export function Radar({
     () => new Map(),
   );
   const [gostergeOlculuyor, setGostergeOlculuyor] = useState(false);
+  /**
+   * ZAMAN MAKİNESİ: kaç gün geriye bakılıyor (0 = bugün).
+   *
+   * Tercihe YAZILMIYOR — bilerek. Kullanıcı radarı bir sonraki açışında
+   * "bugün"ü görmeli; geçmişte unutulmuş bir kaydırıcı, tüm sayıları sessizce
+   * eski bir güne ait yapardı ve başlıktaki tarih dışında hiçbir şey bunu
+   * bağırmaz.
+   */
+  const [geri, setGeri] = useState(0);
+  const [gecmis, setGecmis] = useState<{ rows: ScreenRow[]; gun: number; geri: number } | null>(
+    null,
+  );
+  const [gecmisYukleniyor, setGecmisYukleniyor] = useState(false);
+  const [barSayisi, setBarSayisi] = useState(0);
   const [sektorSecim, setSektorSecim] = useState<string[]>(() =>
     tercihOku<string[]>(SEKTOR_ANAHTARI, []),
   );
@@ -381,6 +405,7 @@ export function Radar({
         const bilgi = await client.load(market, buffer);
         if (iptal) return;
         setIsimler(bilgi.symbols);
+        setBarSayisi(bilgi.bars);
         const sonuc = await client.screen(market, DEFAULT_SCREEN_PARAMS);
         if (!iptal) setHam(sonuc.rows);
       } catch (err) {
@@ -466,7 +491,24 @@ export function Radar({
    * iki ekran aynı sembol için aynı sayıyı veriyor. Daha önce radar kendi
    * küçük hesabını yapıyordu ve "1 gün" değişimi iki yerde farklı çıkabilirdi.
    */
+  /** Geçmiş görünüm etkin ve o güne ait satırlar elde mi? */
+  const gecmisEtkin = geri > 0 && gecmis !== null && gecmis.geri === geri;
+
   const satirlar: ScreenRow[] = useMemo(() => {
+    /*
+      ZAMAN MAKİNESİ DALI.
+
+      Geçmiş güne ait satırlar worker'dan geliyor; ölçütler kesik seriden,
+      gösterge değerleri de aynı kesik seriden zaten içlerinde. Bu yüzden
+      burada ne `gostergeDeger` katılıyor (bugünün ölçümü) ne de temel veri
+      (bugünün F/K'sı). İkisini de katmak geleceği bugüne sızdırmak olurdu.
+      Sektör etiketi kalıyor: sınıflandırma zamanla değişmiyor.
+    */
+    if (gecmisEtkin) {
+      const g = gecmis!.rows;
+      const kapsamli = kapsamSemboller ? g.filter((r) => kapsamSemboller.has(r.symbol)) : g;
+      return withSectors(kapsamli, sektorler);
+    }
     if (!ham) return [];
     const kapsamli = kapsamSemboller ? ham.filter((r) => kapsamSemboller.has(r.symbol)) : ham;
     const temelli = snapshot
@@ -485,7 +527,7 @@ export function Radar({
       const ek = gostergeDeger.get(r.symbol);
       return ek ? { ...r, values: { ...r.values, ...ek } } : r;
     });
-  }, [ham, kapsamSemboller, snapshot, sektorler, tablolar, gostergeDeger]);
+  }, [ham, kapsamSemboller, snapshot, sektorler, tablolar, gostergeDeger, gecmisEtkin, gecmis]);
 
   /**
    * KAPSAMDA OLUP SATIR ÜRETMEYEN SEMBOLLER.
@@ -535,8 +577,11 @@ export function Radar({
   const tumOlcutSozlugu = useMemo(() => {
     const m: OlcutSozlugu = new Map(OLCUT_BY_ID);
     for (const g of etkinGostergeOlcutleri) m.set(g.id, olcutTanimi(g));
+    // Geçmiş görünümde ileri getiri bir ölçüt: sütun, sıralama ve biçim
+    // makinesi onu hazır ölçütten ayırt etmiyor.
+    if (geri > 0) m.set(ILERI_GETIRI_ID, ILERI_GETIRI_TANIMI);
     return m;
-  }, [etkinGostergeOlcutleri]);
+  }, [etkinGostergeOlcutleri, geri]);
 
   /**
    * Gösterge ölçümü — yalnızca eklenmiş göstergeler için.
@@ -585,14 +630,60 @@ export function Radar({
    * çevriliyor: kullanıcı grafikten göstergeyi kapatmış olabilir, o zaman
    * kural sessizce her sembolü eleyen bir tuzağa dönüşürdü.
    */
-  const kurallar = useMemo(() => {
-    const out = araliklarKurallara(araliklar);
+  const { kurallar, dusenTemel } = useMemo(() => {
+    let out = araliklarKurallara(araliklar);
     for (const k of kiyaslar) {
       if (!tumOlcutSozlugu.has(k.a) || !tumOlcutSozlugu.has(k.b)) continue;
       out.push({ metric: k.a, op: k.op, a: 0, karsiMetrik: k.b });
     }
-    return out;
-  }, [araliklar, kiyaslar, tumOlcutSozlugu]);
+    // Geçmiş görünümde temel ölçütlü kural UYGULANMIYOR (bkz. TEMEL_IDLER);
+    // kaç tanesinin düştüğü söyleniyor.
+    let dusen = 0;
+    if (geri > 0) {
+      const once = out.length;
+      out = out.filter(
+        (r) => !TEMEL_IDLER.has(r.metric) && !(r.karsiMetrik && TEMEL_IDLER.has(r.karsiMetrik)),
+      );
+      dusen = once - out.length;
+    }
+    return { kurallar: out, dusenTemel: dusen };
+  }, [araliklar, kiyaslar, tumOlcutSozlugu, geri]);
+
+  /**
+   * Geçmiş günün taraması — kaydırıcı değişince worker'dan iste.
+   *
+   * KISA BİR GECİKMEYLE: kaydırıcı sürüklenirken her piksel bir istek olurdu
+   * (600 sembol × 250 bar). 200 ms bekleyip son değeri gönderiyoruz.
+   */
+  const gostergeIstekAnahtari = istenenGostergeler.map((i) => i.anahtar).join('|');
+  useEffect(() => {
+    if (!client || !ham || geri === 0) {
+      setGecmisYukleniyor(false);
+      return;
+    }
+    let iptal = false;
+    const zamanlayici = setTimeout(() => {
+      setGecmisYukleniyor(true);
+      client
+        .zamanMakinesi(market, DEFAULT_SCREEN_PARAMS, geri, istenenGostergeler)
+        .then(({ rows, gun }) => {
+          if (!iptal) setGecmis({ rows, gun, geri });
+        })
+        .catch(() => {
+          // Ölçüm düşerse geçmiş görünüm KURULMAZ; bugünün sayılarını "o gün"
+          // diye göstermekten iyidir.
+          if (!iptal) setGecmis(null);
+        })
+        .finally(() => {
+          if (!iptal) setGecmisYukleniyor(false);
+        });
+    }, 200);
+    return () => {
+      iptal = true;
+      clearTimeout(zamanlayici);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, ham, market, geri, gostergeIstekAnahtari]);
 
   /**
    * Kurallara UYMADIĞI için değil, ÖLÇÜLEMEDİĞİ için elenenler.
@@ -620,6 +711,17 @@ export function Radar({
     // değeri olmayan sembol "eşiği geçti" sayılmaz.
     return applyScreen(sektorlu, { rules: kurallar });
   }, [satirlar, ara, kurallar, sektorSecim]);
+
+  /**
+   * "Filtre işe yaradı mı": seçilenlerin ve TÜM evrenin ileri getirisi.
+   *
+   * Evren kıyası şart. "Filtrem %8 kazandırdı" tek başına bir şey söylemez;
+   * o gün her şey %12 yükseldiyse filtre kaybettirmiş demektir.
+   */
+  const ileriOzetler = useMemo(
+    () => (gecmisEtkin ? { secilen: ileriOzet(suzulmus), evren: ileriOzet(satirlar) } : null),
+    [gecmisEtkin, suzulmus, satirlar],
+  );
 
   /*
     PANEL GENİŞLİĞİ ÖLÇÜLÜYOR, SÜTUNLAR ONA GÖRE SEÇİLİYOR.
@@ -699,7 +801,9 @@ export function Radar({
       saklamak olurdu.
     */
     const kiyasOlcutIdleri = kiyaslar.flatMap((k) => [k.a, k.b]);
-    const filtreli = [...Object.keys(araliklar), ...kiyasOlcutIdleri].filter(
+    // Geçmiş görünümde İLERİ GETİRİ ilk sütun: sorunun cevabı o.
+    const oncelikli = geri > 0 ? [ILERI_GETIRI_ID] : [];
+    const filtreli = [...oncelikli, ...Object.keys(araliklar), ...kiyasOlcutIdleri].filter(
       (id, i, dizi) => tumOlcutSozlugu.has(id) && dizi.indexOf(id) === i,
     );
     const secili = sutunlar.filter((id) => tumOlcutSozlugu.has(id) && !filtreli.includes(id));
@@ -773,7 +877,17 @@ export function Radar({
     // `liste`, `symbol`, sınıflandırma, sütunlar, etkin filtreler ve PANEL
     // GENİŞLİĞİ dışındaki her şey sabit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liste, symbol, sektorler, araliklar, kiyaslar, sutunlar, tabloGenislik, tumOlcutSozlugu]);
+  }, [
+    liste,
+    symbol,
+    sektorler,
+    araliklar,
+    kiyaslar,
+    sutunlar,
+    tabloGenislik,
+    tumOlcutSozlugu,
+    geri,
+  ]);
 
   const columns = sutunSecimi.cols;
   const gizliSutun = sutunSecimi.gizli;
@@ -916,6 +1030,75 @@ export function Radar({
           <Icon name="close" size={16} />
         </IconButton>
       </header>
+
+      {/*
+        ZAMAN MAKİNESİ — "bu filtre o gün ne bulurdu, bulduğu ne yaptı?"
+
+        Filtre panelinin İÇİNDE değil, tablonun hemen üstünde: kaydırıcı
+        tablodaki HER sayının anlamını değiştiriyor (bugün → o gün). Bir
+        popover'ın içine gömülü olsaydı, kullanıcı paneli kapatıp eski bir
+        güne ait sayılara "bugün" diye bakabilirdi. Başlıktaki tarih ve açık
+        duran bölüm bunu görünür tutuyor.
+
+        Neyin ÖLÇÜLMEDİĞİ de burada yazılı; bkz. core/screen/zamanMakinesi.ts.
+      */}
+      {barSayisi > 2 ? (
+        <details className="radar__zaman" open={geri > 0}>
+          <summary>
+            Zaman makinesi{' '}
+            <span className="desk__muted">
+              {geri === 0
+                ? 'bugün'
+                : gecmisEtkin
+                  ? `${geri} gün önce · ${trDayIndex(gecmis!.gun)}`
+                  : `${geri} gün önce · ölçülüyor…`}
+            </span>
+          </summary>
+          <div className="radar__zaman-kur">
+            <label className="radar__zaman-etiket">
+              <span>Kaç gün önce</span>
+              <input
+                type="range"
+                min={0}
+                max={barSayisi - 2}
+                value={geri}
+                aria-valuetext={geri === 0 ? 'bugün' : `${geri} gün önce`}
+                onChange={(e) => setGeri(Number(e.target.value))}
+              />
+            </label>
+            <span className="radar__zaman-deger" aria-live="polite">
+              {geri === 0 ? 'bugün' : `${geri} gün`}
+            </span>
+          </div>
+          {geri > 0 && ileriOzetler ? (
+            <p className="radar__zaman-ozet">
+              {ileriOzetler.secilen.n === 0 ? (
+                <>O gün filtreye uyan ve ileri getirisi ölçülebilen sembol yok.</>
+              ) : (
+                <>
+                  O gün filtreye uyan <b>{ileriOzetler.secilen.n}</b> sembolün medyan ileri getirisi{' '}
+                  <b className={ileriOzetler.secilen.medyan >= 0 ? 'is-up' : 'is-down'}>
+                    {trPct(ileriOzetler.secilen.medyan, 2, true)}
+                  </b>
+                  , kazanan payı <b>{trPct(ileriOzetler.secilen.kazananPay * 100, 0)}</b> · tüm
+                  piyasa medyanı <b>{trPct(ileriOzetler.evren.medyan, 2, true)}</b>
+                  {ileriOzetler.secilen.olculemeyen > 0
+                    ? ` · ${ileriOzetler.secilen.olculemeyen} sembolün ileri getirisi ölçülemedi`
+                    : ''}
+                </>
+              )}
+            </p>
+          ) : null}
+          {geri > 0 ? (
+            <p className="radar__zaman-not desk__muted">
+              Backtest değil: tek tarih, tek pencere. Yalnızca bugün kote olan semboller (hayatta
+              kalma yanlılığı). Temel veri geçmişe götürülemez
+              {dusenTemel > 0 ? ` — ${dusenTemel} temel kural uygulanmadı` : ''}.
+            </p>
+          ) : null}
+          {gecmisYukleniyor ? <span className="visually-hidden">Geçmiş gün ölçülüyor</span> : null}
+        </details>
+      ) : null}
 
       {/*
         Kapsamda olup hiç satır üretmeyenler: kuralların elediği değil,

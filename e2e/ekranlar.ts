@@ -144,6 +144,25 @@ export const EKRANLAR: Ekran[] = [
     },
   },
   {
+    /*
+      ZAMAN MAKİNESİ. Ayrı giriş: varsayılan hâli "bugün" ve katlı kapalı;
+      kaydırıcı geçmişe alınmadan özet cümlesi ve ileri getiri sütunu hiç
+      çizilmiyor. Bu dosyanın var olma sebebi tam da bu tür yüzeyler.
+    */
+    id: 'sembol:radar-zaman',
+    ad: 'Sembol Masası — radar zaman makinesi',
+    url: 'v=sembol&s={SEMBOL}',
+    hazir: '.radar__zaman-ozet',
+    ac: async (page) => {
+      await page.getByText('Radar', { exact: true }).first().click();
+      await page.waitForSelector('.radar__tablo', { timeout: 90_000 });
+      await page.getByLabel('Kapsam').selectOption('piyasa');
+      await page.getByText('Zaman makinesi').click();
+      await page.getByLabel('Kaç gün önce').fill('30');
+      await page.waitForSelector('.radar__zaman-ozet', { timeout: 60_000 });
+    },
+  },
+  {
     id: 'sembol:finansallar',
     ad: 'Sembol Masası — finansallar',
     url: 'v=sembol&s={SEMBOL}',

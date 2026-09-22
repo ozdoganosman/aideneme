@@ -144,9 +144,44 @@ export interface GostergeOlcutResponse {
   ms: number;
 }
 
+/**
+ * Filtre zaman makinesi: taramayı GEÇMİŞ bir güne kurar.
+ *
+ * `geri` ortak gün ekseninde kaç gün geriye gidileceği (0 = bugün). Kesim
+ * bar indeksiyle değil TARİHLE yapılıyor: her sembol kendi sonlu
+ * kapanışlarına sıkıştırılmış olduğu için "sondan k. bar" sembolden sembole
+ * farklı takvim gününe düşer (bkz. core/data/kes.ts).
+ *
+ * Gösterge ölçütleri de aynı kesik seriden hesaplanıyor; ileri getiri
+ * `ileriGetiri` ölçütü olarak satıra yazılıyor ki radar onu sütun ve
+ * sıralama olarak bedavaya alsın.
+ */
+export interface ZamanMakinesiRequest {
+  id: number;
+  type: 'zamanMakinesi';
+  market: string;
+  params: ScreenParams;
+  /** Ortak eksende kaç gün geri; 0 = bugün. */
+  geri: number;
+  istekler?: OlcutIstegi[];
+  from: number;
+  to: number;
+}
+
+export interface ZamanMakinesiResponse {
+  id: number;
+  ok: true;
+  type: 'zamanMakinesi';
+  rows: ScreenRow[];
+  /** Kesim gününün epoch günü — arayüz tarihi buradan yazıyor. */
+  gun: number;
+  ms: number;
+}
+
 export type WorkerRequest =
   | InitRequest
   | GostergeOlcutRequest
+  | ZamanMakinesiRequest
   | ScreenRequest
   | CorrelateRequest
   | PulseRequest
@@ -235,6 +270,7 @@ export interface SectorMatchResponse {
 export type WorkerResponse =
   | InitResponse
   | GostergeOlcutResponse
+  | ZamanMakinesiResponse
   | SectorMatchResponse
   | SymbolResponse
   | ScreenResponse

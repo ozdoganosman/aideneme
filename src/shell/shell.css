@@ -2330,6 +2330,51 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ZAMAN MAKİNESİ — tablonun üstünde, çünkü tablodaki her sayının anlamını
+   değiştiriyor. Katlı: bugündeyken tek satır, geçmişteyken açık. */
+.radar__zaman {
+  margin: 0 var(--sp-2) var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  font-size: var(--fs-sm);
+}
+.radar__zaman summary {
+  cursor: pointer;
+}
+.radar__zaman-kur {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+}
+.radar__zaman-etiket {
+  display: grid;
+  gap: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+.radar__zaman-etiket input[type='range'] {
+  width: 100%;
+  min-width: 0;
+}
+.radar__zaman-deger {
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5rem;
+  text-align: right;
+}
+.radar__zaman-ozet {
+  margin: var(--sp-1) 0 0;
+  line-height: 1.45;
+}
+.radar__zaman-not {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+
 /* Kapsamda olup ölçülemeyen semboller — "neden listemdeki hisse yok?"
    sorusunun cevabı. `radar__olculemedi` ile aynı yerleşim: ikisi de dar
    panelde tek satırlık açıklama. */

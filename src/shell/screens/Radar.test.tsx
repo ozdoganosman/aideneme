@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { emptyCandles, type Candles } from '../../core/data/types';
 import { DAY_SECONDS } from '../../core/data/pack';
@@ -24,6 +24,7 @@ vi.mock('../../data-client/sectors', () => ({
 import { metricsFor, DEFAULT_SCREEN_PARAMS } from '../../core/screen/metrics';
 import { Radar, araliklarKurallara } from './Radar';
 import { gostergeDegerleri } from '../../core/screen/indikatorOlcutHesap';
+import { zamanMakinesiSatiri } from '../../core/screen/zamanMakinesi';
 import { gostergeOlcutId, type OlcutIstegi } from '../../core/screen/indikatorOlcut';
 
 /** n barlık seri; son bar hacmi `sonHacim` ile ayrılabiliyor. */
@@ -74,10 +75,25 @@ const gostergeOlcutFn = vi.fn(async (_market: unknown, istekler: OlcutIstegi[]) 
   }
   return { degerler, ms: 1 };
 });
+/**
+ * Zaman makinesi de GERÇEK hesapla: kesim tarihi ortak eksende (19000+39)-geri.
+ * Seriler 40 barlık; geri=10 → 30 barlık kesik seri + gerçek ileri getiri.
+ */
+const zamanMakinesiFn = vi.fn(
+  async (_m: unknown, params: Parameters<typeof zamanMakinesiSatiri>[3], geri: number) => {
+    const gun = 19_000 + 39 - geri;
+    const rows = Object.entries(SERILER)
+      .map(([ad, c]) => zamanMakinesiSatiri(ad, c, gun * DAY_SECONDS, params))
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    return { rows, gun, ms: 1 };
+  },
+);
 const FAKE_CLIENT = {
   load: (...a: unknown[]) => loadFn(...a),
   screen: (...a: unknown[]) => screenFn(...a),
   gostergeOlcut: (m: unknown, i: OlcutIstegi[]) => gostergeOlcutFn(m, i),
+  zamanMakinesi: (m: unknown, p: unknown, g: number) =>
+    zamanMakinesiFn(m, p as Parameters<typeof zamanMakinesiSatiri>[3], g),
 } as unknown as Parameters<typeof Radar>[0]['client'];
 
 beforeEach(() => {
@@ -603,5 +619,72 @@ describe('Radar — gösterge ölçülemediğinde', () => {
     const not = await screen.findByText(/sembol ölçülemedi/);
     expect(not.getAttribute('title')).toContain('SMA 200');
     expect(not.getAttribute('title')).not.toContain('gos:');
+  });
+});
+
+describe('Radar — zaman makinesi', () => {
+  /** Kaydırıcıyı geçmişe alır: range input'a değer yazmak `change` tetikler. */
+  async function geriAl(gun: number) {
+    const kaydirici = await screen.findByLabelText('Kaç gün önce');
+    fireEvent.change(kaydirici, { target: { value: String(gun) } });
+  }
+
+  it('bugündeyken ileri getiri sütunu ve not YOK', async () => {
+    // Bugünden bugüne getiri tanımsız; sütunu göstermek "sıfır" okunurdu.
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    expect(screen.queryByText('İleri getiri')).toBeNull();
+    expect(screen.queryByText(/Backtest değil/)).toBeNull();
+    expect(zamanMakinesiFn).not.toHaveBeenCalled();
+  });
+
+  it('geçmişe alınca o günün tarihi, ileri getiri sütunu ve özet geliyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    await geriAl(10);
+
+    await vi.waitFor(() => expect(zamanMakinesiFn).toHaveBeenCalled());
+    expect(zamanMakinesiFn.mock.calls[0][2]).toBe(10);
+    // Başlıkta o günün tarihi (19029. gün = 6 Şub 2022) — Türkçe biçimde.
+    // `\w` Türkçe harfi (Ş) tanımıyor; ay adı `\S+` ile alınıyor.
+    expect(await screen.findByText(/10 gün önce · \d+ \S+ \d{4}/)).toBeTruthy();
+    expect(await screen.findByText('İleri getiri')).toBeTruthy();
+    expect(await screen.findByText(/medyan ileri getirisi/)).toBeTruthy();
+  });
+
+  it('sınırlar YAZILI: backtest değil, hayatta kalma yanlılığı, temel veri', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    await geriAl(10);
+    const not = await screen.findByText(/Backtest değil/);
+    expect(not.textContent).toMatch(/hayatta kalma yanlılığı/);
+    expect(not.textContent).toMatch(/Temel veri geçmişe götürülemez/);
+  });
+
+  it('temel ölçütlü kural geçmişte UYGULANMIYOR ve sayısı söyleniyor', async () => {
+    // Bugünün F/K'sını 6 ay öncesine uygulamak geleceği görmektir. Kural
+    // sessizce düşmüyor; kaç tanesinin düştüğü yazılıyor.
+    localStorage.setItem('radar.filtre.v2', JSON.stringify({ pe: { max: 10 } }));
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    // Bugünde F/K yok → kural her satırı eler → tablo hiç çizilmez. Bu
+    // yüzden tablo beklenmiyor; kaydırıcı tablodan bağımsız çiziliyor.
+    await geriAl(10);
+    expect(await screen.findByText(/1 temel kural uygulanmadı/)).toBeTruthy();
+    // Kural düştüğü için her iki sembol de görünür (F/K yokken NaN elerdi).
+    await vi.waitFor(async () => expect((await satirlar()).length).toBe(2));
+  });
+
+  it('bugüne dönünce bugünün satırları geri geliyor — geçmiş sayı kalmıyor', async () => {
+    const user = userEvent.setup();
+    await tumPiyasa(user);
+    await screen.findByRole('table', { name: 'Radar tablosu' });
+    await geriAl(10);
+    await screen.findByText('İleri getiri');
+    await geriAl(0);
+    await vi.waitFor(() => expect(screen.queryByText('İleri getiri')).toBeNull());
   });
 });
