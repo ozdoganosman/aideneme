@@ -5,6 +5,7 @@ import { metricsFor, type ScreenRow } from '../core/screen/metrics';
 import { gostergeDegerleri } from '../core/screen/indikatorOlcutHesap';
 import { zamanMakinesiSatiri } from '../core/screen/zamanMakinesi';
 import { akisGunleriHesapla } from '../core/screen/akisGunleri';
+import { anomaliHesapla } from '../core/screen/anomali';
 import { kesZaman } from '../core/data/kes';
 import { DAY_SECONDS } from '../core/data/pack';
 import {
@@ -60,6 +61,18 @@ export function createHandler() {
           const bundle = need(bundles, req.market);
           const a = akisGunleriHesapla(bundle, req.gun);
           return { id: req.id, ok: true, type: 'akisGunleri', ...a, ms: now() - started };
+        }
+
+        case 'anomali': {
+          const started = now();
+          const bundle = need(bundles, req.market);
+          return {
+            id: req.id,
+            ok: true,
+            type: 'anomali',
+            ...anomaliHesapla(bundle, req.sektorler),
+            ms: now() - started,
+          };
         }
 
         case 'zamanMakinesi': {

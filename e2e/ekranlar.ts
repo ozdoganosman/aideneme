@@ -76,6 +76,16 @@ export const EKRANLAR: Ekran[] = [
   },
   {
     /*
+      Anomali radarı: gerçek veride kaç satır çıkacağı güne bağlı; boş durum da
+      bir yüzeydir ve denetleniyor. Hazır işareti panelin kendi durumu.
+    */
+    id: 'nabiz:anomali',
+    ad: 'Nabız — anomali radarı',
+    url: 'v=nabiz',
+    hazir: '.anomali[data-durum="hazir"]',
+  },
+  {
+    /*
       PARA AKIŞI OYNATICISI. Kaydırıcı geçmişe alınmadan tarih etiketi
       "bugün" ve harita bugünkü kare; geçmiş kare yüzeyi ancak kaydırınca
       çiziliyor.

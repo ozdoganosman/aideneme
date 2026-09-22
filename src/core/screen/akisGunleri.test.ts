@@ -16,6 +16,7 @@ function paket(kapanis: number[][], gunler = [100, 101, 102, 103, 104]): Bundle 
     bars,
     closeAt: (si, di) => kapanis[si][di],
     volumeAt: (si, di) => (Number.isNaN(kapanis[si][di]) ? Number.NaN : 10),
+    openAt: (si, di) => kapanis[si][di],
     seriesOf: () => null,
   };
 }

@@ -149,6 +149,34 @@ describe('handler', () => {
     }
   });
 
+  it('anomali: sektör haritası yokken kopma/korelasyon herkes için ölçülemez', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(6, 300) });
+    const r = handle({ id: 2, type: 'anomali', market: 'bist', sektorler: null });
+    expect(r.ok).toBe(true);
+    if (!r.ok || r.type !== 'anomali') throw new Error('anomali yanıtı bekleniyordu');
+    expect(r.denenen).toBe(6);
+    expect(r.olculemeyen.kopma).toBe(6);
+    expect(r.olculemeyen.korelasyon).toBe(6);
+    // Hacim ve boşluk için 300 günlük geçmiş yeterli: ölçülemeyen yok.
+    expect(r.olculemeyen.hacim).toBe(0);
+    expect(r.olculemeyen.bosluk).toBe(0);
+    expect(r.gun).toBe(20000 + 299);
+  });
+
+  it('anomali: sektör haritası verilince kopma ölçülüyor', () => {
+    const handle = createHandler();
+    handle({ id: 1, type: 'init', market: 'bist', buffer: buildBundle(6, 300) });
+    const sektorler = Object.fromEntries(
+      Array.from({ length: 6 }, (_, i) => [`S${String(i).padStart(3, '0')}`, 'X']),
+    );
+    const r = handle({ id: 2, type: 'anomali', market: 'bist', sektorler });
+    if (!r.ok || r.type !== 'anomali') throw new Error('anomali yanıtı bekleniyordu');
+    expect(r.olculemeyen.kopma).toBe(0);
+    expect(r.olculemeyen.korelasyon).toBe(0);
+    for (const s of r.satirlar) expect(s.sektor).toBe('X');
+  });
+
   it('zamanMakinesi: geri=0 bugünkü taramayla aynı satırları veriyor (ileri getiri hariç)', () => {
     // Zaman makinesinin "bugün" ayarı taramadan SAPMAMALI; saparsa iki ekran
     // aynı sembol için farklı sayı gösterir. İleri getiri bugün için

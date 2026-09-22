@@ -6,8 +6,15 @@ import type { AkisGunleri } from '../../core/screen/akisGunleri';
 const pulseFn = vi.fn();
 const correlateFn = vi.fn();
 const akisFn = vi.fn();
+const anomaliFn = vi.fn();
 const FAKE_ANALYSIS = {
-  client: { pulse: pulseFn, correlate: correlateFn, akisGunleri: akisFn, size: 2 },
+  client: {
+    pulse: pulseFn,
+    correlate: correlateFn,
+    akisGunleri: akisFn,
+    anomali: anomaliFn,
+    size: 2,
+  },
   symbols: ['AAA', 'BBB', 'CCC', 'DDD'],
   bars: 250,
   status: 'ready' as const,
@@ -52,11 +59,23 @@ function row(symbol: string, changePct: number, value: number): PulseRow {
 
 const push = vi.fn();
 const STATE = { v: 'nabiz', m: 'bist', s: '', tf: 'D', cmp: '' };
+const BOS_ANOMALI = {
+  gun: 20249,
+  denenen: 4,
+  islemGormeyen: 0,
+  satirlar: [],
+  yaygin: { hacim: false, bosluk: false, kopma: false, korelasyon: false },
+  yayginSatir: 0,
+  olculemeyen: { hacim: 0, bosluk: 0, kopma: 0, korelasyon: 0 },
+  tetiklenen: { hacim: 0, bosluk: 0, kopma: 0, korelasyon: 0 },
+  ms: 1,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   sectorsFn.mockResolvedValue(null); // varsayılan: sınıflandırma yok
   akisFn.mockResolvedValue(null); // varsayılan: kare yok → oynatıcı yok
+  anomaliFn.mockResolvedValue(BOS_ANOMALI); // varsayılan: olağandışı yok
   const rows = [
     row('AAA', 4, 5000),
     row('BBB', 1, 1000),

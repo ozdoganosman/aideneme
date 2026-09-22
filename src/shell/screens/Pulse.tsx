@@ -1,4 +1,5 @@
 import { SektorEndeksleri } from './SektorEndeksleri';
+import { AnomaliRadari } from './AnomaliRadari';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, Popover, Select, Skeleton, Stat, Toggle, trPct, trCompact } from '../../ui';
 import {
@@ -90,6 +91,8 @@ export default function Pulse({ state, push }: Props) {
   // sırası daha özel bir analiz görünümü ve isteyenin açacağı bir seçenek.
   const [clusterOrder, setClusterOrder] = useState(false);
   const [sectors, setSectors] = useState<SectorMap | null>(null);
+  /** Sektör dosyasına bakıldı mı — anomali paneli bakılmadan koşmasın. */
+  const [sektorlerBakildi, setSektorlerBakildi] = useState(false);
   const [grouping, setGrouping] = useState<'cluster' | 'sector'>('cluster');
   /**
    * Akış PENCERESİ (bar).
@@ -162,9 +165,11 @@ export default function Pulse({ state, push }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    setSektorlerBakildi(false);
     sectorsClient.map(market).then((map) => {
       if (cancelled) return;
       setSectors(map);
+      setSektorlerBakildi(true);
       // Sınıflandırma varsa varsayılan görünüm sektör olur: "endüstriden para
       // akışı" sorusunun doğru cevabı odur. Yoksa kümelerde kalınır.
       setGrouping(map ? 'sector' : 'cluster');
@@ -829,6 +834,18 @@ export default function Pulse({ state, push }: Props) {
         kaynak erişilemezken de "hangi sektör kazandırdı" sorusu cevaplanıyor.
         Ayrı panel, çünkü ölçtüğü şey farklı: getiri, akış değil.
       */}
+      {/*
+        ANOMALİ RADARI — tekil hisse, tarayıcının tersinden: koşulu kullanıcı
+        yazmıyor, hisse kendi alışkanlığının dışına çıkınca listeye giriyor.
+        Sektör dosyası yüklenmeden koşmuyor (iki sinyal sektör ister).
+      */}
+      <AnomaliRadari
+        market={market}
+        client={analysis.status === 'ready' ? analysis.client : null}
+        sectors={sektorlerBakildi ? sectors : undefined}
+        onSelect={(symbol) => push({ v: 'sembol', s: symbol })}
+      />
+
       <SektorEndeksleri
         market={market}
         client={analysis.status === 'ready' ? analysis.client : null}

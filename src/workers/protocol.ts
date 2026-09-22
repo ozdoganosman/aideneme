@@ -1,6 +1,7 @@
 import type { ScreenParams, ScreenRow } from '../core/screen/metrics';
 import type { OlcutIstegi } from '../core/screen/indikatorOlcut';
 import type { AkisGunleri } from '../core/screen/akisGunleri';
+import type { AnomaliSonucu } from '../core/screen/anomali';
 import type { IndBundle, IndicatorParams } from '../core/indicators/calc';
 import type { Parametreler } from '../core/indicators/kayit';
 import type { PulseRow, PulseSummary, WindowRow } from '../core/screen/pulse';
@@ -197,8 +198,28 @@ export interface AkisGunleriResponse extends AkisGunleri {
   ms: number;
 }
 
+/**
+ * Anomali radarı: bugün kendi alışkanlığının dışına çıkan semboller.
+ * Sektör haritası verilmezse kopma ve korelasyon sinyalleri ölçülemez ve
+ * öyle sayılır.
+ */
+export interface AnomaliRequest {
+  id: number;
+  type: 'anomali';
+  market: string;
+  sektorler: Record<string, string> | null;
+}
+
+export interface AnomaliResponse extends AnomaliSonucu {
+  id: number;
+  ok: true;
+  type: 'anomali';
+  ms: number;
+}
+
 export type WorkerRequest =
   | InitRequest
+  | AnomaliRequest
   | GostergeOlcutRequest
   | ZamanMakinesiRequest
   | AkisGunleriRequest
@@ -289,6 +310,7 @@ export interface SectorMatchResponse {
 
 export type WorkerResponse =
   | InitResponse
+  | AnomaliResponse
   | GostergeOlcutResponse
   | AkisGunleriResponse
   | ZamanMakinesiResponse

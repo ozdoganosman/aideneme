@@ -2736,3 +2736,39 @@
   font-size: var(--fs-xs);
   line-height: 1.45;
 }
+
+/* Anomali radarı */
+.anomali__not,
+.anomali__kapsam {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm);
+}
+.anomali__kapsam {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-xs);
+}
+.anomali__yaygin {
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--warn);
+  background: var(--surface-1);
+  font-size: var(--fs-sm);
+}
+.anomali__sembol {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 24px;
+}
+.anomali__sembol:hover {
+  text-decoration: underline;
+}
+.anomali__nedenler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
