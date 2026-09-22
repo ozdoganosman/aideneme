@@ -27,7 +27,88 @@ Performansın sırrı kütüphane değil, **viewport decimation + LOD**'dur
 
 Sonuç: 1m, 100k veya milyonlarca mum — pan/zoom hep akıcı.
 
+## Yeni nesil sürüm (Faz 0–1 tamamlandı)
+
+Bu repo, [`docs/plan/next-gen-finans-platformu.md`](docs/plan/next-gen-finans-platformu.md)
+planına göre yeniden kuruluyor. İlk iki faz yayında:
+
+- **`core/` katmanı** (`src/core/`): saf TypeScript analiz kodu — DOM, React ve
+  I/O lint ile yasak; Node'da ve Worker'da aynı kodla çalışır.
+- **Tasarım sistemi** (`src/ui/`): token tabanlı iki tema + 18 erişilebilir
+  primitive. Canlı galeri: `next.html?v=kitaplik`.
+- **Uygulama kabuğu** (`src/shell/`): 7 ekran, `Cmd/Ctrl+K` komut paleti,
+  paylaşılabilir URL durumu, tek responsive ağaç (ayrı mobil bileşen yok).
+- **Zayıf makine ölçümü**: `npm run perf -- 6 3` — CPU'yu 6× yavaşlatıp (düşük
+  güçlü dizüstü) her ekranın ana thread bloklarını ölçer. Normal makinede
+  hiçbir ekranda 50 ms'yi aşan görev yok; bulgular ve iyileştirmeler
+  [`docs/plan/performans.md`](docs/plan/performans.md).
+- **Kalite kapısı**: `npm run verify` → tip · lint · biçim · test · build ·
+  performans bütçesi. CI'da da aynısı çalışır (`.github/workflows/verify.yml`).
+
+- **Kolonsal veri hattı** (Faz 2): verbose JSON → `.bin` (bar başına 24 bayt,
+  ~3,7× küçülme) + manifest + `latest-250` paketi. Üretici
+  `scripts/pack_data.py`, saf çözücü `src/core/data/pack.ts`, hash tabanlı
+  IndexedDB önbelleği `src/data-client/`. Format:
+  [`docs/plan/veri-formati.md`](docs/plan/veri-formati.md).
+- **Sembol Masası** (`next.html?v=sembol`): LOD grafik çekirdeği üzerinde mum +
+  hacim + EMA, her metriğin formülünü/penceresini açan provenance katmanı ve
+  veri sağlık paneli (eksik bar, bölünme benzeri sıçrama, bayatlık).
+
+- **Tarayıcı ve Karşılaştır** (Faz 3): Worker havuzunda canlı parametreli tarama
+  (200 sembol × 250 bar → 40 ms), NaN'ı "uygun" saymayan kural motoru, kayıtlı
+  taramalar; korelasyon matrisi + ortalama bağlantılı hiyerarşik kümeleme ve
+  bağımlılıksız canvas ile normalize getiri karşılaştırması.
+
+- **Strateji Laboratuvarı** (Faz 4): JSON'a serileşen kural DSL'i, look-ahead'i
+  yapısal olarak engelleyen olay güdümlü backtest (komisyon + slipaj + likidite
+  tavanı, T+1 emir), Sortino/Calmar/Ulcer/MAE-MFE metrikleri ve **beş doğrulama
+  rozeti**: maliyet · OOS (walk-forward) · parametre platosu · permütasyon
+  p-değeri · deflated Sharpe. Her rozet tıklanınca gerekçesini gösterir.
+
+- **Portföy** (Faz 5): ağırlıklı ortalama maliyetli defter, reel (TÜFE
+  düzeltmeli) getiri, para ağırlıklı getiri (IRR), tarihsel VaR/CVaR,
+  yoğunlaşma ve gerçekten yaşanmış stres pencereleri (2018 kur şoku, Mart 2020,
+  Şubat 2023). İşlemler yalnızca tarayıcıda saklanır.
+
+- **Temel analiz** (Faz 5): kompakt finansal tablo hattı (sembol başına ~14
+  kalem + tüm piyasa için tek anlık görüntü), TTM çarpanlar (kümülatif çeyrek
+  tuzağı kapalı), Piotroski benzeri kalite skoru ve **teknik + temel karışık
+  filtreler** ("RSI 40–70 VE F/K < 10 VE ciro büyümesi %20+").
+
+- **Rapor** (Faz 6): tek sayfalık, paylaşılabilir ve yazdırılabilir sembol
+  özeti. Her metriğin yanında formülü ve hesaplandığı pencere yazılı; `@media
+  print` kabuğu gizliyor, bölümler sayfa arasında bölünmüyor. Bağlantı tüm
+  seçimi taşıdığı için karşı taraf aynı raporu açıyor.
+
+- **Model** (Faz 6): dürüst tahmin katmanı. Üçlü bariyer etiketleme, nedensel
+  özellikler, purged K-fold + embargo, L2 lojistik regresyon ve eğitim
+  katmanından öğrenilen Platt kalibrasyonu. Kural kodda yazılı: **model kartı
+  olmadan olasılık gösterilmez** — kart "kullanma" derse tahmin hiç
+  hesaplanmaz. Kartta AUC, Brier, kalibrasyon hatası, güvenilirlik kovaları,
+  "her zaman taban oranı söyle" modeliyle karşılaştırma ve özellik
+  katsayılarının katmanlar arası kararlılığı var.
+
+Yeni kabuk ikinci bir giriş noktasında (`next.html`); mevcut uygulama
+(`index.html`) tüm ekranlar taşınana kadar yayında kalıyor.
+Durum ve sapmalar: [`docs/plan/faz-0-1-durum.md`](docs/plan/faz-0-1-durum.md),
+[`docs/plan/faz-2-durum.md`](docs/plan/faz-2-durum.md),
+[`docs/plan/faz-3-durum.md`](docs/plan/faz-3-durum.md),
+[`docs/plan/faz-4-durum.md`](docs/plan/faz-4-durum.md),
+[`docs/plan/faz-5-durum.md`](docs/plan/faz-5-durum.md),
+[`docs/plan/faz-6-durum.md`](docs/plan/faz-6-durum.md).
+
 ## Çalıştırma
+
+Depoda veri YOK (`public/data` gitignore'da). Yeni bir klonda önce örnek veri
+seti üretin — tohum sabit olduğu için herkeste aynı baytlar oluşur:
+
+```bash
+python scripts/make_sample_data.py          # 60 sembol × 1200 bar
+python scripts/make_sample_data.py --symbols 200 --bars 3400   # daha büyük
+```
+
+Veri sentetiktir ve öyle etiketlenir (semboller `X000…`, sektör kaynağı
+"Sentetik (yerel)"); gerçek piyasa verisiyle karışmaz.
 
 ```bash
 npm install

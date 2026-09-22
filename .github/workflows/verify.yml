@@ -1,0 +1,76 @@
+name: verify
+
+# Kalite kapısı: tip → lint → test → build → performans bütçesi.
+# Herhangi biri kırmızıysa PR birleştirilmez. Veri üretimi burada çalışmaz
+# (o iş deploy.yml'de); bu iş yalnızca kodu doğrular ve hızlı kalmalıdır.
+on:
+  push:
+    branches-ignore: [gh-pages]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Veri üreticisi, veri olmadan da sınanabilir: sentetik seri yaz → paketle
+      # → geri oku → bar bar karşılaştır. Format sözleşmesinin Python ucu.
+      - name: Veri paketleyici kendi kendine testi
+        run: python scripts/pack_data.py --self-test
+
+      # TTM mantığı (kümülatif çeyrek tuzağı) ağ olmadan sınanır.
+      - name: Finansal üretici kendi kendine testi
+        run: python scripts/build_fundamentals.py --self-test
+
+      # Sektör ayrıştırıcısı: ağ olmadan, sabit örnek kayıtlar üzerinde.
+      - name: Sektör üretici kendi kendine testi
+        run: python scripts/build_sectors.py --self-test
+
+      # Kur ayrıştırıcısı: ağ olmadan, sabit örnek kayıtlar üzerinde.
+      - name: Kur üretici kendi kendine testi
+        run: python scripts/build_fx.py --self-test
+
+      # Örnek veri üreticisi: ürettiğini geri okuyup alan alan karşılaştırır.
+      - name: Örnek veri üretici kendi kendine testi
+        run: python scripts/make_sample_data.py --self-test
+
+      - run: npm ci
+
+      - name: Tip kontrolü
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Biçim kontrolü
+        run: npm run format:check
+
+      - name: Testler
+        run: npm run test
+
+      # Çekirdek katmanın test kapsamı (plan §11: ≥ %90). Eşik vite.config.ts'te;
+      # performans bütçesi testi burada dışarıda, çünkü kapsam araçlandırması
+      # süreyi ~4× uzatıyor ve bütçe ölçümünü anlamsız kılıyor.
+      - name: Çekirdek test kapsamı
+        run: npm run coverage
+
+      - name: Build
+        run: npx vite build
+
+      - name: Performans bütçesi
+        run: npm run budget

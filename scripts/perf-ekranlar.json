@@ -1,0 +1,35 @@
+{
+  "_not": "Ölçüm aracının (measure-perf.mjs) HAZIR ölçütleri. Ayrı dosya çünkü e2e testi (e2e/olcum.spec.ts) aynı listeyi okuyup her seçicinin hâlâ var olduğunu doğruluyor: veri sağlığı paneli kaldırıldığında ölçüm aracı sessizce çalışmaz hâle gelmişti ve CI'da koşmadığı için kimse görmedi. {SEMBOL} yer tutucusu: araç sentetik veride X001 ile, yayındaki gerçek veride --sembol THYAO gibi bir argümanla koşabilsin diye. Sembol sabit yazılıyken araç gerçek veride hiç çalışmıyordu (X001 orada yok) ve 'zayıf makinede akışkan' iddiası asıl önemli veri setinde ölçülemiyordu.",
+  "ekranlar": [
+    {
+      "ad": "nabız",
+      "url": "v=nabiz",
+      "hazir": ".pulse__flows"
+    },
+    {
+      "ad": "tarayıcı",
+      "url": "v=tarayici",
+      "hazir": ".ui-vtable"
+    },
+    {
+      "ad": "sembol masası",
+      "url": "v=sembol&s={SEMBOL}",
+      "hazir": ".chart-host canvas"
+    },
+    {
+      "ad": "karşılaştır",
+      "url": "v=karsilastir&cmp={SEMBOL},{SEMBOL2},{SEMBOL3}",
+      "hazir": ".compare__matrix"
+    },
+    {
+      "ad": "rapor",
+      "url": "v=rapor&s={SEMBOL}",
+      "hazir": ".report__sheet"
+    },
+    {
+      "ad": "portföy",
+      "url": "v=portfoy",
+      "hazir": ".pf-form, .screener__panel, .ui-field"
+    }
+  ]
+}

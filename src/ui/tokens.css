@@ -1,0 +1,239 @@
+/*
+ * Tasarım token'ları — TEK kaynak.
+ *
+ * Kural: bileşen CSS'i ham renk/px yazmaz, yalnızca bu değişkenleri kullanır.
+ * Grafik katmanı da renklerini buradan okur (getComputedStyle), böylece tema
+ * değiştiğinde grafik ile arayüz ayrışmaz.
+ *
+ * Tema durumları:
+ *   :root                          → açık tema (varsayılan)
+ *   @media (prefers-color-scheme)  → kullanıcı sistemi koyu ise, seçim yoksa
+ *   [data-theme="dark"|"light"]    → kullanıcının açık seçimi her zaman kazanır
+ */
+
+:root {
+  /* ── Yüzeyler ve metin ─────────────────────────────────────────────── */
+  --surface-0: #ffffff;
+  --surface-1: #f7f8fa;
+  --surface-2: #eef0f4;
+  --surface-3: #e4e7ee;
+  --surface-inset: #f2f4f8;
+  --surface-overlay: rgba(16, 20, 30, 0.38);
+
+  --text-primary: #0f1420;
+  --text-secondary: #4a5266;
+  /* WCAG AA: #78808f ölçüldüğünde yalnızca 3,98:1 veriyordu (gerek 4,5).
+     Açıklama metinlerinin çoğu bu tokenı kullanıyor — yani ürünün "neden"
+     anlatan yazısı okunaklı değildi. #656d7e üç zeminde de geçiyor
+     (5,20 / 4,89 / 4,55) ve hâlâ ikincil görünüyor. */
+  --text-muted: #656d7e;
+  --text-inverse: #ffffff;
+
+  --border-subtle: #e2e5eb;
+  --border-strong: #c9cdd6;
+
+  /* ── Anlamsal renkler ──────────────────────────────────────────────── */
+  --accent: #2f6df5;
+  --accent-hover: #2259d8;
+  /* Birincil düğmenin metin rengi. Koyu temada accent PARLAK olduğu için
+     beyaz metin yalnızca 3,13:1 veriyordu; orada koyu metin kullanılıyor. */
+  --accent-on: #ffffff;
+  --accent-weak: #e8efff;
+  --accent-text: #1b4bc4;
+
+  /* Anlam renkleri WCAG AA ölçülerek koyulaştırıldı: eski değerler hem kendi
+     rozet zeminlerinde hem beyaz üzerinde 3,85–4,42 arasındaydı (gerek 4,5).
+     Yeni değerler her iki zeminde de geçiyor ve renk kimliği korunuyor. */
+  --up: #0a7a53;
+  --up-weak: #e3f5ec;
+  --down: #c22a24;
+  --down-weak: #fdeceb;
+  --warn: #8a5605;
+  --warn-weak: #fdf2dd;
+  --danger: #c62a24;
+  --info: #2f6df5;
+  --neutral-weak: #eef0f4;
+
+  /* ── Ölçek: 4 px tabanlı ───────────────────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 40px;
+  --sp-8: 48px;
+
+  /* ── Tipografi ─────────────────────────────────────────────────────── */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+  --fs-2xl: 28px;
+
+  --lh-tight: 1.25;
+  --lh-normal: 1.5;
+
+  /* ── Biçim ─────────────────────────────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --shadow-1: 0 1px 2px rgba(16, 20, 30, 0.06), 0 1px 1px rgba(16, 20, 30, 0.04);
+  --shadow-2: 0 4px 12px rgba(16, 20, 30, 0.1), 0 1px 3px rgba(16, 20, 30, 0.06);
+  --shadow-3: 0 16px 40px rgba(16, 20, 30, 0.18), 0 2px 8px rgba(16, 20, 30, 0.08);
+
+  /* ── Hareket ───────────────────────────────────────────────────────── */
+  --dur-fast: 120ms;
+  --dur-med: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ── Yerleşim ──────────────────────────────────────────────────────── */
+  --rail-w: 56px;
+  --topbar-h: 48px;
+  --z-sticky: 10;
+  --z-popover: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  color-scheme: light;
+}
+
+/* Sistem koyu tema — kullanıcı açıkça "light" seçmediyse geçerli. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --surface-0: #0b0e14;
+    --surface-1: #11151d;
+    --surface-2: #171c26;
+    --surface-3: #1f2531;
+    --surface-inset: #0e121a;
+    --surface-overlay: rgba(4, 6, 10, 0.62);
+
+    --text-primary: #e6e9ef;
+    --text-secondary: #9aa3b2;
+    /* Koyu temada da eşiğin altındaydı (4,27:1). */
+    --text-muted: #8b95a6;
+    --text-inverse: #0b0e14;
+
+    --border-subtle: #1e242f;
+    --border-strong: #2e3644;
+
+    --accent: #5b8dff;
+    --accent-hover: #79a1ff;
+    --accent-on: #0b0e14;
+    --accent-weak: #16223a;
+    --accent-text: #9dbaff;
+
+    --up: #35c48f;
+    --up-weak: #10261f;
+    --down: #ff6259;
+    --down-weak: #2a1416;
+    --warn: #e0a33c;
+    --warn-weak: #2a2113;
+    --danger: #ff6259;
+    --info: #5b8dff;
+    --neutral-weak: #1b212c;
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.45);
+    --shadow-3: 0 18px 44px rgba(0, 0, 0, 0.6);
+
+    color-scheme: dark;
+  }
+}
+
+/* Açık seçim her zaman kazanır (her iki yönde de). */
+:root[data-theme='dark'] {
+  --surface-0: #0b0e14;
+  --surface-1: #11151d;
+  --surface-2: #171c26;
+  --surface-3: #1f2531;
+  --surface-inset: #0e121a;
+  --surface-overlay: rgba(4, 6, 10, 0.62);
+
+  --text-primary: #e6e9ef;
+  --text-secondary: #9aa3b2;
+  --text-muted: #8b95a6;
+  --text-inverse: #0b0e14;
+
+  --border-subtle: #1e242f;
+  --border-strong: #2e3644;
+
+  --accent: #5b8dff;
+  --accent-hover: #79a1ff;
+  --accent-on: #0b0e14;
+  --accent-weak: #16223a;
+  --accent-text: #9dbaff;
+
+  --up: #35c48f;
+  --up-weak: #10261f;
+  --down: #ff6259;
+  --down-weak: #2a1416;
+  --warn: #e0a33c;
+  --warn-weak: #2a2113;
+  --danger: #ff6259;
+  --info: #5b8dff;
+  --neutral-weak: #1b212c;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 18px 44px rgba(0, 0, 0, 0.6);
+
+  color-scheme: dark;
+}
+
+/**
+ * Yazdırma: kâğıt beyazdır.
+ *
+ * Koyu temada "Yazdır / PDF" koyu zeminli, açık metinli bir rapor üretiyordu:
+ * arka planlar kapalıysa beyaz kâğıtta AÇIK GRİ METİN (okunmaz), açıksa
+ * sayfa dolusu siyah mürekkep. Ekranın teması kâğıdın işi değil; yazdırmada
+ * açık palet zorlanıyor. Seçici koyu tema kuralıyla aynı özgüllükte ve
+ * dosyada ondan SONRA geldiği için kazanıyor.
+ */
+@media print {
+  /* DİKKAT: sistem koyu teması `:root:not([data-theme='light'])` ile
+     tanımlanıyor (özgüllük 0,2,0). Burada yalnızca `:root` yazmak (0,1,0)
+     yetmiyordu — ilk denemede koyu tema yazdırmada aynen kalmıştı. Aynı
+     şekli tekrarlamak özgüllüğü eşitliyor, sıra da bizde. */
+  :root:not([data-theme='light']),
+  :root[data-theme='light'],
+  :root[data-theme='dark'] {
+    --surface-0: #ffffff;
+    --surface-1: #ffffff;
+    --surface-2: #ffffff;
+    --surface-inset: #ffffff;
+    --surface-overlay: rgba(0, 0, 0, 0.1);
+
+    --text-primary: #0f1420;
+    --text-secondary: #3a4256;
+    --text-muted: #565e70;
+    --text-inverse: #ffffff;
+
+    --border-subtle: #c9ced7;
+    --border-strong: #9aa1ad;
+
+    --accent: #1b4bc4;
+    --accent-text: #1b4bc4;
+    --accent-weak: #ffffff;
+    --accent-on: #ffffff;
+
+    --up: #0a7a53;
+    --up-weak: #ffffff;
+    --down: #c22a24;
+    --down-weak: #ffffff;
+    --warn: #8a5605;
+    --warn-weak: #ffffff;
+  }
+
+  body {
+    background: #ffffff;
+  }
+}

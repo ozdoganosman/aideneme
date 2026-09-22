@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense, type PointerEvent as RPointerEvent } from 'react';
+import { lsRead, lsReadRaw, lsWrite } from './storage';
 import { Chart, IndicatorSettings } from './components/Chart';
 import { IndicatorParams, DEFAULT_PARAMS } from './indicators/calc';
 import { SymbolSearch } from './components/SymbolSearch';
@@ -34,14 +35,7 @@ type Provider = Market | 'synthetic';
 const SYNTH_BARS = 4_000_000;
 const TF_LABEL: Record<TF, string> = { D: 'Günlük', W: 'Haftalık', M: 'Aylık' };
 
-function lsGet<T>(key: string, def: T): T {
-  try {
-    const v = localStorage.getItem(key);
-    return v ? (JSON.parse(v) as T) : def;
-  } catch {
-    return def;
-  }
-}
+const lsGet = lsRead;
 
 // Phone-sized viewport (narrow OR short, e.g. landscape) → use the mobile layout.
 function isNarrow(): boolean {
@@ -56,9 +50,9 @@ interface WatchList {
 }
 function loadLists(): { lists: WatchList[]; activeId: string } {
   try {
-    const lists = JSON.parse(localStorage.getItem('borsaWatchLists') || 'null') as WatchList[] | null;
+    const lists = JSON.parse(lsReadRaw('borsaWatchLists') || 'null') as WatchList[] | null;
     if (Array.isArray(lists) && lists.length) {
-      const saved = localStorage.getItem('borsaActiveList') || '';
+      const saved = lsReadRaw('borsaActiveList') || '';
       return { lists, activeId: lists.some((l) => l.id === saved) ? saved : lists[0].id };
     }
   } catch {
@@ -66,7 +60,7 @@ function loadLists(): { lists: WatchList[]; activeId: string } {
   }
   let items = ['THYAO', 'GARAN', 'ASELS'];
   try {
-    const old = JSON.parse(localStorage.getItem('borsaWatch') || 'null');
+    const old = JSON.parse(lsReadRaw('borsaWatch') || 'null');
     if (Array.isArray(old) && old.length) items = old;
   } catch {
     /* keep defaults */
@@ -123,6 +117,8 @@ function stratResize(e: RPointerEvent<HTMLElement>, commit: (h: number) => void)
   window.addEventListener('pointercancel', up);
 }
 
+const EMPTY_ITEMS: string[] = [];
+
 export default function App() {
   const [provider, setProvider] = useState<Provider>('bist');
   const [symbol, setSymbol] = useState('THYAO');
@@ -154,7 +150,9 @@ export default function App() {
   const [lists, setLists] = useState<WatchList[]>(initLists.lists);
   const [activeListId, setActiveListId] = useState<string>(initLists.activeId);
   const activeList = lists.find((l) => l.id === activeListId) ?? lists[0];
-  const watchlist = activeList ? activeList.items : [];
+  // Sabit boş dizi: satır içi `[]` her render'da YENİ bir referans üretiyordu ve
+  // buna bağlı efekt/memo'lar (aşağıda) her render'da yeniden koşuyordu.
+  const watchlist = activeList ? activeList.items : EMPTY_ITEMS;
   // Update the ACTIVE list's items (keeps every existing setWatchlist call site
   // working). Writes target the SAME list the UI reads (activeList), so a stale
   // activeListId can't make updates silently no-op.
@@ -167,13 +165,13 @@ export default function App() {
   // trades + realized P&L are derived from it.
   const [txns, setTxns] = useState<Txn[]>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem('borsaTxns') || 'null');
+      const raw = JSON.parse(lsReadRaw('borsaTxns') || 'null');
       if (Array.isArray(raw)) return raw as Txn[];
     } catch {
       /* ignore */
     }
     try {
-      const old = JSON.parse(localStorage.getItem('borsaPortfolio') || 'null'); // migrate legacy holdings
+      const old = JSON.parse(lsReadRaw('borsaPortfolio') || 'null'); // migrate legacy holdings
       if (Array.isArray(old))
         return old.map((h: Holding, i: number) => ({ id: 'mig' + i, t: Math.floor(Date.now() / 1000), symbol: h.symbol, side: 'buy' as const, qty: h.qty, price: h.cost }));
     } catch {
@@ -201,9 +199,9 @@ export default function App() {
   // Current data market (null in synthetic mode → no market data/panels).
   const dataMarket: Market | null = provider === 'synthetic' ? null : provider;
 
-  useEffect(() => localStorage.setItem('borsaWatchLists', JSON.stringify(lists)), [lists]);
-  useEffect(() => localStorage.setItem('borsaActiveList', activeListId), [activeListId]);
-  useEffect(() => localStorage.setItem('borsaWatchAdded', JSON.stringify(watchAdded)), [watchAdded]);
+  useEffect(() => lsWrite('borsaWatchLists', lists), [lists]);
+  useEffect(() => lsWrite('borsaActiveList', activeListId), [activeListId]);
+  useEffect(() => lsWrite('borsaWatchAdded', watchAdded), [watchAdded]);
   // Backfill the "tracked since" baseline (date + price) for any watched symbol
   // that has none yet (e.g. added before this feature) once its quote is known.
   useEffect(() => {
@@ -223,8 +221,8 @@ export default function App() {
       return changed ? n : m;
     });
   }, [quotes, watchlist]);
-  useEffect(() => localStorage.setItem('borsaTxns', JSON.stringify(txns)), [txns]);
-  useEffect(() => localStorage.setItem('borsaStrats', JSON.stringify(customStrats)), [customStrats]);
+  useEffect(() => lsWrite('borsaTxns', txns), [txns]);
+  useEffect(() => lsWrite('borsaStrats', customStrats), [customStrats]);
   // Register custom strategies so the chart/trades can draw them by name (using
   // the user's indicator periods for MACD etc.). Done during render (not in an
   // effect) so the registry is current BEFORE the child Chart's effects read it
@@ -232,13 +230,13 @@ export default function App() {
   useMemo(() => {
     customStrats.forEach((s) => registerCustomStrategy({ name: s.name, build: (c) => buildCustomPosition(c, s, undefined, indParams) }));
   }, [customStrats, indParams]);
-  useEffect(() => localStorage.setItem('borsaIndicators', JSON.stringify(settings)), [settings]);
-  useEffect(() => localStorage.setItem('borsaIndParams', JSON.stringify(indParams)), [indParams]);
-  useEffect(() => localStorage.setItem('borsaLog', JSON.stringify(log)), [log]);
-  useEffect(() => localStorage.setItem('borsaLeftTab', JSON.stringify(leftTab)), [leftTab]);
-  useEffect(() => localStorage.setItem('borsaStratH', JSON.stringify(stratH)), [stratH]);
-  useEffect(() => localStorage.setItem('borsaShowLeft', JSON.stringify(showLeft)), [showLeft]);
-  useEffect(() => localStorage.setItem('borsaShowRight', JSON.stringify(showRight)), [showRight]);
+  useEffect(() => lsWrite('borsaIndicators', settings), [settings]);
+  useEffect(() => lsWrite('borsaIndParams', indParams), [indParams]);
+  useEffect(() => lsWrite('borsaLog', log), [log]);
+  useEffect(() => lsWrite('borsaLeftTab', leftTab), [leftTab]);
+  useEffect(() => lsWrite('borsaStratH', stratH), [stratH]);
+  useEffect(() => lsWrite('borsaShowLeft', showLeft), [showLeft]);
+  useEffect(() => lsWrite('borsaShowRight', showRight), [showRight]);
 
   const load = useCallback(
     async (opts?: { provider?: Provider; symbol?: string; tf?: TF }) => {
@@ -483,6 +481,12 @@ export default function App() {
           ☰
         </button>
         <span className="brand">⚡ Borsa</span>
+        {/* Yeni kabuk ikinci bir giriş noktasında duruyordu ve HİÇBİR yerden
+            bağlantısı yoktu: buraya gelen kullanıcı varlığını öğrenemezdi.
+            Dar ekranda da gizlenmiyor — keşfedilmesi gereken tek şey bu. */}
+        <a className="ctl newui" href="next.html">
+          Yeni arayüz
+        </a>
 
         <select
           className="ctl"
@@ -593,7 +597,10 @@ export default function App() {
         )}
       </header>
 
-      {tbMenu && <div className="tb-menu-backdrop" onClick={() => setTbMenu(false)} />}
+      {/* Dekoratif kapatma katmanı: menü Escape ile de kapanıyor (aşağıdaki efekt). */}
+      {tbMenu && (
+        <div className="tb-menu-backdrop" role="presentation" onClick={() => setTbMenu(false)} />
+      )}
 
       <div className="body">
         {provider === 'bist' && (showLeft ? (
@@ -762,7 +769,15 @@ export default function App() {
                     <span
                       className="wl-tab-x"
                       role="button"
+                      tabIndex={0}
+                      aria-label="Listeyi sil"
                       title="Listeyi sil"
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.click();
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteList(l.id);
@@ -798,6 +813,7 @@ export default function App() {
         {provider === 'bist' && (showLeft || showRight) && (
           <div
             className="drawer-backdrop"
+            role="presentation"
             onClick={() => {
               setShowLeft(false);
               setShowRight(false);
@@ -891,7 +907,7 @@ function pct(v: number): string {
 function migrateIndParams(p: IndicatorParams): IndicatorParams {
   if (lsGet('borsaIndParamsV', 0) < 2) {
     try {
-      localStorage.setItem('borsaIndParamsV', '2');
+      lsWrite('borsaIndParamsV', '2');
     } catch {
       /* ignore */
     }
