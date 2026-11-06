@@ -1,0 +1,1 @@
+const e=new Intl.DateTimeFormat("tr-TR",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"});function r(t){return Number.isFinite(t)?e.format(new Date(t*1e3)):"—"}function n(t){return Number.isFinite(t)?e.format(new Date(t*864e5)):"—"}export{n as a,r as t};
